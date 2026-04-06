@@ -5,6 +5,13 @@
 .env.test.local
 .env.production.local
 
+# Frontend environment variables
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
 # Dependencies
 node_modules/
 npm-debug.log*
