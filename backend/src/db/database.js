@@ -1,20 +1,33 @@
 import sqlite3 from 'sqlite3';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { mkdir } from 'fs/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, '../../data/predictions.db');
+
+// Use absolute path and ensure directory exists
+const DATA_DIR = join(__dirname, '../../data');
+const DB_PATH = join(DATA_DIR, 'predictions.db');
 
 // Initialize database
-export function initDatabase() {
+export async function initDatabase() {
+  try {
+    // Ensure data directory exists
+    await mkdir(DATA_DIR, { recursive: true });
+    console.log('[Database] Data directory ensured:', DATA_DIR);
+  } catch (err) {
+    console.error('[Database] Error creating data directory:', err.message);
+  }
+
   return new Promise((resolve, reject) => {
     const db = new sqlite3.Database(DB_PATH, (err) => {
       if (err) {
         console.error('[Database] Error opening database:', err.message);
+        console.error('[Database] Database path:', DB_PATH);
         reject(err);
         return;
       }
-      console.log('[Database] Connected to SQLite database');
+      console.log('[Database] Connected to SQLite database at:', DB_PATH);
       
       // Create tables
       db.serialize(() => {

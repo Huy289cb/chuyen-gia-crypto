@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
-    "db:init": "node src/db/init.js"
+    "db:init": "node src/db/init.js",
+    "setup:data": "node scripts/ensure-data-dir.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
