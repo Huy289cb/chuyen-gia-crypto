@@ -1,0 +1,51 @@
+# Crypto Analysis Agent Skill
+
+## Description
+Agent skill for performing multi-timeframe technical analysis on cryptocurrency price data using Groq LLM.
+
+## When to Use
+- When analyzing BTC/ETH price trends
+- When determining buy/sell/hold signals
+- When confidence scoring is needed
+
+## Analysis Rules
+
+### Timeframe Priority
+Priority order (high to low): 4h > 1d > 1h > 15m
+
+### Trend Classifications
+- `strong_uptrend`: >5% gain in timeframe
+- `uptrend`: 2-5% gain
+- `bullish`: 0.5-2% gain
+- `neutral`: -0.5% to +0.5%
+- `consolidating`: tight range, awaiting breakout
+- `bearish`: -2% to -0.5%
+- `downtrend`: -5% to -2%
+- `strong_downtrend`: <-5% loss
+- `volatile`: high swings, no clear direction
+
+### Decision Rules
+- **BUY**: 4h bullish+ AND 2+ other timeframes bullish+, confidence >= 0.6
+- **SELL**: 4h bearish+ AND 2+ other timeframes bearish+, confidence >= 0.6
+- **HOLD**: mixed signals OR 4h neutral OR confidence < 0.5
+- **UNCERTAIN**: high volatility, conflicting strong signals
+
+## Output Format
+```json
+{
+  "action": "buy|sell|hold|uncertain",
+  "confidence": 0.0-1.0,
+  "reasoning": "max 50 words",
+  "trends": {
+    "15m": "trend_value",
+    "1h": "trend_value",
+    "4h": "trend_value", 
+    "1d": "trend_value"
+  },
+  "risk": "risk warning max 20 words"
+}
+```
+
+## Example Usage
+Input: BTC price $67,000, 24h change -0.5%, 7d sparkline data
+Output: {"action": "hold", "confidence": 0.45, "reasoning": "Mixed signals across timeframes. 4h neutral, 1d slightly bearish.", "trends": {"15m": "neutral", "1h": "bearish", "4h": "neutral", "1d": "bearish"}, "risk": "Sideways movement expected, low conviction."}

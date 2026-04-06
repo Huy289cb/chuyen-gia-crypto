@@ -1,0 +1,446 @@
+// Price Fetcher Module
+// Primary source: Database OHLCV candles
+// Fallback: CoinGecko API with storage to database
+
+const COINGECKO_API = 'https://api.coingecko.com/api/v3';
+const BINANCE_API = 'https://api.binance.com/api/v3';
+
+// Delay helper to avoid rate limiting
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Fetch current prices and historical data
+ * Priority: 1. Database OHLCV, 2. CoinGecko (with storage to DB)
+ * @param {Object} db - Database instance (optional)
+ * @returns {Promise<Object>} Price data with sparklines
+ */
+export async function fetchPrices(db = null) {
+  try {
+    console.log('[PriceFetcher] Fetching prices...');
+    
+    // Try to get data from database first
+    let btcData = null;
+    let ethData = null;
+    
+    if (db) {
+      try {
+        const { getOHLCCandles, getLatestPrice } = await import('./db/database.js');
+        
+        // Get OHLCV candles for last 7 days (use 15m from Binance for detailed analysis)
+        const btcCandles = await getOHLCCandles(db, 'BTC', 168, '15m');
+        const ethCandles = await getOHLCCandles(db, 'ETH', 168, '15m');
+        
+        // Get latest prices
+        const btcLatest = await getLatestPrice(db, 'BTC');
+        const ethLatest = await getLatestPrice(db, 'ETH');
+        
+        if (btcCandles.length >= 100 && btcLatest) {
+          btcData = processCandleData(btcCandles, btcLatest);
+          console.log(`[PriceFetcher] BTC: ${btcCandles.length} candles from DB`);
+        }
+        
+        if (ethCandles.length >= 100 && ethLatest) {
+          ethData = processCandleData(ethCandles, ethLatest);
+          console.log(`[PriceFetcher] ETH: ${ethCandles.length} candles from DB`);
+        }
+      } catch (dbError) {
+        console.log('[PriceFetcher] DB query failed:', dbError.message);
+      }
+    }
+    
+    // If no data from DB, fetch from CoinGecko
+    if (!btcData || !ethData) {
+      console.log('[PriceFetcher] Fetching from CoinGecko...');
+      
+      try {
+        const coingeckoData = await fetchFromCoinGecko();
+        
+        // Store to database if available
+        if (db && coingeckoData) {
+          try {
+            console.log('[PriceFetcher] Saving OHLC data from API...');
+            const { saveOHLCCandles, saveLatestPrice } = await import('./db/database.js');
+            
+            // Fetch OHLC data from Binance (15m granularity for detailed ICT analysis)
+            const btcOHLC = await fetchOHLCFromBinance('BTCUSDT', '15m', 672); // 7 days * 96 candles/day
+            const ethOHLC = await fetchOHLCFromBinance('ETHUSDT', '15m', 672);
+            
+            if (btcOHLC.length > 0) {
+              for (const candle of btcOHLC) {
+                await saveOHLCCandleWithTimeframe(db, 'BTC', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              }
+              console.log(`[PriceFetcher] Saved ${btcOHLC.length} BTC OHLC candles (15m) from Binance`);
+            }
+            
+            if (ethOHLC.length > 0) {
+              for (const candle of ethOHLC) {
+                await saveOHLCCandleWithTimeframe(db, 'ETH', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              }
+              console.log(`[PriceFetcher] Saved ${ethOHLC.length} ETH OHLC candles (15m) from Binance`);
+            }
+            
+            // Save latest prices
+            await saveLatestPrice(db, 'BTC', coingeckoData.btc.price, coingeckoData.btc.change24h, coingeckoData.btc.change7d, coingeckoData.btc.marketCap, coingeckoData.btc.volume24h);
+            await saveLatestPrice(db, 'ETH', coingeckoData.eth.price, coingeckoData.eth.change24h, coingeckoData.eth.change7d, coingeckoData.eth.marketCap, coingeckoData.eth.volume24h);
+            
+            console.log('[PriceFetcher] Saved OHLC data to database');
+          } catch (saveError) {
+            console.log('[PriceFetcher] OHLC save failed:', saveError.message);
+            console.error(saveError);
+          }
+        }
+        
+        return coingeckoData;
+      } catch (apiError) {
+        console.log('[PriceFetcher] API failed, trying fallback to DB data...');
+        
+        // Fallback: try to get any data from database
+        if (db) {
+          try {
+            const { getOHLCCandles, getLatestPrice } = await import('./db/database.js');
+            
+            const btcCandles = await getOHLCCandles(db, 'BTC', 24, '15m');
+            const ethCandles = await getOHLCCandles(db, 'ETH', 24, '15m');
+            const btcLatest = await getLatestPrice(db, 'BTC');
+            const ethLatest = await getLatestPrice(db, 'ETH');
+            
+            if (btcCandles.length > 0 && btcLatest) {
+              btcData = processCandleData(btcCandles, btcLatest);
+              console.log(`[PriceFetcher] BTC fallback: ${btcCandles.length} candles from DB`);
+            }
+            
+            if (ethCandles.length > 0 && ethLatest) {
+              ethData = processCandleData(ethCandles, ethLatest);
+              console.log(`[PriceFetcher] ETH fallback: ${ethCandles.length} candles from DB`);
+            }
+            
+            if (btcData || ethData) {
+              const fearGreed = await fetchFearGreedIndex();
+              const btcCap = btcData?.marketCap || 0;
+              const ethCap = ethData?.marketCap || 0;
+              const totalCap = btcCap + ethCap;
+              
+              return {
+                timestamp: new Date().toISOString(),
+                btc: btcData,
+                eth: ethData,
+                marketData: {
+                  fearGreed,
+                  totalVolume: (btcData?.volume24h || 0) + (ethData?.volume24h || 0),
+                  btcDominance: totalCap > 0 ? ((btcCap / totalCap) * 100).toFixed(2) : null
+                }
+              };
+            }
+          } catch (fallbackError) {
+            console.log('[PriceFetcher] Fallback also failed:', fallbackError.message);
+          }
+        }
+        
+        // If all else fails, throw the original API error
+        throw apiError;
+      }
+    }
+    
+    // Combine data from DB - add marketData
+    const fearGreed = await fetchFearGreedIndex();
+    const btcCap = btcData?.marketCap || 0;
+    const ethCap = ethData?.marketCap || 0;
+    const totalCap = btcCap + ethCap;
+    
+    return {
+      timestamp: new Date().toISOString(),
+      btc: btcData,
+      eth: ethData,
+      marketData: {
+        fearGreed,
+        totalVolume: (btcData?.volume24h || 0) + (ethData?.volume24h || 0),
+        btcDominance: totalCap > 0 ? parseFloat(((btcCap / totalCap) * 100).toFixed(2)) : null
+      }
+    };
+    
+  } catch (error) {
+    console.error('[PriceFetcher] Error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Process candle data from database into the format needed for analysis
+ */
+function processCandleData(candles, latest) {
+  const closes = candles.map(c => c.close);
+  const sparkline7d = closes;
+  
+  // Extract timeframe data
+  const now = new Date();
+  const prices1h = candles.filter(c => {
+    const candleTime = new Date(c.timestamp);
+    return (now - candleTime) <= 60 * 60 * 1000;
+  }).map(c => c.close);
+  
+  const prices4h = candles.filter(c => {
+    const candleTime = new Date(c.timestamp);
+    return (now - candleTime) <= 4 * 60 * 60 * 1000;
+  }).map(c => c.close);
+  
+  const prices1d = candles.filter(c => {
+    const candleTime = new Date(c.timestamp);
+    return (now - candleTime) <= 24 * 60 * 60 * 1000;
+  }).map(c => c.close);
+  
+  return {
+    price: latest.price,
+    change24h: latest.change_24h || 0,
+    change7d: latest.change_7d || 0,
+    marketCap: latest.market_cap || 0,
+    volume24h: latest.volume_24h || 0,
+    sparkline7d: sparkline7d,
+    prices1h: prices1h.slice(-4),
+    prices4h: prices4h.slice(-16),
+    prices1d: prices1d.slice(-96)
+  };
+}
+
+/**
+ * Fetch Fear & Greed Index from alternative.me API
+ */
+async function fetchFearGreedIndex() {
+  try {
+    const res = await fetch('https://api.alternative.me/fng/?limit=1');
+    if (!res.ok) return null;
+    
+    const data = await res.json();
+    if (!data.data || !data.data[0]) return null;
+    
+    const item = data.data[0];
+    return {
+      value: parseInt(item.value),
+      classification: item.value_classification,
+      timestamp: item.timestamp
+    };
+  } catch (error) {
+    console.log('[PriceFetcher] Fear & Greed fetch failed:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Fetch OHLC data from Binance API (for 15m granularity)
+ * @param {string} symbol - Trading pair symbol (BTCUSDT, ETHUSDT)
+ * @param {string} interval - Timeframe (15m, 1h, 4h, 1d)
+ * @param {number} limit - Number of candles (max 1000)
+ * @returns {Promise<Array>} OHLC data array
+ */
+export async function fetchOHLCFromBinance(symbol, interval = '15m', limit = 1000) {
+  try {
+    const res = await fetch(
+      `${BINANCE_API}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
+    );
+    
+    if (!res.ok) {
+      throw new Error(`Binance API error: ${res.status}`);
+    }
+    
+    const klines = await res.json();
+    
+    // Convert to our format: {timestamp, open, high, low, close, volume}
+    // Binance format: [time, open, high, low, close, volume, ...]
+    return klines.map(([time, open, high, low, close, volume]) => ({
+      timestamp: new Date(time).toISOString(),
+      time: Math.floor(time / 1000),
+      open: parseFloat(open),
+      high: parseFloat(high),
+      low: parseFloat(low),
+      close: parseFloat(close),
+      volume: parseFloat(volume)
+    }));
+  } catch (error) {
+    console.error(`[PriceFetcher] Binance OHLC fetch failed for ${symbol}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch OHLC data from CoinGecko API
+ * @param {string} coinId - Coin ID (bitcoin, ethereum)
+ * @param {number} days - Number of days (1-365)
+ * @returns {Promise<Array>} OHLC data array
+ */
+export async function fetchOHLCFromCoinGecko(coinId, days = 7) {
+  try {
+    const res = await fetch(
+      `${COINGECKO_API}/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`
+    );
+    
+    if (!res.ok) {
+      throw new Error(`OHLC API error: ${res.status}`);
+    }
+    
+    const ohlcData = await res.json();
+    
+    // Convert to our format: {timestamp, open, high, low, close}
+    return ohlcData.map(([timestamp, open, high, low, close]) => ({
+      timestamp: new Date(timestamp).toISOString(),
+      time: Math.floor(timestamp / 1000), // Convert milliseconds to seconds
+      open,
+      high,
+      low,
+      close,
+      volume: null // OHLC API doesn't provide volume
+    }));
+  } catch (error) {
+    console.error(`[PriceFetcher] OHLC fetch failed for ${coinId}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch from CoinGecko API with market data
+ */
+async function fetchFromCoinGecko() {
+  // Get current prices
+  const priceRes = await fetch(
+    `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`
+  );
+  
+  if (!priceRes.ok) {
+    throw new Error(`Price API error: ${priceRes.status}`);
+  }
+  
+  const prices = await priceRes.json();
+  
+  await delay(1000);
+  
+  // Get market data with sparklines AND volume
+  const marketRes = await fetch(
+    `${COINGECKO_API}/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&sparkline=true&price_change_percentage=24h,7d`
+  );
+  
+  if (!marketRes.ok) {
+    throw new Error(`Market API error: ${marketRes.status}`);
+  }
+  
+  const markets = await marketRes.json();
+  
+  const btcMarket = markets.find(m => m.id === 'bitcoin');
+  const ethMarket = markets.find(m => m.id === 'ethereum');
+  
+  // Fetch Fear & Greed in parallel
+  const fearGreed = await fetchFearGreedIndex();
+  
+  // Calculate total volume
+  const totalVolume = (btcMarket?.total_volume || 0) + (ethMarket?.total_volume || 0);
+  
+  return {
+    timestamp: new Date().toISOString(),
+    btc: {
+      price: prices.bitcoin.usd,
+      change24h: prices.bitcoin.usd_24h_change || 0,
+      change7d: btcMarket?.price_change_percentage_7d_in_currency || 0,
+      marketCap: prices.bitcoin.usd_market_cap || 0,
+      volume24h: btcMarket?.total_volume || 0,
+      sparkline7d: btcMarket?.sparkline_in_7d?.price || [],
+      prices1h: extractTimeframeData(btcMarket?.sparkline_in_7d?.price, 1),
+      prices4h: extractTimeframeData(btcMarket?.sparkline_in_7d?.price, 4),
+      prices1d: btcMarket?.sparkline_in_7d?.price?.slice(-24) || []
+    },
+    eth: {
+      price: prices.ethereum.usd,
+      change24h: prices.ethereum.usd_24h_change || 0,
+      change7d: ethMarket?.price_change_percentage_7d_in_currency || 0,
+      marketCap: prices.ethereum.usd_market_cap || 0,
+      volume24h: ethMarket?.total_volume || 0,
+      sparkline7d: ethMarket?.sparkline_in_7d?.price || [],
+      prices1h: extractTimeframeData(ethMarket?.sparkline_in_7d?.price, 1),
+      prices4h: extractTimeframeData(ethMarket?.sparkline_in_7d?.price, 4),
+      prices1d: ethMarket?.sparkline_in_7d?.price?.slice(-24) || []
+    },
+    marketData: {
+      fearGreed,
+      totalVolume,
+      btcDominance: btcMarket?.market_cap && ethMarket?.market_cap 
+        ? parseFloat((btcMarket.market_cap / (btcMarket.market_cap + ethMarket.market_cap) * 100).toFixed(2))
+        : null
+    }
+  };
+}
+
+/**
+ * Extract specific timeframe data from 7-day sparkline
+ * CoinGecko sparkline has hourly data = ~168 points for 7 days
+ * @param {number[]} sparkline - Full 7-day sparkline
+ * @param {number} hours - Hours to extract
+ * @returns {number[]} Extracted price points
+ */
+function extractTimeframeData(sparkline, hours) {
+  if (!sparkline || !Array.isArray(sparkline) || sparkline.length === 0) {
+    console.log(`[PriceFetcher] No sparkline data for ${hours}h extraction`);
+    return [];
+  }
+  
+  // CoinGecko sparkline_in_7d typically has hourly data = ~168 points
+  // But can vary, so we calculate based on actual length
+  const totalPoints = sparkline.length;
+  const totalHours = 7 * 24; // 168 hours in 7 days
+  const pointsPerHour = totalPoints / totalHours;
+  
+  const pointsToTake = Math.max(2, Math.floor(hours * pointsPerHour));
+  const result = sparkline.slice(-pointsToTake);
+  
+  console.log(`[PriceFetcher] Extracted ${result.length} points for ${hours}h from ${totalPoints} total points`);
+  return result;
+}
+
+/**
+ * Calculate trend from price array
+ * @param {number[]} prices - Price array
+ * @returns {string} Trend classification
+ */
+export function calculateTrend(prices) {
+  if (!prices || prices.length < 2) return 'neutral';
+  
+  const first = prices[0];
+  const last = prices[prices.length - 1];
+  const change = (last - first) / first;
+  
+  // Classification based on percentage change
+  if (change > 0.05) return 'strong_uptrend';
+  if (change > 0.02) return 'uptrend';
+  if (change > 0.005) return 'bullish';
+  if (change > -0.005) return 'neutral';
+  if (change > -0.02) return 'bearish';
+  if (change > -0.05) return 'downtrend';
+  return 'strong_downtrend';
+}
+
+/**
+ * Calculate confidence based on trend consistency
+ * @param {Object} trends - Trends by timeframe
+ * @returns {number} Confidence score 0-1
+ */
+export function calculateConfidence(trends) {
+  const values = Object.values(trends);
+  
+  // Count bullish vs bearish
+  const bullish = values.filter(v => 
+    ['strong_uptrend', 'uptrend', 'bullish'].includes(v)
+  ).length;
+  const bearish = values.filter(v => 
+    ['strong_downtrend', 'downtrend', 'bearish'].includes(v)
+  ).length;
+  const neutral = values.filter(v => 
+    ['neutral', 'consolidating'].includes(v)
+  ).length;
+  
+  // High agreement
+  if (bullish >= 3 || bearish >= 3) return 0.80;
+  if (bullish === 2 && bearish === 0) return 0.70;
+  if (bearish === 2 && bullish === 0) return 0.70;
+  
+  // Moderate
+  if (bullish === 2 || bearish === 2) return 0.60;
+  if (neutral >= 2) return 0.50;
+  
+  // Low agreement
+  return 0.35;
+}
