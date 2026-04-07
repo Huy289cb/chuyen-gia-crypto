@@ -9,21 +9,30 @@ MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concep
 - **Liquidity Model**: Xác định buy-side/sell-side liquidity
 - **Order Blocks**: Mark institutional reference levels
 - **Fair Value Gaps**: Phát hiện imbalance zones
-- **Narrative Building**: Xây dựng câu chuyện thị trường dựa trên Smart Money Concepts
+- **Narrative Building**: Xây dựng câu chuyện thị trường dựa trên Smart Money Concepts (Tiếng Việt)
 
 ### Multi-Timeframe Analysis
 Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 
 ### Real-time Data
-- Giá BTC/ETH cập nhật real-time từ CoinGecko
+- Giá BTC/ETH cập nhật real-time từ CoinGecko/Binance
 - Phân tích tự động mỗi 15 phút
 - Cache 20 phút để đảm bảo performance
+- Lưu trữ OHLCV candles trong SQLite database
 
 ### Giao diện tương tác
-- Narrative hiển thị rõ ràng
-- Key levels (Liquidity, OB, FVG) interactive display
+- Narrative hiển thị rõ ràng (Tiếng Việt)
+- Key levels (Liquidity, OB, FVG, BOS, CHOCH) interactive display
 - Confidence gauge với bias indicator
-- 7-day normalized trend chart
+- Candlestick charts chuyên nghiệp với lightweight-charts
+- Dự báo multi-timeframe overlay trên biểu đồ
+- Timeframe selector (15m, 1h, 4h, 1d)
+
+### Database & Persistence
+- SQLite database lưu trữ lịch sử phân tích
+- Theo dõi độ chính xác của dự báo
+- Lưu trữ OHLCV candles (15m timeframe)
+- Data retention: giữ 30 ngày dữ liệu 15m candles
 
 ## Cấu trúc thư mục
 
@@ -37,14 +46,22 @@ crypto-analyzer/
 │   │   ├── groq-client.js   # Groq API wrapper
 │   │   ├── scheduler.js     # 15-min cron job
 │   │   ├── cache.js         # In-memory cache
-│   │   └── routes.js        # API endpoints
+│   │   ├── routes.js        # API endpoints
+│   │   ├── config/          # Configuration
+│   │   │   └── cors.js      # CORS middleware
+│   │   └── db/              # Database layer
+│   │       ├── database.js  # SQLite operations
+│   │       └── init.js      # DB initialization
+│   ├── data/               # SQLite database storage
+│   ├── scripts/
+│   │   └── ensure-data-dir.js
 │   └── .env                 # GROQ_API_KEY
 ├── frontend/             # React + Vite + Tailwind
 │   ├── src/
 │   │   ├── App.jsx
 │   │   ├── components/
 │   │   │   ├── CryptoCard.jsx     # ICT card với narrative
-│   │   │   ├── PriceChart.jsx     # 7-day trend
+│   │   │   ├── PriceChart.jsx     # Candlestick chart với predictions
 │   │   │   ├── MarketOverview.jsx
 │   │   │   └── Disclaimer.jsx
 │   │   └── hooks/
@@ -74,6 +91,9 @@ npm install
 
 # Tạo .env file với GROQ_API_KEY
 echo "GROQ_API_KEY=gsk_your_key_here" > .env
+
+# Khởi tạo database (tự động chạy khi start, có thể chạy thủ công)
+npm run db:init
 
 npm run dev
 ```
@@ -112,6 +132,13 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 - Imbalance zones from fast price moves
 - Price often returns to fill gaps
 
+### 5. Multi-Timeframe Predictions
+- **15m**: Short-term entry points
+- **1h**: Intraday trend direction
+- **4h**: Swing trade targets
+- **1d**: Higher timeframe bias
+- Mỗi timeframe có direction, target price, và confidence score
+
 ## API Response Example
 
 ```json
@@ -120,18 +147,27 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
     "bias": "bullish",
     "action": "buy",
     "confidence": 0.75,
-    "narrative": "Price swept sell-side liquidity and reversed. Bullish CHOCH on 4h. HTF bias bullish. Expecting move toward buy-side liquidity above $68k.",
+    "narrative": "Giá đã quét thanh khoản sell-side và đảo chiều. CHOCH tăng trên khung 4h. Bias HTF tăng. Kỳ vọng di chuyển về phía thanh khoản buy-side trên $68k.",
     "timeframes": {
-      "1h": "bullish BOS confirmed",
-      "4h": "bullish structure forming", 
-      "1d": "higher low established"
+      "15m": "tăng ngắn hạn",
+      "1h": "xác nhận BOS tăng",
+      "4h": "cấu trúc tăng đang hình thành",
+      "1d": "đã thiết lập đáy cao hơn"
     },
     "key_levels": {
-      "liquidity": "Buy-side above $68,000; Sell-side swept at $66,500",
-      "order_blocks": "Bullish OB at $66,800",
-      "fvg": "4h FVG at $67,200-$67,500"
+      "liquidity": "Buy-side trên $68,000; Sell-side đã quét tại $66,500",
+      "order_blocks": "Bullish OB tại $66,800",
+      "fvg": "FVG 4h tại $67,200-$67,500",
+      "bos": "BOS tại $67,000",
+      "choch": "CHOCH tại $66,800"
     },
-    "risk": "Volatility high. Invalidation: Clean break below $66,500."
+    "predictions": {
+      "15m": { "direction": "up", "target": 67200, "confidence": 0.7 },
+      "1h": { "direction": "up", "target": 67500, "confidence": 0.75 },
+      "4h": { "direction": "up", "target": 68000, "confidence": 0.8 },
+      "1d": { "direction": "up", "target": 69000, "confidence": 0.7 }
+    },
+    "risk": "Biến động cao. Vô hiệu hóa: Break rõ ràng dưới $66,500."
   }
 }
 ```

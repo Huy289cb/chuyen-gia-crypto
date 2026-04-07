@@ -158,34 +158,59 @@ Thứ tự ưu tiên (cao đến thấp): **1d > 4h > 1h > 15m**
 
 ## 10. Output Format
 
-### Required JSON Structure
+### Required JSON Structure (all text in VIETNAMESE)
 ```json
 {
   "btc": {
     "bias": "bullish | bearish | neutral",
     "action": "buy | sell | hold",
     "confidence": 0.0-1.0,
-    "narrative": "max 80 words - market story",
+    "narrative": "max 200 words in VIETNAMESE - market story",
     "timeframes": {
-      "1h": "structure description",
-      "4h": "structure description",
-      "1d": "structure description"
+      "15m": "structure description in VIETNAMESE",
+      "1h": "structure description in VIETNAMESE",
+      "4h": "structure description in VIETNAMESE",
+      "1d": "structure description in VIETNAMESE"
     },
     "key_levels": {
-      "liquidity": "where liquidity rests",
-      "order_blocks": "key OB levels",
-      "fvg": "imbalance zones"
+      "liquidity": "where liquidity rests in VIETNAMESE",
+      "order_blocks": "key OB levels in VIETNAMESE",
+      "fvg": "imbalance zones in VIETNAMESE",
+      "bos": "break of structure levels in VIETNAMESE",
+      "choch": "change of character levels in VIETNAMESE"
     },
-    "risk": "volatility warning + invalidation"
+    "predictions": {
+      "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
+      "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
+      "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
+      "1d": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 }
+    },
+    "risk": "volatility warning + invalidation in VIETNAMESE"
   },
-  "eth": { ... same structure ... }
+  "eth": { ... same structure ... },
+  "marketSentiment": "bullish | bearish | neutral | mixed",
+  "comparison": "BTC vs ETH comparison in VIETNAMESE"
 }
 ```
 
-### Narrative Template
-"Price at [location] after [event]. Liquidity resting [above/below]. HTF bias [bullish/bearish]. Expecting [direction] toward [target]. Risk at [invalidation]."
+### Narrative Template (in VIETNAMESE)
+"Giá ở [vị trí] sau [sự kiện]. Thanh khoản nghỉ [trên/dưới]. Bias HTF [tăng/giảm/trung lập]. Kỳ vọng [hướng] về phía [mục tiêu]. Rủi ro tại [vô hiệu hóa]."
 
-## 11. Fallback Behavior
+## 11. Multi-Timeframe Predictions
+
+### Prediction Requirements
+- For each timeframe (15m, 1h, 4h, 1d), provide:
+  - **Direction**: up/down/sideways
+  - **Target**: Specific price level (liquidity or FVG)
+  - **Confidence**: 0.0-1.0 based on structure clarity
+
+### Target Selection Logic
+- Use nearest liquidity level if clear
+- Use FVG fill zone if visible
+- Use recent BOS/CHOCH level as reference
+- Default to 2-5% move if no clear level
+
+## 12. Fallback Behavior
 
 ### When Groq API Fails
 1. Calculate % change per timeframe
@@ -199,3 +224,6 @@ Thứ tự ưu tiên (cao đến thấp): **1d > 4h > 1h > 15m**
 - 4h change < -1% → bearish bias
 - |4h change| < 1% → neutral bias
 - Action: buy/sell only if 1h agrees, else hold
+- Generate Vietnamese narrative
+- Set BOS/CHOCH levels as "not identified"
+- Set prediction targets to null for uncertain cases

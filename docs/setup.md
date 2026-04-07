@@ -25,6 +25,12 @@ cd ../frontend
 npm install
 ```
 
+### 4. Initialize Database (Optional - auto-initialized on first run)
+```bash
+cd ../backend
+npm run db:init
+```
+
 ## Configuration
 
 ### Backend Environment Variables
@@ -39,6 +45,9 @@ GROQ_API_KEY=gsk_your_groq_api_key_here
 PORT=3000
 CACHE_TTL_MINUTES=20
 CRON_SCHEDULE=*/15 * * * *
+
+# CORS Configuration (comma-separated origins)
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
 
 **Get Groq API Key:**
@@ -61,10 +70,12 @@ Expected output:
   Crypto Trend Analyzer Backend
 =================================
 Server running on http://localhost:3000
+Database: connected
 
 [Scheduler] Starting 15-minute job scheduler...
 [Job 2026-04-05T...] Starting analysis job...
 [PriceFetcher] Fetching prices from CoinGecko...
+[Database] Connected to SQLite database at: .../data/predictions.db
 [Cache] Data cached at ...
 ```
 
@@ -130,13 +141,27 @@ export default defineConfig({
 - Verify Groq API key is valid
 - Check rate limits (Groq free tier: 20 requests/minute)
 
+### Database errors
+- Ensure `backend/data` directory exists
+- Check file permissions for database directory
+- Run `npm run db:init` to recreate schema if needed
+- Check SQLite is available on the system
+
 ## Production Considerations
 
 ### Environment
 - Use strong random PORT if behind reverse proxy
 - Set NODE_ENV=production
-- Use Redis instead of in-memory cache
+- Use Redis instead of in-memory cache for production
+- Configure ALLOWED_ORIGINS for production domains
 - Add rate limiting middleware
+
+### Database
+- SQLite suitable for MVP/single-server deployments
+- For multi-server deployments, consider PostgreSQL or MySQL
+- Database file location: `backend/data/predictions.db`
+- Data retention: 15m candles kept for 30 days
+- Run `npm run db:init` to initialize/recreate database schema
 
 ### Security
 - Never commit .env files
