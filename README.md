@@ -22,14 +22,20 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Separate Accounts**: 100U demo account riêng cho BTC và ETH
 - **Real-time PnL**: Cập nhật PnL mỗi 30 giây, auto-close khi hit SL/TP
 - **Cooldown System**: 4h cooldown sau 3 consecutive losses
-- **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown
-- **Price Updates**: Cập nhật giá và PnL mỗi 30 giây
+- **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown, average R multiple
+- **Price Updates**: Cập nhật giá và PnL mỗi 30 giây từ Binance API
+- **Prediction Timeline**: Hiển thị lịch sử dự báo theo thời gian với filter
+- **Performance Charts**: Equity curve, trade stats, trade history trong 1 component
+- **Advanced Metrics**: Accuracy by timeframe, accuracy by bias, average hold time
+- **Data Freshness Indicators**: Hiển thị trạng thái freshness của giá và phân tích
 
 ### Real-time Data
-- Giá BTC/ETH cập nhật real-time từ CoinGecko/Binance
+- Giá BTC/ETH cập nhật real-time từ **Binance API** (primary), CoinGecko (fallback)
 - Phân tích tự động mỗi 15 phút
 - Cache 20 phút để đảm bảo performance
 - Lưu trữ OHLCV candles trong SQLite database
+- Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
+- Không còn lỗi 429 rate limit (Binance: 1200 req/min vs CoinGecko: ~10-50 req/min)
 
 ### Giao diện tương tác
 - Narrative hiển thị rõ ràng (Tiếng Việt)
@@ -38,6 +44,10 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - Candlestick charts chuyên nghiệp với lightweight-charts
 - Dự báo multi-timeframe overlay trên biểu đồ
 - Timeframe selector (15m, 1h, 4h, 1d)
+- **Prediction Timeline**: Timeline lịch sử dự báo với filter theo timeframe và bias
+- **Performance Charts**: Equity curve, trade stats (win/loss ratio, profit per trade), trade history table
+- **Advanced Metrics**: Accuracy by timeframe (bar chart), accuracy by bias (pie chart), average hold time
+- **Data Freshness Indicators**: Hiển thị trạng thái freshness với color-coded indicators (green/yellow/red)
 
 ### Database & Persistence
 - SQLite database lưu trữ lịch sử phân tích

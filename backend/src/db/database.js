@@ -1191,3 +1191,124 @@ export async function calculatePerformance(db, accountId) {
     );
   });
 }
+
+/**
+ * Calculate accuracy by timeframe
+ */
+export async function calculateAccuracyByTimeframe(db, accountId) {
+  return new Promise((resolve, reject) => {
+    const sql = `
+      SELECT 
+        p.timeframe,
+        COUNT(*) as total,
+        SUM(CASE WHEN p.outcome = 'win' THEN 1 ELSE 0 END) as correct
+      FROM predictions p
+      WHERE p.coin = (SELECT symbol FROM accounts WHERE id = ?)
+      AND p.predicted_at >= datetime('now', '-30 days')
+      GROUP BY p.timeframe
+    `;
+
+    db.all(sql, [accountId], (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      const result = {};
+      rows.forEach(row => {
+        result[row.timeframe] = {
+          correct: row.correct,
+          total: row.total,
+          accuracy: row.total > 0 ? row.correct / row.total : 0
+        };
+      });
+
+      resolve(result);
+    });
+  });
+}
+
+/**
+ * Calculate accuracy by bias
+ */
+export async function calculateAccuracyByBias(db, accountId) {
+  return new Promise((resolve, reject) => {
+    const sql = `
+      SELECT 
+        ah.bias,
+        COUNT(*) as total,
+        SUM(CASE WHEN p.outcome = 'win' THEN 1 ELSE 0 END) as correct
+      FROM predictions p
+      JOIN analysis_history ah ON p.analysis_id = ah.id
+      WHERE p.coin = (SELECT symbol FROM accounts WHERE id = ?)
+      AND p.predicted_at >= datetime('now', '-30 days')
+      GROUP BY ah.bias
+    `;
+
+    db.all(sql, [accountId], (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      const result = {};
+      rows.forEach(row => {
+        result[row.bias] = {
+          correct: row.correct,
+          total: row.total,
+          accuracy: row.total > 0 ? row.correct / row.total : 0
+        };
+      });
+
+      resolve(result);
+    });
+  });
+}
+
+/**
+ * Calculate average hold time
+ */
+export async function calculateAverageHoldTime(db, accountId) {
+  return new Promise((resolve, reject) => {
+    const sql = `
+      SELECT 
+        entry_time,
+        close_time
+      FROM positions
+      WHERE account_id = ?
+      AND status IN ('closed', 'stopped', 'taken_profit', 'closed_manual')
+      AND close_time IS NOT NULL
+    `;
+
+    db.all(sql, [accountId], (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      if (rows.length === 0) {
+        resolve({
+          averageMinutes: 0,
+          averageHours: 0,
+          medianMinutes: 0
+        });
+        return;
+      }
+
+      const holdTimes = rows.map(row => {
+        const entry = new Date(row.entry_time);
+        const close = new Date(row.close_time);
+        return (close - entry) / (1000 * 60); // minutes
+      }).sort((a, b) => a - b);
+
+      const averageMinutes = holdTimes.reduce((sum, time) => sum + time, 0) / holdTimes.length;
+      const medianMinutes = holdTimes[Math.floor(holdTimes.length / 2)];
+
+      resolve({
+        averageMinutes: Math.round(averageMinutes),
+        averageHours: (averageMinutes / 60).toFixed(2),
+        medianMinutes: Math.round(medianMinutes)
+      });
+    });
+  });
+}

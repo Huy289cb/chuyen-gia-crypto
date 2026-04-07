@@ -134,4 +134,145 @@ router.get('/trades', async (req, res) => {
   }
 });
 
+// GET /api/performance/accuracy-timeframe - Get accuracy by timeframe
+router.get('/accuracy-timeframe', async (req, res) => {
+  const db = req.db;
+  const dbEnabled = req.dbEnabled;
+
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  const { symbol } = req.query;
+
+  if (!symbol) {
+    return res.status(400).json({
+      success: false,
+      error: 'Symbol parameter required'
+    });
+  }
+
+  try {
+    const { getAccountBySymbol, calculateAccuracyByTimeframe } = await import('../db/database.js');
+    const account = await getAccountBySymbol(db, symbol);
+    
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account not found'
+      });
+    }
+    
+    const accuracy = await calculateAccuracyByTimeframe(db, account.id);
+    
+    res.json({
+      success: true,
+      data: accuracy,
+      meta: { symbol, account_id: account.id }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// GET /api/performance/accuracy-bias - Get accuracy by bias
+router.get('/accuracy-bias', async (req, res) => {
+  const db = req.db;
+  const dbEnabled = req.dbEnabled;
+
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  const { symbol } = req.query;
+
+  if (!symbol) {
+    return res.status(400).json({
+      success: false,
+      error: 'Symbol parameter required'
+    });
+  }
+
+  try {
+    const { getAccountBySymbol, calculateAccuracyByBias } = await import('../db/database.js');
+    const account = await getAccountBySymbol(db, symbol);
+    
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account not found'
+      });
+    }
+    
+    const accuracy = await calculateAccuracyByBias(db, account.id);
+    
+    res.json({
+      success: true,
+      data: accuracy,
+      meta: { symbol, account_id: account.id }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// GET /api/performance/hold-time - Get average hold time
+router.get('/hold-time', async (req, res) => {
+  const db = req.db;
+  const dbEnabled = req.dbEnabled;
+
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  const { symbol } = req.query;
+
+  if (!symbol) {
+    return res.status(400).json({
+      success: false,
+      error: 'Symbol parameter required'
+    });
+  }
+
+  try {
+    const { getAccountBySymbol, calculateAverageHoldTime } = await import('../db/database.js');
+    const account = await getAccountBySymbol(db, symbol);
+    
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account not found'
+      });
+    }
+    
+    const holdTime = await calculateAverageHoldTime(db, account.id);
+    
+    res.json({
+      success: true,
+      data: holdTime,
+      meta: { symbol, account_id: account.id }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

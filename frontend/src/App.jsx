@@ -3,6 +3,9 @@ import { MarketOverview, RefreshButton } from './components/MarketOverview';
 import { Disclaimer } from './components/Disclaimer';
 import { DashboardHeader } from './components/DashboardHeader';
 import { PositionPanel } from './components/PositionPanel';
+import { PredictionTimeline } from './components/PredictionTimeline';
+import { PerformanceCharts } from './components/PerformanceCharts';
+import { AdvancedMetrics } from './components/AdvancedMetrics';
 import { useTrends } from './hooks/useTrends';
 import { usePaperTrading } from './hooks/usePaperTrading';
 import { Zap, Loader2, AlertCircle } from 'lucide-react';
@@ -15,6 +18,8 @@ function App() {
   const analysis = data?.analysis || {};
   const marketData = data?.prices?.marketData;
   const disclaimer = analysis?.disclaimer;
+  const lastPriceUpdate = prices?.timestamp || data?.lastUpdated;
+  const lastAnalysisUpdate = data?.lastUpdated;
 
   const handleRefresh = () => {
     refetch();
@@ -70,23 +75,6 @@ function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8">
-        {/* Paper Trading Dashboard Header */}
-        <DashboardHeader accounts={accounts} />
-
-        {/* Market Overview */}
-        <div className="mb-6">
-          <MarketOverview
-            analysis={analysis}
-            lastUpdated={prices.timestamp}
-            marketData={marketData}
-          />
-        </div>
-
-        {/* Position Panel */}
-        <div className="mb-6">
-          <PositionPanel positions={positions} onClosePosition={closePosition} />
-        </div>
-
         {/* Charts Grid - 50/50 Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <CoinChart 
@@ -107,6 +95,37 @@ function App() {
           />
         </div>
 
+        {/* Paper Trading Dashboard Header */}
+        <DashboardHeader accounts={accounts} lastPriceUpdate={lastPriceUpdate} lastAnalysisUpdate={lastAnalysisUpdate} />
+
+        {/* Market Overview */}
+        <div className="mb-6">
+          <MarketOverview
+            analysis={analysis}
+            lastUpdated={prices.timestamp}
+            marketData={marketData}
+          />
+        </div>
+
+        {/* Position Panel */}
+        <div className="mb-6">
+          <PositionPanel positions={positions} onClosePosition={closePosition} />
+        </div>
+
+        {/* Prediction Timeline */}
+        <div className="mb-6">
+          <PredictionTimeline symbol="BTC" limit={50} />
+        </div>
+
+        {/* Performance Charts */}
+        <div className="mb-6">
+          <PerformanceCharts symbol="BTC" />
+        </div>
+
+        {/* Advanced Metrics */}
+        <div className="mb-6">
+          <AdvancedMetrics symbol="BTC" />
+        </div>
         {/* Disclaimer */}
         <Disclaimer />
 
