@@ -3,8 +3,13 @@ import dotenv from 'dotenv';
 import { startScheduler } from './scheduler.js';
 import analysisRouter, { initDb } from './routes.js';
 import { corsMiddleware } from './config/cors.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+// Load .env from backend directory (parent of src directory)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
