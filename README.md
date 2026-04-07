@@ -33,6 +33,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - Theo dõi độ chính xác của dự báo
 - Lưu trữ OHLCV candles (15m timeframe)
 - Data retention: giữ 30 ngày dữ liệu 15m candles
+- Historical prediction context: AI học từ độ chính xác dự báo trước đây (4h, 1d timeframes)
 
 ## Cấu trúc thư mục
 

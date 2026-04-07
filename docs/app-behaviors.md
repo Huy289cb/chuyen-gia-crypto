@@ -135,7 +135,24 @@ OUTPUT FORMAT (STRICT JSON - ALL TEXT IN VIETNAMESE)
 
 CONSTRAINTS:
 - ALL text fields must be in VIETNAMESE language
-- narrative ≤ 200 words in VIETNAMESE
+- narrative ≤ 350 characters in VIETNAMESE
 - no explanation outside JSON
 - if unclear → HOLD
 - Predictions must target specific liquidity/FVG levels with actual prices
+
+========================
+10. HISTORICAL PREDICTION CONTEXT
+========================
+
+When database is available, recent prediction accuracy is provided as context:
+
+- **Timeframes tracked**: Only 4h and 1d predictions are included in historical context
+- **Time range**: Last 24 hours of predictions
+- **Purpose**: Help AI learn from past mistakes and adjust confidence
+- **Format**: Shows predicted direction, target, confidence, and actual result
+
+**How to use historical context:**
+- If recent predictions were incorrect → be more conservative with confidence
+- If recent predictions were accurate → maintain or increase confidence
+- Use actual vs target price differences to refine future targets
+- Focus on 4h and 1d timeframes (15m is for micro-structure only, not historical tracking)

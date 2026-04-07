@@ -66,17 +66,19 @@ Hệ thống sử dụng phương pháp phân tích **Inner Circle Trader (ICT)*
    - key_levels (liquidity, OB, FVG, BOS, CHOCH)
    - predictions (multi-timeframe with targets)
    │
-6. Save analysis to SQLite database:
+6. (Optional) If database available, include historical prediction context (4h/1d, last 24h) for AI to learn from past accuracy
+   │
+7. Save analysis to SQLite database:
    - analysis_history table
    - predictions table
    - key_levels table
    - OHLCV candles (15m timeframe)
    │
-7. Cache result in memory (TTL: 20 minutes)
+8. Cache result in memory (TTL: 20 minutes)
    │
-8. Frontend fetches from /api/analysis
+9. Frontend fetches from /api/analysis
    │
-9. Display with:
+10. Display with:
    - Candlestick charts (lightweight-charts)
    - ICT indicator overlays
    - Prediction lines
@@ -115,7 +117,7 @@ Hệ thống sử dụng phương pháp phân tích **Inner Circle Trader (ICT)*
     "bias": "bullish|bearish|neutral",
     "action": "buy|sell|hold",
     "confidence": 0.0-1.0,
-    "narrative": "Market story in Vietnamese (max 200 words)",
+    "narrative": "Market story in Vietnamese (max 350 characters)",
     "timeframes": {
       "15m": "...",
       "1h": "...",

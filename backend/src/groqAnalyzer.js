@@ -15,9 +15,10 @@ const getGroqClient = () => {
 /**
  * Analyze price data using Groq API with multi-timeframe approach
  * @param {Object} priceData - Price data from fetchPrices
+ * @param {Object} db - Optional database connection for historical context
  * @returns {Promise<Object>} Analysis result
  */
-export async function analyzeWithGroq(priceData) {
+export async function analyzeWithGroq(priceData, db = null) {
   try {
     const client = getGroqClient();
     
@@ -28,6 +29,64 @@ export async function analyzeWithGroq(priceData) {
     }
 
     console.log('[GroqAnalyzer] Starting ICT Smart Money analysis...');
+
+    // Fetch historical prediction context if database is available
+    let historicalContext = '';
+    if (db) {
+      try {
+        const { getRecentAnalysisWithPredictions } = await import('./db/database.js');
+        
+        // Get predictions from last 24 hours, limit to 10 per coin
+        const btcHistory = await getRecentAnalysisWithPredictions(db, 'BTC', 20);
+        const ethHistory = await getRecentAnalysisWithPredictions(db, 'ETH', 20);
+        
+        // Filter to last 24 hours and only 4h/1d timeframes
+        const twentyFourHoursAgo = new Date();
+        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+        
+        const formatPredictionHistory = (history, coinName) => {
+          if (!history || history.length === 0) return '';
+          
+          const filtered = history
+            .filter(h => new Date(h.timestamp) >= twentyFourHoursAgo)
+            .slice(0, 10); // Limit to 10 most recent
+          
+          if (filtered.length === 0) return '';
+          
+          let lines = [];
+          filtered.forEach(h => {
+            const predictions = h.predictions || [];
+            predictions.forEach(p => {
+              // Only include 4h and 1d timeframes
+              if (p.timeframe === '4h' || p.timeframe === '1d') {
+                const hoursAgo = Math.round((new Date() - new Date(h.timestamp)) / (1000 * 60 * 60));
+                const status = p.is_correct === true ? '✓ CORRECT' : p.is_correct === false ? '✗ INCORRECT' : 'PENDING';
+                const actualPrice = p.actual ? `$${p.actual.toLocaleString()}` : 'PENDING';
+                lines.push(
+                  `${coinName} ${p.timeframe}: [${hoursAgo}h ago] predicted ${p.direction.toUpperCase()} to $${p.target?.toLocaleString() || 'N/A'} (conf: ${Math.round((p.confidence || 0) * 100)}%) → actual: ${actualPrice} ${status}`
+                );
+              }
+            });
+          });
+          
+          return lines.join('\n');
+        };
+        
+        const btcContext = formatPredictionHistory(btcHistory, 'BTC');
+        const ethContext = formatPredictionHistory(ethHistory, 'ETH');
+        
+        if (btcContext || ethContext) {
+          historicalContext = `\n\nPREDICTION HISTORY (24H):\n${btcContext}\n${ethContext}\n\nReview past accuracy. If recent predictions were incorrect, be more conservative. If accurate, maintain confidence.`;
+          console.log('[GroqAnalyzer] Historical prediction context included');
+        } else {
+          console.log('[GroqAnalyzer] No historical predictions available in last 24h');
+        }
+      } catch (error) {
+        console.log('[GroqAnalyzer] Failed to fetch historical context:', error.message);
+      }
+    } else {
+      console.log('[GroqAnalyzer] Database not available, skipping historical context');
+    }
 
     const systemPrompt = `You are an ICT (Inner Circle Trader) crypto analyst. Use Smart Money Concepts. Return ONLY valid JSON with ALL text fields in VIETNAMESE language.
 
@@ -93,7 +152,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
     "bias": "bullish | bearish | neutral",
     "action": "buy | sell | hold",
     "confidence": 0-1,
-    "narrative": "max 200 words in Vietnamese - tell the market story with details about structure, liquidity, and price action",
+    "narrative": "max 350 characters in Vietnamese - tell the market story with details about structure, liquidity, and price action",
     "timeframes": {
       "1h": "structure description in Vietnamese",
       "4h": "structure description in Vietnamese", 
@@ -125,7 +184,7 @@ RULES:
 - If signals conflict → HOLD
 - Predictions must target specific liquidity/FVG levels
 - No text outside JSON
-- reasoning ≤ 200 words in Vietnamese`;
+- reasoning ≤ 350 characters in Vietnamese`;
 
     // Calculate actual changes for each timeframe to help Groq
     const calcChange = (arr) => {
@@ -166,7 +225,7 @@ ETH DATA:
 - 7d Change: ${priceData.eth.change7d?.toFixed(2)}%
 - Timeframe Changes: 15m=${ethChanges['15m']?.toFixed(3)}%, 1h=${ethChanges['1h']?.toFixed(3)}%, 4h=${ethChanges['4h']?.toFixed(3)}%, 1d=${ethChanges['1d']?.toFixed(3)}%
 - Recent Prices (last points): ${JSON.stringify(priceData.eth.prices1d?.slice(-6) || [])}
-
+${historicalContext}
 Apply ICT methodology:
 1. Check multi-timeframe structure (15m, 1h, 4h, 1d)
 2. Identify liquidity levels (recent highs/lows)
@@ -270,7 +329,7 @@ function formatAnalysisResponse(rawResponse, priceData) {
         : 'hold',
       confidence: hasValidPredictions ? Math.max(0, Math.min(1, parseFloat(coinData?.confidence) || 0.4)) : 0.3,
       narrative: hasValidPredictions 
-        ? (coinData?.narrative || 'No narrative provided').substring(0, 300)
+        ? (coinData?.narrative || 'No narrative provided').substring(0, 350)
         : 'Không có dự báo cụ thể - cần phân tích thêm dữ liệu',
       timeframes: {
         '15m': coinData?.timeframes?.['15m'] || 'neutral',
@@ -349,7 +408,7 @@ function generateFallbackAnalysis(priceData) {
       bias,
       action,
       confidence,
-      narrative: narrative.substring(0, 300),
+      narrative: narrative.substring(0, 350),
       timeframes: {
         '15m': change15m > 0.2 ? 'tăng' : change15m < -0.2 ? 'giảm' : 'đi ngang',
         '1h': change1h > 0.5 ? 'tăng' : change1h < -0.5 ? 'giảm' : 'đi ngang',

@@ -108,7 +108,7 @@ async function runAnalysisJob() {
     }
     
     // Step 2: Groq Analysis
-    const analysis = await analyzeWithGroq(priceData);
+    const analysis = await analyzeWithGroq(priceData, db);
     
     // Step 3: Cache results
     const cachedData = {

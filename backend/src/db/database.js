@@ -314,17 +314,40 @@ export async function validatePredictions(db) {
   });
 }
 
-// Get price closest to a timestamp
+// Get price closest to a timestamp using OHLCV candles for accuracy
 async function getPriceAtTime(db, coin, timestamp) {
   return new Promise((resolve, reject) => {
+    // Try OHLCV candles first (more accurate - 15m granularity)
+    const targetTimestamp = new Date(timestamp).toISOString();
+    
     db.get(
-      `SELECT price FROM price_history 
-       WHERE coin = ? AND timestamp <= ?
-       ORDER BY timestamp DESC LIMIT 1`,
-      [coin, timestamp],
+      `SELECT close FROM ohlcv_candles 
+       WHERE coin = ? AND timeframe = '15m' 
+       ORDER BY ABS(strftime('%s', timestamp) - strftime('%s', ?)) ASC 
+       LIMIT 1`,
+      [coin.toUpperCase(), targetTimestamp],
       (err, row) => {
-        if (err) reject(err);
-        else resolve(row?.price || null);
+        if (err) {
+          reject(err);
+          return;
+        }
+        if (row?.close) {
+          resolve(row.close);
+          return;
+        }
+        
+        // Fallback to price_history if OHLCV not available
+        console.log(`[Database] OHLCV not available for ${coin} at ${targetTimestamp}, using price_history fallback`);
+        db.get(
+          `SELECT price FROM price_history 
+           WHERE coin = ? AND timestamp <= ? 
+           ORDER BY timestamp DESC LIMIT 1`,
+          [coin.toUpperCase(), timestamp],
+          (err2, row2) => {
+            if (err2) reject(err2);
+            else resolve(row2?.price || null);
+          }
+        );
       }
     );
   });

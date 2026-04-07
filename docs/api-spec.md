@@ -174,7 +174,7 @@ Get OHLCV candle data for charting.
 | bias | string | `bullish`, `bearish`, `neutral` - Directional bias |
 | action | string | `buy`, `sell`, `hold` - Trading action |
 | confidence | number | 0.0 to 1.0 confidence score |
-| narrative | string | Market story in Vietnamese (max 200 words) |
+| narrative | string | Market story in Vietnamese (max 350 characters) |
 | timeframes | object | Structure description per TF (Vietnamese) |
 | key_levels | object | Liquidity, OB, FVG, BOS, CHOCH levels (Vietnamese) |
 | predictions | object | Multi-timeframe predictions with targets |

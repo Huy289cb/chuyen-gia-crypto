@@ -165,7 +165,7 @@ Thứ tự ưu tiên (cao đến thấp): **1d > 4h > 1h > 15m**
     "bias": "bullish | bearish | neutral",
     "action": "buy | sell | hold",
     "confidence": 0.0-1.0,
-    "narrative": "max 200 words in VIETNAMESE - market story",
+    "narrative": "max 350 characters in VIETNAMESE - market story",
     "timeframes": {
       "15m": "structure description in VIETNAMESE",
       "1h": "structure description in VIETNAMESE",
@@ -227,3 +227,30 @@ Thứ tự ưu tiên (cao đến thấp): **1d > 4h > 1h > 15m**
 - Generate Vietnamese narrative
 - Set BOS/CHOCH levels as "not identified"
 - Set prediction targets to null for uncertain cases
+
+## 13. Historical Prediction Context
+
+### When Historical Data is Available
+The system provides recent prediction accuracy (4h and 1d timeframes, last 24 hours) as context for new predictions.
+
+### Timeframe Priority for Historical Context
+- **Primary timeframes**: 4h and 1d (tracked for historical accuracy)
+- **15m timeframe**: Used for micro-structure analysis only, not stored for historical context
+- **Reasoning**: 4h and 1d provide meaningful data points; 15m is too noisy for long-term accuracy tracking
+
+### Using Historical Context
+When provided with past prediction results:
+- **If recent predictions were incorrect** → Be more conservative with confidence (reduce by 10-20%)
+- **If recent predictions were accurate** → Maintain or increase confidence
+- **Review actual vs target differences** → Use to refine future target selection
+- **Check for patterns** → If consistently missing targets in one direction, adjust bias
+
+### Example Historical Context Format
+```
+BTC 4h: [2h ago] predicted UP to $68000 (conf: 80%) → actual: $68200 ✓ CORRECT
+BTC 4h: [6h ago] predicted DOWN to $66000 (conf: 70%) → actual: $66500 ✗ INCORRECT
+BTC 1d: [12h ago] predicted UP to $69000 (conf: 75%) → actual: $68800 ✓ CORRECT
+```
+
+### Validation Logic Improvement
+Historical accuracy is tracked using OHLCV candles (15m granularity) for precise actual prices at prediction expiration time, ensuring accurate validation of 4h and 1d predictions.
