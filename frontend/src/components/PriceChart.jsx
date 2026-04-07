@@ -98,7 +98,7 @@ function extractPrices(text, currentPrice) {
   }).filter(p => !isNaN(p) && p > 0 && p > currentPrice * 0.7 && p < currentPrice * 1.3) : [];
 }
 
-export function CoinChart({ name, symbol, data, analysis, color, predictions }) {
+export function CoinChart({ name, symbol, data, analysis, color, predictions, historicalPredictions = [] }) {
   const [showPredictions, setShowPredictions] = useState(true);
   const [timeframe, setTimeframe] = useState('1h');
   const [ohlcData, setOhlcData] = useState([]);
@@ -107,6 +107,7 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
   const lineSeriesRef = useRef(null);
+  const historicalLineSeriesRef = useRef([]);
   
   const sparkline = data?.sparkline7d || [];
   const currentPrice = data?.price || sparkline[sparkline.length - 1] || 0;
@@ -223,6 +224,62 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
     return lineData;
   }, [ohlcData, predictions, showPredictions, timeframe]);
   
+  // Generate historical prediction lines (1h timeframe only, connected as trend)
+  const historicalPredictionLines = useMemo(() => {
+    if (!showPredictions || !Array.isArray(historicalPredictions) || historicalPredictions.length === 0 || ohlcData.length === 0) {
+      return [];
+    }
+
+    // Calculate time range based on OHLC data
+    const firstCandle = ohlcData[0];
+    const lastCandle = ohlcData[ohlcData.length - 1];
+    const timeRangeHours = (lastCandle.time - firstCandle.time) / 3600;
+
+    // Filter historical predictions within time range
+    const filteredHistory = historicalPredictions.filter(entry => {
+      const entryTime = new Date(entry.timestamp).getTime() / 1000;
+      const hoursDiff = (lastCandle.time - entryTime) / 3600;
+      return hoursDiff <= timeRangeHours && hoursDiff > 0;
+    });
+
+    // Sort by timestamp (oldest first)
+    const sortedHistory = filteredHistory.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    // Limit to max 20 historical predictions for performance
+    const limitedHistory = sortedHistory.slice(0, 20);
+
+    // Extract 1h prediction points and connect them
+    const lineData = [];
+    
+    limitedHistory.forEach(entry => {
+      const entryTime = new Date(entry.timestamp).getTime() / 1000;
+      const entryPrice = entry.current_price;
+      
+      // Get 1h prediction from this historical entry
+      const pred1h = entry.predictions.find(p => p.timeframe === '1h');
+      
+      if (!pred1h) return;
+      
+      // Add point at prediction time with current price
+      lineData.push({ time: entryTime, value: entryPrice });
+    });
+
+    // If we have points, return as a single line
+    if (lineData.length > 0) {
+      return [{
+        data: lineData,
+        color: color, // Use coin's main color
+        opacity: 0.3,
+        timeframe: '1h',
+        timestamp: 'historical'
+      }];
+    }
+
+    return [];
+  }, [ohlcData, historicalPredictions, showPredictions, color]);
+  
   // Initialize chart
   useEffect(() => {
     if (!chartContainerRef.current || ohlcData.length === 0) return;
@@ -280,6 +337,27 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
     if (showPredictions && predictionLineData.length > 1) {
       lineSeries.setData(predictionLineData);
     }
+    
+    // Add historical prediction line series (overlay on same price scale)
+    const historicalSeries = [];
+    historicalPredictionLines.forEach(histLine => {
+      const histSeries = chart.addSeries(LineSeries, {
+        color: histLine.color,
+        lineStyle: 2, // Dashed
+        lineWidth: 1,
+        lineVisible: true,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        priceFormat: {
+          type: 'price',
+          precision: 2,
+          minMove: 0.01,
+        },
+      });
+      histSeries.setData(histLine.data);
+      historicalSeries.push(histSeries);
+    });
+    historicalLineSeriesRef.current = historicalSeries;
     
     // Price line is not needed as the last candle shows current price
     
@@ -398,7 +476,7 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [ohlcData, predictionLineData, currentPrice, color, analysis, showPredictions]);
+  }, [ohlcData, predictionLineData, historicalPredictionLines, currentPrice, color, analysis, showPredictions]);
   
   if (!sparkline.length) return null;
   

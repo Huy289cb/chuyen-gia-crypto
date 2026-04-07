@@ -5,7 +5,7 @@ import { useTrends } from './hooks/useTrends';
 import { Zap, Loader2, AlertCircle } from 'lucide-react';
 
 function App() {
-  const { data, loading, error, refetch } = useTrends();
+  const { data, loading, error, refetch, historicalPredictions } = useTrends();
 
   const prices = data?.prices || {};
   const analysis = data?.analysis || {};
@@ -80,6 +80,7 @@ function App() {
             analysis={analysis.btc}
             color="#f97316"
             predictions={analysis.btc?.predictions ? Object.entries(analysis.btc.predictions).map(([tf, pred]) => ({ timeframe: tf, ...pred })) : []}
+            historicalPredictions={historicalPredictions.BTC || []}
           />
           <CoinChart 
             name="Ethereum"
@@ -88,6 +89,7 @@ function App() {
             analysis={analysis.eth}
             color="#3b82f6"
             predictions={analysis.eth?.predictions ? Object.entries(analysis.eth.predictions).map(([tf, pred]) => ({ timeframe: tf, ...pred })) : []}
+            historicalPredictions={historicalPredictions.ETH || []}
           />
         </div>
 

@@ -174,6 +174,9 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
           const timeframeHours = { '15m': 0.25, '1h': 1, '4h': 4, '1d': 24 };
           
           predictions.forEach(([timeframe, pred]) => {
+            // Skip if pred is undefined or missing required properties
+            if (!pred || typeof pred !== 'object') return;
+            
             const expiresAt = new Date();
             expiresAt.setHours(expiresAt.getHours() + timeframeHours[timeframe]);
             
@@ -185,9 +188,9 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
                 analysisId,
                 coin.toUpperCase(),
                 timeframe,
-                pred.direction,
-                pred.target,
-                pred.confidence,
+                pred.direction || 'neutral',
+                pred.target || 0,
+                pred.confidence || 0,
                 expiresAt.toISOString()
               ]
             );
