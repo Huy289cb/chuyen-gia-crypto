@@ -93,7 +93,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
     "bias": "bullish | bearish | neutral",
     "action": "buy | sell | hold",
     "confidence": 0-1,
-    "narrative": "max 80 words in Vietnamese - tell the market story",
+    "narrative": "max 200 words in Vietnamese - tell the market story with details about structure, liquidity, and price action",
     "timeframes": {
       "1h": "structure description in Vietnamese",
       "4h": "structure description in Vietnamese", 
@@ -125,7 +125,7 @@ RULES:
 - If signals conflict → HOLD
 - Predictions must target specific liquidity/FVG levels
 - No text outside JSON
-- reasoning ≤ 80 words in Vietnamese`;
+- reasoning ≤ 200 words in Vietnamese`;
 
     // Calculate actual changes for each timeframe to help Groq
     const calcChange = (arr) => {
@@ -264,7 +264,7 @@ function formatAnalysisResponse(rawResponse, priceData) {
         ? coinData.action 
         : 'hold',
       confidence: Math.max(0, Math.min(1, parseFloat(coinData?.confidence) || 0.4)),
-      narrative: (coinData?.narrative || 'No narrative provided').substring(0, 100),
+      narrative: (coinData?.narrative || 'No narrative provided').substring(0, 300),
       timeframes: {
         '15m': coinData?.timeframes?.['15m'] || 'neutral',
         '1h': coinData?.timeframes?.['1h'] || 'neutral',
@@ -334,13 +334,15 @@ function generateFallbackAnalysis(priceData) {
 
     const trendText = change24h >= 0 ? 'tăng' : 'giảm';
     const biasText = bias === 'bullish' ? 'tăng' : bias === 'bearish' ? 'giảm' : 'đi ngang';
-    const narrative = `Giá ${trendText} ${Math.abs(change24h).toFixed(2)}% trong 24h. Khung 4h: ${change4h.toFixed(2)}%. Xu hướng ${biasText}, chờ breakout.`;
+    const resistance = (currentPrice * 1.02).toFixed(0);
+    const support = (currentPrice * 0.98).toFixed(0);
+    const narrative = `Giá ${trendText} ${Math.abs(change24h).toFixed(2)}% trong 24h. Khung 4h: ${change4h.toFixed(2)}%. Xu hướng ${biasText}, chờ breakout. Kháng cự gần nhất: $${resistance}, Hỗ trợ: $${support}.`;
 
     return {
       bias,
       action,
       confidence,
-      narrative: narrative.substring(0, 100),
+      narrative: narrative.substring(0, 300),
       timeframes: {
         '15m': change15m > 0.2 ? 'tăng' : change15m < -0.2 ? 'giảm' : 'đi ngang',
         '1h': change1h > 0.5 ? 'tăng' : change1h < -0.5 ? 'giảm' : 'đi ngang',

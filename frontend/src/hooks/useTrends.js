@@ -30,8 +30,8 @@ export function useTrends() {
   useEffect(() => {
     fetchData();
     
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
+    // Auto-refresh every 15 minutes
+    const interval = setInterval(fetchData, 900000);
     return () => clearInterval(interval);
   }, []);
 

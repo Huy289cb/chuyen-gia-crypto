@@ -12,10 +12,10 @@ export function MarketOverview({ analysis, lastUpdated, marketData }) {
   // Guard against undefined/null/empty analysis during loading
   if (!analysis || typeof analysis !== 'object' || Object.keys(analysis).length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+      <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 border border-gray-100">
         <div className="flex items-center gap-2">
-          <Activity className="text-purple-500" size={20} />
-          <h3 className="font-bold text-gray-900">Tổng quan thị trường</h3>
+          <Activity className="text-purple-500" size={18} />
+          <h3 className="font-bold text-sm sm:text-base text-gray-900">Tổng quan thị trường</h3>
         </div>
         <p className="text-xs text-gray-500 mt-2">Đang tải dữ liệu...</p>
       </div>
@@ -48,20 +48,20 @@ export function MarketOverview({ analysis, lastUpdated, marketData }) {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+    <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 border border-gray-100">
       {/* Header row with stats */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
-          <Activity className="text-purple-500" size={20} />
-          <h3 className="font-bold text-gray-900">Tổng quan thị trường</h3>
-          <div className={`px-3 py-1.5 rounded-lg ${config.bg} flex items-center gap-2 shrink-0`}>
-            <div className={`w-2 h-2 rounded-full ${config.color}`}></div>
-            <span className={`text-sm font-semibold ${config.textColor}`}>{config.text}</span>
+          <Activity className="text-purple-500" size={18} />
+          <h3 className="font-bold text-sm sm:text-base text-gray-900">Tổng quan thị trường</h3>
+          <div className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg ${config.bg} flex items-center gap-1.5 sm:gap-2 shrink-0`}>
+            <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${config.color}`}></div>
+            <span className={`text-xs sm:text-sm font-semibold ${config.textColor}`}>{config.text}</span>
           </div>
         </div>
         
         {marketData && (
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-2 sm:gap-4 text-xs flex-wrap">
             {marketData?.fearGreed?.value !== undefined && (
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-500">F&G:</span>
@@ -106,10 +106,10 @@ export function MarketOverview({ analysis, lastUpdated, marketData }) {
   } catch (error) {
     console.error('MarketOverview error:', error);
     return (
-      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+      <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 border border-gray-100">
         <div className="flex items-center gap-2">
-          <Activity className="text-purple-500" size={20} />
-          <h3 className="font-bold text-gray-900">Tổng quan thị trường</h3>
+          <Activity className="text-purple-500" size={18} />
+          <h3 className="font-bold text-sm sm:text-base text-gray-900">Tổng quan thị trường</h3>
         </div>
         <p className="text-xs text-red-500 mt-2">Lỗi hiển thị dữ liệu</p>
       </div>
@@ -122,14 +122,14 @@ export function RefreshButton({ onRefresh, loading }) {
     <button
       onClick={onRefresh}
       disabled={loading}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium text-xs sm:text-sm transition-all ${
         loading 
           ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
           : 'bg-blue-500 text-white hover:bg-blue-600 active:scale-95'
       }`}
     >
-      <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-      {loading ? 'Đang tải...' : 'Làm mới'}
+      <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+      <span className="hidden sm:inline">{loading ? 'Đang tải...' : 'Làm mới'}</span>
     </button>
   );
 }

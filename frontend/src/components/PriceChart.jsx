@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
-import { Clock, TrendingUp, TrendingDown, Layers, Box, Droplets, Activity } from 'lucide-react';
+import { Clock, TrendingUp, TrendingDown, Layers, Box, Droplets, Activity, MessageSquare } from 'lucide-react';
 
 const tfLabels = {
   '15m': '15 phút',
@@ -17,8 +17,9 @@ const directionLabels = {
 
 function formatPrice(price) {
   if (!price || isNaN(price)) return 'N/A';
+  // Always display full price without abbreviations
   if (price >= 1000) {
-    return `$${(price / 1000).toFixed(1)}K`;
+    return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   return `$${price.toFixed(2)}`;
 }
@@ -164,22 +165,14 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
 
     if (validPredictions.length === 0) return [];
 
-    const sortedPredictions = validPredictions.sort((a, b) => {
-      const aIndex = tfOrder.indexOf(a.timeframe);
-      const bIndex = tfOrder.indexOf(b.timeframe);
-      return aIndex - bIndex;
-    });
-
     let lineData = [];
-    let lastPrice = currentPrice;
-    const baseTime = ohlcData.length > 0 ? ohlcData[ohlcData.length - 1].time : Date.now() / 1000;
+    // Use last candle's close price for accurate starting point
+    const lastCandle = ohlcData[ohlcData.length - 1];
+    const startPrice = lastCandle.close;
+    const baseTime = lastCandle.time;
 
-    // Add connecting point at current time
-    lineData.push({ time: baseTime, value: lastPrice });
-
-    // Get the prediction for the current timeframe to determine direction
-    const currentTfPrediction = sortedPredictions.find(p => p.timeframe === timeframe);
-    const direction = currentTfPrediction?.direction || 'sideways';
+    // Add connecting point at current time with last candle's close price
+    lineData.push({ time: baseTime, value: startPrice });
 
     // Calculate interval in minutes based on selected timeframe
     const intervalMinutes =
@@ -187,28 +180,48 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
       timeframe === '1h' ? 60 :
       timeframe === '4h' ? 240 : 1440;
 
-    // Generate prediction points at the selected timeframe interval
-    // Show up to 10 points into the future
-    const numPoints = 10;
-    for (let i = 1; i <= numPoints; i++) {
-      const predTime = baseTime + (i * intervalMinutes * 60);
+    // Calculate how many candles equal 4 hours and 24 hours
+    const candles4h = Math.ceil(240 / intervalMinutes); // 4 hours = 240 minutes
+    const candles24h = Math.ceil(1440 / intervalMinutes); // 24 hours = 1440 minutes
 
-      // Calculate target price with small incremental moves
-      const movePercent = direction === 'up' ? 0.005 : direction === 'down' ? -0.005 : 0;
-      // Add some randomness for more realistic look
-      const randomFactor = 1 + (Math.random() - 0.5) * 0.01;
-      const targetPrice = lastPrice * (1 + movePercent) * randomFactor;
+    // Get predictions for 4h and 1d timeframes
+    const pred4h = validPredictions.find(p => p.timeframe === '4h');
+    const pred1d = validPredictions.find(p => p.timeframe === '1d');
+
+    // Determine target prices
+    const target4h = pred4h?.target && typeof pred4h.target === 'number' && pred4h.target > 0 
+                    ? pred4h.target 
+                    : startPrice * (1 + (pred4h?.direction === 'up' ? 0.02 : pred4h?.direction === 'down' ? -0.02 : 0));
+    
+    const target1d = pred1d?.target && typeof pred1d.target === 'number' && pred1d.target > 0 
+                    ? pred1d.target 
+                    : startPrice * (1 + (pred1d?.direction === 'up' ? 0.05 : pred1d?.direction === 'down' ? -0.05 : 0));
+
+    // Generate prediction points from current to 24h
+    const totalCandles = candles24h;
+    for (let i = 1; i <= totalCandles; i++) {
+      const predTime = baseTime + (i * intervalMinutes * 60);
+      
+      let pointPrice;
+      
+      if (i <= candles4h) {
+        // Points 1 to candles4h: Interpolate from start to 4h target
+        const progress = i / candles4h;
+        pointPrice = startPrice + (target4h - startPrice) * progress;
+      } else {
+        // Points candles4h+1 to totalCandles: Interpolate from 4h target to 1d target
+        const progress = (i - candles4h) / (totalCandles - candles4h);
+        pointPrice = target4h + (target1d - target4h) * progress;
+      }
 
       lineData.push({
         time: predTime,
-        value: targetPrice
+        value: pointPrice
       });
-
-      lastPrice = targetPrice;
     }
 
     return lineData;
-  }, [ohlcData, predictions, showPredictions, currentPrice, timeframe]);
+  }, [ohlcData, predictions, showPredictions, timeframe]);
   
   // Initialize chart
   useEffect(() => {
@@ -390,7 +403,7 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
   if (!sparkline.length) return null;
   
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+    <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -399,8 +412,8 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
             {symbol}
           </div>
           <div>
-            <h3 className="font-bold text-lg text-gray-900">{name}</h3>
-            <p className="text-sm text-gray-500">
+            <h3 className="font-bold text-base sm:text-lg text-gray-900">{name}</h3>
+            <p className="text-xs sm:text-sm text-gray-500">
               Giá: {formatPrice(currentPrice)} 
               {data?.change24h !== undefined && (
                 <span className={data.change24h >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
@@ -460,7 +473,7 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
       </div>
       
       {/* Chart */}
-      <div ref={chartContainerRef} className="w-full h-[300px] mb-4" />
+      <div ref={chartContainerRef} className="w-full h-[250px] sm:h-[300px] mb-4" />
       
       {/* ICT Indicators Section */}
       {(ictLevels.orderBlocks.length > 0 || ictLevels.fvg.length > 0 || ictLevels.liquidity.length > 0 || ictLevels.bos.length > 0 || ictLevels.choch.length > 0) && (
@@ -546,6 +559,17 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
               </div>
             )}
           </div>
+        </div>
+      )}
+      
+      {/* Narrative Section */}
+      {analysis?.narrative && (
+        <div className="mb-4 p-3 bg-blue-50 rounded-xl">
+          <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <MessageSquare size={14} />
+            Phân tích thị trường
+          </div>
+          <p className="text-sm text-gray-700 leading-relaxed">{analysis.narrative}</p>
         </div>
       )}
       
