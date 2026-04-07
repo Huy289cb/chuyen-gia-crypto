@@ -334,8 +334,8 @@ function generateFallbackAnalysis(priceData) {
 
     const trendText = change24h >= 0 ? 'tăng' : 'giảm';
     const biasText = bias === 'bullish' ? 'tăng' : bias === 'bearish' ? 'giảm' : 'đi ngang';
-    const resistance = (currentPrice * 1.02).toFixed(0);
-    const support = (currentPrice * 0.98).toFixed(0);
+    const resistance = (coinData.price * 1.02).toFixed(0);
+    const support = (coinData.price * 0.98).toFixed(0);
     const narrative = `Giá ${trendText} ${Math.abs(change24h).toFixed(2)}% trong 24h. Khung 4h: ${change4h.toFixed(2)}%. Xu hướng ${biasText}, chờ breakout. Kháng cự gần nhất: $${resistance}, Hỗ trợ: $${support}.`;
 
     return {
