@@ -1,16 +1,24 @@
 import { CoinChart } from './components/PriceChart';
 import { MarketOverview, RefreshButton } from './components/MarketOverview';
 import { Disclaimer } from './components/Disclaimer';
+import { DashboardHeader } from './components/DashboardHeader';
+import { PositionPanel } from './components/PositionPanel';
 import { useTrends } from './hooks/useTrends';
+import { usePaperTrading } from './hooks/usePaperTrading';
 import { Zap, Loader2, AlertCircle } from 'lucide-react';
 
 function App() {
   const { data, loading, error, refetch } = useTrends();
+  const { accounts, positions, loading: ptLoading, resetAccount, closePosition } = usePaperTrading();
 
   const prices = data?.prices || {};
   const analysis = data?.analysis || {};
   const marketData = data?.prices?.marketData;
   const disclaimer = analysis?.disclaimer;
+
+  const handleRefresh = () => {
+    refetch();
+  };
 
   if (loading && !data) {
     return (
@@ -31,7 +39,7 @@ function App() {
           <h2 className="text-xl font-bold text-gray-900 mb-2">Chưa sẵn sàng</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={refetch}
+            onClick={handleRefresh}
             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
           >
             Thử lại
@@ -53,15 +61,18 @@ function App() {
               </div>
               <div>
                 <h1 className="text-base sm:text-xl font-bold text-gray-900">Crypto Trend Analyzer</h1>
-                <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Phân tích xu hướng BTC/ETH với AI</p>
+                <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Phân tích xu hướng BTC/ETH với AI + Paper Trading</p>
               </div>
             </div>
-            <RefreshButton onRefresh={refetch} loading={loading} />
+            <RefreshButton onRefresh={handleRefresh} loading={loading} />
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8">
+        {/* Paper Trading Dashboard Header */}
+        <DashboardHeader accounts={accounts} />
+
         {/* Market Overview */}
         <div className="mb-6">
           <MarketOverview
@@ -69,6 +80,11 @@ function App() {
             lastUpdated={prices.timestamp}
             marketData={marketData}
           />
+        </div>
+
+        {/* Position Panel */}
+        <div className="mb-6">
+          <PositionPanel positions={positions} onClosePosition={closePosition} />
         </div>
 
         {/* Charts Grid - 50/50 Layout */}
@@ -96,7 +112,7 @@ function App() {
 
         {/* Footer */}
         <footer className="mt-8 text-center text-sm text-gray-400">
-          <p>Phân tích bởi AI • Dữ liệu từ CoinGecko/Binance</p>
+          <p>Phân tích bởi AI • Dữ liệu từ CoinGecko/Binance • Paper Trading Simulation</p>
         </footer>
       </main>
     </div>

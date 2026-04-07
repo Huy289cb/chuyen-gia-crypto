@@ -1,5 +1,8 @@
 import express from 'express';
 import { cache } from './cache.js';
+import positionsRouter from './routes/positions.js';
+import accountsRouter from './routes/accounts.js';
+import performanceRouter from './routes/performance.js';
 
 const router = express.Router();
 let db = null;
@@ -9,9 +12,11 @@ let dbEnabled = false;
 export async function initDb() {
   try {
     const { initDatabase } = await import('./db/database.js');
+    const { runMigrations } = await import('./db/migrations.js');
     db = await initDatabase();
+    await runMigrations(db);
     dbEnabled = true;
-    console.log('[Routes] Database connected');
+    console.log('[Routes] Database connected and migrations run');
   } catch (error) {
     console.log('[Routes] Database not available:', error.message);
     db = null;
@@ -19,6 +24,13 @@ export async function initDb() {
   }
   return { db, dbEnabled };
 }
+
+// Middleware to inject db into routes
+router.use((req, res, next) => {
+  req.db = db;
+  req.dbEnabled = dbEnabled;
+  next();
+});
 
 // GET /api/analysis - Get cached trend analysis
 router.get('/analysis', (req, res) => {
@@ -233,6 +245,54 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// POST /api/analysis/run - Manual trigger for analysis
+router.post('/analysis/run', async (req, res) => {
+  try {
+    const { fetchPrices } = await import('./price-fetcher.js');
+    const { analyzeWithGroq } = await import('./groqAnalyzer.js');
+    const { cache } = await import('./cache.js');
+    
+    console.log('[Routes] Manual analysis trigger requested');
+    
+    // Fetch prices
+    const priceData = await fetchPrices(db);
+    
+    // Run analysis
+    const analysis = await analyzeWithGroq(priceData, db);
+    
+    // Cache results
+    const cachedData = {
+      prices: priceData,
+      analysis: analysis,
+      lastUpdated: priceData.timestamp
+    };
+    cache.set(cachedData);
+    
+    // Save to database if enabled
+    if (dbEnabled && db) {
+      const { saveAnalysis } = await import('./db/database.js');
+      await saveAnalysis(db, 'BTC', priceData, analysis);
+      await saveAnalysis(db, 'ETH', priceData, analysis);
+    }
+    
+    res.json({
+      success: true,
+      data: cachedData,
+      message: 'Analysis completed successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Mount sub-routers
+router.use('/positions', positionsRouter);
+router.use('/accounts', accountsRouter);
+router.use('/performance', performanceRouter);
 
 export default router;
 export { db, dbEnabled };

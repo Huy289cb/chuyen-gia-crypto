@@ -208,3 +208,23 @@ Get OHLCV candle data for charting.
 - Frontend auto-refresh: every 30 seconds
 - Cache TTL: 20 minutes
 - Cron schedule: 15 minutes
+
+## API Sources
+
+### Primary Source: Binance API
+- **Why**: No rate limiting (1200 req/min vs CoinGecko's ~10-50 req/min)
+- **Endpoints**:
+  - `/api/v3/ticker/price?symbol=BTCUSDT` - Current price
+  - `/api/v3/ticker/24hr?symbol=BTCUSDT` - 24h ticker data
+  - `/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=672` - OHLCV data
+- **Price Consistency**: 100% Binance (no exchange discrepancies)
+
+### Fallback Chain
+1. **Binance API** (primary, no rate limit)
+2. **CoinGecko API** (fallback, rate-limited to 2s delay)
+3. **Database** (cached data, last resort)
+
+### Update Frequencies
+- Paper Trading: 30 seconds (Binance real-time API)
+- Analysis: 15 minutes (Binance API)
+- Manual Operations: On-demand (Binance API)

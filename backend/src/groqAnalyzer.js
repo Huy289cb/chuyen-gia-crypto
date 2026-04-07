@@ -154,6 +154,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
     "confidence": 0-1,
     "narrative": "max 350 characters in Vietnamese - tell the market story with details about structure, liquidity, and price action",
     "timeframes": {
+      "15m": "structure description in Vietnamese",
       "1h": "structure description in Vietnamese",
       "4h": "structure description in Vietnamese", 
       "1d": "structure description in Vietnamese"
@@ -171,7 +172,13 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
       "1d": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 }
     },
-    "risk": "volatility warning + invalidation scenario in Vietnamese"
+    "risk": "volatility warning + invalidation scenario in Vietnamese",
+    "suggested_entry": number (optional - specific entry price if bias is clear),
+    "suggested_stop_loss": number (optional - SL below swing low for long, above swing high for short),
+    "suggested_take_profit": number (optional - TP at liquidity target or FVG fill),
+    "expected_rr": number (optional - risk/reward ratio, minimum 2.0),
+    "invalidation_level": number (optional - price level that invalidates the setup),
+    "reason_summary": "brief reason in Vietnamese for the trading suggestion (max 200 chars)"
   },
   "eth": { ... same structure ... },
   "marketSentiment": "bullish | bearish | neutral | mixed",
@@ -183,6 +190,10 @@ RULES:
 - Build narrative BEFORE decision
 - If signals conflict → HOLD
 - Predictions must target specific liquidity/FVG levels
+- Only provide suggested_entry, suggested_stop_loss, suggested_take_profit if confidence >= 0.8 and bias is clear
+- SL should be placed below recent swing low (long) or above swing high (short)
+- TP should target next liquidity level or FVG fill zone with minimum 1:2 R:R
+- expected_rr must be >= 2.0 if suggesting a trade
 - No text outside JSON
 - reasoning ≤ 350 characters in Vietnamese`;
 
@@ -319,6 +330,23 @@ function formatAnalysisResponse(rawResponse, priceData) {
       
       return pred;
     };
+
+    // Validate trading suggestion fields
+    const validatePriceLevel = (price, currentPrice, type) => {
+      if (!price || isNaN(price)) return null;
+      
+      const p = parseFloat(price);
+      // Ensure price is within reasonable range
+      const maxPrice = currentPrice * 1.5;
+      const minPrice = currentPrice * 0.5;
+      
+      if (p > maxPrice || p < minPrice) {
+        console.log(`[GroqAnalyzer] Fixing unrealistic ${type}: ${p}`);
+        return null;
+      }
+      
+      return p;
+    };
     
     return {
       bias: hasValidPredictions && ['bullish', 'bearish', 'neutral'].includes(coinData?.bias) 
@@ -350,7 +378,15 @@ function formatAnalysisResponse(rawResponse, priceData) {
         '4h': validatePredictionTarget(coinData?.predictions?.['4h'], currentPrice),
         '1d': validatePredictionTarget(coinData?.predictions?.['1d'], currentPrice)
       },
-      risk: coinData?.risk || 'Crypto markets are volatile - trade carefully'
+      risk: coinData?.risk || 'Crypto markets are volatile - trade carefully',
+      // New trading suggestion fields
+      current_price: currentPrice,
+      suggested_entry: validatePriceLevel(coinData?.suggested_entry, currentPrice, 'entry'),
+      suggested_stop_loss: validatePriceLevel(coinData?.suggested_stop_loss, currentPrice, 'stop_loss'),
+      suggested_take_profit: validatePriceLevel(coinData?.suggested_take_profit, currentPrice, 'take_profit'),
+      expected_rr: coinData?.expected_rr && !isNaN(coinData.expected_rr) ? Math.max(0, parseFloat(coinData.expected_rr)) : null,
+      invalidation_level: validatePriceLevel(coinData?.invalidation_level, currentPrice, 'invalidation'),
+      reason_summary: coinData?.reason_summary ? coinData.reason_summary.substring(0, 200) : null
     };
   };
 

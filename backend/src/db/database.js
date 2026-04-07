@@ -168,46 +168,71 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
         
         const analysisId = this.lastID;
         
-        // Save predictions
-        if (coinData.predictions) {
-          const predictions = Object.entries(coinData.predictions);
-          const timeframeHours = { '15m': 0.25, '1h': 1, '4h': 4, '1d': 24 };
-          
-          predictions.forEach(([timeframe, pred]) => {
-            // Skip if pred is undefined or missing required properties
-            if (!pred || typeof pred !== 'object') return;
+        // Save predictions with new trading suggestion fields (async)
+        const savePredictions = async () => {
+          if (coinData.predictions) {
+            const predictions = Object.entries(coinData.predictions);
+            const timeframeHours = { '15m': 0.25, '1h': 1, '4h': 4, '1d': 24 };
             
-            const expiresAt = new Date();
-            expiresAt.setHours(expiresAt.getHours() + timeframeHours[timeframe]);
-            
-            db.run(
-              `INSERT INTO predictions 
-               (analysis_id, coin, timeframe, direction, target_price, confidence, expires_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [
-                analysisId,
-                coin.toUpperCase(),
-                timeframe,
-                pred.direction || 'neutral',
-                pred.target || 0,
-                pred.confidence || 0,
-                expiresAt.toISOString()
-              ]
-            );
-          });
-        }
+            for (const [timeframe, pred] of predictions) {
+              // Skip if pred is undefined or missing required properties
+              if (!pred || typeof pred !== 'object') continue;
+              
+              const expiresAt = new Date();
+              expiresAt.setHours(expiresAt.getHours() + timeframeHours[timeframe]);
+              
+              await new Promise((res, rej) => {
+                db.run(
+                  `INSERT INTO predictions 
+                   (analysis_id, coin, timeframe, direction, target_price, confidence, expires_at, 
+                    suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr, 
+                    invalidation_level, reason_summary, model_version)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    analysisId,
+                    coin.toUpperCase(),
+                    timeframe,
+                    pred.direction || 'neutral',
+                    pred.target || 0,
+                    pred.confidence || 0,
+                    expiresAt.toISOString(),
+                    coinData.suggested_entry || null,
+                    coinData.suggested_stop_loss || null,
+                    coinData.suggested_take_profit || null,
+                    coinData.expected_rr || null,
+                    coinData.invalidation_level || null,
+                    coinData.reason_summary || null,
+                    '1.0'
+                  ],
+                  function(insertErr) {
+                    if (insertErr) rej(insertErr);
+                    else res(this.lastID);
+                  }
+                );
+              });
+            }
+          }
+        };
         
-        // Save key levels
-        if (coinData.key_levels) {
-          Object.entries(coinData.key_levels).forEach(([type, desc]) => {
-            db.run(
-              `INSERT INTO key_levels 
-               (analysis_id, coin, level_type, description)
-               VALUES (?, ?, ?, ?)`,
-              [analysisId, coin.toUpperCase(), type, desc]
-            );
-          });
-        }
+        // Save key levels (async)
+        const saveKeyLevels = async () => {
+          if (coinData.key_levels) {
+            for (const [type, desc] of Object.entries(coinData.key_levels)) {
+              await new Promise((res, rej) => {
+                db.run(
+                  `INSERT INTO key_levels 
+                   (analysis_id, coin, level_type, description)
+                   VALUES (?, ?, ?, ?)`,
+                  [analysisId, coin.toUpperCase(), type, desc],
+                  function(insertErr) {
+                    if (insertErr) rej(insertErr);
+                    else res();
+                  }
+                );
+              });
+            }
+          }
+        };
         
         // Save current price
         db.run(
@@ -215,8 +240,17 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
           [coin.toUpperCase(), currentPrice]
         );
         
-        console.log(`[Database] Saved analysis #${analysisId} for ${coin}`);
-        resolve(analysisId);
+        // Wait for async operations to complete
+        Promise.all([savePredictions(), saveKeyLevels()])
+          .then(() => {
+            console.log(`[Database] Saved analysis #${analysisId} for ${coin}`);
+            resolve({ analysisId });
+          })
+          .catch((saveErr) => {
+            console.error('[Database] Error saving related data:', saveErr.message);
+            // Still resolve with analysisId even if predictions fail
+            resolve({ analysisId });
+          });
       }
     );
   });
@@ -619,4 +653,541 @@ export async function runDataRetention(db) {
   } catch (error) {
     console.error('[Database] Data retention error:', error.message);
   }
+}
+
+// ==========================================
+// PAPER TRADING - ACCOUNT FUNCTIONS
+// ==========================================
+
+// Initialize or get account for a symbol
+export async function getOrCreateAccount(db, symbol, startingBalance = 100) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM accounts WHERE symbol = ?`,
+      [symbol.toUpperCase()],
+      (err, row) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        if (row) {
+          resolve(row);
+        } else {
+          // Create new account
+          db.run(
+            `INSERT INTO accounts (symbol, starting_balance, current_balance, equity)
+             VALUES (?, ?, ?, ?)`,
+            [symbol.toUpperCase(), startingBalance, startingBalance, startingBalance],
+            function(err) {
+              if (err) {
+                reject(err);
+                return;
+              }
+              db.get(
+                `SELECT * FROM accounts WHERE id = ?`,
+                [this.lastID],
+                (err2, newRow) => {
+                  if (err2) reject(err2);
+                  else resolve(newRow);
+                }
+              );
+            }
+          );
+        }
+      }
+    );
+  });
+}
+
+// Update account balance and equity
+export async function updateAccount(db, accountId, updates) {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    
+    if (updates.current_balance !== undefined) {
+      fields.push('current_balance = ?');
+      values.push(updates.current_balance);
+    }
+    if (updates.equity !== undefined) {
+      fields.push('equity = ?');
+      values.push(updates.equity);
+    }
+    if (updates.unrealized_pnl !== undefined) {
+      fields.push('unrealized_pnl = ?');
+      values.push(updates.unrealized_pnl);
+    }
+    if (updates.realized_pnl !== undefined) {
+      fields.push('realized_pnl = ?');
+      values.push(updates.realized_pnl);
+    }
+    if (updates.total_trades !== undefined) {
+      fields.push('total_trades = ?');
+      values.push(updates.total_trades);
+    }
+    if (updates.winning_trades !== undefined) {
+      fields.push('winning_trades = ?');
+      values.push(updates.winning_trades);
+    }
+    if (updates.losing_trades !== undefined) {
+      fields.push('losing_trades = ?');
+      values.push(updates.losing_trades);
+    }
+    if (updates.max_drawdown !== undefined) {
+      fields.push('max_drawdown = ?');
+      values.push(updates.max_drawdown);
+    }
+    if (updates.consecutive_losses !== undefined) {
+      fields.push('consecutive_losses = ?');
+      values.push(updates.consecutive_losses);
+    }
+    if (updates.last_trade_time !== undefined) {
+      fields.push('last_trade_time = ?');
+      values.push(updates.last_trade_time);
+    }
+    if (updates.cooldown_until !== undefined) {
+      fields.push('cooldown_until = ?');
+      values.push(updates.cooldown_until);
+    }
+    
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(accountId);
+    
+    db.run(
+      `UPDATE accounts SET ${fields.join(', ')} WHERE id = ?`,
+      values,
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+// Get all accounts
+export async function getAllAccounts(db) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM accounts ORDER BY symbol`,
+      (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      }
+    );
+  });
+}
+
+// Get account by symbol
+export async function getAccountBySymbol(db, symbol) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM accounts WHERE symbol = ?`,
+      [symbol.toUpperCase()],
+      (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      }
+    );
+  });
+}
+
+// Reset account to starting balance
+export async function resetAccount(db, symbol) {
+  return new Promise((resolve, reject) => {
+    // First, close all open positions for this symbol
+    db.run(
+      `UPDATE positions SET status = 'closed_manual', close_time = datetime('now'), close_reason = 'account_reset' WHERE symbol = ? AND status = 'open'`,
+      [symbol.toUpperCase()]
+    );
+
+    db.run(
+      `UPDATE accounts 
+       SET current_balance = starting_balance,
+           equity = starting_balance,
+           unrealized_pnl = 0,
+           realized_pnl = 0,
+           total_trades = 0,
+           winning_trades = 0,
+           losing_trades = 0,
+           max_drawdown = 0,
+           consecutive_losses = 0,
+           cooldown_until = NULL,
+           last_trade_time = NULL
+       WHERE symbol = ?`,
+      [symbol.toUpperCase()],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+// ==========================================
+// PAPER TRADING - POSITION FUNCTIONS
+// ==========================================
+
+// Create a new position
+export async function createPosition(db, positionData) {
+  return new Promise((resolve, reject) => {
+    const {
+      position_id,
+      account_id,
+      symbol,
+      side,
+      entry_price,
+      stop_loss,
+      take_profit,
+      size_usd,
+      size_qty,
+      risk_usd,
+      risk_percent,
+      expected_rr,
+      linked_prediction_id
+    } = positionData;
+    
+    db.run(
+      `INSERT INTO positions 
+       (position_id, account_id, symbol, side, entry_price, stop_loss, take_profit, 
+        size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        position_id,
+        account_id,
+        symbol.toUpperCase(),
+        side,
+        entry_price,
+        stop_loss,
+        take_profit,
+        size_usd,
+        size_qty,
+        risk_usd,
+        risk_percent,
+        expected_rr,
+        linked_prediction_id
+      ],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        // Log trade event
+        logTradeEvent(db, this.lastID, 'opened', JSON.stringify(positionData)).catch(console.error);
+        
+        db.get(
+          `SELECT * FROM positions WHERE id = ?`,
+          [this.lastID],
+          (err2, row) => {
+            if (err2) reject(err2);
+            else resolve(row);
+          }
+        );
+      }
+    );
+  });
+}
+
+// Get position by ID
+export async function getPosition(db, positionId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM positions WHERE id = ?`,
+      [positionId],
+      (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      }
+    );
+  });
+}
+
+// Get positions by symbol and/or status
+export async function getPositions(db, filters = {}) {
+  return new Promise((resolve, reject) => {
+    const conditions = [];
+    const values = [];
+    
+    if (filters.symbol) {
+      conditions.push('symbol = ?');
+      values.push(filters.symbol.toUpperCase());
+    }
+    if (filters.status) {
+      conditions.push('status = ?');
+      values.push(filters.status);
+    }
+    if (filters.account_id) {
+      conditions.push('account_id = ?');
+      values.push(filters.account_id);
+    }
+    
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    
+    db.all(
+      `SELECT * FROM positions ${whereClause} ORDER BY entry_time DESC`,
+      values,
+      (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      }
+    );
+  });
+}
+
+// Update position
+export async function updatePosition(db, positionId, updates) {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+    }
+    if (updates.realized_pnl !== undefined) {
+      fields.push('realized_pnl = ?');
+      values.push(updates.realized_pnl);
+    }
+    if (updates.unrealized_pnl !== undefined) {
+      fields.push('unrealized_pnl = ?');
+      values.push(updates.unrealized_pnl);
+    }
+    if (updates.close_price !== undefined) {
+      fields.push('close_price = ?');
+      values.push(updates.close_price);
+    }
+    if (updates.close_time !== undefined) {
+      fields.push('close_time = ?');
+      values.push(updates.close_time);
+    }
+    if (updates.close_reason !== undefined) {
+      fields.push('close_reason = ?');
+      values.push(updates.close_reason);
+    }
+    
+    if (fields.length === 0) {
+      resolve(0);
+      return;
+    }
+    
+    values.push(positionId);
+    
+    db.run(
+      `UPDATE positions SET ${fields.join(', ')} WHERE id = ?`,
+      values,
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+// Close position
+export async function closePosition(db, positionId, closePrice, closeReason) {
+  return new Promise((resolve, reject) => {
+    const closeTime = new Date().toISOString();
+    
+    db.run(
+      `UPDATE positions 
+       SET status = CASE 
+         WHEN close_reason = 'stop_loss' THEN 'stopped'
+         WHEN close_reason = 'take_profit' THEN 'taken_profit'
+         WHEN close_reason = 'manual' THEN 'closed_manual'
+         ELSE 'closed'
+       END,
+       close_price = ?,
+       close_time = ?,
+       close_reason = ?
+       WHERE id = ?`,
+      [closePrice, closeTime, closeReason, positionId],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        // Log trade event
+        logTradeEvent(db, positionId, closeReason === 'stop_loss' ? 'sl_hit' : closeReason === 'take_profit' ? 'tp_hit' : 'closed', 
+          JSON.stringify({ close_price: closePrice, close_reason: closeReason })).catch(console.error);
+        
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+// ==========================================
+// PAPER TRADING - ACCOUNT SNAPSHOTS
+// ==========================================
+
+// Create account snapshot
+export async function createAccountSnapshot(db, accountId, balance, equity, unrealizedPnl, openPositions) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO account_snapshots (account_id, balance, equity, unrealized_pnl, open_positions)
+       VALUES (?, ?, ?, ?, ?)`,
+      [accountId, balance, equity, unrealizedPnl, openPositions],
+      function(err) {
+        if (err) reject(err);
+        else resolve(this.lastID);
+      }
+    );
+  });
+}
+
+// Get account snapshots for equity curve
+export async function getAccountSnapshots(db, accountId, hoursBack = 168) {
+  return new Promise((resolve, reject) => {
+    const since = new Date();
+    since.setHours(since.getHours() - hoursBack);
+    
+    db.all(
+      `SELECT * FROM account_snapshots 
+       WHERE account_id = ? AND timestamp >= ?
+       ORDER BY timestamp ASC`,
+      [accountId, since.toISOString()],
+      (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      }
+    );
+  });
+}
+
+// ==========================================
+// PAPER TRADING - TRADE EVENTS
+// ==========================================
+
+// Log trade event
+export async function logTradeEvent(db, positionId, eventType, eventData = '{}') {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO trade_events (position_id, event_type, event_data)
+       VALUES (?, ?, ?)`,
+      [positionId, eventType, eventData],
+      function(err) {
+        if (err) reject(err);
+        else resolve(this.lastID);
+      }
+    );
+  });
+}
+
+// Get trade events for a position
+export async function getTradeEvents(db, positionId) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM trade_events WHERE position_id = ? ORDER BY timestamp ASC`,
+      [positionId],
+      (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      }
+    );
+  });
+}
+
+// ==========================================
+// PAPER TRADING - PERFORMANCE CALCULATIONS
+// ==========================================
+
+// Calculate performance metrics for an account
+export async function calculatePerformance(db, accountId) {
+  return new Promise((resolve, reject) => {
+    // Get account info
+    db.get(
+      `SELECT * FROM accounts WHERE id = ?`,
+      [accountId],
+      (err, account) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        if (!account) {
+          reject(new Error('Account not found'));
+          return;
+        }
+        
+        // Get closed positions
+        db.all(
+          `SELECT * FROM positions WHERE account_id = ? AND status IN ('closed', 'stopped', 'taken_profit', 'closed_manual')`,
+          [accountId],
+          (err2, positions) => {
+            if (err2) {
+              reject(err2);
+              return;
+            }
+            
+            const winningTrades = positions.filter(p => p.realized_pnl > 0);
+            const losingTrades = positions.filter(p => p.realized_pnl < 0);
+            
+            const totalReturn = ((account.equity - account.starting_balance) / account.starting_balance) * 100;
+            const winRate = positions.length > 0 ? (winningTrades.length / positions.length) * 100 : 0;
+            
+            const grossProfit = winningTrades.reduce((sum, p) => sum + p.realized_pnl, 0);
+            const grossLoss = Math.abs(losingTrades.reduce((sum, p) => sum + p.realized_pnl, 0));
+            const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+            
+            const avgRisk = positions.length > 0 ? positions.reduce((sum, p) => sum + p.risk_usd, 0) / positions.length : 0;
+            const avgProfit = winningTrades.length > 0 ? winningTrades.reduce((sum, p) => sum + p.realized_pnl, 0) / winningTrades.length : 0;
+            const avgRMultiple = avgRisk > 0 ? avgProfit / avgRisk : 0;
+            
+            // Calculate max drawdown from snapshots
+            db.all(
+              `SELECT equity FROM account_snapshots WHERE account_id = ? ORDER BY timestamp ASC`,
+              [accountId],
+              (err3, snapshots) => {
+                if (err3) {
+                  reject(err3);
+                  return;
+                }
+                
+                let maxDrawdown = 0;
+                let peak = account.starting_balance;
+                
+                snapshots.forEach(s => {
+                  if (s.equity > peak) {
+                    peak = s.equity;
+                  }
+                  const drawdown = ((peak - s.equity) / peak) * 100;
+                  if (drawdown > maxDrawdown) {
+                    maxDrawdown = drawdown;
+                  }
+                });
+                
+                resolve({
+                  starting_balance: account.starting_balance,
+                  current_equity: account.equity,
+                  current_balance: account.current_balance,
+                  unrealized_pnl: account.unrealized_pnl,
+                  realized_pnl: account.realized_pnl,
+                  total_return_percent: totalReturn,
+                  win_rate: winRate,
+                  profit_factor: profitFactor,
+                  max_drawdown: maxDrawdown > 0 ? maxDrawdown : account.max_drawdown,
+                  average_r_multiple: avgRMultiple,
+                  total_trades: positions.length,
+                  winning_trades: winningTrades.length,
+                  losing_trades: losingTrades.length,
+                  consecutive_losses: account.consecutive_losses
+                });
+              }
+            );
+          }
+        );
+      }
+    );
+  });
 }

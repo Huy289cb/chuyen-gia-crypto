@@ -1,6 +1,6 @@
 # Crypto Trend Analyzer - ICT Edition
 
-MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concepts** với AI.
+MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concepts** với AI và **Paper Trading**.
 
 ## Tính năng nổi bật
 
@@ -13,6 +13,17 @@ MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concep
 
 ### Multi-Timeframe Analysis
 Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
+
+### Paper Trading System
+- **Auto-Entry ICT-Based**: Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
+- **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
+- **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
+- **Risk Management**: 1% risk per trade, position sizing dựa trên SL distance
+- **Separate Accounts**: 100U demo account riêng cho BTC và ETH
+- **Real-time PnL**: Cập nhật PnL mỗi 30 giây, auto-close khi hit SL/TP
+- **Cooldown System**: 4h cooldown sau 3 consecutive losses
+- **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown
+- **Price Updates**: Cập nhật giá và PnL mỗi 30 giây
 
 ### Real-time Data
 - Giá BTC/ETH cập nhật real-time từ CoinGecko/Binance
@@ -34,6 +45,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - Lưu trữ OHLCV candles (15m timeframe)
 - Data retention: giữ 30 ngày dữ liệu 15m candles
 - Historical prediction context: AI học từ độ chính xác dự báo trước đây (4h, 1d timeframes)
+- Paper trading: lưu vị thế, lịch sử giao dịch, equity curve
 
 ## Cấu trúc thư mục
 
@@ -45,18 +57,28 @@ crypto-analyzer/
 │   │   ├── groqAnalyzer.js  # ICT analysis engine
 │   │   ├── price-fetcher.js # CoinGecko integration
 │   │   ├── groq-client.js   # Groq API wrapper
-│   │   ├── scheduler.js     # 15-min cron job
+│   │   ├── scheduler.js     # 15-min cron job + price updates
 │   │   ├── cache.js         # In-memory cache
-│   │   ├── routes.js        # API endpoints
+│   │   ├── routes.js        # Main API endpoints
+│   │   ├── routes/          # API route modules
+│   │   │   ├── positions.js # Position management API
+│   │   │   ├── accounts.js  # Account management API
+│   │   │   └── performance.js # Performance metrics API
+│   │   ├── schedulers/      # Scheduler modules
+│   │   │   └── priceUpdateScheduler.js # 30s price updates
+│   │   ├── services/        # Business logic
+│   │   │   ├── autoEntryLogic.js # Auto-entry decision engine
+│   │   │   └── paperTradingEngine.js # Position management
 │   │   ├── config/          # Configuration
 │   │   │   └── cors.js      # CORS middleware
 │   │   └── db/              # Database layer
 │   │       ├── database.js  # SQLite operations
-│   │       └── init.js      # DB initialization
+│   │       ├── init.js      # DB initialization
+│   │       └── migrations.js # Paper trading migrations
 │   ├── data/               # SQLite database storage
 │   ├── scripts/
 │   │   └── ensure-data-dir.js
-│   └── .env                 # GROQ_API_KEY
+│   └── .env                 # GROQ_API_KEY + paper trading config
 ├── frontend/             # React + Vite + Tailwind
 │   ├── src/
 │   │   ├── App.jsx
@@ -71,7 +93,10 @@ crypto-analyzer/
 ├── docs/                 # Documentation
 │   ├── architecture.md   # System architecture
 │   ├── api-spec.md       # API specification
+│   ├── api-paper-trading.md # Paper trading API
 │   ├── app-behaviors.md  # ICT methodology
+│   ├── paper-trading.md  # Paper trading system docs
+│   ├── risk-management.md # ICT risk management
 │   └── setup.md          # Setup guide
 ├── rules/                # Analysis rules
 │   └── analysis.rules.md # ICT Smart Money rules
@@ -139,6 +164,13 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 - **4h**: Swing trade targets
 - **1d**: Higher timeframe bias
 - Mỗi timeframe có direction, target price, và confidence score
+
+### Price Fetching
+- **Primary Source**: Binance API (real-time, no rate limit)
+- **Fallback**: CoinGecko API (rate-limited, only if Binance fails)
+- **Price Consistency**: 100% Binance (no exchange discrepancies)
+- **OHLC Data**: 15m candles from Binance for ICT analysis
+- **Update Frequency**: 30s (paper trading), 15m (analysis)
 
 ## API Response Example
 

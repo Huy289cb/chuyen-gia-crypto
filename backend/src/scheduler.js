@@ -11,9 +11,11 @@ async function initDb() {
   try {
     // Dynamically import to avoid startup failure if sqlite3 not installed
     const { initDatabase } = await import('./db/database.js');
+    const { runMigrations } = await import('./db/migrations.js');
     db = await initDatabase();
+    await runMigrations(db);
     dbEnabled = true;
-    console.log('[Scheduler] Database initialized');
+    console.log('[Scheduler] Database initialized and migrations run');
   } catch (error) {
     console.log('[Scheduler] Database not available:', error.message);
     console.log('[Scheduler] Running without database persistence');
@@ -23,11 +25,11 @@ async function initDb() {
 }
 
 // Run analysis job every 15 minutes
-export function startScheduler() {
+export async function startScheduler() {
   console.log('[Scheduler] Starting 15-minute job scheduler...');
   
   // Initialize database
-  initDb();
+  await initDb();
   
   // Run immediately on startup
   runAnalysisJob();
@@ -63,6 +65,18 @@ export function startScheduler() {
       }
     }
   });
+  
+  // Start price update scheduler (30-second intervals)
+  if (dbEnabled && db) {
+    (async () => {
+      try {
+        const { initPriceUpdateScheduler } = await import('./schedulers/priceUpdateScheduler.js');
+        initPriceUpdateScheduler(db, true);
+      } catch (err) {
+        console.log('[Scheduler] Could not start price update scheduler:', err.message);
+      }
+    })();
+  }
   
   console.log('[Scheduler] Scheduled job registered (*/15 * * * *)');
 }
@@ -121,9 +135,50 @@ async function runAnalysisJob() {
     // Step 4: Save to database for prediction tracking (optional)
     if (dbEnabled && db) {
       try {
-        const { saveAnalysis } = await import('./db/database.js');
-        await saveAnalysis(db, 'BTC', priceData, analysis);
-        await saveAnalysis(db, 'ETH', priceData, analysis);
+        const { saveAnalysis, getOrCreateAccount, getPositions } = await import('./db/database.js');
+        const { evaluateAutoEntry } = await import('./services/autoEntryLogic.js');
+        const { openPosition } = await import('./services/paperTradingEngine.js');
+        
+        // Save analysis for BTC
+        const btcAnalysisId = await saveAnalysis(db, 'BTC', priceData, analysis);
+        
+        // Save analysis for ETH
+        const ethAnalysisId = await saveAnalysis(db, 'ETH', priceData, analysis);
+        
+        // Auto-entry evaluation for BTC
+        const btcAccount = await getOrCreateAccount(db, 'BTC', 100);
+        const btcOpenPositions = await getPositions(db, { symbol: 'BTC', status: 'open' });
+        const btcDecision = evaluateAutoEntry(analysis.btc, btcAccount, btcOpenPositions);
+        
+        console.log(`[Scheduler] BTC auto-entry decision: ${btcDecision.action} - ${btcDecision.reason}`);
+        
+        if (btcDecision.shouldEnter && btcDecision.suggestedPosition) {
+          try {
+            // Pass null for linked_prediction_id since we don't have a specific prediction to link
+            await openPosition(db, btcAccount, btcDecision.suggestedPosition, null);
+            console.log(`[Scheduler] BTC position opened successfully`);
+          } catch (posError) {
+            console.error(`[Scheduler] Failed to open BTC position:`, posError.message);
+          }
+        }
+        
+        // Auto-entry evaluation for ETH
+        const ethAccount = await getOrCreateAccount(db, 'ETH', 100);
+        const ethOpenPositions = await getPositions(db, { symbol: 'ETH', status: 'open' });
+        const ethDecision = evaluateAutoEntry(analysis.eth, ethAccount, ethOpenPositions);
+        
+        console.log(`[Scheduler] ETH auto-entry decision: ${ethDecision.action} - ${ethDecision.reason}`);
+        
+        if (ethDecision.shouldEnter && ethDecision.suggestedPosition) {
+          try {
+            // Pass null for linked_prediction_id since we don't have a specific prediction to link
+            await openPosition(db, ethAccount, ethDecision.suggestedPosition, null);
+            console.log(`[Scheduler] ETH position opened successfully`);
+          } catch (posError) {
+            console.error(`[Scheduler] Failed to open ETH position:`, posError.message);
+          }
+        }
+        
       } catch (dbError) {
         console.error('[Scheduler] Database save error:', dbError.message);
       }

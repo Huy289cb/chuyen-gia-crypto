@@ -29,6 +29,18 @@ try {
   const result = await initDb();
   db = result.db;
   dbEnabled = result.dbEnabled;
+  
+  // Initialize paper trading accounts for BTC and ETH
+  if (dbEnabled && db) {
+    try {
+      const { getOrCreateAccount } = await import('./db/database.js');
+      await getOrCreateAccount(db, 'BTC', 100);
+      await getOrCreateAccount(db, 'ETH', 100);
+      console.log('[Index] Paper trading accounts initialized (BTC: 100U, ETH: 100U)');
+    } catch (accountError) {
+      console.log('[Index] Account initialization failed:', accountError.message);
+    }
+  }
 } catch (error) {
   console.log('[Index] Database init failed:', error.message);
   dbEnabled = false;
