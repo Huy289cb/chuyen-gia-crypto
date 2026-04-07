@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { TrendingUp, TrendingDown, Activity, DollarSign, Clock, Calendar } from 'lucide-react';
 
-const API_BASE = import.meta.env.API_URL || 'http://localhost:3000/api';
+const API_BASE = import.meta.env.DEV
+  ? 'http://localhost:3000/api'
+  : '/api';
 
 export function PerformanceCharts({ symbol, hours = 168 }) {
   const [performance, setPerformance] = useState(null);
@@ -129,7 +131,7 @@ export function PerformanceCharts({ symbol, hours = 168 }) {
         <div className="flex items-center gap-2">
           <select
             value={hours}
-            onChange={(e) => window.location.href = `${API_BASE}/performance/equity-curve?symbol=${symbol}&hours=${e.target.value}`}
+            onChange={(e) => setHours(parseInt(e.target.value))}
             className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm"
           >
             <option value="24">24h</option>

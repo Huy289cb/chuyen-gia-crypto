@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-const API_BASE = import.meta.env.API_URL || 'http://localhost:3000/api';
+const API_BASE = import.meta.env.DEV
+  ? 'http://localhost:3000/api'
+  : '/api';
 
 const tfLabels = {
   '15m': '15p',

@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Activity, Target, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-const API_BASE = import.meta.env.API_URL || 'http://localhost:3000/api';
+const API_BASE = import.meta.env.DEV
+  ? 'http://localhost:3000/api'
+  : '/api';
 
 export function AdvancedMetrics({ symbol }) {
   const [accuracyTimeframe, setAccuracyTimeframe] = useState({});

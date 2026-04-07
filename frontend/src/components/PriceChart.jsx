@@ -2,6 +2,10 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import { Clock, TrendingUp, TrendingDown, Layers, Box, Droplets, Activity, MessageSquare } from 'lucide-react';
 
+const API_BASE = import.meta.env.DEV
+  ? 'http://localhost:3000/api'
+  : '/api';
+
 const tfLabels = {
   '15m': '15 phút',
   '1h': '1 giờ', 
@@ -132,7 +136,7 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
       try {
         setIsLoading(true);
         const coinId = symbol.toLowerCase();
-        const response = await fetch(`/api/ohlc/${coinId}?timeframe=${timeframe}&limit=100`);
+        const response = await fetch(`${API_BASE}/ohlc/${coinId}?timeframe=${timeframe}&limit=100`);
         if (!response.ok) throw new Error('Failed to fetch OHLC data');
         const result = await response.json();
         if (result.success && result.data) {
