@@ -234,6 +234,11 @@ function formatAnalysisResponse(rawResponse, priceData) {
   };
 
   const formatCoin = (coinData, currentPrice) => {
+    // Check if predictions have valid targets
+    const hasValidPredictions = coinData?.predictions && 
+      Object.keys(coinData.predictions).length > 0 &&
+      Object.values(coinData.predictions).some(p => p && p.target);
+    
     // Validate and fix prediction targets
     const validatePredictionTarget = (pred, currentPrice) => {
       if (!pred || !pred.target) return pred;
@@ -257,14 +262,16 @@ function formatAnalysisResponse(rawResponse, priceData) {
     };
     
     return {
-      bias: ['bullish', 'bearish', 'neutral'].includes(coinData?.bias) 
+      bias: hasValidPredictions && ['bullish', 'bearish', 'neutral'].includes(coinData?.bias) 
         ? coinData.bias 
         : 'neutral',
-      action: ['buy', 'sell', 'hold'].includes(coinData?.action) 
+      action: hasValidPredictions && ['buy', 'sell', 'hold'].includes(coinData?.action) 
         ? coinData.action 
         : 'hold',
-      confidence: Math.max(0, Math.min(1, parseFloat(coinData?.confidence) || 0.4)),
-      narrative: (coinData?.narrative || 'No narrative provided').substring(0, 300),
+      confidence: hasValidPredictions ? Math.max(0, Math.min(1, parseFloat(coinData?.confidence) || 0.4)) : 0.3,
+      narrative: hasValidPredictions 
+        ? (coinData?.narrative || 'No narrative provided').substring(0, 300)
+        : 'Không có dự báo cụ thể - cần phân tích thêm dữ liệu',
       timeframes: {
         '15m': coinData?.timeframes?.['15m'] || 'neutral',
         '1h': coinData?.timeframes?.['1h'] || 'neutral',
