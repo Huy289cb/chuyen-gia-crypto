@@ -7,6 +7,7 @@ const API_BASE = import.meta.env.DEV
 export function usePaperTrading() {
   const [accounts, setAccounts] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [tradeHistory, setTradeHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -34,11 +35,23 @@ export function usePaperTrading() {
     }
   };
 
+  const fetchTradeHistory = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/performance/trades`);
+      const data = await response.json();
+      if (data.success) {
+        setTradeHistory(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching trade history:', err);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([fetchAccounts(), fetchPositions()]);
+      await Promise.all([fetchAccounts(), fetchPositions(), fetchTradeHistory()]);
     } catch (err) {
       setError('Failed to fetch paper trading data');
     } finally {
@@ -90,6 +103,7 @@ export function usePaperTrading() {
   return {
     accounts,
     positions,
+    tradeHistory,
     loading,
     error,
     refresh: fetchData,

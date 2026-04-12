@@ -386,6 +386,122 @@ Get trade history.
 }
 ```
 
+### Pending Orders
+
+#### GET /api/pending-orders
+
+Get all pending orders (limit orders waiting for execution).
+
+**Query Parameters:**
+- `symbol` (optional): Filter by symbol (e.g., BTC, ETH)
+- `status` (optional): Filter by status (pending, executed, cancelled)
+
+**Response Example:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "order_id": "uuid-here",
+      "account_id": 1,
+      "symbol": "BTC",
+      "side": "short",
+      "entry_price": 67000,
+      "current_price": 71000,
+      "stop_loss": 72300,
+      "take_profit": 64300,
+      "size_usd": 147,
+      "size_qty": 0.0022,
+      "risk_usd": 1,
+      "risk_percent": 1,
+      "expected_rr": 2.0,
+      "status": "pending",
+      "created_at": "2026-04-07T12:00:00.000Z",
+      "executed_at": null,
+      "linked_prediction_id": 123,
+      "invalidation_level": 72300
+    }
+  ],
+  "meta": {
+    "count": 1,
+    "filters": { "symbol": "BTC", "status": "pending" }
+  }
+}
+```
+
+#### GET /api/pending-orders/:id
+
+Get a specific pending order by ID.
+
+**Response Example:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "order_id": "uuid-here",
+    "symbol": "BTC",
+    "side": "short",
+    "entry_price": 67000,
+    "stop_loss": 72300,
+    "take_profit": 64300,
+    "status": "pending",
+    "created_at": "2026-04-07T12:00:00.000Z"
+  }
+}
+```
+
+#### POST /api/pending-orders
+
+Create a new pending order (limit order).
+
+**Request Body:**
+```json
+{
+  "symbol": "BTC",
+  "side": "short",
+  "entry_price": 67000,
+  "stop_loss": 72300,
+  "take_profit": 64300
+}
+```
+
+**Response Example:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "order_id": "uuid-here",
+    "symbol": "BTC",
+    "side": "short",
+    "entry_price": 67000,
+    "status": "pending"
+  },
+  "message": "Pending order created successfully"
+}
+```
+
+#### POST /api/pending-orders/:id/cancel
+
+Cancel a pending order.
+
+**Request Body:**
+```json
+{
+  "reason": "manual"
+}
+```
+
+**Response Example:**
+```json
+{
+  "success": true,
+  "message": "Pending order cancelled successfully"
+}
+```
+
 ### Analysis
 
 #### POST /api/analysis/run

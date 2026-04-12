@@ -7,6 +7,8 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 ## Features
 
 - **Auto-Entry Logic**: Automatically suggests positions when confidence >= 80% and ICT criteria are met
+- **Dual Order Types**: Supports both **Market Orders** (immediate execution) and **Limit Orders** (wait for price)
+- **Pending Orders System**: Automatically creates limit orders when entry price differs from current price
 - **Risk Management**: 1% risk per trade with risk-based position sizing
 - **Position Management**: Automatic Stop Loss (SL) and Take Profit (TP) monitoring
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
@@ -31,15 +33,37 @@ A position is suggested when ALL of the following conditions are met:
 5. **No Cooldown**: Account must not be in cooldown period
 6. **Max Positions**: No open positions for the symbol (max 1 per symbol)
 
+## Order Types
+
+### Market Orders
+When AI suggests entry price within **0.5%** of current market price:
+- Position opened **immediately** at current price
+- No waiting required
+- Best for high-confidence, immediate execution scenarios
+
+### Limit Orders (Pending Orders)
+When AI suggests entry price **more than 0.5%** away from current price:
+- Order stored as **pending** and monitored every 30 seconds
+- **Long positions**: Executed when price drops to entry level
+- **Short positions**: Executed when price rises to entry level
+- Entry price validated to be within 10% of current price (realistic range)
+
+Example:
+- Current BTC price: $71,000
+- AI suggests short @ $67,000 (5.6% away)
+- System creates **pending limit order** at $67,000
+- When BTC drops to $67,000 → Position opened automatically
+
 ## Position Sizing (ICT-Based)
 
 Position size is calculated using risk-based sizing:
 
 ```
-Position Size = (Account Balance × Risk%) / (Entry Price - Stop Loss)
+Position Size = (Account Balance × Risk%) / |Entry Price - Stop Loss|
 ```
 
 - **Risk per Trade**: 1% of account balance (configurable)
+- **Entry Price**: AI suggested price for limit orders, current price for market orders
 - **Stop Loss**: Below swing low (long) or above swing high (short)
 - **Take Profit**: At liquidity target or FVG fill zone with minimum 1:2 R:R
 
@@ -55,11 +79,43 @@ This prevents overtrading during drawdown periods.
 
 - **Frequency**: Every 30 seconds
 - **Actions**:
+  - **Check pending orders**: Execute limit orders when price hits entry level
   - Update unrealized PnL for all open positions
   - Check if SL or TP levels are hit
   - Auto-close positions on SL/TP hit
   - Update account equity
 - **Account Snapshots**: Created every 5 minutes for equity curve
+
+## Pending Orders System
+
+### How It Works
+
+1. **AI Analysis**: Groq AI analyzes market and suggests entry price
+2. **Order Classification**:
+   - Entry near current price (≤0.5% diff) → **Market Order** (execute now)
+   - Entry far from price (>0.5% diff) → **Limit Order** (create pending)
+3. **Monitoring**: Every 30 seconds, system checks all pending orders
+4. **Execution**: When price hits entry level, position opened automatically
+
+### Pending Order Lifecycle
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Order waiting for price to hit entry level |
+| `executed` | Order successfully executed, position opened |
+| `cancelled_*` | Order cancelled (e.g., analysis invalidated) |
+
+### Database Schema
+
+**pending_orders table**:
+- `order_id`: Unique identifier
+- `symbol`: BTC or ETH
+- `side`: long or short
+- `entry_price`: Target entry price
+- `stop_loss`, `take_profit`: Risk management levels
+- `size_usd`, `size_qty`: Position sizing
+- `status`: pending, executed, or cancelled
+- `created_at`, `executed_at`: Timestamps
 
 ## API Endpoints
 

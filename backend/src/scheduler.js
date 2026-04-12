@@ -154,11 +154,36 @@ async function runAnalysisJob() {
         
         if (btcDecision.shouldEnter && btcDecision.suggestedPosition) {
           try {
-            // Pass null for linked_prediction_id since we don't have a specific prediction to link
-            await openPosition(db, btcAccount, btcDecision.suggestedPosition, null);
-            console.log(`[Scheduler] BTC position opened successfully`);
+            const { createPendingOrder } = await import('./db/database.js');
+            const { randomUUID } = await import('crypto');
+            
+            if (btcDecision.orderType === 'market') {
+              // Execute market order immediately
+              await openPosition(db, btcAccount, btcDecision.suggestedPosition, null);
+              console.log(`[Scheduler] BTC market order executed immediately`);
+            } else {
+              // Create limit order (pending)
+              const position = btcDecision.suggestedPosition;
+              await createPendingOrder(db, {
+                order_id: randomUUID(),
+                account_id: btcAccount.id,
+                symbol: 'BTC',
+                side: position.side,
+                entry_price: position.entry_price,
+                stop_loss: position.stop_loss,
+                take_profit: position.take_profit,
+                size_usd: position.size_usd,
+                size_qty: position.size_qty,
+                risk_usd: position.risk_usd,
+                risk_percent: position.risk_percent,
+                expected_rr: position.expected_rr,
+                linked_prediction_id: null,
+                invalidation_level: position.invalidation_level
+              });
+              console.log(`[Scheduler] BTC limit order created (pending): entry ${position.entry_price}`);
+            }
           } catch (posError) {
-            console.error(`[Scheduler] Failed to open BTC position:`, posError.message);
+            console.error(`[Scheduler] Failed to process BTC order:`, posError.message);
           }
         }
         
@@ -171,11 +196,36 @@ async function runAnalysisJob() {
         
         if (ethDecision.shouldEnter && ethDecision.suggestedPosition) {
           try {
-            // Pass null for linked_prediction_id since we don't have a specific prediction to link
-            await openPosition(db, ethAccount, ethDecision.suggestedPosition, null);
-            console.log(`[Scheduler] ETH position opened successfully`);
+            const { createPendingOrder } = await import('./db/database.js');
+            const { randomUUID } = await import('crypto');
+            
+            if (ethDecision.orderType === 'market') {
+              // Execute market order immediately
+              await openPosition(db, ethAccount, ethDecision.suggestedPosition, null);
+              console.log(`[Scheduler] ETH market order executed immediately`);
+            } else {
+              // Create limit order (pending)
+              const position = ethDecision.suggestedPosition;
+              await createPendingOrder(db, {
+                order_id: randomUUID(),
+                account_id: ethAccount.id,
+                symbol: 'ETH',
+                side: position.side,
+                entry_price: position.entry_price,
+                stop_loss: position.stop_loss,
+                take_profit: position.take_profit,
+                size_usd: position.size_usd,
+                size_qty: position.size_qty,
+                risk_usd: position.risk_usd,
+                risk_percent: position.risk_percent,
+                expected_rr: position.expected_rr,
+                linked_prediction_id: null,
+                invalidation_level: position.invalidation_level
+              });
+              console.log(`[Scheduler] ETH limit order created (pending): entry ${position.entry_price}`);
+            }
           } catch (posError) {
-            console.error(`[Scheduler] Failed to open ETH position:`, posError.message);
+            console.error(`[Scheduler] Failed to process ETH order:`, posError.message);
           }
         }
         

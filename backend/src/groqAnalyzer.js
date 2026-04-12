@@ -331,27 +331,57 @@ function formatAnalysisResponse(rawResponse, priceData) {
       return pred;
     };
 
-    // Validate trading suggestion fields
-    const validatePriceLevel = (price, currentPrice, type) => {
+    // Validate trading suggestion fields for limit orders
+    const validatePriceLevel = (price, currentPrice, type, bias = null) => {
       if (!price || isNaN(price)) return null;
       
       const p = parseFloat(price);
-      // Ensure price is within reasonable range
+      
+      // For entry prices: validate within reasonable range based on current price
+      if (type === 'entry') {
+        // Validate entry is within 10% of current price (realistic limit order range)
+        const maxPrice = currentPrice * 1.10;
+        const minPrice = currentPrice * 0.90;
+        
+        if (p > maxPrice || p < minPrice) {
+          console.log(`[GroqAnalyzer] Entry ${p} outside 10% range of ${currentPrice}, rejecting`);
+          return null;
+        }
+        
+        // Validate direction alignment for limit orders
+        if (bias === 'bullish' && p > currentPrice * 1.05) {
+          // Long entry too far above current price
+          console.log(`[GroqAnalyzer] Long entry ${p} too far above current ${currentPrice}, rejecting`);
+          return null;
+        }
+        if (bias === 'bearish' && p < currentPrice * 0.95) {
+          // Short entry too far below current price
+          console.log(`[GroqAnalyzer] Short entry ${p} too far below current ${currentPrice}, rejecting`);
+          return null;
+        }
+        
+        return p; // Return validated suggested entry
+      }
+      
+      // For SL/TP: validate within reasonable range (50%-150% of current price)
       const maxPrice = currentPrice * 1.5;
       const minPrice = currentPrice * 0.5;
       
       if (p > maxPrice || p < minPrice) {
-        console.log(`[GroqAnalyzer] Fixing unrealistic ${type}: ${p}`);
+        console.log(`[GroqAnalyzer] Fixing unrealistic ${type}: ${p} (outside valid range of ${currentPrice})`);
         return null;
       }
       
       return p;
     };
     
+    // Determine bias first for direction-aware validation
+    const bias = hasValidPredictions && ['bullish', 'bearish', 'neutral'].includes(coinData?.bias) 
+      ? coinData.bias 
+      : 'neutral';
+    
     return {
-      bias: hasValidPredictions && ['bullish', 'bearish', 'neutral'].includes(coinData?.bias) 
-        ? coinData.bias 
-        : 'neutral',
+      bias: bias,
       action: hasValidPredictions && ['buy', 'sell', 'hold'].includes(coinData?.action) 
         ? coinData.action 
         : 'hold',
@@ -379,13 +409,13 @@ function formatAnalysisResponse(rawResponse, priceData) {
         '1d': validatePredictionTarget(coinData?.predictions?.['1d'], currentPrice)
       },
       risk: coinData?.risk || 'Crypto markets are volatile - trade carefully',
-      // New trading suggestion fields
+      // New trading suggestion fields with bias-aware validation
       current_price: currentPrice,
-      suggested_entry: validatePriceLevel(coinData?.suggested_entry, currentPrice, 'entry'),
-      suggested_stop_loss: validatePriceLevel(coinData?.suggested_stop_loss, currentPrice, 'stop_loss'),
-      suggested_take_profit: validatePriceLevel(coinData?.suggested_take_profit, currentPrice, 'take_profit'),
+      suggested_entry: validatePriceLevel(coinData?.suggested_entry, currentPrice, 'entry', bias),
+      suggested_stop_loss: validatePriceLevel(coinData?.suggested_stop_loss, currentPrice, 'stop_loss', bias),
+      suggested_take_profit: validatePriceLevel(coinData?.suggested_take_profit, currentPrice, 'take_profit', bias),
       expected_rr: coinData?.expected_rr && !isNaN(coinData.expected_rr) ? Math.max(0, parseFloat(coinData.expected_rr)) : null,
-      invalidation_level: validatePriceLevel(coinData?.invalidation_level, currentPrice, 'invalidation'),
+      invalidation_level: validatePriceLevel(coinData?.invalidation_level, currentPrice, 'invalidation', bias),
       reason_summary: coinData?.reason_summary ? coinData.reason_summary.substring(0, 200) : null
     };
   };

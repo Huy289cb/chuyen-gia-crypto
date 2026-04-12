@@ -289,6 +289,110 @@ router.post('/analysis/run', async (req, res) => {
   }
 });
 
+// Pending Orders Routes
+
+// GET /api/pending-orders - Get all pending orders
+router.get('/pending-orders', async (req, res) => {
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+  
+  const { symbol, status } = req.query;
+  const filters = {};
+  
+  if (symbol) filters.symbol = symbol;
+  if (status) filters.status = status;
+  
+  try {
+    const { getPendingOrders } = await import('./db/database.js');
+    const orders = await getPendingOrders(db, filters);
+    
+    res.json({
+      success: true,
+      data: orders,
+      meta: { count: orders.length, filters }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// GET /api/pending-orders/:id - Get specific pending order
+router.get('/pending-orders/:id', async (req, res) => {
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+  
+  const { id } = req.params;
+  
+  try {
+    const { getPendingOrders } = await import('./db/database.js');
+    const orders = await getPendingOrders(db, {});
+    const order = orders.find(o => o.id == id);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Pending order not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// POST /api/pending-orders/:id/cancel - Cancel a pending order
+router.post('/pending-orders/:id/cancel', async (req, res) => {
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+  
+  const { id } = req.params;
+  const { reason = 'manual' } = req.body;
+  
+  try {
+    const { cancelPendingOrder } = await import('./db/database.js');
+    const changes = await cancelPendingOrder(db, id, reason);
+    
+    if (changes === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Pending order not found or already executed'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Pending order cancelled successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Mount sub-routers
 router.use('/positions', positionsRouter);
 router.use('/accounts', accountsRouter);

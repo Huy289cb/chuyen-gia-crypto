@@ -353,6 +353,7 @@ async function getPriceAtTime(db, coin, timestamp) {
   return new Promise((resolve, reject) => {
     // Try OHLCV candles first (more accurate - 15m granularity)
     const targetTimestamp = new Date(timestamp).toISOString();
+    const now = new Date().toISOString();
     
     db.get(
       `SELECT close FROM ohlcv_candles 
@@ -360,7 +361,7 @@ async function getPriceAtTime(db, coin, timestamp) {
        ORDER BY ABS(strftime('%s', timestamp) - strftime('%s', ?)) ASC 
        LIMIT 1`,
       [coin.toUpperCase(), targetTimestamp],
-      (err, row) => {
+      async (err, row) => {
         if (err) {
           reject(err);
           return;
@@ -377,9 +378,30 @@ async function getPriceAtTime(db, coin, timestamp) {
            WHERE coin = ? AND timestamp <= ? 
            ORDER BY timestamp DESC LIMIT 1`,
           [coin.toUpperCase(), timestamp],
-          (err2, row2) => {
-            if (err2) reject(err2);
-            else resolve(row2?.price || null);
+          async (err2, row2) => {
+            if (err2) {
+              reject(err2);
+              return;
+            }
+            if (row2?.price) {
+              resolve(row2.price);
+              return;
+            }
+            
+            // Final fallback: use latest price from latest_prices table
+            // This handles expired predictions that haven't been validated yet
+            console.log(`[Database] No price_history for ${coin} at ${targetTimestamp}, using latest_prices fallback`);
+            try {
+              const latestPrice = await getLatestPrice(db, coin);
+              if (latestPrice?.price) {
+                resolve(latestPrice.price);
+              } else {
+                resolve(null);
+              }
+            } catch (latestErr) {
+              console.error(`[Database] Error getting latest price for ${coin}:`, latestErr.message);
+              resolve(null);
+            }
           }
         );
       }
@@ -400,7 +422,9 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50) {
             'target', p.target_price,
             'confidence', p.confidence,
             'actual', p.actual_price,
-            'is_correct', p.is_correct
+            'is_correct', p.is_correct,
+            'id', p.id,
+            'expires_at', p.expires_at
           )
         ) as predictions
        FROM analysis_history ah
@@ -410,20 +434,81 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50) {
        ORDER BY ah.timestamp DESC
        LIMIT ?`,
       [coin.toUpperCase(), limit],
-      (err, rows) => {
+      async (err, rows) => {
         if (err) {
           reject(err);
           return;
         }
         
-        const results = rows.map(row => ({
-          ...row,
-          predictions: JSON.parse(row.predictions || '[]').filter(p => p.timeframe)
-        }));
+        const now = new Date().toISOString();
+        const promises = [];
+        
+        const results = rows.map(row => {
+          let predictions = JSON.parse(row.predictions || '[]').filter(p => p.timeframe);
+          
+          // Auto-validate expired predictions that haven't been validated yet
+          predictions.forEach(pred => {
+            if (pred.expires_at && pred.expires_at <= now && pred.is_correct === null) {
+              // Trigger validation for this prediction
+              promises.push(
+                validateSinglePrediction(db, pred.id, row.coin, row.current_price, pred.direction)
+                  .then(updated => {
+                    if (updated) {
+                      pred.actual = updated.actual_price;
+                      pred.is_correct = updated.is_correct;
+                    }
+                  })
+                  .catch(err => console.error('[Database] Auto-validate error:', err.message))
+              );
+            }
+          });
+          
+          return {
+            ...row,
+            predictions
+          };
+        });
+        
+        // Wait for all validations to complete
+        await Promise.all(promises);
         
         resolve(results);
       }
     );
+  });
+}
+
+// Validate a single prediction and return updated data
+async function validateSinglePrediction(db, predictionId, coin, entryPrice, direction) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+    
+    // Get actual price at expiration time (or current if already passed)
+    getPriceAtTime(db, coin, now).then(actualPrice => {
+      if (!actualPrice) {
+        resolve(null);
+        return;
+      }
+      
+      const predictedUp = direction === 'up';
+      const actualUp = actualPrice > entryPrice;
+      const isCorrect = predictedUp === actualUp;
+      
+      db.run(
+        `UPDATE predictions 
+         SET actual_price = ?, is_correct = ?, accuracy = ?
+         WHERE id = ?`,
+        [actualPrice, isCorrect, isCorrect ? 1 : 0, predictionId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            console.log(`[Database] Auto-validated prediction #${predictionId}: ${isCorrect ? 'correct' : 'incorrect'}`);
+            resolve({ actual_price: actualPrice, is_correct: isCorrect });
+          }
+        }
+      );
+    }).catch(reject);
   });
 }
 
@@ -920,8 +1005,16 @@ export async function getPositions(db, filters = {}) {
       values.push(filters.symbol.toUpperCase());
     }
     if (filters.status) {
-      conditions.push('status = ?');
-      values.push(filters.status);
+      if (Array.isArray(filters.status)) {
+        // Handle array of statuses (e.g., ['closed', 'stopped', 'taken_profit'])
+        const placeholders = filters.status.map(() => '?').join(',');
+        conditions.push(`status IN (${placeholders})`);
+        values.push(...filters.status);
+      } else {
+        // Handle single status string
+        conditions.push('status = ?');
+        values.push(filters.status);
+      }
     }
     if (filters.account_id) {
       conditions.push('account_id = ?');
@@ -1310,5 +1403,142 @@ export async function calculateAverageHoldTime(db, accountId) {
         medianMinutes: Math.round(medianMinutes)
       });
     });
+  });
+}
+
+// ==========================================
+// PENDING ORDERS - LIMIT ORDER FUNCTIONALITY
+// ==========================================
+
+// Create a pending order (limit order)
+export async function createPendingOrder(db, orderData) {
+  return new Promise((resolve, reject) => {
+    const {
+      order_id,
+      account_id,
+      symbol,
+      side,
+      entry_price,
+      stop_loss,
+      take_profit,
+      size_usd,
+      size_qty,
+      risk_usd,
+      risk_percent,
+      expected_rr,
+      linked_prediction_id,
+      invalidation_level
+    } = orderData;
+    
+    db.run(
+      `INSERT INTO pending_orders 
+       (order_id, account_id, symbol, side, entry_price, stop_loss, take_profit, 
+        size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
+        linked_prediction_id, invalidation_level, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [
+        order_id,
+        account_id,
+        symbol.toUpperCase(),
+        side,
+        entry_price,
+        stop_loss,
+        take_profit,
+        size_usd,
+        size_qty,
+        risk_usd,
+        risk_percent,
+        expected_rr,
+        linked_prediction_id,
+        invalidation_level
+      ],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        db.get(
+          `SELECT * FROM pending_orders WHERE id = ?`,
+          [this.lastID],
+          (err2, row) => {
+            if (err2) reject(err2);
+            else resolve(row);
+          }
+        );
+      }
+    );
+  });
+}
+
+// Get pending orders by symbol and status
+export async function getPendingOrders(db, filters = {}) {
+  return new Promise((resolve, reject) => {
+    const conditions = [];
+    const values = [];
+    
+    if (filters.symbol) {
+      conditions.push('symbol = ?');
+      values.push(filters.symbol.toUpperCase());
+    }
+    if (filters.status) {
+      conditions.push('status = ?');
+      values.push(filters.status);
+    }
+    if (filters.account_id) {
+      conditions.push('account_id = ?');
+      values.push(filters.account_id);
+    }
+    
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    
+    db.all(
+      `SELECT * FROM pending_orders ${whereClause} ORDER BY created_at DESC`,
+      values,
+      (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      }
+    );
+  });
+}
+
+// Execute a pending order (convert to actual position)
+export async function executePendingOrder(db, orderId, positionId) {
+  return new Promise((resolve, reject) => {
+    const executedAt = new Date().toISOString();
+    
+    db.run(
+      `UPDATE pending_orders 
+       SET status = 'executed', executed_at = ?
+       WHERE id = ?`,
+      [executedAt, orderId],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+// Cancel a pending order
+export async function cancelPendingOrder(db, orderId, reason = 'cancelled') {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE pending_orders 
+       SET status = ?
+       WHERE id = ?`,
+      [`cancelled_${reason}`, orderId],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
   });
 }

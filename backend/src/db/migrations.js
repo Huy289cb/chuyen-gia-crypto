@@ -113,6 +113,39 @@ export async function runMigrations(db) {
         console.log('[Migration] Trade events table created/verified');
       });
 
+      // Migration 4b: Create pending_orders table for limit orders
+      db.run(`
+        CREATE TABLE IF NOT EXISTS pending_orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id TEXT UNIQUE NOT NULL,
+          account_id INTEGER NOT NULL,
+          symbol TEXT NOT NULL,
+          side TEXT NOT NULL,
+          entry_price REAL NOT NULL,
+          stop_loss REAL NOT NULL,
+          take_profit REAL NOT NULL,
+          size_usd REAL NOT NULL,
+          size_qty REAL NOT NULL,
+          risk_usd REAL NOT NULL,
+          risk_percent REAL NOT NULL,
+          expected_rr REAL NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          executed_at DATETIME,
+          linked_prediction_id INTEGER,
+          invalidation_level REAL,
+          FOREIGN KEY (account_id) REFERENCES accounts(id),
+          FOREIGN KEY (linked_prediction_id) REFERENCES predictions(id)
+        )
+      `, (err) => {
+        if (err) {
+          console.error('[Migration] Error creating pending_orders table:', err.message);
+          reject(err);
+          return;
+        }
+        console.log('[Migration] Pending orders table created/verified');
+      });
+
       // Migration 5: Add columns to predictions table
       // Check if columns exist first to avoid errors on re-run
       db.all("PRAGMA table_info(predictions)", (err, columns) => {
@@ -200,7 +233,10 @@ function createIndexes(db, resolve, reject) {
     "CREATE INDEX IF NOT EXISTS idx_snapshots_account_time ON account_snapshots(account_id, timestamp)",
     "CREATE INDEX IF NOT EXISTS idx_events_position ON trade_events(position_id)",
     "CREATE INDEX IF NOT EXISTS idx_predictions_outcome ON predictions(outcome)",
-    "CREATE INDEX IF NOT EXISTS idx_predictions_linked_position ON predictions(linked_position_id)"
+    "CREATE INDEX IF NOT EXISTS idx_predictions_linked_position ON predictions(linked_prediction_id)",
+    "CREATE INDEX IF NOT EXISTS idx_pending_orders_account ON pending_orders(account_id)",
+    "CREATE INDEX IF NOT EXISTS idx_pending_orders_symbol ON pending_orders(symbol)",
+    "CREATE INDEX IF NOT EXISTS idx_pending_orders_status ON pending_orders(status)"
   ];
 
   let completed = 0;

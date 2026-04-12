@@ -125,6 +125,21 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     decision.action = 'no_trade';
     decision.reason = 'Failed to calculate position parameters (invalid risk distance or position too small)';
     decision.suggestedPosition = null;
+    return decision;
+  }
+
+  // Check if entry price is far from current price (limit order vs market order)
+  const currentPrice = analysis.current_price || 0;
+  const entryPrice = decision.suggestedPosition.entry_price;
+  const priceDiff = Math.abs(entryPrice - currentPrice) / currentPrice;
+  
+  // If entry is more than 0.5% away from current price, treat as limit order (pending)
+  if (priceDiff > 0.005) {
+    decision.orderType = 'limit'; // Will create pending order
+    decision.reason += ` | Limit order: entry ${entryPrice.toFixed(2)} vs current ${currentPrice.toFixed(2)} (${(priceDiff * 100).toFixed(2)}% away)`;
+  } else {
+    decision.orderType = 'market'; // Execute immediately
+    decision.reason += ` | Market order: entry near current price`;
   }
 
   return decision;
@@ -179,7 +194,7 @@ function calculateSuggestedPosition(analysis, account) {
   const bias = analysis.bias;
   const riskAmount = account.current_balance * AUTO_ENTRY_CONFIG.riskPerTrade;
 
-  // Get suggested levels from analysis or calculate defaults
+  // Use AI suggested entry for limit orders (or fallback to current price)
   const suggestedEntry = analysis.suggested_entry || currentPrice;
   const suggestedSL = analysis.suggested_stop_loss;
   const suggestedTP = analysis.suggested_take_profit;
@@ -218,9 +233,12 @@ function calculateSuggestedPosition(analysis, account) {
   const rewardDistance = Math.abs(takeProfit - suggestedEntry);
   const actualRR = riskDistance > 0 ? rewardDistance / riskDistance : 0;
 
+  console.log(`[AutoEntry] Limit order: entry=${suggestedEntry}, current=${currentPrice}, SL=${stopLoss}, TP=${takeProfit}, RR=${actualRR.toFixed(2)}`);
+
   return {
     side: bias === 'bullish' ? 'long' : 'short',
     entry_price: suggestedEntry,
+    current_price: currentPrice,
     stop_loss: stopLoss,
     take_profit: takeProfit,
     size_usd: sizeUsd,

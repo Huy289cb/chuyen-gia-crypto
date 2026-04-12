@@ -3,6 +3,7 @@ import { MarketOverview, RefreshButton } from './components/MarketOverview';
 import { Disclaimer } from './components/Disclaimer';
 import { DashboardHeader } from './components/DashboardHeader';
 import { PositionPanel } from './components/PositionPanel';
+import { TradeHistoryPanel } from './components/TradeHistoryPanel';
 import { PredictionTimeline } from './components/PredictionTimeline';
 import { PerformanceCharts } from './components/PerformanceCharts';
 import { AdvancedMetrics } from './components/AdvancedMetrics';
@@ -12,7 +13,7 @@ import { Zap, Loader2, AlertCircle } from 'lucide-react';
 
 function App() {
   const { data, loading, error, refetch } = useTrends();
-  const { accounts, positions, loading: ptLoading, resetAccount, closePosition } = usePaperTrading();
+  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading();
 
   const prices = data?.prices || {};
   const analysis = data?.analysis || {};
@@ -110,6 +111,11 @@ function App() {
         {/* Position Panel */}
         <div className="mb-6">
           <PositionPanel positions={positions} onClosePosition={closePosition} />
+        </div>
+
+        {/* Trade History Panel */}
+        <div className="mb-6">
+          <TradeHistoryPanel trades={tradeHistory} />
         </div>
 
         {/* Prediction Timeline */}

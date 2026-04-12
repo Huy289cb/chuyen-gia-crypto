@@ -111,6 +111,9 @@ async function updateSymbolPositions(symbol, currentPrice) {
     
     console.log(`[PriceScheduler] Updating ${symbol} positions at $${currentPrice.toLocaleString()}`);
     
+    // Check and execute pending orders first
+    await checkAndExecutePendingOrders(symbol, currentPrice);
+    
     // Update all open positions
     const result = await updateOpenPositions(db, symbol, currentPrice);
     
@@ -128,6 +131,68 @@ async function updateSymbolPositions(symbol, currentPrice) {
     
   } catch (error) {
     console.error(`[PriceScheduler] Error updating ${symbol} positions:`, error.message);
+  }
+}
+
+/**
+ * Check pending orders and execute when price hits entry level
+ */
+async function checkAndExecutePendingOrders(symbol, currentPrice) {
+  try {
+    const { getPendingOrders, executePendingOrder, getAccountBySymbol } = await import('../db/database.js');
+    const { openPosition } = await import('../services/paperTradingEngine.js');
+    
+    // Get all pending orders for this symbol
+    const pendingOrders = await getPendingOrders(db, { symbol, status: 'pending' });
+    
+    if (pendingOrders.length === 0) return;
+    
+    console.log(`[PriceScheduler] Checking ${pendingOrders.length} pending orders for ${symbol} at $${currentPrice.toLocaleString()}`);
+    
+    for (const order of pendingOrders) {
+      const isLong = order.side === 'long';
+      const entryPrice = order.entry_price;
+      
+      // Check if price hit entry level
+      // For long: execute when price <= entry (price dropped to entry)
+      // For short: execute when price >= entry (price rose to entry)
+      const shouldExecute = isLong 
+        ? currentPrice <= entryPrice  // Price dropped to entry level
+        : currentPrice >= entryPrice; // Price rose to entry level
+      
+      if (shouldExecute) {
+        try {
+          const account = await getAccountBySymbol(db, symbol);
+          if (!account) {
+            console.error(`[PriceScheduler] Account not found for ${symbol}`);
+            continue;
+          }
+          
+          // Execute the order (convert to actual position)
+          const positionData = {
+            side: order.side,
+            entry_price: entryPrice,
+            stop_loss: order.stop_loss,
+            take_profit: order.take_profit,
+            size_usd: order.size_usd,
+            size_qty: order.size_qty,
+            risk_usd: order.risk_usd,
+            risk_percent: order.risk_percent,
+            expected_rr: order.expected_rr,
+            invalidation_level: order.invalidation_level
+          };
+          
+          await openPosition(db, account, positionData, order.linked_prediction_id);
+          await executePendingOrder(db, order.id);
+          
+          console.log(`[PriceScheduler] ${symbol} limit order executed: ${order.side} @ $${entryPrice.toLocaleString()} (current: $${currentPrice.toLocaleString()})`);
+        } catch (execError) {
+          console.error(`[PriceScheduler] Failed to execute pending order ${order.id}:`, execError.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[PriceScheduler] Error checking pending orders for ${symbol}:`, error.message);
   }
 }
 
