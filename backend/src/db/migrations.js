@@ -144,100 +144,115 @@ export async function runMigrations(db) {
           return;
         }
         console.log('[Migration] Pending orders table created/verified');
-      });
 
-      // Migration 5: Add columns to predictions table
-      // Check if columns exist first to avoid errors on re-run
-      db.all("PRAGMA table_info(predictions)", (err, columns) => {
-        if (err) {
-          console.error('[Migration] Error checking predictions table:', err.message);
-          reject(err);
-          return;
-        }
-
-        const columnNames = columns.map(col => col.name);
-        const migrations = [];
-
-        if (!columnNames.includes('outcome')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN outcome TEXT");
-        }
-        if (!columnNames.includes('pnl')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN pnl REAL DEFAULT 0");
-        }
-        if (!columnNames.includes('hit_tp')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN hit_tp INTEGER DEFAULT 0");
-        }
-        if (!columnNames.includes('hit_sl')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN hit_sl INTEGER DEFAULT 0");
-        }
-        if (!columnNames.includes('linked_position_id')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN linked_position_id INTEGER");
-        }
-        if (!columnNames.includes('suggested_entry')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN suggested_entry REAL");
-        }
-        if (!columnNames.includes('suggested_stop_loss')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN suggested_stop_loss REAL");
-        }
-        if (!columnNames.includes('suggested_take_profit')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN suggested_take_profit REAL");
-        }
-        if (!columnNames.includes('expected_rr')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN expected_rr REAL");
-        }
-        if (!columnNames.includes('invalidation_level')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN invalidation_level REAL");
-        }
-        if (!columnNames.includes('reason_summary')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN reason_summary TEXT");
-        }
-        if (!columnNames.includes('model_version')) {
-          migrations.push("ALTER TABLE predictions ADD COLUMN model_version TEXT DEFAULT '1.0'");
-        }
-
-        // Run migrations sequentially
-        let completed = 0;
-        if (migrations.length === 0) {
-          console.log('[Migration] All prediction columns already exist');
-          createIndexes(db, resolve, reject);
-        } else {
-          migrations.forEach((sql, index) => {
-            db.run(sql, (err) => {
-              if (err) {
-                console.error(`[Migration] Error adding column ${index + 1}:`, err.message);
-                reject(err);
-                return;
-              }
-              completed++;
-              console.log(`[Migration] Added prediction column ${completed}/${migrations.length}`);
-              
-              if (completed === migrations.length) {
-                createIndexes(db, resolve, reject);
-              }
-            });
-          });
-        }
+        // Migration 5: Add columns to predictions table (after pending_orders is created)
+        runMigration5(db, resolve, reject);
       });
     });
   });
 }
 
 /**
+ * Migration 5: Add columns to predictions table
+ */
+function runMigration5(db, resolve, reject) {
+  db.all("PRAGMA table_info(predictions)", (err, columns) => {
+    if (err) {
+      console.error('[Migration] Error checking predictions table:', err.message);
+      reject(err);
+      return;
+    }
+
+    const columnNames = columns.map(col => col.name);
+    const migrations = [];
+
+    if (!columnNames.includes('outcome')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN outcome TEXT");
+    }
+    if (!columnNames.includes('pnl')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN pnl REAL DEFAULT 0");
+    }
+    if (!columnNames.includes('hit_tp')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN hit_tp INTEGER DEFAULT 0");
+    }
+    if (!columnNames.includes('hit_sl')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN hit_sl INTEGER DEFAULT 0");
+    }
+    if (!columnNames.includes('linked_position_id')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN linked_position_id INTEGER");
+    }
+    if (!columnNames.includes('suggested_entry')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN suggested_entry REAL");
+    }
+    if (!columnNames.includes('suggested_stop_loss')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN suggested_stop_loss REAL");
+    }
+    if (!columnNames.includes('suggested_take_profit')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN suggested_take_profit REAL");
+    }
+    if (!columnNames.includes('expected_rr')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN expected_rr REAL");
+    }
+    if (!columnNames.includes('invalidation_level')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN invalidation_level REAL");
+    }
+    if (!columnNames.includes('reason_summary')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN reason_summary TEXT");
+    }
+    if (!columnNames.includes('model_version')) {
+      migrations.push("ALTER TABLE predictions ADD COLUMN model_version TEXT DEFAULT '1.0'");
+    }
+
+    // Run migrations sequentially
+    let completed = 0;
+    if (migrations.length === 0) {
+      console.log('[Migration] All prediction columns already exist');
+      createIndexes(db, resolve, reject, columnNames);
+    } else {
+      migrations.forEach((sql, index) => {
+        db.run(sql, (err) => {
+          if (err) {
+            console.error(`[Migration] Error adding column ${index + 1}:`, err.message);
+            reject(err);
+            return;
+          }
+          completed++;
+          console.log(`[Migration] Added prediction column ${completed}/${migrations.length}`);
+          
+          if (completed === migrations.length) {
+            // Refresh column list after adding columns
+            db.all("PRAGMA table_info(predictions)", (err2, newColumns) => {
+              if (err2) {
+                console.error('[Migration] Error refreshing column list:', err2.message);
+                reject(err2);
+                return;
+              }
+              const updatedColumnNames = newColumns.map(col => col.name);
+              createIndexes(db, resolve, reject, updatedColumnNames);
+            });
+          }
+        });
+      });
+    }
+  });
+}
+
+/**
  * Create indexes for performance
  */
-function createIndexes(db, resolve, reject) {
+function createIndexes(db, resolve, reject, predictionColumns = []) {
   const indexes = [
     "CREATE INDEX IF NOT EXISTS idx_positions_account ON positions(account_id)",
     "CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol)",
     "CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status)",
     "CREATE INDEX IF NOT EXISTS idx_snapshots_account_time ON account_snapshots(account_id, timestamp)",
     "CREATE INDEX IF NOT EXISTS idx_events_position ON trade_events(position_id)",
-    "CREATE INDEX IF NOT EXISTS idx_predictions_outcome ON predictions(outcome)",
-    "CREATE INDEX IF NOT EXISTS idx_predictions_linked_position ON predictions(linked_prediction_id)",
+    predictionColumns.includes('outcome') ? "CREATE INDEX IF NOT EXISTS idx_predictions_outcome ON predictions(outcome)" : null,
+    predictionColumns.includes('linked_position_id') ? "CREATE INDEX IF NOT EXISTS idx_predictions_linked_position ON predictions(linked_position_id)" : null,
     "CREATE INDEX IF NOT EXISTS idx_pending_orders_account ON pending_orders(account_id)",
     "CREATE INDEX IF NOT EXISTS idx_pending_orders_symbol ON pending_orders(symbol)",
     "CREATE INDEX IF NOT EXISTS idx_pending_orders_status ON pending_orders(status)"
-  ];
+  ].filter(Boolean);
 
   let completed = 0;
   indexes.forEach((sql, index) => {
