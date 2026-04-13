@@ -176,8 +176,9 @@ async function runAnalysisJob() {
             
             if (btcDecision.orderType === 'market') {
               // Execute market order immediately with linked prediction
-              await openPosition(db, btcAccount, btcDecision.suggestedPosition, btcPredictionId);
-              console.log(`[Scheduler] BTC market order executed immediately`);
+              const position = btcDecision.suggestedPosition;
+              await openPosition(db, btcAccount, position, btcPredictionId);
+              console.log(`[Scheduler] BTC market order executed: side=${position.side}, entry=${position.entry_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
             } else {
               // Create limit order (pending)
               const position = btcDecision.suggestedPosition;
@@ -218,8 +219,9 @@ async function runAnalysisJob() {
             
             if (ethDecision.orderType === 'market') {
               // Execute market order immediately with linked prediction
-              await openPosition(db, ethAccount, ethDecision.suggestedPosition, ethPredictionId);
-              console.log(`[Scheduler] ETH market order executed immediately`);
+              const position = ethDecision.suggestedPosition;
+              await openPosition(db, ethAccount, position, ethPredictionId);
+              console.log(`[Scheduler] ETH market order executed: side=${position.side}, entry=${position.entry_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
             } else {
               // Create limit order (pending)
               const position = ethDecision.suggestedPosition;

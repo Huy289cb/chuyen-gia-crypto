@@ -144,16 +144,23 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
 
   // Check if entry price is far from current price (limit order vs market order)
   const currentPrice = analysis.current_price || 0;
-  const entryPrice = decision.suggestedPosition.entry_price;
-  const priceDiff = Math.abs(entryPrice - currentPrice) / currentPrice;
+  const suggestedEntry = decision.suggestedPosition.entry_price;
+  const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
   
   // If entry is more than 0.5% away from current price, treat as limit order (pending)
   if (priceDiff > 0.005) {
     decision.orderType = 'limit'; // Will create pending order
-    decision.reason += ` | Limit order: entry ${entryPrice.toFixed(2)} vs current ${currentPrice.toFixed(2)} (${(priceDiff * 100).toFixed(2)}% away)`;
+    decision.reason += ` | Limit order: entry ${suggestedEntry.toFixed(2)} vs current ${currentPrice.toFixed(2)} (${(priceDiff * 100).toFixed(2)}% away)`;
+    // For limit orders, keep the suggested entry (waiting for price to hit)
   } else {
     decision.orderType = 'market'; // Execute immediately
-    decision.reason += ` | Market order: entry near current price`;
+    decision.reason += ` | Market order: entry at current price ${currentPrice.toFixed(2)} (suggested was ${suggestedEntry.toFixed(2)})`;
+    // CRITICAL FIX: For market orders, entry price must be current market price, not suggested!
+    decision.suggestedPosition.entry_price = currentPrice;
+    // Recalculate size based on new entry price
+    const newSizeUsd = decision.suggestedPosition.size_qty * currentPrice;
+    decision.suggestedPosition.size_usd = newSizeUsd;
+    console.log(`[AutoEntry] Market order adjusted: entry=${currentPrice}, size_usd=${newSizeUsd.toFixed(2)}`);
   }
 
   return decision;
@@ -247,7 +254,7 @@ function calculateSuggestedPosition(analysis, account) {
   const rewardDistance = Math.abs(takeProfit - suggestedEntry);
   const actualRR = riskDistance > 0 ? rewardDistance / riskDistance : 0;
 
-  console.log(`[AutoEntry] Limit order: entry=${suggestedEntry}, current=${currentPrice}, SL=${stopLoss}, TP=${takeProfit}, RR=${actualRR.toFixed(2)}`);
+  console.log(`[AutoEntry] Position calc: suggested_entry=${suggestedEntry}, current=${currentPrice}, SL=${stopLoss}, TP=${takeProfit}, RR=${actualRR.toFixed(2)}`);
 
   return {
     side: bias === 'bullish' ? 'long' : 'short',
