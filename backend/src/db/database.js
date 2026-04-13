@@ -169,6 +169,8 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
         const analysisId = this.lastID;
         
         // Save predictions with new trading suggestion fields (async)
+        // Collect prediction IDs for linking with positions
+        const predictionIds = {};
         const savePredictions = async () => {
           if (coinData.predictions) {
             const predictions = Object.entries(coinData.predictions);
@@ -181,7 +183,7 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
               const expiresAt = new Date();
               expiresAt.setHours(expiresAt.getHours() + timeframeHours[timeframe]);
               
-              await new Promise((res, rej) => {
+              const predictionId = await new Promise((res, rej) => {
                 db.run(
                   `INSERT INTO predictions 
                    (analysis_id, coin, timeframe, direction, target_price, confidence, expires_at, 
@@ -210,6 +212,9 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
                   }
                 );
               });
+              
+              // Store prediction ID for linking with positions
+              predictionIds[timeframe] = predictionId;
             }
           }
         };
@@ -244,12 +249,12 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
         Promise.all([savePredictions(), saveKeyLevels()])
           .then(() => {
             console.log(`[Database] Saved analysis #${analysisId} for ${coin}`);
-            resolve({ analysisId });
+            resolve({ analysisId, predictionIds });
           })
           .catch((saveErr) => {
             console.error('[Database] Error saving related data:', saveErr.message);
             // Still resolve with analysisId even if predictions fail
-            resolve({ analysisId });
+            resolve({ analysisId, predictionIds });
           });
       }
     );
@@ -424,7 +429,16 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50) {
             'actual', p.actual_price,
             'is_correct', p.is_correct,
             'id', p.id,
-            'expires_at', p.expires_at
+            'expires_at', p.expires_at,
+            'linked_position_id', p.linked_position_id,
+            'suggested_entry', p.suggested_entry,
+            'suggested_stop_loss', p.suggested_stop_loss,
+            'suggested_take_profit', p.suggested_take_profit,
+            'expected_rr', p.expected_rr,
+            'invalidation_level', p.invalidation_level,
+            'reason_summary', p.reason_summary,
+            'outcome', p.outcome,
+            'pnl', p.pnl
           )
         ) as predictions
        FROM analysis_history ah
@@ -1074,6 +1088,62 @@ export async function updatePosition(db, positionId, updates) {
     
     db.run(
       `UPDATE positions SET ${fields.join(', ')} WHERE id = ?`,
+      values,
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+// Update prediction
+export async function updatePrediction(db, predictionId, updates) {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    
+    if (updates.linked_position_id !== undefined) {
+      fields.push('linked_position_id = ?');
+      values.push(updates.linked_position_id);
+    }
+    if (updates.outcome !== undefined) {
+      fields.push('outcome = ?');
+      values.push(updates.outcome);
+    }
+    if (updates.pnl !== undefined) {
+      fields.push('pnl = ?');
+      values.push(updates.pnl);
+    }
+    if (updates.hit_tp !== undefined) {
+      fields.push('hit_tp = ?');
+      values.push(updates.hit_tp);
+    }
+    if (updates.hit_sl !== undefined) {
+      fields.push('hit_sl = ?');
+      values.push(updates.hit_sl);
+    }
+    if (updates.actual_price !== undefined) {
+      fields.push('actual_price = ?');
+      values.push(updates.actual_price);
+    }
+    if (updates.is_correct !== undefined) {
+      fields.push('is_correct = ?');
+      values.push(updates.is_correct);
+    }
+    
+    if (fields.length === 0) {
+      resolve(0);
+      return;
+    }
+    
+    values.push(predictionId);
+    
+    db.run(
+      `UPDATE predictions SET ${fields.join(', ')} WHERE id = ?`,
       values,
       function(err) {
         if (err) {

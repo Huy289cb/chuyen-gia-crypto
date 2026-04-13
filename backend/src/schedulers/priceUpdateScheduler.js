@@ -8,6 +8,21 @@ let dbEnabled = false;
 let isRunning = false;
 
 /**
+ * Format date to Vietnam timezone (GMT+7)
+ */
+function formatVietnamTime(date) {
+  return new Date(date).toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+/**
  * Initialize the price update scheduler
  */
 export async function initPriceUpdateScheduler(database, enabled) {
@@ -51,7 +66,7 @@ async function runPriceUpdateJob() {
   const startTime = Date.now();
   
   try {
-    console.log(`[PriceScheduler] ${new Date().toISOString()} - Updating prices and positions...`);
+    console.log(`[PriceScheduler] ${formatVietnamTime(new Date())} - Updating prices and positions...`);
     
     // Fetch current prices
     const prices = await fetchCurrentPrices();
@@ -218,7 +233,7 @@ async function updateAllAccountsEquity() {
  */
 async function runAccountSnapshotJob() {
   try {
-    console.log(`[PriceScheduler] ${new Date().toISOString()} - Creating account snapshots...`);
+    console.log(`[PriceScheduler] ${formatVietnamTime(new Date())} - Creating account snapshots...`);
     
     const { getAllAccounts, createAccountSnapshot: createSnap } = await import('../db/database.js');
     const accounts = await getAllAccounts(db);

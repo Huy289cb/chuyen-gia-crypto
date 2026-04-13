@@ -30,6 +30,7 @@ logs
 *.log
 backend.log
 frontend.log
+backup-logs/
 
 # Runtime data
 pids
@@ -110,6 +111,7 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 backend/data/predictions.db
+backend/data/backup.db
 
 # API Keys and secrets
 **/api-keys/

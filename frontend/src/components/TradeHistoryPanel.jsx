@@ -20,6 +20,7 @@ export function TradeHistoryPanel({ trades }) {
     if (!timestamp) return 'N/A';
     const date = new Date(timestamp);
     return date.toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
       day: '2-digit',
       month: '2-digit',
       hour: '2-digit',

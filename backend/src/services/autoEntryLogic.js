@@ -25,6 +25,20 @@ const AUTO_ENTRY_CONFIG = {
 };
 
 /**
+ * Format date to Vietnam timezone (GMT+7)
+ */
+function formatVietnamTime(date) {
+  return new Date(date).toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+/**
  * Check if current time is within allowed trading sessions
  */
 function isWithinAllowedSessions() {
@@ -66,7 +80,7 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
   if (account.cooldown_until) {
     const cooldownEnd = new Date(account.cooldown_until);
     if (new Date() < cooldownEnd) {
-      decision.reason = `Account in cooldown until ${cooldownEnd.toLocaleString()} (after ${account.consecutive_losses} consecutive losses)`;
+      decision.reason = `Account in cooldown until ${formatVietnamTime(cooldownEnd)} (after ${account.consecutive_losses} consecutive losses)`;
       return decision;
     }
   }

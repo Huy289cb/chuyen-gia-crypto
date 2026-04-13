@@ -35,7 +35,34 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
         
         const result = await response.json();
         if (result.success && result.data) {
-          setPredictions(result.data);
+          // Flatten predictions from all analyses
+          // Each analysis has nested predictions array
+          const flattenedPredictions = result.data.flatMap(analysis => {
+            const analysisData = {
+              id: `analysis-${analysis.id}`,
+              analysis_id: analysis.id,
+              timestamp: analysis.timestamp,
+              current_price: analysis.current_price,
+              bias: analysis.bias,
+              confidence_score: analysis.confidence,
+              narrative_vi: analysis.narrative
+            };
+            
+            // If no predictions, return analysis as single item
+            if (!analysis.predictions || analysis.predictions.length === 0) {
+              return [analysisData];
+            }
+            
+            // Map each prediction with analysis data
+            return analysis.predictions.map(pred => ({
+              ...analysisData,
+              ...pred,
+              predicted_at: analysis.timestamp,
+              id: `${analysis.id}-${pred.timeframe}`
+            }));
+          });
+          
+          setPredictions(flattenedPredictions);
         }
       } catch (err) {
         setError(err.message);
@@ -50,6 +77,7 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
   const formatDateTime = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
       day: '2-digit',
       month: '2-digit',
       hour: '2-digit',
@@ -63,7 +91,7 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
   };
 
   const formatPnL = (pnl) => {
-    if (!pnl) return 'N/A';
+    if (pnl === undefined || pnl === null) return 'N/A';
     const sign = pnl >= 0 ? '+' : '';
     return `${sign}$${pnl.toFixed(2)}`;
   };
@@ -89,7 +117,9 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
       case 'win': return 'text-emerald-600';
       case 'loss': return 'text-rose-600';
       case 'neutral': return 'text-gray-600';
-      default: return 'text-yellow-600';
+      case '-': return 'text-gray-400';
+      case 'pending': return 'text-yellow-600';
+      default: return 'text-gray-400';
     }
   };
 
@@ -185,7 +215,9 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
                   <div>
                     <span className="text-gray-500">Outcome:</span>
                     <span className={`ml-1 font-medium ${getOutcomeColor(pred.outcome)}`}>
-                      {pred.outcome || 'pending'}
+                      {pred.linked_position_id
+                        ? (pred.outcome || 'pending')
+                        : (pred.outcome || '-')}
                     </span>
                   </div>
                 </div>

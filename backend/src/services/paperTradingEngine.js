@@ -45,10 +45,22 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
     linked_prediction_id: linkedPredictionId
   };
 
-  const { createPosition, updateAccount } = await import('../db/database.js');
+  const { createPosition, updateAccount, updatePrediction } = await import('../db/database.js');
   
   // Create position
   const position = await createPosition(db, positionData);
+  
+  // Update prediction with linked position (if linked)
+  if (linkedPredictionId) {
+    try {
+      await updatePrediction(db, linkedPredictionId, {
+        linked_position_id: position.id,
+        outcome: 'pending'
+      });
+    } catch (err) {
+      console.error('[PaperTrading] Failed to link prediction:', err.message);
+    }
+  }
   
   // Update account - in paper trading, balance stays the same, equity = balance + unrealized_pnl
   // We don't deduct from balance because the position is just allocated, not spent
@@ -147,13 +159,27 @@ export async function updatePositionPnL(db, position, currentPrice) {
  * Close position and update account
  */
 export async function closePosition(db, position, currentPrice, closeReason) {
-  const { closePosition: closePos, updateAccount, getPosition, getPositions } = await import('../db/database.js');
+  const { closePosition: closePos, updateAccount, getPosition, getPositions, updatePrediction } = await import('../db/database.js');
   
   // Calculate final PnL
   const { pnl: realizedPnl } = calculateUnrealizedPnL(position, currentPrice);
   
   // Close position
   await closePos(db, position.id, currentPrice, closeReason);
+  
+  // Update linked prediction with outcome and PnL
+  if (position.linked_prediction_id) {
+    try {
+      const outcome = realizedPnl > 0 ? 'win' : realizedPnl < 0 ? 'loss' : 'neutral';
+      await updatePrediction(db, position.linked_prediction_id, {
+        outcome: outcome,
+        pnl: realizedPnl
+      });
+      console.log(`[PaperTrading] Updated prediction ${position.linked_prediction_id}: ${outcome} (${realizedPnl.toFixed(2)} USDT)`);
+    } catch (err) {
+      console.error('[PaperTrading] Failed to update prediction:', err.message);
+    }
+  }
   
   // Get updated position
   const closedPosition = await getPosition(db, position.id);

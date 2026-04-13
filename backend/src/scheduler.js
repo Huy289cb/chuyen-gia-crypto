@@ -6,6 +6,21 @@ import { cache } from './cache.js';
 let db = null;
 let dbEnabled = false;
 
+/**
+ * Format date to Vietnam timezone (GMT+7)
+ */
+function formatVietnamTime(date) {
+  return new Date(date).toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
 // Initialize database on startup (optional)
 async function initDb() {
   try {
@@ -83,7 +98,7 @@ export async function startScheduler() {
 
 async function runAnalysisJob() {
   const startTime = Date.now();
-  console.log(`\n[Job ${new Date().toISOString()}] Starting analysis job...`);
+  console.log(`\n[Job ${formatVietnamTime(new Date())}] Starting analysis job...`);
   
   try {
     // Step 1: Fetch price data (with database)
@@ -139,11 +154,13 @@ async function runAnalysisJob() {
         const { evaluateAutoEntry } = await import('./services/autoEntryLogic.js');
         const { openPosition } = await import('./services/paperTradingEngine.js');
         
-        // Save analysis for BTC
-        const btcAnalysisId = await saveAnalysis(db, 'BTC', priceData, analysis);
+        // Save analysis for BTC - returns { analysisId, predictionIds }
+        const btcResult = await saveAnalysis(db, 'BTC', priceData, analysis);
+        const btcPredictionId = btcResult.predictionIds?.['4h'] || btcResult.predictionIds?.['1d'];
         
-        // Save analysis for ETH
-        const ethAnalysisId = await saveAnalysis(db, 'ETH', priceData, analysis);
+        // Save analysis for ETH - returns { analysisId, predictionIds }
+        const ethResult = await saveAnalysis(db, 'ETH', priceData, analysis);
+        const ethPredictionId = ethResult.predictionIds?.['4h'] || ethResult.predictionIds?.['1d'];
         
         // Auto-entry evaluation for BTC
         const btcAccount = await getOrCreateAccount(db, 'BTC', 100);
@@ -158,8 +175,8 @@ async function runAnalysisJob() {
             const { randomUUID } = await import('crypto');
             
             if (btcDecision.orderType === 'market') {
-              // Execute market order immediately
-              await openPosition(db, btcAccount, btcDecision.suggestedPosition, null);
+              // Execute market order immediately with linked prediction
+              await openPosition(db, btcAccount, btcDecision.suggestedPosition, btcPredictionId);
               console.log(`[Scheduler] BTC market order executed immediately`);
             } else {
               // Create limit order (pending)
@@ -177,7 +194,7 @@ async function runAnalysisJob() {
                 risk_usd: position.risk_usd,
                 risk_percent: position.risk_percent,
                 expected_rr: position.expected_rr,
-                linked_prediction_id: null,
+                linked_prediction_id: btcPredictionId,
                 invalidation_level: position.invalidation_level
               });
               console.log(`[Scheduler] BTC limit order created (pending): entry ${position.entry_price}`);
@@ -200,8 +217,8 @@ async function runAnalysisJob() {
             const { randomUUID } = await import('crypto');
             
             if (ethDecision.orderType === 'market') {
-              // Execute market order immediately
-              await openPosition(db, ethAccount, ethDecision.suggestedPosition, null);
+              // Execute market order immediately with linked prediction
+              await openPosition(db, ethAccount, ethDecision.suggestedPosition, ethPredictionId);
               console.log(`[Scheduler] ETH market order executed immediately`);
             } else {
               // Create limit order (pending)
@@ -219,7 +236,7 @@ async function runAnalysisJob() {
                 risk_usd: position.risk_usd,
                 risk_percent: position.risk_percent,
                 expected_rr: position.expected_rr,
-                linked_prediction_id: null,
+                linked_prediction_id: ethPredictionId,
                 invalidation_level: position.invalidation_level
               });
               console.log(`[Scheduler] ETH limit order created (pending): entry ${position.entry_price}`);
