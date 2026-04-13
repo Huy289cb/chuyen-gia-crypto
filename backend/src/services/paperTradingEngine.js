@@ -178,6 +178,14 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   // Close position
   await closePos(db, position.id, currentPrice, closeReason);
   
+  // CRITICAL FIX: Update position with realized PnL (was missing!)
+  const { updatePosition } = await import('../db/database.js');
+  await updatePosition(db, position.id, {
+    realized_pnl: realizedPnl,
+    close_price: currentPrice
+  });
+  console.log(`[PaperTrading] Saved realized_pnl: ${realizedPnl.toFixed(2)} to position ${position.position_id}`);
+  
   // Update linked prediction with outcome and PnL
   if (position.linked_prediction_id) {
     try {
