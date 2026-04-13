@@ -86,6 +86,58 @@ This prevents overtrading during drawdown periods.
   - Update account equity
 - **Account Snapshots**: Created every 5 minutes for equity curve
 
+## Prediction Tracking System
+
+### Overview
+
+Each position opened is linked to a specific prediction timeframe for outcome tracking and performance analysis.
+
+### Linking Logic
+
+**Primary Timeframe: 4h**
+
+- All positions are linked to the **4h prediction** when available
+- If 4h prediction doesn't exist, falls back to **1d prediction**
+- Position tracks outcome (win/loss/neutral) and realized PnL against this prediction
+
+### Why 4h?
+
+- **4h timeframe** is the primary trading signal for auto-entry
+- **1d timeframe** is used for confirmation and trend alignment
+- Only positions linked to 4h predictions are tracked in the prediction history timeline
+
+### Outcome Flow
+
+1. **Position Opened**: Prediction outcome set to `pending`
+2. **Position Active**: Outcome remains `pending` while position is open
+3. **Position Closed**: Outcome updated to `win`, `loss`, or `neutral` based on realized PnL
+4. **PnL Recorded**: Realized profit/loss saved to prediction record
+
+### Frontend Display
+
+**Prediction Timeline Component** (`PredictionTimeline.jsx`):
+- Only displays **4h timeframe predictions**
+- Shows prediction price, confidence, and outcome
+- Displays entry suggestion, SL, TP levels when expanded
+- Color-coded outcomes: green (win), red (loss), yellow (pending), gray (-)
+
+### API Response
+
+```json
+{
+  "id": "analysis-123-4h",
+  "analysis_id": 123,
+  "timestamp": "2024-01-15T08:00:00Z",
+  "current_price": 70954.74,
+  "timeframe": "4h",
+  "direction": "up",
+  "confidence": 0.85,
+  "outcome": "win",
+  "pnl": 12.50,
+  "linked_position_id": 456
+}
+```
+
 ## Pending Orders System
 
 ### How It Works

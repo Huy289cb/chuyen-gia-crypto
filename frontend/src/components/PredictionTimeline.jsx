@@ -53,15 +53,23 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
               return [analysisData];
             }
             
-            // Map each prediction with analysis data
-            return analysis.predictions.map(pred => ({
-              ...analysisData,
-              ...pred,
-              predicted_at: analysis.timestamp,
-              id: `${analysis.id}-${pred.timeframe}`
-            }));
+            // Map each prediction with analysis data - ONLY show 4h timeframe
+            return analysis.predictions
+              .filter(pred => pred.timeframe === '4h')
+              .map(pred => ({
+                ...analysisData,
+                ...pred,
+                predicted_at: analysis.timestamp,
+                id: `${analysis.id}-${pred.timeframe}`
+              }));
           });
           
+          console.log('[PredictionTimeline] Flattened predictions:', flattenedPredictions.map(p => ({ 
+            id: p.id, 
+            timestamp: p.timestamp, 
+            current_price: p.current_price,
+            timeframe: p.timeframe 
+          })));
           setPredictions(flattenedPredictions);
         }
       } catch (err) {

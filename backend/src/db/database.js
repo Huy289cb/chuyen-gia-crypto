@@ -144,6 +144,8 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
     
     const currentPrice = priceData[coin.toLowerCase()]?.price || 0;
     
+    console.log(`[Database] Saving analysis for ${coin}: currentPrice=${currentPrice}, bias=${coinData.bias}, confidence=${coinData.confidence}`);
+    
     db.run(
       `INSERT INTO analysis_history 
        (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer)
