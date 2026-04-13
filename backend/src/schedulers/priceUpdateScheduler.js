@@ -100,11 +100,25 @@ async function runPriceUpdateJob() {
 /**
  * Fetch current prices for BTC and ETH
  * Uses Binance real-time API for paper trading (no rate limit issues)
+ * Also updates latest_prices in database to keep data fresh
  */
 async function fetchCurrentPrices() {
   try {
     const { fetchRealTimePrices } = await import('../price-fetcher.js');
+    const { saveLatestPrice } = await import('../db/database.js');
+    
     const priceData = await fetchRealTimePrices();
+    
+    // Update latest_prices in database to ensure fresh data for analysis
+    if (db && priceData) {
+      try {
+        await saveLatestPrice(db, 'BTC', priceData.btc?.price || 0, 0, 0, 0, 0);
+        await saveLatestPrice(db, 'ETH', priceData.eth?.price || 0, 0, 0, 0, 0);
+        console.log(`[PriceScheduler] Updated latest_prices - BTC: $${priceData.btc?.price}, ETH: $${priceData.eth?.price}`);
+      } catch (saveError) {
+        console.log('[PriceScheduler] Failed to update latest_prices:', saveError.message);
+      }
+    }
     
     return {
       btc: priceData.btc?.price || null,
