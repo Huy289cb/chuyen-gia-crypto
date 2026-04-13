@@ -231,7 +231,7 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
   useEffect(() => {
     if (!chartContainerRef.current || ohlcData.length === 0) return;
     
-    // Create chart
+    // Create chart with GMT+7 timezone
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: '#ffffff' },
@@ -256,6 +256,19 @@ export function CoinChart({ name, symbol, data, analysis, color, predictions }) 
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 12,
+      },
+      localization: {
+        locale: 'vi-VN',
+        timeFormatter: (timestamp) => {
+          const date = new Date(timestamp * 1000);
+          return date.toLocaleString('vi-VN', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }
       },
       height: 300,
     });
