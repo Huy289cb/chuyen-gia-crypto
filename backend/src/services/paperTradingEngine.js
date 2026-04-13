@@ -164,6 +164,17 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   // Calculate final PnL
   const { pnl: realizedPnl } = calculateUnrealizedPnL(position, currentPrice);
   
+  // DEBUG: Log PnL calculation details
+  console.log(`[PaperTrading] Closing position ${position.position_id}:`, {
+    side: position.side,
+    entry: position.entry_price,
+    current: currentPrice,
+    size_qty: position.size_qty,
+    size_usd: position.size_usd,
+    calculated_pnl: realizedPnl,
+    reason: closeReason
+  });
+  
   // Close position
   await closePos(db, position.id, currentPrice, closeReason);
   

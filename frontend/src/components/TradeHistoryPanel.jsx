@@ -18,7 +18,9 @@ export function TradeHistoryPanel({ trades }) {
 
   const formatDateTime = (timestamp) => {
     if (!timestamp) return 'N/A';
-    const date = new Date(timestamp);
+    // Ensure timestamp is parsed as UTC (backend sends "2026-04-13 16:45:28")
+    const utcTimestamp = timestamp.includes('T') ? timestamp : timestamp.replace(' ', 'T') + 'Z';
+    const date = new Date(utcTimestamp);
     return date.toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
       day: '2-digit',
