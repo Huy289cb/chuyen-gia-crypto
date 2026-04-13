@@ -22,7 +22,8 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedPrediction, setSelectedPrediction] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     const fetchPredictions = async () => {
@@ -81,6 +82,18 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
 
     fetchPredictions();
   }, [symbol, limit]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(predictions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPredictions = predictions.slice(startIndex, endIndex);
+
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
 
   const formatDateTime = (timestamp) => {
     const date = new Date(timestamp);
@@ -168,14 +181,15 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
         <h3 className="text-base sm:text-lg font-bold text-gray-900">Lịch Sử Dự Báo</h3>
       </div>
 
-      {/* Timeline */}
+      {/* Timeline - Paginated */}
       <div className="space-y-3">
-        {predictions.map((pred, index) => {
+        {currentPredictions.map((pred, index) => {
           const BiasIcon = getBiasIcon(pred.bias);
+          const actualIndex = startIndex + index;
           return (
-            <div key={pred.id || index} className="relative pl-6">
+            <div key={pred.id || actualIndex} className="relative pl-6">
               {/* Timeline line */}
-              {index < predictions.length - 1 && (
+              {actualIndex < predictions.length - 1 && (
                 <div className="absolute left-2 top-8 bottom-0 w-0.5 bg-gray-200" />
               )}
 
@@ -188,13 +202,8 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
                 }`} />
               </div>
 
-              {/* Prediction card */}
-              <div
-                className={`p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md ${
-                  selectedPrediction === pred.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'
-                }`}
-                onClick={() => setSelectedPrediction(selectedPrediction === pred.id ? null : pred.id)}
-              >
+              {/* Prediction card - No click to expand, show reason directly */}
+              <div className="p-3 rounded-xl border border-gray-200 bg-white transition-all hover:shadow-md">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${getBiasColor(pred.bias)}`}>
@@ -239,33 +248,33 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
                   </div>
                 )}
 
-                {/* Expanded details */}
-                {selectedPrediction === pred.id && (
-                  <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                    {pred.narrative_vi && (
-                      <div className="text-sm text-gray-700">
-                        <span className="font-medium">Lý do:</span> {pred.narrative_vi}
-                      </div>
-                    )}
-                    {pred.reason_summary && (
-                      <div className="text-sm text-gray-700">
-                        <span className="font-medium">Tóm tắt:</span> {pred.reason_summary}
-                      </div>
-                    )}
+                {/* Always show reason/narrative */}
+                {pred.narrative_vi && (
+                  <div className="mt-2 pt-2 border-t border-gray-100">
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium text-gray-900">Lý do:</span>{' '}
+                      <span className="text-gray-600">{pred.narrative_vi}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Entry/SL/TP levels */}
+                {(pred.suggested_entry || pred.suggested_stop_loss || pred.suggested_take_profit) && (
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
                     {pred.suggested_entry && (
-                      <div className="text-xs text-gray-600">
-                        <span className="font-medium">Entry:</span> {formatPrice(pred.suggested_entry)}
-                      </div>
+                      <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">
+                        Entry: {formatPrice(pred.suggested_entry)}
+                      </span>
                     )}
                     {pred.suggested_stop_loss && (
-                      <div className="text-xs text-gray-600">
-                        <span className="font-medium">SL:</span> {formatPrice(pred.suggested_stop_loss)}
-                      </div>
+                      <span className="px-2 py-1 bg-rose-50 text-rose-700 rounded">
+                        SL: {formatPrice(pred.suggested_stop_loss)}
+                      </span>
                     )}
                     {pred.suggested_take_profit && (
-                      <div className="text-xs text-gray-600">
-                        <span className="font-medium">TP:</span> {formatPrice(pred.suggested_take_profit)}
-                      </div>
+                      <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded">
+                        TP: {formatPrice(pred.suggested_take_profit)}
+                      </span>
                     )}
                   </div>
                 )}
@@ -274,6 +283,42 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
           );
         })}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-200">
+          <div className="text-sm text-gray-500">
+            Hiển thị {startIndex + 1}-{Math.min(endIndex, predictions.length)} / {predictions.length} dự báo
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                currentPage === 1
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              ← Trước
+            </button>
+            <span className="text-sm text-gray-700">
+              Trang {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                currentPage === totalPages
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Sau →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

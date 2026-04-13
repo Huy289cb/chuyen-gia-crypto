@@ -110,14 +110,27 @@ async function fetchCurrentPrices() {
     const priceData = await fetchRealTimePrices();
     
     // Update latest_prices in database to ensure fresh data for analysis
+    console.log(`[PriceScheduler] Checking DB state: db=${db ? 'OK' : 'NULL'}, priceData=${priceData ? 'OK' : 'NULL'}`);
     if (db && priceData) {
       try {
-        await saveLatestPrice(db, 'BTC', priceData.btc?.price || 0, 0, 0, 0, 0);
-        await saveLatestPrice(db, 'ETH', priceData.eth?.price || 0, 0, 0, 0, 0);
-        console.log(`[PriceScheduler] Updated latest_prices - BTC: $${priceData.btc?.price}, ETH: $${priceData.eth?.price}`);
+        console.log(`[PriceScheduler] Saving latest prices to DB...`);
+        const btcPrice = priceData.btc?.price || 0;
+        const ethPrice = priceData.eth?.price || 0;
+        console.log(`[PriceScheduler] Prices to save - BTC: $${btcPrice}, ETH: $${ethPrice}`);
+        
+        await saveLatestPrice(db, 'BTC', btcPrice, 0, 0, 0, 0);
+        console.log(`[PriceScheduler] Saved BTC price to DB`);
+        
+        await saveLatestPrice(db, 'ETH', ethPrice, 0, 0, 0, 0);
+        console.log(`[PriceScheduler] Saved ETH price to DB`);
+        
+        console.log(`[PriceScheduler] Updated latest_prices - BTC: $${btcPrice}, ETH: $${ethPrice}`);
       } catch (saveError) {
-        console.log('[PriceScheduler] Failed to update latest_prices:', saveError.message);
+        console.error('[PriceScheduler] Failed to update latest_prices:', saveError.message);
+        console.error('[PriceScheduler] Error stack:', saveError.stack);
       }
+    } else {
+      console.log(`[PriceScheduler] Skipping DB update: db=${db ? 'OK' : 'NULL'}, priceData.btc=${priceData?.btc ? 'OK' : 'NULL'}, priceData.eth=${priceData?.eth ? 'OK' : 'NULL'}`);
     }
     
     return {
