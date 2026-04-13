@@ -96,14 +96,18 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
   };
 
   const formatDateTime = (timestamp) => {
+    if (!timestamp) return 'N/A';
     const date = new Date(timestamp);
-    return date.toLocaleString('vi-VN', {
+    // Force GMT+7 timezone
+    const formatted = date.toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
       day: '2-digit',
       month: '2-digit',
       hour: '2-digit',
       minute: '2-digit'
     });
+    console.log('[PredictionTimeline] Formatting:', timestamp, '->', formatted);
+    return formatted;
   };
 
   const formatPrice = (price) => {
