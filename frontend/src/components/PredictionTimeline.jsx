@@ -97,8 +97,10 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
 
   const formatDateTime = (timestamp) => {
     if (!timestamp) return 'N/A';
-    const date = new Date(timestamp);
-    // Force GMT+7 timezone
+    // Ensure timestamp is parsed as UTC (backend sends "2026-04-13 16:45:28")
+    const utcTimestamp = timestamp.includes('T') ? timestamp : timestamp.replace(' ', 'T') + 'Z';
+    const date = new Date(utcTimestamp);
+    // Convert to GMT+7
     const formatted = date.toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
       day: '2-digit',
@@ -106,7 +108,7 @@ export function PredictionTimeline({ symbol, limit = 50 }) {
       hour: '2-digit',
       minute: '2-digit'
     });
-    console.log('[PredictionTimeline] Formatting:', timestamp, '->', formatted);
+    console.log('[PredictionTimeline] Formatting:', timestamp, '->', utcTimestamp, '->', formatted);
     return formatted;
   };
 
