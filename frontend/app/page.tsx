@@ -1,5 +1,6 @@
 'use client';
 
+// Cache-bust: v2
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
 import { HeroSection } from './sections/HeroSection';
