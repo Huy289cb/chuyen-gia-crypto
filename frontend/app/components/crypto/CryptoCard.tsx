@@ -127,7 +127,7 @@ export function CryptoCard({ name, symbol, data, analysis, color }: CryptoCardPr
         {narrative && (
           <div className={cn('p-3 rounded-lg mb-3', biasCfg.bg)}>
             <div className="flex items-center gap-2 mb-2">
-              <div className={cn('w-2 h-2 rounded-full', biasCfg.color.replace('text-', 'bg-'))} />
+              <div className={cn('w-2 h-2 rounded-full', biasCfg.color?.replace('text-', 'bg-') || 'bg-foreground-tertiary')} />
               <span className={cn('text-xs font-bold uppercase', biasCfg.color)}>
                 {biasCfg.text} BIAS
               </span>
@@ -193,7 +193,7 @@ function ConfidenceBar({ confidence, colorClass }: { confidence: number; colorCl
       </div>
       <div className="h-2 bg-surface-2 rounded-full overflow-hidden">
         <div 
-          className={cn('h-full transition-all duration-500 rounded-full', colorClass.replace('text-', 'bg-'))}
+          className={cn('h-full transition-all duration-500 rounded-full', colorClass?.replace('text-', 'bg-') || 'bg-accent-primary')}
           style={{ width: `${percentage}%` }}
         />
       </div>
