@@ -5,19 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatPrice(price: number, decimals: number = 2): string {
+export function formatPrice(price: number | null | undefined, decimals: number = 2): string {
+  if (price == null) return '-';
   return price.toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
 }
 
-export function formatPercentage(value: number, decimals: number = 2): string {
+export function formatPercentage(value: number | null | undefined, decimals: number = 2): string {
+  if (value == null) return '-';
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(decimals)}%`;
 }
 
-export function formatNumber(num: number): string {
+export function formatNumber(num: number | null | undefined): string {
+  if (num == null) return '-';
   if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
   if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
   if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
