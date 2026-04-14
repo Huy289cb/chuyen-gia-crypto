@@ -58,8 +58,8 @@ export function CryptoCard({ name, symbol, data, analysis, color }: CryptoCardPr
   const keyLevels = analysis?.key_levels;
   const riskNotes = analysis?.risk;
   
-  const actionCfg = actionConfig[action];
-  const biasCfg = biasConfig[bias];
+  const actionCfg = actionConfig[action as keyof typeof actionConfig] || actionConfig['hold'];
+  const biasCfg = biasConfig[bias as keyof typeof biasConfig] || biasConfig['neutral'];
   const ActionIcon = actionCfg.icon;
   const isPositive = change24h >= 0;
 
