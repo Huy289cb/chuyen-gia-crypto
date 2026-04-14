@@ -146,7 +146,7 @@ function PredictionItem({
             </div>
             <div className="flex items-center gap-2 text-xs text-foreground-tertiary mt-0.5">
               <Clock size={12} />
-              {new Date(prediction.timestamp).toLocaleString()}
+              {prediction.timestamp ? new Date(prediction.timestamp).toLocaleString() : '-'}
             </div>
           </div>
         </div>
@@ -156,13 +156,13 @@ function PredictionItem({
           {/* Confidence */}
           <div className="text-right">
             <div className="text-sm font-medium text-foreground">
-              {Math.round(prediction.confidence * 100)}%
+              {prediction.confidence != null ? Math.round(prediction.confidence * 100) : 0}%
             </div>
             <div className="text-xs text-foreground-tertiary">Confidence</div>
           </div>
           
           {/* PnL if available */}
-          {prediction.pnl !== null && (
+          {prediction.pnl != null && (
             <div className={cn(
               'text-right font-mono',
               prediction.pnl >= 0 ? 'text-success' : 'text-danger'
