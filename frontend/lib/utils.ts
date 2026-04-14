@@ -6,11 +6,17 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatPrice(price: number | null | undefined, decimals: number = 2): string {
-  if (price == null) return '-';
-  return price.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  if (price == null || typeof price !== 'number' || isNaN(price) || !isFinite(price)) {
+    return '-';
+  }
+  try {
+    return price.toLocaleString('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  } catch {
+    return price.toFixed(decimals);
+  }
 }
 
 export function formatPercentage(value: number | null | undefined, decimals: number = 2): string {
