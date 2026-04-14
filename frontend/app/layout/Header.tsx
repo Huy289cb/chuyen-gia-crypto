@@ -30,6 +30,7 @@ export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpda
       case 'fresh': return 'text-success';
       case 'stale': return 'text-warning';
       case 'error': return 'text-danger';
+      case 'unknown': return 'text-foreground-tertiary';
       default: return 'text-foreground-tertiary';
     }
   };
