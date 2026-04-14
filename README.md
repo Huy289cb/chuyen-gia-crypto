@@ -89,17 +89,40 @@ crypto-analyzer/
 │   ├── scripts/
 │   │   └── ensure-data-dir.js
 │   └── .env                 # GROQ_API_KEY + paper trading config
-├── frontend/             # React + Vite + Tailwind
-│   ├── src/
-│   │   ├── App.jsx
+├── frontend/             # Next.js 15 + TypeScript + Tailwind
+│   ├── app/              # App Router (Next.js 15)
+│   │   ├── layout.tsx           # Root layout với ThemeProvider
+│   │   ├── page.tsx             # Main dashboard
+│   │   ├── globals.css          # CSS variables (light/dark theme)
+│   │   ├── layout/
+│   │   │   ├── Header.tsx       # Sticky header + theme toggle
+│   │   │   └── Footer.tsx       # Risk disclaimer
+│   │   ├── sections/
+│   │   │   ├── HeroSection.tsx      # BTC/ETH cards
+│   │   │   ├── TradingDashboard.tsx # Account stats
+│   │   │   ├── PositionsSection.tsx # Open positions
+│   │   │   ├── HistorySection.tsx   # Trade history
+│   │   │   ├── PredictionsSection.tsx # Prediction timeline
+│   │   │   └── PerformanceSection.tsx # Metrics grid
 │   │   ├── components/
-│   │   │   ├── CryptoCard.jsx     # ICT card với narrative
-│   │   │   ├── PriceChart.jsx     # Candlestick chart với predictions
-│   │   │   ├── MarketOverview.jsx
-│   │   │   └── Disclaimer.jsx
-│   │   └── hooks/
-│   │       └── useTrends.js
-│   └── index.html
+│   │   │   ├── ThemeProvider.tsx    # Dark/Light mode context
+│   │   │   ├── ui/
+│   │   │   │   ├── Card.tsx
+│   │   │   │   ├── Badge.tsx
+│   │   │   │   └── Button.tsx
+│   │   │   └── crypto/
+│   │   │       └── CryptoCard.tsx   # Crypto card w/ sparkline
+│   │   ├── hooks/
+│   │   │   ├── useTrends.ts         # Analysis data fetching
+│   │   │   └── usePaperTrading.ts   # Trading data fetching
+│   │   └── types/
+│   │       └── index.ts             # TypeScript definitions
+│   ├── lib/
+│   │   └── utils.ts                 # Utility functions (cn, formatPrice)
+│   ├── public/
+│   ├── next.config.js
+│   ├── tailwind.config.ts
+│   └── tsconfig.json
 ├── docs/                 # Documentation
 │   ├── architecture.md   # System architecture
 │   ├── api-spec.md       # API specification
@@ -140,10 +163,22 @@ Backend chạy tại http://localhost:3000
 ```bash
 cd frontend
 npm install
+
+# Dev server
 npm run dev
+
+# Production build
+npm run build
 ```
 
-Frontend chạy tại http://localhost:5173
+Frontend chạy tại http://localhost:3000 (Next.js App Router)
+
+#### Frontend Features
+- **Framework**: Next.js 15 + TypeScript + Tailwind CSS
+- **Theming**: Dark/Light mode toggle (default: Light), lưu localStorage
+- **Components**: Modular architecture (sections, UI components, hooks)
+- **Responsive**: Mobile-first design với glassmorphism effects
+- **Type Safety**: Full TypeScript coverage
 
 ## ICT Methodology
 

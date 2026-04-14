@@ -19,11 +19,17 @@ cd backend
 npm install
 ```
 
-### 3. Install Frontend Dependencies
+### 3. Install Frontend Dependencies (Next.js + TypeScript)
 ```bash
 cd ../frontend
 npm install
 ```
+
+**Frontend Stack:**
+- Next.js 15 + React 19
+- TypeScript 5.7
+- Tailwind CSS 3.4
+- Lucide React icons
 
 ### 4. Initialize Database (Optional - auto-initialized on first run)
 ```bash
@@ -79,7 +85,7 @@ Database: connected
 [Cache] Data cached at ...
 ```
 
-### Terminal 2 - Start Frontend
+### Terminal 2 - Start Frontend (Next.js)
 ```bash
 cd frontend
 npm run dev
@@ -87,13 +93,18 @@ npm run dev
 
 Expected output:
 ```
-VITE v5.4.21  ready in 524 ms
+▲ Next.js 15.1.3
+- Local:        http://localhost:3000
+- Network:      http://192.168.x.x:3000
 
-➜  Local:   http://localhost:5173/
+✓ Starting...
+✓ Ready in 2.5s
 ```
 
 ### Access Application
-Open browser: `http://localhost:5173`
+Open browser: `http://localhost:3000`
+
+**Note**: Next.js frontend chạy trên port 3000 (cùng port với backend dev proxy). Trong production, frontend build ra static files và có thể deploy riêng.
 
 ## Cron Job Details
 
@@ -115,15 +126,26 @@ To run analysis immediately (for testing):
 
 ## Troubleshooting
 
-### "React is not defined" Error
-Check `frontend/vite.config.js` has:
-```js
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+### "Module not found" Error in Next.js
+If you see module resolution errors:
+```bash
+# Xóa cache và reinstall
+cd frontend
+rm -rf node_modules .next
+npm install
+npm run build
+```
 
-export default defineConfig({
-  plugins: [react()],
-})
+### TypeScript Errors
+Check `tsconfig.json` paths configuration:
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"]
+    }
+  }
+}
 ```
 
 ### Backend won't start
