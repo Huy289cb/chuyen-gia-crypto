@@ -13,7 +13,7 @@ export function Badge({
   size = 'sm',
   className 
 }: BadgeProps) {
-  const variants = {
+  const variants: Record<string, string> = {
     default: 'bg-accent-primary/15 text-accent-primary border-accent-primary/20',
     success: 'bg-success-dim text-success border-success/20',
     danger: 'bg-danger-dim text-danger border-danger/20',
@@ -22,18 +22,21 @@ export function Badge({
     neutral: 'bg-surface-2 text-foreground-secondary border-border-default',
   };
 
-  const sizes = {
+  const sizes: Record<string, string> = {
     sm: 'px-2 py-0.5 text-xs',
     md: 'px-2.5 py-1 text-sm',
     lg: 'px-3 py-1.5 text-sm',
   };
 
+  const variantClass = variants[variant] || variants['default'];
+  const sizeClass = sizes[size] || sizes['sm'];
+
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 font-medium rounded-full border',
-        variants[variant],
-        sizes[size],
+        variantClass,
+        sizeClass,
         className
       )}
     >
