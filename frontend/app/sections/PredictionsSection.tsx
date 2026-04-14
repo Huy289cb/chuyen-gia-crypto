@@ -22,7 +22,7 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
         const API_BASE = process.env.NODE_ENV === 'development' 
           ? 'http://localhost:3000/api' 
           : '/api';
-        const response = await fetch(`${API_BASE}/analysis/predictions/${symbol}?limit=20`);
+        const response = await fetch(`${API_BASE}/predictions/${symbol}?limit=20`);
         const data: ApiResponse<PredictionHistory[]> = await response.json();
         if (data.success && data.data) {
           setPredictions(data.data);
