@@ -49,40 +49,62 @@ export function PriceChart({
       console.log(`[PriceChart] Prediction ${i}:`, p.timeframe, p.direction, 'target:', p.price_target);
     });
 
+    console.log('[PriceChart] Creating chart...');
+    
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'var(--text-secondary)',
+        background: { type: ColorType.Solid, color: 'rgba(0,0,0,0.1)' }, // Debug: slight background
+        textColor: '#000000',
       },
       grid: {
-        vertLines: { color: 'var(--border-subtle)' },
-        horzLines: { color: 'var(--border-subtle)' },
+        vertLines: { color: '#cccccc' },
+        horzLines: { color: '#cccccc' },
       },
       crosshair: {
         mode: 1,
       },
       rightPriceScale: {
-        borderColor: 'var(--border-default)',
+        borderColor: '#000000',
+        visible: true,
+      },
+      leftPriceScale: {
+        visible: false,
       },
       timeScale: {
-        borderColor: 'var(--border-default)',
+        borderColor: '#000000',
         timeVisible: true,
+        visible: true,
       },
       height,
       autoSize: true,
     });
 
+    console.log('[PriceChart] Chart created, adding candlestick series...');
+    
     // Candlestick series - v5 API
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: 'var(--success)',
-      downColor: 'var(--danger)',
-      borderUpColor: 'var(--success)',
-      borderDownColor: 'var(--danger)',
-      wickUpColor: 'var(--success)',
-      wickDownColor: 'var(--danger)',
+      upColor: '#16a34a',
+      downColor: '#dc2626',
+      borderUpColor: '#16a34a',
+      borderDownColor: '#dc2626',
+      wickUpColor: '#16a34a',
+      wickDownColor: '#dc2626',
     });
+    
+    console.log('[PriceChart] Candlestick series created:', !!candleSeries);
+    console.log('[PriceChart] Setting data with', data.length, 'points');
 
     candleSeries.setData(data as CandlestickData[]);
+    
+    console.log('[PriceChart] Candle data set');
+    
+    // Force chart update
+    chart.timeScale().fitContent();
+    chart.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+      }
+    });
 
     // Add prediction lines if available
     if (predictions && predictions.length > 0) {
@@ -128,20 +150,33 @@ export function PriceChart({
 
     // TEST: Always add a test line at current price + 2%
     const testPrice = data[data.length - 1].close * 1.02;
-    console.log('[PriceChart] Adding TEST line at:', testPrice);
+    console.log('[PriceChart] Adding TEST line at:', testPrice, 'Current close:', data[data.length - 1].close);
+    
+    const lastCandle = data[data.length - 1];
     const testLine = chart.addSeries(LineSeries, {
       color: '#ef4444',  // Red
       lineWidth: 4,
       lineStyle: 2, // dashed
-      title: 'TEST LINE',
+      title: 'TEST',
       lastValueVisible: true,
+      priceLineVisible: true,
+      priceLineColor: '#ef4444',
+      priceLineWidth: 2,
     });
-    const lastCandle = data[data.length - 1];
+    
+    console.log('[PriceChart] TEST series created:', !!testLine);
+    
     const testData: LineData[] = [
-      { time: (lastCandle.time - 172800) as Time, value: testPrice },  // 2 days ago
-      { time: (lastCandle.time + 172800) as Time, value: testPrice },  // 2 days future
+      { time: (lastCandle.time - 86400) as Time, value: testPrice },  // 1 day ago
+      { time: (lastCandle.time + 86400) as Time, value: testPrice },  // 1 day future
     ];
+    
+    console.log('[PriceChart] TEST line data:', JSON.stringify(testData));
     testLine.setData(testData);
+    console.log('[PriceChart] TEST line data set, calling applyOptions');
+    
+    // Force update
+    testLine.applyOptions({ lineWidth: 4 });
 
     // Add Stop Loss line
     if (stopLoss) {
