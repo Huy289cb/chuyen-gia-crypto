@@ -143,6 +143,7 @@ export function PriceChart({
   }, [data, predictions, showPredictions, timeframe]);
 
   useEffect(() => {
+    console.log('[PriceChart] useEffect running - predictionLineData:', predictionLineData?.length);
     if (!chartContainerRef.current || data.length === 0) return;
     
     const chart = createChart(chartContainerRef.current, {
