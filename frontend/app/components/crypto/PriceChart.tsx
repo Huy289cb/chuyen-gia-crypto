@@ -39,8 +39,15 @@ export function PriceChart({
     // Debug logging
     console.log('[PriceChart] Rendering chart for', symbol);
     console.log('[PriceChart] Data points:', data.length);
+    console.log('[PriceChart] First price:', data[0]?.open, 'Last price:', data[data.length-1]?.close);
+    console.log('[PriceChart] Price range:', Math.min(...data.map(d => d.low)), '-', Math.max(...data.map(d => d.high)));
     console.log('[PriceChart] Predictions:', predictions);
-    console.log('[PriceChart] Entry/SL/TP:', { suggestedEntry, stopLoss, takeProfit });
+    console.log('[PriceChart] Entry:', suggestedEntry, 'SL:', stopLoss, 'TP:', takeProfit);
+    
+    // Log prediction targets
+    predictions?.forEach((p, i) => {
+      console.log(`[PriceChart] Prediction ${i}:`, p.timeframe, p.direction, 'target:', p.price_target);
+    });
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -100,11 +107,14 @@ export function PriceChart({
 
     // Add Suggested Entry line
     if (suggestedEntry) {
+      console.log('[PriceChart] Adding Entry line at:', suggestedEntry);
       const entryLine = chart.addSeries(LineSeries, {
-        color: 'var(--accent-primary)',
-        lineWidth: 2,
+        color: '#f59e0b',  // Hardcode amber color
+        lineWidth: 3,
         lineStyle: 1,
         title: 'Entry',
+        lastValueVisible: true,
+        priceLineVisible: true,
       });
 
       const lastCandle = data[data.length - 1];
@@ -113,15 +123,35 @@ export function PriceChart({
         { time: (lastCandle.time + 86400) as Time, value: suggestedEntry },
       ];
       entryLine.setData(entryData);
+      console.log('[PriceChart] Entry line data:', entryData);
     }
+
+    // TEST: Always add a test line at current price + 2%
+    const testPrice = data[data.length - 1].close * 1.02;
+    console.log('[PriceChart] Adding TEST line at:', testPrice);
+    const testLine = chart.addSeries(LineSeries, {
+      color: '#ef4444',  // Red
+      lineWidth: 4,
+      lineStyle: 2, // dashed
+      title: 'TEST LINE',
+      lastValueVisible: true,
+    });
+    const lastCandle = data[data.length - 1];
+    const testData: LineData[] = [
+      { time: (lastCandle.time - 172800) as Time, value: testPrice },  // 2 days ago
+      { time: (lastCandle.time + 172800) as Time, value: testPrice },  // 2 days future
+    ];
+    testLine.setData(testData);
 
     // Add Stop Loss line
     if (stopLoss) {
+      console.log('[PriceChart] Adding SL line at:', stopLoss);
       const slLine = chart.addSeries(LineSeries, {
-        color: 'var(--danger)',
+        color: '#dc2626',  // Hardcode red
         lineWidth: 2,
         lineStyle: 1,
         title: 'SL',
+        lastValueVisible: true,
       });
 
       const lastCandle = data[data.length - 1];
@@ -134,11 +164,13 @@ export function PriceChart({
 
     // Add Take Profit line
     if (takeProfit) {
+      console.log('[PriceChart] Adding TP line at:', takeProfit);
       const tpLine = chart.addSeries(LineSeries, {
-        color: 'var(--success)',
+        color: '#16a34a',  // Hardcode green
         lineWidth: 2,
         lineStyle: 1,
         title: 'TP',
+        lastValueVisible: true,
       });
 
       const lastCandle = data[data.length - 1];
