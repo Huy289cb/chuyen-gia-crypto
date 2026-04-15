@@ -73,11 +73,20 @@ export function PriceChart({
     }
 
     const tfOrder = ['15m', '1h', '4h', '1d'];
+    console.log('[PriceChart] Raw predictions:', JSON.stringify(predictions));
     const validPredictions = predictions.filter(p => {
-      return p && typeof p === 'object' && p.timeframe && tfOrder.includes(p.timeframe);
+      const isValid = p && typeof p === 'object' && p.timeframe && tfOrder.includes(p.timeframe);
+      if (!isValid) {
+        console.log('[PriceChart] Invalid prediction:', p);
+      }
+      return isValid;
     });
+    console.log('[PriceChart] Valid predictions:', validPredictions.length);
 
-    if (validPredictions.length === 0) return [];
+    if (validPredictions.length === 0) {
+      console.log('[PriceChart] Returning empty - no valid predictions');
+      return [];
+    }
 
     const lineData: LineData[] = [];
     const lastCandle = data[data.length - 1];
