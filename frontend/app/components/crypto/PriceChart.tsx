@@ -65,7 +65,10 @@ export function PriceChart({
 
   // Generate prediction line data like Vite implementation
   const predictionLineData = useMemo(() => {
+    console.log('[PriceChart] Generating prediction line data:', { showPredictions, predictionsCount: predictions?.length, dataCount: data.length });
+    
     if (!showPredictions || !predictions || predictions.length === 0 || data.length === 0) {
+      console.log('[PriceChart] Returning empty - missing data');
       return [];
     }
 
@@ -99,6 +102,9 @@ export function PriceChart({
     const pred1d = validPredictions.find(p => p.timeframe === '1d');
 
     // Determine target prices
+    console.log('[PriceChart] pred4h:', pred4h);
+    console.log('[PriceChart] pred1d:', pred1d);
+    
     const target4h = pred4h?.price_target && typeof pred4h.price_target === 'number' && pred4h.price_target > 0
                     ? pred4h.price_target
                     : startPrice * (1 + (pred4h?.direction === 'up' ? 0.02 : pred4h?.direction === 'down' ? -0.02 : 0));
@@ -106,6 +112,8 @@ export function PriceChart({
     const target1d = pred1d?.price_target && typeof pred1d.price_target === 'number' && pred1d.price_target > 0
                     ? pred1d.price_target
                     : startPrice * (1 + (pred1d?.direction === 'up' ? 0.05 : pred1d?.direction === 'down' ? -0.05 : 0));
+
+    console.log('[PriceChart] Targets:', { startPrice, target4h, target1d, candles4h, candles24h });
 
     // Generate prediction points from current to 24h
     const totalCandles = candles24h;
@@ -130,6 +138,7 @@ export function PriceChart({
       });
     }
 
+    console.log('[PriceChart] Generated lineData:', lineData.length, 'points');
     return lineData;
   }, [data, predictions, showPredictions, timeframe]);
 
@@ -177,15 +186,23 @@ export function PriceChart({
     candleSeries.setData(data as CandlestickData[]);
 
     // Add prediction line series (dashed) using v5 API
+    console.log('[PriceChart] Prediction line data:', predictionLineData.length, 'points');
+    console.log('[PriceChart] Prediction line first:', predictionLineData[0]);
+    console.log('[PriceChart] Prediction line last:', predictionLineData[predictionLineData.length - 1]);
+    
     if (showPredictions && predictionLineData.length > 1) {
+      console.log('[PriceChart] Adding prediction line with color:', color);
       const lineSeries = chart.addSeries(LineSeries, {
         color: color,
         lineStyle: 2, // Dashed
-        lineWidth: 2,
-        lastValueVisible: false,
+        lineWidth: 3,
+        lastValueVisible: true,
         priceLineVisible: false,
       });
       lineSeries.setData(predictionLineData);
+      console.log('[PriceChart] Prediction line added');
+    } else {
+      console.log('[PriceChart] NOT adding prediction line - showPredictions:', showPredictions, 'data length:', predictionLineData.length);
     }
 
     // Parse and add ICT indicators using createPriceLine
