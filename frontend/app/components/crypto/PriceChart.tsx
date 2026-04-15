@@ -156,11 +156,27 @@ export function PriceChart({
     };
   }, [data, predictions, suggestedEntry, stopLoss, takeProfit, height]);
 
+  // Debug render
   return (
-    <div 
-      ref={chartContainerRef} 
-      className="w-full rounded-lg overflow-hidden"
-      style={{ height }}
-    />
+    <div className="relative">
+      {/* Debug Panel */}
+      <div className="absolute top-2 left-2 z-10 bg-surface-1/90 p-2 rounded text-xs font-mono">
+        <div>Symbol: {symbol}</div>
+        <div>Data points: {data.length}</div>
+        <div>Predictions: {predictions?.length || 0}</div>
+        <div>Entry: {suggestedEntry?.toFixed(2) || 'N/A'}</div>
+        <div>SL: {stopLoss?.toFixed(2) || 'N/A'}</div>
+        <div>TP: {takeProfit?.toFixed(2) || 'N/A'}</div>
+        <div className="mt-1 text-warning">
+          Targets: {predictions?.filter(p => p.price_target).length || 0}
+        </div>
+      </div>
+      
+      <div 
+        ref={chartContainerRef} 
+        className="w-full rounded-lg overflow-hidden"
+        style={{ height }}
+      />
+    </div>
   );
 }
