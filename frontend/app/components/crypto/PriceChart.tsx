@@ -40,20 +40,8 @@ export function PriceChart({
     const lastCandle = data[data.length - 1];
     const currentPrice = lastCandle.close;
     
-    // Debug logging
-    console.log('[PriceChart] Rendering chart for', symbol);
-    console.log('[PriceChart] Data points:', data.length);
-    console.log('[PriceChart] First price:', data[0]?.open, 'Last price:', lastCandle.close);
-    console.log('[PriceChart] Price range:', Math.min(...data.map(d => d.low)), '-', Math.max(...data.map(d => d.high)));
-    console.log('[PriceChart] Predictions:', predictions);
-    console.log('[PriceChart] Entry:', suggestedEntry, 'SL:', stopLoss, 'TP:', takeProfit);
-    
-    // Log prediction targets
-    predictions?.forEach((p, i) => {
-      console.log(`[PriceChart] Prediction ${i}:`, p.timeframe, p.direction, 'target:', p.price_target);
-    });
-
-    console.log('[PriceChart] Creating chart...');
+    // Debug logging (keep minimal)
+    console.log('[PriceChart]', symbol, '- Entry:', suggestedEntry, 'SL:', stopLoss, 'TP:', takeProfit);
     
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -83,32 +71,17 @@ export function PriceChart({
       autoSize: true,
     });
 
-    console.log('[PriceChart] Chart created, adding candlestick series...');
-    
-    // Candlestick series - v5 API
+    // Candlestick series
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#16a34a',
-      downColor: '#dc2626',
-      borderUpColor: '#16a34a',
-      borderDownColor: '#dc2626',
-      wickUpColor: '#16a34a',
-      wickDownColor: '#dc2626',
+      upColor: 'var(--success)',
+      downColor: 'var(--danger)',
+      borderUpColor: 'var(--success)',
+      borderDownColor: 'var(--danger)',
+      wickUpColor: 'var(--success)',
+      wickDownColor: 'var(--danger)',
     });
-    
-    console.log('[PriceChart] Candlestick series created:', !!candleSeries);
-    console.log('[PriceChart] Setting data with', data.length, 'points');
-
     candleSeries.setData(data as CandlestickData[]);
-    
-    console.log('[PriceChart] Candle data set');
-    
-    // Force chart update
     chart.timeScale().fitContent();
-    chart.applyOptions({
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-      }
-    });
 
     // Add prediction lines if available
     if (predictions && predictions.length > 0) {
@@ -148,36 +121,6 @@ export function PriceChart({
       { time: (lastCandle.time + 86400) as Time, value: testEntry },
     ];
     entryLine.setData(entryData);
-    console.log('[PriceChart] Entry line data:', entryData);
-
-    // TEST: Always add a test line at current price + 2%
-    const testPrice = currentPrice * 1.02;
-    console.log('[PriceChart] Adding TEST line at:', testPrice, 'Current close:', currentPrice);
-    
-    const testLine = chart.addSeries(LineSeries, {
-      color: '#ef4444',  // Red
-      lineWidth: 4,
-      lineStyle: 2, // dashed
-      title: 'TEST',
-      lastValueVisible: true,
-      priceLineVisible: true,
-      priceLineColor: '#ef4444',
-      priceLineWidth: 2,
-    });
-    
-    console.log('[PriceChart] TEST series created:', !!testLine);
-    
-    const testData: LineData[] = [
-      { time: (data[data.length - 1].time - 86400) as Time, value: testPrice },  // 1 day ago
-      { time: (data[data.length - 1].time + 86400) as Time, value: testPrice },  // 1 day future
-    ];
-    
-    console.log('[PriceChart] TEST line data:', JSON.stringify(testData));
-    testLine.setData(testData);
-    console.log('[PriceChart] TEST line data set, calling applyOptions');
-    
-    // Force update
-    testLine.applyOptions({ lineWidth: 4 });
 
     // Add Stop Loss line
     const testSL = stopLoss || currentPrice * 0.95; // 5% below current if not provided
@@ -220,27 +163,11 @@ export function PriceChart({
     };
   }, [data, predictions, suggestedEntry, stopLoss, takeProfit, height]);
 
-  // Debug render
   return (
-    <div className="relative">
-      {/* Debug Panel */}
-      <div className="absolute top-2 left-2 z-10 bg-surface-1/90 p-2 rounded text-xs font-mono">
-        <div>Symbol: {symbol}</div>
-        <div>Data points: {data.length}</div>
-        <div>Predictions: {predictions?.length || 0}</div>
-        <div>Entry: {suggestedEntry?.toFixed(2) || 'N/A'}</div>
-        <div>SL: {stopLoss?.toFixed(2) || 'N/A'}</div>
-        <div>TP: {takeProfit?.toFixed(2) || 'N/A'}</div>
-        <div className="mt-1 text-warning">
-          Targets: {predictions?.filter(p => p.price_target).length || 0}
-        </div>
-      </div>
-      
-      <div 
-        ref={chartContainerRef} 
-        className="w-full rounded-lg overflow-hidden"
-        style={{ height }}
-      />
-    </div>
+    <div 
+      ref={chartContainerRef} 
+      className="w-full rounded-lg overflow-hidden"
+      style={{ height }}
+    />
   );
 }
