@@ -1,17 +1,19 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineSeries, type Time, type CandlestickData, type LineData } from 'lightweight-charts';
 import type { Prediction } from '@/app/types';
 
+interface ChartDataPoint {
+  time: Time;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 interface PriceChartProps {
-  data: {
-    time: string;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-  }[];
+  data: ChartDataPoint[];
   predictions?: Prediction[];
   suggestedEntry?: number;
   stopLoss?: number;
@@ -55,7 +57,7 @@ export function PriceChart({
       autoSize: true,
     });
 
-    // Candlestick series
+    // Candlestick series - v5 API
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: 'var(--success)',
       downColor: 'var(--danger)',
@@ -69,7 +71,7 @@ export function PriceChart({
 
     // Add prediction lines if available
     if (predictions && predictions.length > 0) {
-      predictions.forEach((pred, index) => {
+      predictions.forEach((pred) => {
         if (pred.price_target) {
           const lineSeries = chart.addSeries(LineSeries, {
             color: pred.direction === 'up' ? 'var(--success)' : 'var(--danger)',
@@ -79,12 +81,9 @@ export function PriceChart({
           });
 
           const lastCandle = data[data.length - 1];
-          const lineData = [
+          const lineData: LineData[] = [
             { time: lastCandle.time, value: pred.price_target },
-            { 
-              time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-              value: pred.price_target 
-            },
+            { time: ((lastCandle.time as number) + 86400) as Time, value: pred.price_target },
           ];
           lineSeries.setData(lineData);
         }
@@ -101,12 +100,9 @@ export function PriceChart({
       });
 
       const lastCandle = data[data.length - 1];
-      const entryData = [
+      const entryData: LineData[] = [
         { time: lastCandle.time, value: suggestedEntry },
-        { 
-          time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-          value: suggestedEntry 
-        },
+        { time: ((lastCandle.time as number) + 86400) as Time, value: suggestedEntry },
       ];
       entryLine.setData(entryData);
     }
@@ -121,12 +117,9 @@ export function PriceChart({
       });
 
       const lastCandle = data[data.length - 1];
-      const slData = [
+      const slData: LineData[] = [
         { time: lastCandle.time, value: stopLoss },
-        { 
-          time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-          value: stopLoss 
-        },
+        { time: ((lastCandle.time as number) + 86400) as Time, value: stopLoss },
       ];
       slLine.setData(slData);
     }
@@ -141,12 +134,9 @@ export function PriceChart({
       });
 
       const lastCandle = data[data.length - 1];
-      const tpData = [
+      const tpData: LineData[] = [
         { time: lastCandle.time, value: takeProfit },
-        { 
-          time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-          value: takeProfit 
-        },
+        { time: ((lastCandle.time as number) + 86400) as Time, value: takeProfit },
       ];
       tpLine.setData(tpData);
     }
