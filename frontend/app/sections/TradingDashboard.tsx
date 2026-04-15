@@ -31,7 +31,7 @@ export function TradingDashboard({ accounts, loading, onReset }: TradingDashboar
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-foreground">Paper Trading Dashboard</h2>
         <div className="flex gap-2">
-          <Button 
+          {/* <Button 
             variant="ghost" 
             size="sm" 
             leftIcon={<RotateCcw size={14} />}
@@ -46,7 +46,7 @@ export function TradingDashboard({ accounts, loading, onReset }: TradingDashboar
             onClick={() => onReset('ETH')}
           >
             Reset ETH
-          </Button>
+          </Button> */}
         </div>
       </div>
 
