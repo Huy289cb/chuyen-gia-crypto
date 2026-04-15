@@ -36,10 +36,14 @@ export function PriceChart({
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return;
     
+    // Shared variables
+    const lastCandle = data[data.length - 1];
+    const currentPrice = lastCandle.close;
+    
     // Debug logging
     console.log('[PriceChart] Rendering chart for', symbol);
     console.log('[PriceChart] Data points:', data.length);
-    console.log('[PriceChart] First price:', data[0]?.open, 'Last price:', data[data.length-1]?.close);
+    console.log('[PriceChart] First price:', data[0]?.open, 'Last price:', lastCandle.close);
     console.log('[PriceChart] Price range:', Math.min(...data.map(d => d.low)), '-', Math.max(...data.map(d => d.high)));
     console.log('[PriceChart] Predictions:', predictions);
     console.log('[PriceChart] Entry:', suggestedEntry, 'SL:', stopLoss, 'TP:', takeProfit);
@@ -117,7 +121,6 @@ export function PriceChart({
             title: `${pred.timeframe} Target`,
           });
 
-          const lastCandle = data[data.length - 1];
           const lineData: LineData[] = [
             { time: lastCandle.time as Time, value: pred.price_target },
             { time: (lastCandle.time + 86400) as Time, value: pred.price_target },
@@ -128,31 +131,29 @@ export function PriceChart({
     }
 
     // Add Suggested Entry line
-    if (suggestedEntry) {
-      console.log('[PriceChart] Adding Entry line at:', suggestedEntry);
-      const entryLine = chart.addSeries(LineSeries, {
-        color: '#f59e0b',  // Hardcode amber color
-        lineWidth: 3,
-        lineStyle: 1,
-        title: 'Entry',
-        lastValueVisible: true,
-        priceLineVisible: true,
-      });
+    const testEntry = suggestedEntry || currentPrice * 0.98; // 2% below current if not provided
+    
+    console.log('[PriceChart] Adding Entry line at:', suggestedEntry, 'Using:', testEntry, 'Current:', currentPrice);
+    const entryLine = chart.addSeries(LineSeries, {
+      color: '#f59e0b',  // Amber
+      lineWidth: 3,
+      lineStyle: 1,
+      title: 'Entry',
+      lastValueVisible: true,
+      priceLineVisible: true,
+    });
 
-      const lastCandle = data[data.length - 1];
-      const entryData: LineData[] = [
-        { time: lastCandle.time as Time, value: suggestedEntry },
-        { time: (lastCandle.time + 86400) as Time, value: suggestedEntry },
-      ];
-      entryLine.setData(entryData);
-      console.log('[PriceChart] Entry line data:', entryData);
-    }
+    const entryData: LineData[] = [
+      { time: (lastCandle.time - 86400) as Time, value: testEntry },
+      { time: (lastCandle.time + 86400) as Time, value: testEntry },
+    ];
+    entryLine.setData(entryData);
+    console.log('[PriceChart] Entry line data:', entryData);
 
     // TEST: Always add a test line at current price + 2%
-    const testPrice = data[data.length - 1].close * 1.02;
-    console.log('[PriceChart] Adding TEST line at:', testPrice, 'Current close:', data[data.length - 1].close);
+    const testPrice = currentPrice * 1.02;
+    console.log('[PriceChart] Adding TEST line at:', testPrice, 'Current close:', currentPrice);
     
-    const lastCandle = data[data.length - 1];
     const testLine = chart.addSeries(LineSeries, {
       color: '#ef4444',  // Red
       lineWidth: 4,
@@ -167,8 +168,8 @@ export function PriceChart({
     console.log('[PriceChart] TEST series created:', !!testLine);
     
     const testData: LineData[] = [
-      { time: (lastCandle.time - 86400) as Time, value: testPrice },  // 1 day ago
-      { time: (lastCandle.time + 86400) as Time, value: testPrice },  // 1 day future
+      { time: (data[data.length - 1].time - 86400) as Time, value: testPrice },  // 1 day ago
+      { time: (data[data.length - 1].time + 86400) as Time, value: testPrice },  // 1 day future
     ];
     
     console.log('[PriceChart] TEST line data:', JSON.stringify(testData));
@@ -179,42 +180,38 @@ export function PriceChart({
     testLine.applyOptions({ lineWidth: 4 });
 
     // Add Stop Loss line
-    if (stopLoss) {
-      console.log('[PriceChart] Adding SL line at:', stopLoss);
-      const slLine = chart.addSeries(LineSeries, {
-        color: '#dc2626',  // Hardcode red
-        lineWidth: 2,
-        lineStyle: 1,
-        title: 'SL',
-        lastValueVisible: true,
-      });
+    const testSL = stopLoss || currentPrice * 0.95; // 5% below current if not provided
+    console.log('[PriceChart] Adding SL line at:', stopLoss, 'Using:', testSL);
+    const slLine = chart.addSeries(LineSeries, {
+      color: '#dc2626',  // Red
+      lineWidth: 2,
+      lineStyle: 1,
+      title: 'SL',
+      lastValueVisible: true,
+    });
 
-      const lastCandle = data[data.length - 1];
-      const slData: LineData[] = [
-        { time: lastCandle.time as Time, value: stopLoss },
-        { time: (lastCandle.time + 86400) as Time, value: stopLoss },
-      ];
-      slLine.setData(slData);
-    }
+    const slData: LineData[] = [
+      { time: (lastCandle.time - 86400) as Time, value: testSL },
+      { time: (lastCandle.time + 86400) as Time, value: testSL },
+    ];
+    slLine.setData(slData);
 
     // Add Take Profit line
-    if (takeProfit) {
-      console.log('[PriceChart] Adding TP line at:', takeProfit);
-      const tpLine = chart.addSeries(LineSeries, {
-        color: '#16a34a',  // Hardcode green
-        lineWidth: 2,
-        lineStyle: 1,
-        title: 'TP',
-        lastValueVisible: true,
-      });
+    const testTP = takeProfit || currentPrice * 1.05; // 5% above current if not provided
+    console.log('[PriceChart] Adding TP line at:', takeProfit, 'Using:', testTP);
+    const tpLine = chart.addSeries(LineSeries, {
+      color: '#16a34a',  // Green
+      lineWidth: 2,
+      lineStyle: 1,
+      title: 'TP',
+      lastValueVisible: true,
+    });
 
-      const lastCandle = data[data.length - 1];
-      const tpData: LineData[] = [
-        { time: lastCandle.time as Time, value: takeProfit },
-        { time: (lastCandle.time + 86400) as Time, value: takeProfit },
-      ];
-      tpLine.setData(tpData);
-    }
+    const tpData: LineData[] = [
+      { time: (lastCandle.time - 86400) as Time, value: testTP },
+      { time: (lastCandle.time + 86400) as Time, value: testTP },
+    ];
+    tpLine.setData(tpData);
 
     chart.timeScale().fitContent();
 
