@@ -83,7 +83,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     ${formatPrice(trade.entry_price)}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-foreground">
-                    ${formatPrice(trade.exit_price)}
+                    ${formatPrice(trade.close_price || trade.exit_price || 0)}
                   </td>
                   <td className={cn(
                     'px-4 py-3 text-right font-mono font-medium',
@@ -98,10 +98,10 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     {(trade.r_multiple || 0) >= 0 ? '+' : ''}{trade.r_multiple?.toFixed(2) || '0.00'}R
                   </td>
                   <td className="px-4 py-3">
-                    <ExitReasonBadge reason={trade.exit_reason} />
+                    <ExitReasonBadge reason={trade.close_reason || trade.exit_reason} />
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
-                    {trade.closed_at ? new Date(trade.closed_at).toLocaleDateString() : '-'}
+                    {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleDateString() : '-'}
                   </td>
                 </tr>
               ))}
@@ -132,12 +132,12 @@ function TradeCardMobile({ trade }: { trade: Trade }) {
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs text-foreground-secondary mb-2">
         <div>Entry: <span className="font-mono text-foreground">${formatPrice(trade.entry_price)}</span></div>
-        <div>Exit: <span className="font-mono text-foreground">${formatPrice(trade.exit_price)}</span></div>
+        <div>Exit: <span className="font-mono text-foreground">${formatPrice(trade.close_price || trade.exit_price || 0)}</span></div>
       </div>
       <div className="flex items-center justify-between text-xs">
-        <ExitReasonBadge reason={trade.exit_reason} />
+        <ExitReasonBadge reason={trade.close_reason || trade.exit_reason} />
         <span className="text-foreground-tertiary">
-          {trade.closed_at ? new Date(trade.closed_at).toLocaleDateString() : '-'}
+          {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleDateString() : '-'}
         </span>
       </div>
     </div>

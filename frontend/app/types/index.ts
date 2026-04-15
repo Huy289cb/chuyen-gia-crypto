@@ -113,12 +113,15 @@ export interface Trade {
   symbol: string;
   side: 'long' | 'short';
   entry_price: number;
-  exit_price: number;
+  exit_price?: number;
+  close_price?: number;
   size_usd: number;
   realized_pnl: number;
-  exit_reason: string;
+  exit_reason?: string;
+  close_reason?: string;
   opened_at: string;
-  closed_at: string;
+  closed_at?: string;
+  close_time?: string;
   r_multiple: number;
 }
 
