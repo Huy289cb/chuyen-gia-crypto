@@ -163,27 +163,30 @@ export function PriceChart({
     console.log('[PriceChart] useEffect running - predictionLineData:', predictionLineData?.length);
     if (!chartContainerRef.current || data.length === 0) return;
     
+    // Detect dark mode
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'var(--text-secondary)',
+        textColor: isDarkMode ? '#d1d5db' : '#374151',
         fontSize: 10,
       },
       grid: {
-        vertLines: { color: 'var(--border-subtle)' },
-        horzLines: { color: 'var(--border-subtle)' },
+        vertLines: { color: isDarkMode ? '#374151' : '#e5e7eb' },
+        horzLines: { color: isDarkMode ? '#374151' : '#e5e7eb' },
       },
       crosshair: {
         mode: 1,
-        vertLine: { color: 'var(--border-default)', style: 2 },
-        horzLine: { color: 'var(--border-default)', style: 2 },
+        vertLine: { color: isDarkMode ? '#4b5563' : '#9ca3af', style: 2 },
+        horzLine: { color: isDarkMode ? '#4b5563' : '#9ca3af', style: 2 },
       },
       rightPriceScale: {
-        borderColor: 'var(--border-default)',
+        borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
-        borderColor: 'var(--border-default)',
+        borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 12,
@@ -192,14 +195,14 @@ export function PriceChart({
       autoSize: true,
     });
 
-    // Candlestick series
+    // Candlestick series - use hardcoded colors for proper rendering
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: 'var(--success)',
-      downColor: 'var(--danger)',
-      borderUpColor: 'var(--success)',
-      borderDownColor: 'var(--danger)',
-      wickUpColor: 'var(--success)',
-      wickDownColor: 'var(--danger)',
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
     });
     candleSeries.setData(data as CandlestickData[]);
 
@@ -224,6 +227,9 @@ export function PriceChart({
     }
 
     // Parse and add ICT indicators using createPriceLine
+    console.log('[PriceChart] ICT analysis?.key_levels:', !!analysis?.key_levels);
+    console.log('[PriceChart] ICT levels:', ictLevels);
+    
     if (analysis?.key_levels) {
       const currentPrice = data[data.length - 1]?.close || 0;
       
@@ -232,9 +238,12 @@ export function PriceChart({
       };
       
       const validRange = getPriceRange(symbol || '', currentPrice);
+      console.log('[PriceChart] ICT validRange:', validRange);
       
       // Add liquidity levels (blue)
+      console.log('[PriceChart] Adding liquidity levels:', ictLevels.liquidity.length);
       ictLevels.liquidity.forEach((price, i) => {
+        console.log('[PriceChart] Liquidity price:', price, 'in range:', price >= validRange[0] && price <= validRange[1]);
         if (price >= validRange[0] && price <= validRange[1]) {
           candleSeries.createPriceLine({
             price: price,
