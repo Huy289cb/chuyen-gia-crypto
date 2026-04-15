@@ -18,7 +18,7 @@ interface PriceChartContainerProps {
 }
 
 interface OHLCData {
-  time: string;
+  time: number;  // Unix timestamp
   open: number;
   high: number;
   low: number;
@@ -61,7 +61,7 @@ export function PriceChartContainer({
         const result = await response.json();
         
         if (result.success && result.data) {
-          // Convert timestamp to string format for lightweight-charts
+          // Data already in correct format with Unix timestamps
           const formattedData = result.data.map((candle: any) => ({
             time: candle.time,
             open: candle.open,
@@ -69,6 +69,9 @@ export function PriceChartContainer({
             low: candle.low,
             close: candle.close,
           }));
+          console.log('[PriceChart]', symbol, 'OHLC data points:', formattedData.length);
+          console.log('[PriceChart]', symbol, 'First candle:', formattedData[0]);
+          console.log('[PriceChart]', symbol, 'Last candle:', formattedData[formattedData.length - 1]);
           setData(formattedData);
         } else {
           throw new Error(result.message || 'No data available');
@@ -135,6 +138,7 @@ export function PriceChartContainer({
         stopLoss={stopLoss}
         takeProfit={takeProfit}
         height={300}
+        symbol={symbol}
       />
     </div>
   );

@@ -5,7 +5,7 @@ import { createChart, ColorType, CandlestickSeries, LineSeries, type Time, type 
 import type { Prediction } from '@/app/types';
 
 interface ChartDataPoint {
-  time: Time;
+  time: number;  // Unix timestamp
   open: number;
   high: number;
   low: number;
@@ -19,6 +19,7 @@ interface PriceChartProps {
   stopLoss?: number;
   takeProfit?: number;
   height?: number;
+  symbol?: string;
 }
 
 export function PriceChart({ 
@@ -27,12 +28,19 @@ export function PriceChart({
   suggestedEntry,
   stopLoss,
   takeProfit,
-  height = 300 
+  height = 300,
+  symbol
 }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return;
+    
+    // Debug logging
+    console.log('[PriceChart] Rendering chart for', symbol);
+    console.log('[PriceChart] Data points:', data.length);
+    console.log('[PriceChart] Predictions:', predictions);
+    console.log('[PriceChart] Entry/SL/TP:', { suggestedEntry, stopLoss, takeProfit });
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -67,7 +75,7 @@ export function PriceChart({
       wickDownColor: 'var(--danger)',
     });
 
-    candleSeries.setData(data);
+    candleSeries.setData(data as CandlestickData[]);
 
     // Add prediction lines if available
     if (predictions && predictions.length > 0) {
@@ -82,8 +90,8 @@ export function PriceChart({
 
           const lastCandle = data[data.length - 1];
           const lineData: LineData[] = [
-            { time: lastCandle.time, value: pred.price_target },
-            { time: ((lastCandle.time as number) + 86400) as Time, value: pred.price_target },
+            { time: lastCandle.time as Time, value: pred.price_target },
+            { time: (lastCandle.time + 86400) as Time, value: pred.price_target },
           ];
           lineSeries.setData(lineData);
         }
@@ -101,8 +109,8 @@ export function PriceChart({
 
       const lastCandle = data[data.length - 1];
       const entryData: LineData[] = [
-        { time: lastCandle.time, value: suggestedEntry },
-        { time: ((lastCandle.time as number) + 86400) as Time, value: suggestedEntry },
+        { time: lastCandle.time as Time, value: suggestedEntry },
+        { time: (lastCandle.time + 86400) as Time, value: suggestedEntry },
       ];
       entryLine.setData(entryData);
     }
@@ -118,8 +126,8 @@ export function PriceChart({
 
       const lastCandle = data[data.length - 1];
       const slData: LineData[] = [
-        { time: lastCandle.time, value: stopLoss },
-        { time: ((lastCandle.time as number) + 86400) as Time, value: stopLoss },
+        { time: lastCandle.time as Time, value: stopLoss },
+        { time: (lastCandle.time + 86400) as Time, value: stopLoss },
       ];
       slLine.setData(slData);
     }
@@ -135,8 +143,8 @@ export function PriceChart({
 
       const lastCandle = data[data.length - 1];
       const tpData: LineData[] = [
-        { time: lastCandle.time, value: takeProfit },
-        { time: ((lastCandle.time as number) + 86400) as Time, value: takeProfit },
+        { time: lastCandle.time as Time, value: takeProfit },
+        { time: (lastCandle.time + 86400) as Time, value: takeProfit },
       ];
       tpLine.setData(tpData);
     }
