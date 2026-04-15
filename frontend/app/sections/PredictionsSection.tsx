@@ -87,8 +87,6 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
             <PredictionItem 
               key={prediction.id} 
               prediction={prediction}
-              isExpanded={expandedId === prediction.id}
-              onToggle={() => setExpandedId(expandedId === prediction.id ? null : prediction.id)}
             />
           ))}
         </div>
@@ -98,13 +96,9 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
 }
 
 function PredictionItem({ 
-  prediction, 
-  isExpanded, 
-  onToggle 
+  prediction
 }: { 
-  prediction: PredictionHistory; 
-  isExpanded: boolean;
-  onToggle: () => void;
+  prediction: PredictionHistory;
 }) {
   const directionIcon = prediction.direction === 'up' ? ArrowUp : 
                        prediction.direction === 'down' ? ArrowDown : Minus;
@@ -124,10 +118,8 @@ function PredictionItem({
 
   return (
     <div className="p-4 hover:bg-surface-1/30 transition-colors">
-      <div 
-        className="flex items-center justify-between cursor-pointer"
-        onClick={onToggle}
-      >
+      {/* Main Row */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* Direction */}
           <div className={cn('p-1.5 rounded-lg bg-surface-1', directionColor)}>
@@ -173,40 +165,43 @@ function PredictionItem({
               <div className="text-xs text-foreground-tertiary">PnL</div>
             </div>
           )}
-
-          {/* Expand */}
-          {isExpanded ? <ChevronUp size={16} className="text-foreground-tertiary" /> : 
-                        <ChevronDown size={16} className="text-foreground-tertiary" />}
         </div>
       </div>
 
-      {/* Expanded Details */}
-      {isExpanded && (
-        <div className="mt-4 pt-4 border-t border-border-subtle grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {prediction.entry_price && (
-            <div className="bg-surface-1 rounded-lg p-2">
-              <span className="text-xs text-foreground-tertiary block">Entry</span>
-              <span className="font-mono text-sm text-foreground">${formatPrice(prediction.entry_price)}</span>
-            </div>
-          )}
-          {prediction.stop_loss && (
-            <div className="bg-danger-dim rounded-lg p-2">
-              <span className="text-xs text-danger block">Stop Loss</span>
-              <span className="font-mono text-sm text-danger">${formatPrice(prediction.stop_loss)}</span>
-            </div>
-          )}
-          {prediction.take_profit && (
-            <div className="bg-success-dim rounded-lg p-2">
-              <span className="text-xs text-success block">Take Profit</span>
-              <span className="font-mono text-sm text-success">${formatPrice(prediction.take_profit)}</span>
-            </div>
-          )}
-          <div className="bg-surface-1 rounded-lg p-2">
-            <span className="text-xs text-foreground-tertiary block">Prediction ID</span>
-            <span className="font-mono text-xs text-foreground truncate">{prediction.id}</span>
-          </div>
+      {/* Narrative - Always Visible */}
+      {prediction.reasoning && (
+        <div className="mt-3 text-sm text-foreground-secondary leading-relaxed">
+          {prediction.reasoning}
         </div>
       )}
+
+      {/* Details - Always Visible */}
+      <div className="mt-3 pt-3 border-t border-border-subtle flex flex-wrap gap-2">
+        {prediction.entry_price && (
+          <div className="bg-surface-1 rounded-lg px-2 py-1">
+            <span className="text-xs text-foreground-tertiary">Entry: </span>
+            <span className="font-mono text-xs text-foreground">${formatPrice(prediction.entry_price)}</span>
+          </div>
+        )}
+        {prediction.stop_loss && (
+          <div className="bg-danger-dim rounded-lg px-2 py-1">
+            <span className="text-xs text-danger">SL: </span>
+            <span className="font-mono text-xs text-danger">${formatPrice(prediction.stop_loss)}</span>
+          </div>
+        )}
+        {prediction.take_profit && (
+          <div className="bg-success-dim rounded-lg px-2 py-1">
+            <span className="text-xs text-success">TP: </span>
+            <span className="font-mono text-xs text-success">${formatPrice(prediction.take_profit)}</span>
+          </div>
+        )}
+        {prediction.price_target && (
+          <div className="bg-accent-primary/10 rounded-lg px-2 py-1">
+            <span className="text-xs text-accent-primary">Target: </span>
+            <span className="font-mono text-xs text-accent-primary">${formatPrice(prediction.price_target)}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

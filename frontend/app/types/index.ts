@@ -136,6 +136,8 @@ export interface PredictionHistory {
   entry_price: number | null;
   stop_loss: number | null;
   take_profit: number | null;
+  reasoning?: string;
+  price_target?: number;
 }
 
 export interface PerformanceMetrics {

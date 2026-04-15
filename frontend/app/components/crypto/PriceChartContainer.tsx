@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { PriceChart } from './PriceChart';
 import { Card } from '../ui/Card';
 import { BarChart3, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { Prediction } from '@/app/types';
+
+type TimeFrame = '15m' | '1h' | '4h' | '1d';
 
 interface PriceChartContainerProps {
   symbol: string;
@@ -22,6 +25,13 @@ interface OHLCData {
   close: number;
 }
 
+const TIMEFRAMES: { label: string; value: TimeFrame }[] = [
+  { label: '15m', value: '15m' },
+  { label: '1H', value: '1h' },
+  { label: '4H', value: '4h' },
+  { label: '1D', value: '1d' },
+];
+
 export function PriceChartContainer({ 
   symbol, 
   predictions,
@@ -32,6 +42,7 @@ export function PriceChartContainer({
   const [data, setData] = useState<OHLCData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeframe, setTimeframe] = useState<TimeFrame>('4h');
 
   useEffect(() => {
     const fetchOHLC = async () => {
@@ -41,7 +52,7 @@ export function PriceChartContainer({
           ? 'http://localhost:3000/api' 
           : '/api';
         
-        const response = await fetch(`${API_BASE}/ohlc/${symbol.toLowerCase()}?timeframe=4h&limit=100`);
+        const response = await fetch(`${API_BASE}/ohlc/${symbol.toLowerCase()}?timeframe=${timeframe}&limit=100`);
         
         if (!response.ok) {
           throw new Error('Failed to fetch chart data');
@@ -71,7 +82,7 @@ export function PriceChartContainer({
     };
 
     fetchOHLC();
-  }, [symbol]);
+  }, [symbol, timeframe]);
 
   if (loading) {
     return (
@@ -96,13 +107,35 @@ export function PriceChartContainer({
   }
 
   return (
-    <PriceChart 
-      data={data}
-      predictions={predictions}
-      suggestedEntry={suggestedEntry}
-      stopLoss={stopLoss}
-      takeProfit={takeProfit}
-      height={300}
-    />
+    <div className="space-y-2">
+      {/* Timeframe Selector */}
+      <div className="flex items-center justify-end gap-1">
+        <div className="flex bg-surface-1 rounded-lg p-1">
+          {TIMEFRAMES.map((tf) => (
+            <button
+              key={tf.value}
+              onClick={() => setTimeframe(tf.value)}
+              className={cn(
+                'px-3 py-1 text-xs font-medium rounded-md transition-all',
+                timeframe === tf.value
+                  ? 'bg-accent-primary text-bg-primary'
+                  : 'text-foreground-secondary hover:text-foreground'
+              )}
+            >
+              {tf.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      <PriceChart 
+        data={data}
+        predictions={predictions}
+        suggestedEntry={suggestedEntry}
+        stopLoss={stopLoss}
+        takeProfit={takeProfit}
+        height={300}
+      />
+    </div>
   );
 }
