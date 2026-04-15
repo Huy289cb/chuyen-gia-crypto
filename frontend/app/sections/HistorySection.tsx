@@ -54,6 +54,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
               <tr className="bg-surface-1 border-b border-border-default">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-foreground-secondary">Symbol</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-foreground-secondary">Side</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Opened</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Entry</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Exit</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">PnL</th>
@@ -78,6 +79,9 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     <Badge variant={trade.side === 'long' ? 'success' : 'danger'} size="sm">
                       {trade.side.toUpperCase()}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
+                    {trade.entry_time || trade.opened_at ? new Date(trade.entry_time || trade.opened_at!).toLocaleDateString() : '-'}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-foreground">
                     ${formatPrice(trade.entry_price)}

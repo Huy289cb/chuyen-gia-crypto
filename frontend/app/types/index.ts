@@ -119,7 +119,8 @@ export interface Trade {
   realized_pnl: number;
   exit_reason?: string;
   close_reason?: string;
-  opened_at: string;
+  opened_at?: string;
+  entry_time?: string;
   closed_at?: string;
   close_time?: string;
   r_multiple: number;
