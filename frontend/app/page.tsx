@@ -7,6 +7,7 @@ import { HeroSection } from './sections/HeroSection';
 import { TradingDashboard } from './sections/TradingDashboard';
 import { PositionsSection } from './sections/PositionsSection';
 import { HistorySection } from './sections/HistorySection';
+import { PendingOrdersSection } from './sections/PendingOrdersSection';
 import { PredictionsSection } from './sections/PredictionsSection';
 import { PerformanceSection } from './sections/PerformanceSection';
 import { useTrends } from './hooks/useTrends';
@@ -87,6 +88,9 @@ export default function Home() {
           positions={positions}
           onClosePosition={closePosition}
         />
+
+        {/* Pending Orders */}
+        <PendingOrdersSection />
 
         {/* Trade History */}
         <HistorySection 

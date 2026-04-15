@@ -126,6 +126,27 @@ export interface Trade {
   r_multiple: number;
 }
 
+export interface PendingOrder {
+  id: string;
+  order_id: string;
+  account_id: number;
+  symbol: string;
+  side: 'long' | 'short';
+  entry_price: number;
+  stop_loss: number;
+  take_profit: number;
+  size_usd: number;
+  size_qty: number;
+  risk_usd: number;
+  risk_percent: number;
+  expected_rr: number;
+  status: 'pending' | 'executed' | 'cancelled' | 'cancelled_manual' | 'cancelled_timeout' | 'cancelled_invalidation';
+  created_at: string;
+  executed_at?: string;
+  linked_prediction_id?: number;
+  invalidation_level?: number;
+}
+
 export interface PredictionHistory {
   id: string;
   analysis_id: number;
