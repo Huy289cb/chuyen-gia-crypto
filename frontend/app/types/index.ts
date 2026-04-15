@@ -138,6 +138,7 @@ export interface PredictionHistory {
   stop_loss: number | null;
   take_profit: number | null;
   reasoning?: string;
+  narrative?: string;
   price_target?: number;
 }
 

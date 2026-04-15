@@ -168,10 +168,11 @@ function PredictionItem({
         </div>
       </div>
 
-      {/* Narrative - Always Visible */}
-      {prediction.reasoning && (
+      {/* Reason/Narrative - Always Visible */}
+      {(prediction.reasoning || (prediction as any).narrative) && (
         <div className="mt-3 text-sm text-foreground-secondary leading-relaxed">
-          {prediction.reasoning}
+          <span className="font-medium text-foreground">Lý do: </span>
+          {prediction.reasoning || (prediction as any).narrative}
         </div>
       )}
 
