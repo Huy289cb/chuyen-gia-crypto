@@ -74,7 +74,15 @@ export function PriceChart({
 
     const tfOrder = ['15m', '1h', '4h', '1d'];
     console.log('[PriceChart] Raw predictions:', JSON.stringify(predictions));
-    const validPredictions = predictions.filter(p => {
+    
+    // Map predictions by index if timeframe is missing (0=15m, 1=1h, 2=4h, 3=1d)
+    const mappedPredictions = predictions.map((p, index) => ({
+      ...p,
+      timeframe: p.timeframe || tfOrder[index] || '1h',
+      price_target: p.price_target || p.target || 0
+    }));
+    
+    const validPredictions = mappedPredictions.filter(p => {
       const isValid = p && typeof p === 'object' && p.timeframe && tfOrder.includes(p.timeframe);
       if (!isValid) {
         console.log('[PriceChart] Invalid prediction:', p);

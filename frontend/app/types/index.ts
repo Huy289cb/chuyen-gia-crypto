@@ -22,6 +22,7 @@ export interface Prediction {
   timeframe: string;
   direction: 'up' | 'down' | 'sideways';
   confidence: number;
+  target?: number;
   price_target?: number;
   invalidation_price?: number;
   reasoning?: string;
