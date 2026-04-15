@@ -2,7 +2,11 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  // Filter out undefined, null, and non-string values to prevent tailwind-merge errors
+  const filtered = inputs.filter((input): input is string => 
+    typeof input === 'string' && input.length > 0
+  );
+  return twMerge(clsx(filtered));
 }
 
 export function formatPrice(price: number | null | undefined, decimals: number = 2): string {
