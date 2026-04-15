@@ -16,7 +16,25 @@ interface HeroSectionProps {
 export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis }: HeroSectionProps) {
   return (
     <section className="mb-8 space-y-6">
-      {/* Price Chart */}
+      {/* Crypto Cards - Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <CryptoCard 
+          name="Bitcoin"
+          symbol="BTC"
+          data={btcData}
+          analysis={btcAnalysis}
+          color="#f7931a"
+        />
+        <CryptoCard 
+          name="Ethereum"
+          symbol="ETH"
+          data={ethData}
+          analysis={ethAnalysis}
+          color="#627eea"
+        />
+      </div>
+
+      {/* Price Chart - Analysis */}
       <div>
         <CardHeader 
           title="Price Analysis" 
@@ -37,24 +55,6 @@ export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis }: Hero
             color="#627eea"
           />
         </div>
-      </div>
-
-      {/* Crypto Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <CryptoCard 
-          name="Bitcoin"
-          symbol="BTC"
-          data={btcData}
-          analysis={btcAnalysis}
-          color="#f7931a"
-        />
-        <CryptoCard 
-          name="Ethereum"
-          symbol="ETH"
-          data={ethData}
-          analysis={ethAnalysis}
-          color="#627eea"
-        />
       </div>
     </section>
   );
