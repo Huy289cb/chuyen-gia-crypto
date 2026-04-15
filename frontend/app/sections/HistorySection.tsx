@@ -144,15 +144,16 @@ function TradeCardMobile({ trade }: { trade: Trade }) {
   );
 }
 
-function ExitReasonBadge({ reason }: { reason: string }) {
+function ExitReasonBadge({ reason }: { reason: string | undefined }) {
   const configs: Record<string, { variant: 'success' | 'danger' | 'warning' | 'info'; icon: React.ReactNode }> = {
     'take_profit': { variant: 'success', icon: <CheckCircle2 size={12} /> },
     'stop_loss': { variant: 'danger', icon: <XCircle size={12} /> },
     'manual': { variant: 'info', icon: <Target size={12} /> },
   };
 
-  const config = configs[reason] || { variant: 'neutral', icon: null };
-  const label = reason.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+  const safeReason = reason || 'unknown';
+  const config = configs[safeReason] || { variant: 'neutral', icon: null };
+  const label = safeReason.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
 
   return (
     <Badge variant={config.variant} size="sm">
