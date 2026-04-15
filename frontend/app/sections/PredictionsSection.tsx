@@ -1,20 +1,42 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Brain, ChevronDown, ChevronUp, Target, ArrowUp, ArrowDown, Minus, Clock } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
 import { cn, formatPrice } from '@/lib/utils';
-import type { PredictionHistory, ApiResponse } from '../types';
+import type { PredictionHistory, ApiResponse, Analysis } from '../types';
+
+const tfLabels: Record<string, string> = {
+  '15m': '15p',
+  '1h': '1g',
+  '4h': '4g',
+  '1d': '1ng'
+};
+
+const biasLabels: Record<string, string> = {
+  'bullish': 'Tăng',
+  'bearish': 'Giảm',
+  'neutral': 'Trung lập'
+};
 
 interface PredictionsSectionProps {
   symbol: string;
 }
 
+// Extended prediction with analysis data
+interface PredictionWithAnalysis extends PredictionHistory {
+  bias?: Analysis['bias'];
+  confidence_score?: number;
+  narrative_vi?: string;
+  predicted_at?: string;
+  suggested_entry?: number;
+  suggested_stop_loss?: number;
+  suggested_take_profit?: number;
+}
+
 export function PredictionsSection({ symbol }: PredictionsSectionProps) {
-  const [predictions, setPredictions] = useState<PredictionHistory[]>([]);
+  const [predictions, setPredictions] = useState<PredictionWithAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPredictions = async () => {
@@ -23,9 +45,38 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
           ? 'http://localhost:3000/api' 
           : '/api';
         const response = await fetch(`${API_BASE}/predictions/${symbol}?limit=20`);
-        const data: ApiResponse<PredictionHistory[]> = await response.json();
+        const data = await response.json();
         if (data.success && data.data) {
-          setPredictions(data.data);
+          // Flatten predictions from all analyses like old frontend
+          const flattened = data.data.flatMap((analysis: any) => {
+            const analysisData = {
+              id: `analysis-${analysis.id}`,
+              analysis_id: analysis.id,
+              timestamp: analysis.timestamp,
+              current_price: analysis.current_price,
+              bias: analysis.bias,
+              confidence_score: analysis.confidence,
+              narrative_vi: analysis.narrative
+            };
+            
+            if (!analysis.predictions || analysis.predictions.length === 0) {
+              return [analysisData as PredictionWithAnalysis];
+            }
+            
+            // Only show 4h timeframe predictions
+            return analysis.predictions
+              .filter((p: any) => p.timeframe === '4h')
+              .map((pred: any) => ({
+                ...analysisData,
+                ...pred,
+                predicted_at: analysis.timestamp,
+                id: `${analysis.id}-${pred.timeframe}`,
+                reasoning: pred.reason_summary || analysis.narrative
+              } as PredictionWithAnalysis));
+          });
+          
+          console.log('[PredictionTimeline] Flattened:', flattened.length);
+          setPredictions(flattened);
         }
       } catch (err) {
         console.error('Error fetching predictions:', err);
@@ -82,11 +133,13 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
       />
       
       <Card className="mt-4" padding="none">
-        <div className="divide-y divide-border-subtle">
-          {predictions.map((prediction) => (
+        <div className="space-y-3 p-4">
+          {predictions.map((prediction, index) => (
             <PredictionItem 
               key={prediction.id} 
               prediction={prediction}
+              index={index}
+              total={predictions.length}
             />
           ))}
         </div>
@@ -96,110 +149,170 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
 }
 
 function PredictionItem({ 
-  prediction
+  prediction,
+  index,
+  total
 }: { 
-  prediction: PredictionHistory;
+  prediction: PredictionWithAnalysis;
+  index: number;
+  total: number;
 }) {
-  const directionIcon = prediction.direction === 'up' ? ArrowUp : 
-                       prediction.direction === 'down' ? ArrowDown : Minus;
-  const directionColor = prediction.direction === 'up' ? 'text-success' : 
-                        prediction.direction === 'down' ? 'text-danger' : 'text-foreground-tertiary';
-
-  const outcomeConfig: Record<string, { label: string; variant: 'success' | 'danger' | 'warning' | 'neutral'; color: string }> = {
-    'win': { label: 'WIN', variant: 'success', color: 'text-success' },
-    'loss': { label: 'LOSS', variant: 'danger', color: 'text-danger' },
-    'neutral': { label: 'NEUTRAL', variant: 'neutral', color: 'text-foreground-tertiary' },
-    'pending': { label: 'PENDING', variant: 'warning', color: 'text-warning' },
-    'null': { label: '-', variant: 'neutral', color: 'text-foreground-tertiary' },
+  // Use bias from analysis (bullish/bearish/neutral)
+  const bias = prediction.bias || 'neutral';
+  
+  const getBiasIcon = (bias: string) => {
+    switch (bias) {
+      case 'bullish': return TrendingUp;
+      case 'bearish': return TrendingDown;
+      default: return Minus;
+    }
   };
-  const outcome = outcomeConfig[prediction.outcome || 'null'] || outcomeConfig['null'];
+  
+  const getBiasColor = (bias: string) => {
+    switch (bias) {
+      case 'bullish': return 'text-emerald-600 bg-emerald-100';
+      case 'bearish': return 'text-rose-600 bg-rose-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+  
+  const getNodeColor = (bias: string) => {
+    switch (bias) {
+      case 'bullish': return 'bg-emerald-500 border-emerald-600';
+      case 'bearish': return 'bg-rose-500 border-rose-600';
+      default: return 'bg-gray-400 border-gray-500';
+    }
+  };
+  
+  const getOutcomeColor = (outcome: string | null) => {
+    switch (outcome) {
+      case 'win': return 'text-emerald-600';
+      case 'loss': return 'text-rose-600';
+      case 'neutral': return 'text-gray-600';
+      case 'pending': return 'text-yellow-600';
+      default: return 'text-gray-400';
+    }
+  };
+  
+  const formatDateTime = (timestamp: string) => {
+    if (!timestamp) return 'N/A';
+    const date = new Date(timestamp);
+    return date.toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+  
+  const formatPnL = (pnl: number | null) => {
+    if (pnl === undefined || pnl === null) return 'N/A';
+    const sign = pnl >= 0 ? '+' : '';
+    return `${sign}$${pnl.toFixed(2)}`;
+  };
 
-  const DirectionIcon = directionIcon;
+  const BiasIcon = getBiasIcon(bias);
+  const outcome = prediction.linked_position_id
+    ? (prediction.outcome || 'pending')
+    : (prediction.outcome || '-');
 
   return (
-    <div className="p-4 hover:bg-surface-1/30 transition-colors">
-      {/* Main Row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {/* Direction */}
-          <div className={cn('p-1.5 rounded-lg bg-surface-1', directionColor)}>
-            <DirectionIcon size={16} />
-          </div>
-          
-          {/* Info */}
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-sm text-foreground">
-                ${formatPrice(prediction.current_price)}
-              </span>
-              <Badge variant={outcome.variant} size="sm">
-                {outcome.label}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-foreground-tertiary mt-0.5">
-              <Clock size={12} />
-              {prediction.timestamp ? new Date(prediction.timestamp).toLocaleString() : '-'}
-            </div>
-          </div>
-        </div>
-
-        {/* Right side */}
-        <div className="flex items-center gap-3">
-          {/* Confidence */}
-          <div className="text-right">
-            <div className="text-sm font-medium text-foreground">
-              {prediction.confidence != null ? Math.round(prediction.confidence * 100) : 0}%
-            </div>
-            <div className="text-xs text-foreground-tertiary">Confidence</div>
-          </div>
-          
-          {/* PnL if available */}
-          {prediction.pnl != null && (
-            <div className={cn(
-              'text-right font-mono',
-              prediction.pnl >= 0 ? 'text-success' : 'text-danger'
-            )}>
-              <div className="text-sm font-medium">
-                {prediction.pnl >= 0 ? '+' : ''}${formatPrice(prediction.pnl)}
-              </div>
-              <div className="text-xs text-foreground-tertiary">PnL</div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Reason/Narrative - Always Visible */}
-      {(prediction.reasoning || (prediction as any).narrative) && (
-        <div className="mt-3 text-sm text-foreground-secondary leading-relaxed">
-          <span className="font-medium text-foreground">Lý do: </span>
-          {prediction.reasoning || (prediction as any).narrative}
-        </div>
+    <div className="relative pl-6">
+      {/* Timeline line */}
+      {index < total - 1 && (
+        <div className="absolute left-2 top-8 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
       )}
 
-      {/* Details - Always Visible */}
-      <div className="mt-3 pt-3 border-t border-border-subtle flex flex-wrap gap-2">
-        {prediction.entry_price && (
-          <div className="bg-surface-1 rounded-lg px-2 py-1">
-            <span className="text-xs text-foreground-tertiary">Entry: </span>
-            <span className="font-mono text-xs text-foreground">${formatPrice(prediction.entry_price)}</span>
+      {/* Timeline node */}
+      <div className="absolute left-0 top-1">
+        <div className={`w-4 h-4 rounded-full border-2 ${getNodeColor(bias)}`} />
+      </div>
+
+      {/* Prediction card */}
+      <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all hover:shadow-md">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2">
+            {/* Bias badge */}
+            <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${getBiasColor(bias)}`}>
+              <BiasIcon size={12} />
+              <span>{biasLabels[bias] || bias}</span>
+            </div>
+            {/* Timeframe */}
+            {prediction.timeframe && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {tfLabels[prediction.timeframe] || prediction.timeframe}
+              </span>
+            )}
+          </div>
+          {/* Timestamp */}
+          <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+            <Clock size={12} />
+            {formatDateTime(prediction.predicted_at || prediction.timestamp)}
+          </div>
+        </div>
+
+        {/* Grid: Giá, Conf, Outcome */}
+        <div className="grid grid-cols-3 gap-2 text-xs mb-2">
+          <div>
+            <span className="text-gray-500 dark:text-gray-400">Giá:</span>
+            <span className="ml-1 font-medium text-gray-900 dark:text-gray-100">
+              ${formatPrice(prediction.current_price)}
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-500 dark:text-gray-400">Conf:</span>
+            <span className="ml-1 font-medium text-gray-900 dark:text-gray-100">
+              {Math.round((prediction.confidence_score || prediction.confidence || 0) * 100)}%
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-500 dark:text-gray-400">Outcome:</span>
+            <span className={`ml-1 font-medium ${getOutcomeColor(prediction.outcome)}`}>
+              {outcome}
+            </span>
+          </div>
+        </div>
+
+        {/* PnL */}
+        {prediction.pnl !== undefined && prediction.pnl !== null && (
+          <div className="text-xs mb-2">
+            <span className="text-gray-500 dark:text-gray-400">PnL:</span>
+            <span className={`ml-1 font-medium ${prediction.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {formatPnL(prediction.pnl)}
+            </span>
           </div>
         )}
-        {prediction.stop_loss && (
-          <div className="bg-danger-dim rounded-lg px-2 py-1">
-            <span className="text-xs text-danger">SL: </span>
-            <span className="font-mono text-xs text-danger">${formatPrice(prediction.stop_loss)}</span>
+
+        {/* Reason/Narrative */}
+        {prediction.narrative_vi && (
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              <span className="font-medium text-gray-900 dark:text-gray-100">Lý do:</span>{' '}
+              <span className="text-gray-600 dark:text-gray-400">{prediction.narrative_vi}</span>
+            </div>
           </div>
         )}
-        {prediction.take_profit && (
-          <div className="bg-success-dim rounded-lg px-2 py-1">
-            <span className="text-xs text-success">TP: </span>
-            <span className="font-mono text-xs text-success">${formatPrice(prediction.take_profit)}</span>
-          </div>
-        )}
-        {prediction.price_target && (
-          <div className="bg-accent-primary/10 rounded-lg px-2 py-1">
-            <span className="text-xs text-accent-primary">Target: </span>
-            <span className="font-mono text-xs text-accent-primary">${formatPrice(prediction.price_target)}</span>
+
+        {/* Entry/SL/TP levels */}
+        {(prediction.suggested_entry || prediction.suggested_stop_loss || prediction.suggested_take_profit) && (
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            {prediction.suggested_entry && (
+              <span className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                Entry: ${formatPrice(prediction.suggested_entry)}
+              </span>
+            )}
+            {prediction.suggested_stop_loss && (
+              <span className="px-2 py-1 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded">
+                SL: ${formatPrice(prediction.suggested_stop_loss)}
+              </span>
+            )}
+            {prediction.suggested_take_profit && (
+              <span className="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded">
+                TP: ${formatPrice(prediction.suggested_take_profit)}
+              </span>
+            )}
           </div>
         )}
       </div>
