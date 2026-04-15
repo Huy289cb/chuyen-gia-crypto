@@ -5,16 +5,15 @@ import { PriceChart } from './PriceChart';
 import { Card } from '../ui/Card';
 import { BarChart3, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Prediction } from '@/app/types';
+import type { Prediction, Analysis } from '@/app/types';
 
 type TimeFrame = '15m' | '1h' | '4h' | '1d';
 
 interface PriceChartContainerProps {
   symbol: string;
   predictions?: Prediction[];
-  suggestedEntry?: number;
-  stopLoss?: number;
-  takeProfit?: number;
+  analysis?: Analysis;
+  color?: string;
 }
 
 interface OHLCData {
@@ -35,9 +34,8 @@ const TIMEFRAMES: { label: string; value: TimeFrame }[] = [
 export function PriceChartContainer({ 
   symbol, 
   predictions,
-  suggestedEntry,
-  stopLoss,
-  takeProfit 
+  analysis,
+  color
 }: PriceChartContainerProps) {
   const [data, setData] = useState<OHLCData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,11 +132,12 @@ export function PriceChartContainer({
       <PriceChart 
         data={data}
         predictions={predictions}
-        suggestedEntry={suggestedEntry}
-        stopLoss={stopLoss}
-        takeProfit={takeProfit}
+        analysis={analysis}
+        color={color}
         height={300}
         symbol={symbol}
+        showPredictions={true}
+        timeframe={timeframe}
       />
     </div>
   );

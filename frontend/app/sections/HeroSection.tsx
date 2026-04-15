@@ -27,16 +27,14 @@ export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis }: Hero
           <PriceChartContainer 
             symbol="BTC"
             predictions={btcAnalysis?.predictions ? Object.values(btcAnalysis.predictions) : undefined}
-            suggestedEntry={btcAnalysis?.suggested_entry}
-            stopLoss={btcAnalysis?.stop_loss}
-            takeProfit={btcAnalysis?.take_profit}
+            analysis={btcAnalysis}
+            color="#f7931a"
           />
           <PriceChartContainer 
             symbol="ETH"
             predictions={ethAnalysis?.predictions ? Object.values(ethAnalysis.predictions) : undefined}
-            suggestedEntry={ethAnalysis?.suggested_entry}
-            stopLoss={ethAnalysis?.stop_loss}
-            takeProfit={ethAnalysis?.take_profit}
+            analysis={ethAnalysis}
+            color="#627eea"
           />
         </div>
       </div>
