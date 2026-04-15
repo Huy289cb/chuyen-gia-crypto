@@ -230,7 +230,7 @@ function TimeframeStructure({ timeframes }: { timeframes: Record<string, string>
 }
 
 function KeyLevelsSection({ keyLevels }: { keyLevels: KeyLevels }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   
   const sections = [
     { key: 'liquidity', icon: Target, label: 'Liquidity', color: 'text-info' },
