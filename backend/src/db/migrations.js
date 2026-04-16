@@ -220,16 +220,48 @@ function runMigration5(db, resolve, reject) {
           console.log(`[Migration] Added prediction column ${completed}/${migrations.length}`);
           
           if (completed === migrations.length) {
-            // Refresh column list after adding columns
-            db.all("PRAGMA table_info(predictions)", (err2, newColumns) => {
-              if (err2) {
-                console.error('[Migration] Error refreshing column list:', err2.message);
-                reject(err2);
-                return;
-              }
-              const updatedColumnNames = newColumns.map(col => col.name);
-              createIndexes(db, resolve, reject, updatedColumnNames);
-            });
+            console.log('[Migration] Prediction columns migration completed, running migration 6...');
+            runMigration6(db, resolve, reject);
+          }
+        });
+      });
+    }
+  });
+}
+
+// Migration 6: Add current_price column to positions table
+function runMigration6(db, resolve, reject) {
+  db.all("PRAGMA table_info(positions)", (err, columns) => {
+    if (err) {
+      console.error('[Migration] Error checking positions columns:', err.message);
+      reject(err);
+      return;
+    }
+    
+    const columnNames = columns.map(col => col.name);
+    const migrations = [];
+    
+    if (!columnNames.includes('current_price')) {
+      migrations.push("ALTER TABLE positions ADD COLUMN current_price REAL DEFAULT 0");
+    }
+    
+    if (migrations.length === 0) {
+      console.log('[Migration] Positions columns already up to date');
+      createIndexes(db, resolve, reject, columnNames);
+    } else {
+      let completed = 0;
+      migrations.forEach((sql, index) => {
+        db.run(sql, (err) => {
+          if (err) {
+            console.error(`[Migration] Error adding positions column ${index + 1}:`, err.message);
+            reject(err);
+            return;
+          }
+          completed++;
+          console.log(`[Migration] Added positions column ${completed}/${migrations.length}`);
+          
+          if (completed === migrations.length) {
+            createIndexes(db, resolve, reject, columnNames);
           }
         });
       });

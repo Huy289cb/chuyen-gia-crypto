@@ -35,6 +35,7 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
     symbol: account.symbol,
     side: suggestion.side,
     entry_price: suggestion.entry_price,
+    current_price: suggestion.entry_price, // Current price starts at entry price
     stop_loss: suggestion.stop_loss,
     take_profit: suggestion.take_profit,
     size_usd: suggestion.size_usd,
@@ -142,14 +143,15 @@ export function checkStopLevels(position, currentPrice) {
 }
 
 /**
- * Update position PnL based on current price
+ * Update position PnL and current price
  */
 export async function updatePositionPnL(db, position, currentPrice) {
   const { pnl, pnl_percent } = calculateUnrealizedPnL(position, currentPrice);
   const { updatePosition } = await import('../db/database.js');
   
   await updatePosition(db, position.id, {
-    unrealized_pnl: pnl
+    unrealized_pnl: pnl,
+    current_price: currentPrice
   });
 
   return { pnl, pnl_percent };
