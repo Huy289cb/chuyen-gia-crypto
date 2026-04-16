@@ -45,6 +45,7 @@ export async function runMigrations(db) {
           symbol TEXT NOT NULL,
           side TEXT NOT NULL,
           entry_price REAL NOT NULL,
+          current_price REAL DEFAULT 0,
           stop_loss REAL NOT NULL,
           take_profit REAL NOT NULL,
           entry_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -206,8 +207,8 @@ function runMigration5(db, resolve, reject) {
     // Run migrations sequentially
     let completed = 0;
     if (migrations.length === 0) {
-      console.log('[Migration] All prediction columns already exist');
-      createIndexes(db, resolve, reject, columnNames);
+      console.log('[Migration] All prediction columns already exist, running migration 6...');
+      runMigration6(db, resolve, reject);
     } else {
       migrations.forEach((sql, index) => {
         db.run(sql, (err) => {
