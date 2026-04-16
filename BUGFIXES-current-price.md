@@ -42,6 +42,16 @@ Open Positions section not displaying current price properly.
 - **Issue**: positionData when executing pending order didn't include `current_price`
 - **Fix**: Added `current_price: currentPrice` to positionData
 
+#### 8. **CRITICAL**: Migration 6 never runs if prediction columns already exist
+**File**: `backend/src/db/migrations.js` (lines 209-211)
+- **Issue**: If all prediction columns exist, migration called `createIndexes` directly without running migration 6
+- **Fix**: Changed to always call `runMigration6` regardless of prediction migrations
+
+#### 9. `CREATE TABLE positions` missing `current_price` column
+**File**: `backend/src/db/migrations.js` (line 47)
+- **Issue**: New databases created without `current_price` in schema
+- **Fix**: Added `current_price REAL DEFAULT 0` to CREATE TABLE
+
 ### Data Flow After Fix
 
 ```
