@@ -944,6 +944,7 @@ export async function createPosition(db, positionData) {
       symbol,
       side,
       entry_price,
+      current_price,
       stop_loss,
       take_profit,
       size_usd,
@@ -956,15 +957,16 @@ export async function createPosition(db, positionData) {
     
     db.run(
       `INSERT INTO positions 
-       (position_id, account_id, symbol, side, entry_price, stop_loss, take_profit, 
+       (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit, 
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         position_id,
         account_id,
         symbol.toUpperCase(),
         side,
         entry_price,
+        current_price || entry_price, // Default to entry_price if not provided
         stop_loss,
         take_profit,
         size_usd,
@@ -1067,6 +1069,10 @@ export async function updatePosition(db, positionId, updates) {
     if (updates.unrealized_pnl !== undefined) {
       fields.push('unrealized_pnl = ?');
       values.push(updates.unrealized_pnl);
+    }
+    if (updates.current_price !== undefined) {
+      fields.push('current_price = ?');
+      values.push(updates.current_price);
     }
     if (updates.close_price !== undefined) {
       fields.push('close_price = ?');
