@@ -32,6 +32,16 @@ Open Positions section not displaying current price properly.
 - **Issue**: positionData didn't include `current_price`
 - **Fix**: Added `current_price: suggestion.entry_price` when opening position
 
+#### 6. TP1 hit handler not updating `current_price` or `unrealized_pnl`
+**File**: `backend/src/services/paperTradingEngine.js` (lines 294-305)
+- **Issue**: When position hits TP1 (trailing stop), only updated `stop_loss` and `tp1_hit`
+- **Fix**: Now also calculates and updates `unrealized_pnl` and `current_price`
+
+#### 7. Pending order execution not setting `current_price`
+**File**: `backend/src/schedulers/priceUpdateScheduler.js` (lines 213-226)
+- **Issue**: positionData when executing pending order didn't include `current_price`
+- **Fix**: Added `current_price: currentPrice` to positionData
+
 ### Data Flow After Fix
 
 ```
