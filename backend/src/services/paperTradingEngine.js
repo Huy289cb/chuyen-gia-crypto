@@ -294,9 +294,12 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
       } else if (hitTP1 && PAPER_TRADING_CONFIG.trailingStopEnabled) {
         // Hit TP1 - move SL to breakeven (trailing stop)
         const { updatePosition } = await import('../db/database.js');
+        const { pnl } = calculateUnrealizedPnL(position, currentPrice);
         await updatePosition(db, position.id, {
           stop_loss: position.entry_price, // Move to breakeven
-          tp1_hit: true
+          tp1_hit: true,
+          unrealized_pnl: pnl,
+          current_price: currentPrice
         });
         console.log(`[PaperTrading] ${symbol} position ${position.position_id} hit TP1, SL moved to breakeven`);
         results.updated++;

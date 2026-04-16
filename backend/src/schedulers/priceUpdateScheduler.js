@@ -214,6 +214,7 @@ async function checkAndExecutePendingOrders(symbol, currentPrice) {
           const positionData = {
             side: order.side,
             entry_price: entryPrice,
+            current_price: currentPrice, // Set to current market price at execution
             stop_loss: order.stop_loss,
             take_profit: order.take_profit,
             size_usd: order.size_usd,
