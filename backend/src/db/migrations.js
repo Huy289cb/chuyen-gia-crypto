@@ -210,11 +210,8 @@ export async function runMigrations(db) {
         }
         console.log('[Migration] Pending orders table created/verified');
 
-        // Migration 5: Add columns to predictions table (after pending_orders is created)
+        // Migration 5: Add columns to pending_orders table (after pending_orders is created)
       runMigration5(db, resolve, reject);
-      
-      // Migration 6: Update pending_orders table schema from 19 to 21 columns
-      runMigration6(db, resolve, reject);
       });
     });
   });
