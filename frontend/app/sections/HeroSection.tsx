@@ -26,16 +26,14 @@ export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis, showEt
           analysis={btcAnalysis}
           color="#f7931a"
         />
-        {showEthTrading && (
-          <CryptoCard 
-            name="Ethereum"
-            symbol="ETH"
-            data={ethData}
-            analysis={ethAnalysis}
-            color="#627eea"
-            showTradingInfo={showEthTrading}
-          />
-        )}
+        <CryptoCard 
+          name="Ethereum"
+          symbol="ETH"
+          data={ethData}
+          analysis={ethAnalysis}
+          color="#627eea"
+          showTradingInfo={false} // Always show price data, hide trading controls
+        />
       </div>
 
       {/* Price Chart - Analysis */}
@@ -52,14 +50,12 @@ export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis, showEt
             analysis={btcAnalysis}
             color="#f7931a"
           />
-          {showEthTrading && (
-            <PriceChartContainer 
-              symbol="ETH"
-              predictions={ethAnalysis?.predictions ? Object.values(ethAnalysis.predictions) : undefined}
-              analysis={ethAnalysis}
-              color="#627eea"
-            />
-          )}
+          <PriceChartContainer 
+            symbol="ETH"
+            predictions={ethAnalysis?.predictions ? Object.values(ethAnalysis.predictions) : undefined}
+            analysis={ethAnalysis}
+            color="#627eea"
+          />
         </div>
       </div>
     </section>
