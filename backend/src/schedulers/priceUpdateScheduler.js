@@ -176,6 +176,12 @@ async function updateSymbolPositions(symbol, currentPrice) {
   }
 }
 
+// Store previous prices to detect price crossing
+const previousPrices = {
+  BTC: null,
+  ETH: null
+};
+
 /**
  * Check pending orders and execute when price hits entry level
  */
@@ -191,16 +197,28 @@ async function checkAndExecutePendingOrders(symbol, currentPrice) {
     
     console.log(`[PriceScheduler] Checking ${pendingOrders.length} pending orders for ${symbol} at $${currentPrice.toLocaleString()}`);
     
+    const previousPrice = previousPrices[symbol];
+    
     for (const order of pendingOrders) {
       const isLong = order.side === 'long';
       const entryPrice = order.entry_price;
       
-      // Check if price hit entry level
-      // For long: execute when price <= entry (price dropped to entry)
-      // For short: execute when price >= entry (price rose to entry)
-      const shouldExecute = isLong 
-        ? currentPrice <= entryPrice  // Price dropped to entry level
-        : currentPrice >= entryPrice; // Price rose to entry level
+      // Check if price crossed the entry level
+      // For long: execute when price was ABOVE entry and now is AT or BELOW entry (price dropped to entry)
+      // For short: execute when price was BELOW entry and now is AT or ABOVE entry (price rose to entry)
+      let shouldExecute = false;
+      
+      if (isLong) {
+        // Long: Price must drop from above to at/below entry
+        if (previousPrice !== null && previousPrice > entryPrice && currentPrice <= entryPrice) {
+          shouldExecute = true;
+        }
+      } else {
+        // Short: Price must rise from below to at/above entry
+        if (previousPrice !== null && previousPrice < entryPrice && currentPrice >= entryPrice) {
+          shouldExecute = true;
+        }
+      }
       
       if (shouldExecute) {
         try {
@@ -211,6 +229,7 @@ async function checkAndExecutePendingOrders(symbol, currentPrice) {
           }
           
           // Execute the order (convert to actual position)
+          // Use entry_price as the execution price since that's where the limit was hit
           const positionData = {
             side: order.side,
             entry_price: entryPrice,
@@ -228,12 +247,15 @@ async function checkAndExecutePendingOrders(symbol, currentPrice) {
           await openPosition(db, account, positionData, order.linked_prediction_id);
           await executePendingOrder(db, order.id);
           
-          console.log(`[PriceScheduler] ${symbol} limit order executed: ${order.side} @ $${entryPrice.toLocaleString()} (current: $${currentPrice.toLocaleString()})`);
+          console.log(`[PriceScheduler] ${symbol} limit order executed: ${order.side} @ $${entryPrice.toLocaleString()} (prev: $${previousPrice?.toLocaleString()}, current: $${currentPrice.toLocaleString()})`);
         } catch (execError) {
           console.error(`[PriceScheduler] Failed to execute pending order ${order.id}:`, execError.message);
         }
       }
     }
+    
+    // Update previous price for next cycle
+    previousPrices[symbol] = currentPrice;
   } catch (error) {
     console.error(`[PriceScheduler] Error checking pending orders for ${symbol}:`, error.message);
   }
