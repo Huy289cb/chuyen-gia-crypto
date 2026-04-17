@@ -309,15 +309,19 @@ export function checkStopLevels(position, currentPrice) {
         current_price: currentPrice,
         side: position.side,
         hitTP: hitTP,
-        comparison: position.side === 'long' ? `${currentPrice} >= ${tpLevel}` : `${currentPrice} <= ${tpLevel}`
+        comparison: position.side === 'long' ? `${currentPrice} >= ${tpLevel}` : `${currentPrice} <= ${tpLevel}`,
+        position_id: position.position_id
       });
       
       if (hitTP) {
         hitTPs.push({ level: i + 1, price: tpLevel });
-        console.log(`[PaperTrading] TP Level ${i + 1} HIT at price ${tpLevel}`);
+        console.log(`[PaperTrading] TP Level ${i + 1} HIT at price ${tpLevel} for position ${position.position_id}`);
+        
+        // Force immediate TP hit logging for debugging
+        console.log(`[PaperTrading] IMMEDIATE ACTION: Position ${position.position_id} hit TP${i + 1}, should trigger partial close`);
       } else {
         nextTPLevel = { level: i + 1, price: tpLevel };
-        console.log(`[PaperTrading] TP Level ${i + 1} NOT HIT, next target: ${tpLevel}`);
+        console.log(`[PaperTrading] TP Level ${i + 1} NOT HIT, next target: ${tpLevel} for position ${position.position_id}`);
         break; // Found next unhit TP level
       }
     }
