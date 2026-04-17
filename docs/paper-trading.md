@@ -347,6 +347,95 @@ Check backend logs for:
 [PriceScheduler] BTC limit order executed: side=long @ $74000.00
 ```
 
+## ICT Position Management Strategies (Updated 17/04/2026)
+
+### Smart Money Concepts (ICT) Position Management
+
+The system implements ICT-based position management strategies that adapt to different Risk/Reward ratios. This ensures optimal profit-taking while managing risk effectively.
+
+#### **R:R 2.0 Strategy (Default)**
+- **TP1 (1:1)**: Close 50%, move SL to entry (breakeven)
+- **TP2 (2:1)**: Close remaining 50%
+- **Rationale**: Secure profit at 1:1, let remainder run to full target
+
+#### **R:R 3.0 Strategy**
+- **TP1 (1:1)**: Close 33%, move SL to entry
+- **TP2 (2:1)**: Close 33%, tighten trailing stop
+- **TP3 (3:1)**: Close remaining 34%
+- **Rationale**: Scale out progressively, reduce risk as profit increases
+
+#### **R:R 5.0 Strategy**
+- **TP1 (1:1)**: Close 25%, move SL to entry
+- **TP2 (2:1)**: Close 25%, move SL to 1.5:1 level
+- **TP3 (3:1)**: Close 25%, move SL to 2.5:1 level
+- **TP4 (5:1)**: Close remaining 25%
+- **Rationale**: Conservative scaling with progressive SL tightening
+
+#### **R:R 7.0 Strategy**
+- **TP1 (1:1)**: Close 20%, move SL to entry
+- **TP2 (2:1)**: Close 20%, move SL to 1.5:1 level
+- **TP3 (3:1)**: Close 20%, move SL to 2.5:1 level
+- **TP4 (5:1)**: Close 20%, move SL to 4:1 level
+- **TP5 (7:1)**: Close remaining 20%
+- **Rationale**: Very conservative scaling, lock in profits progressively
+
+### **Stop Loss Management**
+
+#### **Progressive SL Movement**
+- **SL Move 0**: Move to entry price (breakeven)
+- **SL Move 1**: Move to TP1 level
+- **SL Move 2**: Move to TP2 level
+- **SL Move 3**: Move to TP3 level
+- **SL Move 4**: Move to TP4 level
+
+#### **Trailing Stop Logic**
+- After each TP hit, SL is moved to protect profits
+- Higher R:R ratios get more aggressive SL tightening
+- Ensures risk-free trading after initial profit secured
+
+### **Implementation Examples**
+
+#### **Example: R:R 3.0 Long Position**
+```
+Entry: $70,000
+Stop Loss: $68,000 (Risk: $2,000)
+Expected RR: 3.0
+
+TP1 (1:1): $72,000 - Close 33%, move SL to $70,000
+TP2 (2:1): $74,000 - Close 33%, move SL to $72,000  
+TP3 (3:1): $76,000 - Close remaining 34%
+```
+
+#### **Example: R:R 7.0 Short Position**
+```
+Entry: $70,000
+Stop Loss: $72,000 (Risk: $2,000)
+Expected RR: 7.0
+
+TP1 (1:1): $68,000 - Close 20%, move SL to $70,000
+TP2 (2:1): $66,000 - Close 20%, move SL to $68,000
+TP3 (3:1): $64,000 - Close 20%, move SL to $66,000
+TP4 (5:1): $60,000 - Close 20%, move SL to $64,000
+TP5 (7:1): $56,000 - Close remaining 20%
+```
+
+### **Monitoring and Logging**
+
+The system logs all TP hits and SL movements:
+```
+[PaperTrading] BTC position abc-123 hit TP1, closed 50%, SL moved to 70000.00
+[PaperTrading] BTC position abc-123 hit TP2, closed 33%, SL moved to 72000.00
+[PaperTrading] BTC position abc-123 hit TP3, closed 34%, position fully closed
+```
+
+### **Benefits of ICT Position Management**
+
+1. **Risk Management**: Progressive risk reduction as profits increase
+2. **Psychological Advantage**: Securing profits reduces emotional trading
+3. **Maximum Profit Potential**: Let portions run to full targets
+4. **Adaptive Strategy**: Different approaches for different R:R ratios
+5. **Professional Trading**: Follows institutional trading practices
+
 ## Configuration (Updated 17/04/2026)
 
 Key configuration options in `.env`:

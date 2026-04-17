@@ -74,7 +74,46 @@ export async function runMigrations(db) {
         console.log('[Migration] Positions table created/verified');
       });
 
-      // Migration 3: Create account_snapshots table
+      // Migration 3: Add ICT strategy fields to positions table
+      db.run(`
+        ALTER TABLE positions ADD COLUMN ict_strategy TEXT
+      `, (err) => {
+        // Ignore error if column already exists
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('[Migration] Error adding ict_strategy column:', err.message);
+        }
+      });
+
+      db.run(`
+        ALTER TABLE positions ADD COLUMN tp_levels TEXT
+      `, (err) => {
+        // Ignore error if column already exists
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('[Migration] Error adding tp_levels column:', err.message);
+        }
+      });
+
+      db.run(`
+        ALTER TABLE positions ADD COLUMN tp_hit_count INTEGER DEFAULT 0
+      `, (err) => {
+        // Ignore error if column already exists
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('[Migration] Error adding tp_hit_count column:', err.message);
+        }
+      });
+
+      db.run(`
+        ALTER TABLE positions ADD COLUMN partial_closed REAL DEFAULT 0
+      `, (err) => {
+        // Ignore error if column already exists
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('[Migration] Error adding partial_closed column:', err.message);
+        }
+      });
+
+      console.log('[Migration] ICT strategy fields added to positions table');
+
+      // Migration 4: Create account_snapshots table
       db.run(`
         CREATE TABLE IF NOT EXISTS account_snapshots (
           id INTEGER PRIMARY KEY AUTOINCREMENT,

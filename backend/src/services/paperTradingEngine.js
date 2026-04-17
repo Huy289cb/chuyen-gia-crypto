@@ -9,7 +9,18 @@ const PAPER_TRADING_CONFIG = {
   partialTPRRLevels: [1.0, 2.0],
   trailingStopEnabled: true,
   trailAfterRR: 1.0,
-  trailDistancePct: 0.5
+  trailDistancePct: 0.5,
+  // Enhanced ICT-based strategies
+  ictStrategies: {
+    // R:R 2.0: 50% at 1:1 (move SL to entry), 50% at 2:1
+    rr2: { ratios: [0.5, 0.5], levels: [1.0, 2.0], slMoves: [0, 1] },
+    // R:R 3.0: 33% at 1:1 (move SL to entry), 33% at 2:1, 34% at 3:1
+    rr3: { ratios: [0.33, 0.33, 0.34], levels: [1.0, 2.0, 3.0], slMoves: [0, 1, 2] },
+    // R:R 5.0: 25% at 1:1 (move SL to entry), 25% at 2:1, 25% at 3:1, 25% at 5:1
+    rr5: { ratios: [0.25, 0.25, 0.25, 0.25], levels: [1.0, 2.0, 3.0, 5.0], slMoves: [0, 1, 2, 3] },
+    // R:R 7.0: 20% at each level with progressive SL tightening
+    rr7: { ratios: [0.2, 0.2, 0.2, 0.2, 0.2], levels: [1.0, 2.0, 3.0, 5.0, 7.0], slMoves: [0, 1, 2, 3, 4] }
+  }
 };
 
 /**
@@ -77,7 +88,32 @@ export async function checkPredictionReversal(db, newAnalysis, symbol = 'BTC') {
 }
 
 /**
- * Calculate TP1 and TP2 levels based on R:R ratios
+ * Get ICT strategy based on R:R ratio
+ */
+function getICTStrategy(expectedRR) {
+  if (expectedRR >= 7) return PAPER_TRADING_CONFIG.ictStrategies.rr7;
+  if (expectedRR >= 5) return PAPER_TRADING_CONFIG.ictStrategies.rr5;
+  if (expectedRR >= 3) return PAPER_TRADING_CONFIG.ictStrategies.rr3;
+  return PAPER_TRADING_CONFIG.ictStrategies.rr2; // Default for R:R 2.0+
+}
+
+/**
+ * Calculate TP levels based on ICT strategy
+ */
+function calculateICTTPLevels(entry, sl, strategy) {
+  const riskDistance = Math.abs(entry - sl);
+  const tpLevels = [];
+  
+  for (let i = 0; i < strategy.levels.length; i++) {
+    const tpLevel = entry + (entry > sl ? riskDistance * strategy.levels[i] : -riskDistance * strategy.levels[i]);
+    tpLevels.push(tpLevel);
+  }
+  
+  return tpLevels;
+}
+
+/**
+ * Calculate TP1 and TP2 levels based on R:R ratios (legacy function)
  */
 function calculateTPLevels(entry, sl, rrLevels) {
   const riskDistance = Math.abs(entry - sl);
@@ -93,6 +129,10 @@ function calculateTPLevels(entry, sl, rrLevels) {
 export async function openPosition(db, account, suggestion, linkedPredictionId = null) {
   const positionId = randomUUID();
   
+  // Determine ICT strategy based on expected R:R
+  const ictStrategy = getICTStrategy(suggestion.expected_rr);
+  const tpLevels = calculateICTTPLevels(suggestion.entry_price, suggestion.stop_loss, ictStrategy);
+  
   const positionData = {
     position_id: positionId,
     account_id: account.id,
@@ -107,7 +147,12 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
     risk_usd: suggestion.risk_usd,
     risk_percent: suggestion.risk_percent,
     expected_rr: suggestion.expected_rr,
-    linked_prediction_id: linkedPredictionId
+    invalidation_level: suggestion.invalidation_level,
+    // ICT strategy tracking
+    ict_strategy: JSON.stringify(ictStrategy),
+    tp_levels: JSON.stringify(tpLevels),
+    tp_hit_count: 0,
+    partial_closed: 0
   };
 
   const { createPosition, updateAccount, updatePrediction } = await import('../db/database.js');
@@ -178,32 +223,49 @@ export function calculateUnrealizedPnL(position, currentPrice) {
 }
 
 /**
- * Check if position hit SL, TP1, or TP2
+ * Check if position hit SL or any TP levels using ICT strategy
  */
 export function checkStopLevels(position, currentPrice) {
   if (position.status !== 'open') {
-    return { hitSL: false, hitTP1: false, hitTP2: false };
+    return { hitSL: false, hitTPs: [], nextTPLevel: null };
   }
 
   let hitSL = false;
-  let hitTP1 = false;
-  let hitTP2 = false;
+  let hitTPs = [];
+  let nextTPLevel = null;
 
+  // Check stop loss
   if (position.side === 'long') {
     hitSL = currentPrice <= position.stop_loss;
-    // Calculate TP1/TP2 if not already stored
-    const tpLevels = calculateTPLevels(position.entry_price, position.stop_loss, PAPER_TRADING_CONFIG.partialTPRRLevels);
-    hitTP1 = currentPrice >= tpLevels.tp1;
-    hitTP2 = currentPrice >= tpLevels.tp2;
   } else {
-    // short
     hitSL = currentPrice >= position.stop_loss;
-    const tpLevels = calculateTPLevels(position.entry_price, position.stop_loss, PAPER_TRADING_CONFIG.partialTPRRLevels);
-    hitTP1 = currentPrice <= tpLevels.tp1;
-    hitTP2 = currentPrice <= tpLevels.tp2;
   }
 
-  return { hitSL, hitTP1, hitTP2 };
+  // Check TP levels using ICT strategy
+  if (position.tp_levels) {
+    const tpLevels = JSON.parse(position.tp_levels);
+    const tpHitCount = position.tp_hit_count || 0;
+    
+    for (let i = tpHitCount; i < tpLevels.length; i++) {
+      const tpLevel = tpLevels[i];
+      let hitTP = false;
+      
+      if (position.side === 'long') {
+        hitTP = currentPrice >= tpLevel;
+      } else {
+        hitTP = currentPrice <= tpLevel;
+      }
+      
+      if (hitTP) {
+        hitTPs.push({ level: i + 1, price: tpLevel });
+      } else {
+        nextTPLevel = { level: i + 1, price: tpLevel };
+        break; // Found next unhit TP level
+      }
+    }
+  }
+
+  return { hitSL, hitTPs, nextTPLevel };
 }
 
 /**
@@ -217,12 +279,20 @@ export async function updatePositionPnL(db, position, currentPrice) {
     unrealized_pnl: pnl,
     current_price: currentPrice
   });
-
-  return { pnl, pnl_percent };
+  
+  console.log(`[PaperTrading] Partial closed ${position.side} position for ${position.symbol}:`, {
+    position_id: position.position_id,
+    close_price: currentPrice,
+    close_size: closeSize,
+    close_reason: closeReason,
+    partial_pnl: partialPnl.toFixed(2)
+  });
+  
+  return { closedPosition: position, realizedPnl: partialPnl, isWin: partialPnl > 0 };
 }
 
 /**
- * Close position and update account
+ * Close a position and update account
  */
 export async function closePosition(db, position, currentPrice, closeReason) {
   const { closePosition: closePos, updateAccount, getPosition, getPositions, updatePrediction } = await import('../db/database.js');
@@ -343,30 +413,58 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
 
   for (const position of openPositions) {
     try {
-      // Check SL, TP1, TP2
-      const { hitSL, hitTP1, hitTP2 } = checkStopLevels(position, currentPrice);
+      // Check SL and TP levels using ICT strategy
+      const { hitSL, hitTPs, nextTPLevel } = checkStopLevels(position, currentPrice);
 
       if (hitSL) {
         // Hit stop loss - close position
         const result = await closePosition(db, position, currentPrice, 'stop_loss');
         results.closed.push(result);
-      } else if (hitTP2 || (position.take_profit && 
-           (position.side === 'long' ? currentPrice >= position.take_profit : currentPrice <= position.take_profit))) {
-        // Hit TP2 or original TP - close position
-        const result = await closePosition(db, position, currentPrice, 'take_profit');
-        results.closed.push(result);
-      } else if (hitTP1 && PAPER_TRADING_CONFIG.trailingStopEnabled) {
-        // Hit TP1 - move SL to breakeven (trailing stop)
-        const { updatePosition } = await import('../db/database.js');
-        const { pnl } = calculateUnrealizedPnL(position, currentPrice);
-        await updatePosition(db, position.id, {
-          stop_loss: position.entry_price, // Move to breakeven
-          tp1_hit: true,
-          unrealized_pnl: pnl,
-          current_price: currentPrice
-        });
-        console.log(`[PaperTrading] ${symbol} position ${position.position_id} hit TP1, SL moved to breakeven`);
-        results.updated++;
+      } else if (hitTPs.length > 0) {
+        // Handle TP hits using ICT strategy
+        const ictStrategy = position.ict_strategy ? JSON.parse(position.ict_strategy) : null;
+        
+        if (ictStrategy) {
+          for (const tpHit of hitTPs) {
+            const strategyIndex = tpHit.level - 1;
+            const closeRatio = ictStrategy.ratios[strategyIndex];
+            const slMoveIndex = ictStrategy.slMoves[strategyIndex];
+            
+            // Calculate position size to close
+            const remainingSize = position.size_qty * (1 - (position.partial_closed || 0));
+            const closeSize = remainingSize * closeRatio;
+            
+            if (closeSize > 0) {
+              // Partial close
+              const result = await closePartialPosition(db, position, currentPrice, closeSize, `tp${tpHit.level}`);
+              results.closed.push(result);
+              
+              // Update position with new size and SL if needed
+              const { updatePosition } = await import('../db/database.js');
+              const newSize = position.size_qty - closeSize;
+              const newPartialClosed = (position.partial_closed || 0) + closeRatio;
+              
+              let newStopLoss = position.stop_loss;
+              if (slMoveIndex === 0) {
+                newStopLoss = position.entry_price; // Move to breakeven
+              } else if (slMoveIndex > 0 && position.tp_levels) {
+                const tpLevels = JSON.parse(position.tp_levels);
+                newStopLoss = tpLevels[slMoveIndex - 1]; // Move to previous TP level
+              }
+              
+              await updatePosition(db, position.id, {
+                size_qty: newSize,
+                size_usd: newSize * currentPrice,
+                partial_closed: newPartialClosed,
+                tp_hit_count: tpHit.level,
+                stop_loss: newStopLoss,
+                current_price: currentPrice
+              });
+              
+              console.log(`[PaperTrading] ${symbol} position ${position.position_id} hit TP${tpHit.level}, closed ${Math.round(closeRatio * 100)}%, SL moved to ${newStopLoss.toFixed(2)}`);
+            }
+          }
+        }
       } else {
         // Just update PnL
         await updatePositionPnL(db, position, currentPrice);
