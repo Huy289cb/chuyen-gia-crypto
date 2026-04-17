@@ -47,6 +47,12 @@ function isWithinAllowedSessions() {
   
   const sessions = AUTO_ENTRY_CONFIG.allowedSessions;
   
+  // Check if all timeframes are enabled
+  if (sessions.includes('all_timeframes')) {
+    return true; // Always allow trading for all timeframes
+  }
+  
+  // Fallback to session-based trading (for backward compatibility)
   for (const session of sessions) {
     if (session === 'london') {
       const { start, end } = AUTO_ENTRY_CONFIG.londonSession;
