@@ -61,6 +61,7 @@ export async function runMigrations(db) {
           close_time DATETIME,
           close_reason TEXT,
           linked_prediction_id INTEGER,
+          invalidation_level REAL,
           tp1_hit INTEGER DEFAULT 0,
           FOREIGN KEY (account_id) REFERENCES accounts(id),
           FOREIGN KEY (linked_prediction_id) REFERENCES predictions(id)
@@ -75,6 +76,15 @@ export async function runMigrations(db) {
       });
 
       // Migration 3: Add ICT strategy fields to positions table
+      db.run(`
+        ALTER TABLE positions ADD COLUMN invalidation_level REAL
+      `, (err) => {
+        // Ignore error if column already exists
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('[Migration] Error adding invalidation_level column:', err.message);
+        }
+      });
+
       db.run(`
         ALTER TABLE positions ADD COLUMN ict_strategy TEXT
       `, (err) => {

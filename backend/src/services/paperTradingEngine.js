@@ -288,6 +288,42 @@ export async function updatePositionPnL(db, position, currentPrice) {
 }
 
 /**
+ * Close partial position and update account
+ */
+export async function closePartialPosition(db, position, currentPrice, closeSize, closeReason) {
+  const { updateAccount, logTradeEvent } = await import('../db/database.js');
+  
+  // Calculate PnL for partial close
+  const { pnl, pnl_percent } = calculateUnrealizedPnL(position, currentPrice);
+  const partialPnl = pnl * (closeSize / position.size_qty);
+  
+  // Update account balance with partial PnL
+  const account = await (await import('../db/database.js')).getAccountBySymbol(db, position.symbol);
+  const newBalance = account.balance + partialPnl;
+  await updateAccount(db, account.id, { balance: newBalance });
+  
+  // Create trade event for partial close
+  await logTradeEvent(db, position.id, 'partial_close', JSON.stringify({
+    close_price: currentPrice,
+    close_size: closeSize,
+    close_reason: closeReason,
+    pnl: partialPnl,
+    pnl_percent: pnl_percent * (closeSize / position.size_qty),
+    timestamp: new Date().toISOString()
+  }));
+  
+  console.log(`[PaperTrading] Partial closed ${position.side} position for ${position.symbol}:`, {
+    position_id: position.position_id,
+    close_price: currentPrice,
+    close_size: closeSize,
+    close_reason: closeReason,
+    partial_pnl: partialPnl.toFixed(2)
+  });
+  
+  return { closedPosition: position, realizedPnl: partialPnl, isWin: partialPnl > 0 };
+}
+
+/**
  * Close a position and update account
  */
 export async function closePosition(db, position, currentPrice, closeReason) {
