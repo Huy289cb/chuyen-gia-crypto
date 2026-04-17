@@ -208,15 +208,34 @@ export function calculateUnrealizedPnL(position, currentPrice) {
     return { pnl: 0, pnl_percent: 0 };
   }
 
+  // Add comprehensive null checks
+  if (!currentPrice || currentPrice === undefined || currentPrice === null) {
+    console.error('[PaperTrading] Invalid currentPrice for position:', position.position_id, currentPrice);
+    return { pnl: 0, pnl_percent: 0 };
+  }
+
+  if (!position.entry_price || position.entry_price === undefined || position.entry_price === null) {
+    console.error('[PaperTrading] Invalid entry_price for position:', position.position_id, position.entry_price);
+    return { pnl: 0, pnl_percent: 0 };
+  }
+
+  if (!position.size_usd || position.size_usd === undefined || position.size_usd === null) {
+    console.error('[PaperTrading] Invalid size_usd for position:', position.position_id, position.size_usd);
+    return { pnl: 0, pnl_percent: 0 };
+  }
+
   let pnl = 0;
   
   if (position.side === 'long') {
     pnl = (currentPrice - position.entry_price) * position.size_qty;
-  } else {
+  } else if (position.side === 'short') {
     // short
     pnl = (position.entry_price - currentPrice) * position.size_qty;
+  } else {
+    console.error('[PaperTrading] Invalid position side for position:', position.position_id, position.side);
+    return { pnl: 0, pnl_percent: 0 };
   }
-
+  
   const pnl_percent = position.size_usd > 0 ? (pnl / position.size_usd) * 100 : 0;
 
   return { pnl, pnl_percent };
@@ -298,19 +317,52 @@ export async function closePartialPosition(db, position, currentPrice, closeSize
   const partialPnl = position.size_qty > 0 ? pnl * (closeSize / position.size_qty) : 0;
   
   // Update account balance with partial PnL
-  const account = await getAccountBySymbol(db, position.symbol);
+  let account;
+  try {
+    account = await getAccountBySymbol(db, position.symbol);
+  } catch (error) {
+    console.error('[PaperTrading] Error fetching account for partial close:', error.message);
+    throw error;
+  }
+  
+  if (!account) {
+    console.error('[PaperTrading] Account not found for symbol:', position.symbol);
+    throw new Error(`Account not found for symbol ${position.symbol}`);
+  }
+  
   const newBalance = account.balance + partialPnl;
-  await updateAccount(db, account.id, { balance: newBalance });
+  try {
+    await updateAccount(db, account.id, { balance: newBalance });
+  } catch (error) {
+    console.error('[PaperTrading] Error updating account for partial close:', error.message);
+    throw error;
+  }
   
   // Create trade event for partial close
-  await logTradeEvent(db, position.id, 'partial_close', JSON.stringify({
-    close_price: currentPrice,
-    close_size: closeSize,
-    close_reason: closeReason,
-    pnl: partialPnl,
-    pnl_percent: position.size_qty > 0 ? pnl_percent * (closeSize / position.size_qty) : 0,
-    timestamp: new Date().toISOString()
-  }));
+  let tradeEventData;
+  try {
+    tradeEventData = JSON.stringify({
+      close_price: currentPrice,
+      close_size: closeSize,
+      close_reason: closeReason,
+      pnl: partialPnl,
+      pnl_percent: position.size_qty > 0 ? pnl_percent * (closeSize / position.size_qty) : 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[PaperTrading] Error stringifying trade event data:', error.message);
+    tradeEventData = JSON.stringify({
+      close_price: currentPrice,
+      close_size: closeSize,
+      close_reason: closeReason,
+      pnl: partialPnl,
+      pnl_percent: position.size_qty > 0 ? pnl_percent * (closeSize / position.size_qty) : 0,
+      timestamp: new Date().toISOString(),
+      error: 'JSON stringify error'
+    });
+  }
+  
+  await logTradeEvent(db, position.id, 'partial_close', tradeEventData);
   
   console.log(`[PaperTrading] Partial closed ${position.side} position for ${position.symbol}:`, {
     position_id: position.position_id,
