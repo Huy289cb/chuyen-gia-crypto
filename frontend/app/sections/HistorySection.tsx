@@ -92,7 +92,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
-                    {trade.entry_time || trade.opened_at ? new Date(trade.entry_time || trade.opened_at!).toLocaleDateString() : '-'}
+                    {trade.entry_time || trade.opened_at ? new Date(trade.entry_time || trade.opened_at!).toLocaleString() : '-'}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-foreground">
                     ${formatPrice(trade.entry_price)}
@@ -116,7 +116,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     <ExitReasonBadge reason={trade.close_reason || trade.exit_reason} />
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
-                    {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleDateString() : '-'}
+                    {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleString() : '-'}
                   </td>
                 </tr>
               ))}
@@ -191,7 +191,7 @@ function TradeCardMobile({ trade }: { trade: Trade }) {
       <div className="flex items-center justify-between text-xs">
         <ExitReasonBadge reason={trade.close_reason || trade.exit_reason} />
         <span className="text-foreground-tertiary">
-          {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleDateString() : '-'}
+          {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleString() : '-'}
         </span>
       </div>
     </div>

@@ -171,11 +171,12 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     decision.orderType = 'market'; // Execute immediately
     decision.reason += ` | Market order: entry at current price ${currentPrice.toFixed(2)} (suggested was ${suggestedEntry.toFixed(2)})`;
     // CRITICAL FIX: For market orders, entry price must be current market price, not suggested!
+    const originalEntry = decision.suggestedPosition.entry_price;
     decision.suggestedPosition.entry_price = currentPrice;
     // Recalculate size based on new entry price
     const newSizeUsd = decision.suggestedPosition.size_qty * currentPrice;
     decision.suggestedPosition.size_usd = newSizeUsd;
-    console.log(`[AutoEntry] Market order adjusted: entry=${currentPrice}, size_usd=${newSizeUsd.toFixed(2)}`);
+    console.log(`[AutoEntry] Market order adjusted: original_entry=${originalEntry}, current_price=${currentPrice}, new_entry=${decision.suggestedPosition.entry_price}, size_usd=${newSizeUsd.toFixed(2)}`);
   }
 
   return decision;

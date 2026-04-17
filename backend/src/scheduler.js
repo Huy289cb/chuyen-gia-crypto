@@ -198,6 +198,7 @@ async function runAnalysisJob() {
             if (btcDecision.orderType === 'market') {
               // Execute market order immediately with linked prediction
               const position = btcDecision.suggestedPosition;
+              console.log(`[Scheduler] BTC market order BEFORE execution: side=${position.side}, entry=${position.entry_price}, current_price=${analysis.btc.current_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
               await openPosition(db, btcAccount, position, btcPredictionId);
               console.log(`[Scheduler] BTC market order executed: side=${position.side}, entry=${position.entry_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
             } else {
