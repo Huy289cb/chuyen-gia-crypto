@@ -6,15 +6,14 @@ const AUTO_ENTRY_CONFIG = {
   minRRRatio: 2.0,             // Minimum risk/reward ratio
   riskPerTrade: 0.01,          // 1% of account balance
   maxPositionsPerSymbol: 8,    // Max concurrent positions per symbol (BTC only) - Updated 17/04/2026
-  maxConsecutiveLosses: 3,     // Trigger cooldown
+  maxConsecutiveLosses: 8,     // Trigger cooldown
   cooldownHours: 4,            // Cooldown duration in hours
   requiredTimeframes: ['1h', '4h'],  // Check these for alignment - Updated 17/04/2026 (1h primary)
   minAlignment: 0.5,           // Majority (50%+) required
   enabledSymbols: ['BTC'],     // Only enable BTC trading
-  // Session timing (UTC hours)
-  allowedSessions: ['london', 'ny_killzone'],
-  londonSession: { start: 7, end: 10 },  // 07:00-10:00 UTC
-  nyKillzone: { start: 12, end: 15 },      // 12:00-15:00 UTC
+  // Trading sessions - Updated to all timeframes (no session restrictions)
+  allowedSessions: ['all_timeframes'],  // Trade during all market hours
+  tradingHours: { start: 0, end: 24 },  // 24/7 trading enabled
   // Partial take profits (ICT: take profits in stages)
   partialTPEnabled: true,
   partialTPRatios: [0.5, 0.5],  // 50% @ TP1, 50% @ TP2

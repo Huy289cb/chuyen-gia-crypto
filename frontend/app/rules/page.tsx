@@ -75,17 +75,17 @@ const translations = {
       cooldown: {
         title: '6. Giai Đoạn Nghỉ Tài Khoản',
         description: 'Không vào lệnh trong giai đoạn nghỉ',
-        details: 'Nghỉ 4 giờ sau 3 lỗ liên tiếp'
+        details: 'Nghỉ 4 giờ sau 8 lỗ liên tiếp'
       },
       positionLimit: {
         title: '7. Giới Hạn Vị Thế',
-        description: 'Tối đa 8 vị thế BTC đồng thời',
+        description: 'Tối đa 8 vị thế BTC đồng thởi',
         details: 'MAX_POSITIONS_PER_SYMBOL: 8 - Từ chối vị thế mới nếu đạt giới hạn'
       },
       tradingSessions: {
         title: '8. Phiên Giao Dịch',
-        description: 'Chỉ giao dịch trong phiên thanh khoản cao',
-        details: 'London (07:00-10:00 UTC) và NY Killzone (12:00-15:00 UTC)'
+        description: 'Giao dịch trong tất cả mọi khung giờ',
+        details: '24/7 giao dịch được kích hoạt - không giới hạn phiên'
       }
     },
     orderTypes: {
@@ -292,7 +292,7 @@ const translations = {
       cooldown: {
         title: '6. Account Cooldown',
         description: 'No entries during cooldown period',
-        details: '4-hour cooldown after 3 consecutive losses'
+        details: '4-hour cooldown after 8 consecutive losses'
       },
       positionLimit: {
         title: '7. Position Limit',
@@ -301,8 +301,8 @@ const translations = {
       },
       tradingSessions: {
         title: '8. Trading Sessions',
-        description: 'Only trade during high-liquidity sessions',
-        details: 'London (07:00-10:00 UTC) and NY Killzone (12:00-15:00 UTC)'
+        description: 'Trade during all timeframes',
+        details: '24/7 trading enabled - no session restrictions'
       }
     },
     orderTypes: {

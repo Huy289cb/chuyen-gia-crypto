@@ -290,6 +290,7 @@ Positions can have the following statuses:
 - **Limit Order Intelligence**: AI-powered limit order management to keep only valid setups
 - **Focus**: Improved BTC trading skills before multi-symbol expansion
 - **AI Intelligence**: Enhanced decision-making with open position and limit order analysis
+- **Consecutive Loss Protection**: Increased cooldown trigger from 3 to 8 consecutive losses for better risk management
 
 ## Important Notes
 
