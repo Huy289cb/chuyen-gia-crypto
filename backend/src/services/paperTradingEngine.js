@@ -217,7 +217,7 @@ export function calculateUnrealizedPnL(position, currentPrice) {
     pnl = (position.entry_price - currentPrice) * position.size_qty;
   }
 
-  const pnl_percent = (pnl / position.size_usd) * 100;
+  const pnl_percent = position.size_usd > 0 ? (pnl / position.size_usd) * 100 : 0;
 
   return { pnl, pnl_percent };
 }
@@ -291,14 +291,14 @@ export async function updatePositionPnL(db, position, currentPrice) {
  * Close partial position and update account
  */
 export async function closePartialPosition(db, position, currentPrice, closeSize, closeReason) {
-  const { updateAccount, logTradeEvent } = await import('../db/database.js');
+  const { updateAccount, logTradeEvent, getAccountBySymbol } = await import('../db/database.js');
   
   // Calculate PnL for partial close
   const { pnl, pnl_percent } = calculateUnrealizedPnL(position, currentPrice);
-  const partialPnl = pnl * (closeSize / position.size_qty);
+  const partialPnl = position.size_qty > 0 ? pnl * (closeSize / position.size_qty) : 0;
   
   // Update account balance with partial PnL
-  const account = await (await import('../db/database.js')).getAccountBySymbol(db, position.symbol);
+  const account = await getAccountBySymbol(db, position.symbol);
   const newBalance = account.balance + partialPnl;
   await updateAccount(db, account.id, { balance: newBalance });
   
@@ -308,7 +308,7 @@ export async function closePartialPosition(db, position, currentPrice, closeSize
     close_size: closeSize,
     close_reason: closeReason,
     pnl: partialPnl,
-    pnl_percent: pnl_percent * (closeSize / position.size_qty),
+    pnl_percent: position.size_qty > 0 ? pnl_percent * (closeSize / position.size_qty) : 0,
     timestamp: new Date().toISOString()
   }));
   
@@ -467,12 +467,30 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
         if (ictStrategy) {
           for (const tpHit of hitTPs) {
             const strategyIndex = tpHit.level - 1;
+            
+            // Bounds checking for strategy arrays
+            if (strategyIndex >= ictStrategy.ratios.length || strategyIndex >= ictStrategy.slMoves.length) {
+              console.error(`[PaperTrading] Strategy index ${strategyIndex} out of bounds for TP level ${tpHit.level}`);
+              continue;
+            }
+            
             const closeRatio = ictStrategy.ratios[strategyIndex];
             const slMoveIndex = ictStrategy.slMoves[strategyIndex];
             
             // Calculate position size to close
             const remainingSize = position.size_qty * (1 - (position.partial_closed || 0));
             const closeSize = remainingSize * closeRatio;
+            
+            // Validate position size calculations
+            if (remainingSize <= 0) {
+              console.error(`[PaperTrading] Invalid remaining size: ${remainingSize} for position ${position.position_id}`);
+              continue;
+            }
+            
+            if (closeSize <= 0 || closeSize > remainingSize) {
+              console.error(`[PaperTrading] Invalid close size: ${closeSize} (remaining: ${remainingSize}) for position ${position.position_id}`);
+              continue;
+            }
             
             if (closeSize > 0) {
               // Partial close
@@ -483,6 +501,17 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
               const { updatePosition } = await import('../db/database.js');
               const newSize = position.size_qty - closeSize;
               const newPartialClosed = (position.partial_closed || 0) + closeRatio;
+              
+              // Validate new position size
+              if (newSize < 0) {
+                console.error(`[PaperTrading] Invalid new size: ${newSize} for position ${position.position_id}`);
+                continue;
+              }
+              
+              if (newPartialClosed > 1) {
+                console.error(`[PaperTrading] Invalid partial closed ratio: ${newPartialClosed} for position ${position.position_id}`);
+                continue;
+              }
               
               let newStopLoss = position.stop_loss;
               if (slMoveIndex === 0) {
