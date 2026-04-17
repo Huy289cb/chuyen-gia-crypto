@@ -1,8 +1,8 @@
 'use client';
 
 import { BookOpen, Settings, Target, Shield, Clock, TrendingUp, AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react';
-import { Card, CardHeader } from '../../components/ui/Card';
-import { Badge } from '../../components/ui/Badge';
+import { Card, CardHeader } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
 
 export default function RulesPage() {
   return (
