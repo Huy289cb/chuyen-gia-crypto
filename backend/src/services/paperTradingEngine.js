@@ -243,7 +243,13 @@ export function checkStopLevels(position, currentPrice) {
 
   // Check TP levels using ICT strategy
   if (position.tp_levels) {
-    const tpLevels = JSON.parse(position.tp_levels);
+    let tpLevels;
+    try {
+      tpLevels = JSON.parse(position.tp_levels);
+    } catch (error) {
+      console.error('[PaperTrading] Error parsing tp_levels:', error.message);
+      return { hitSL, hitTPs: [], nextTPLevel: null };
+    }
     const tpHitCount = position.tp_hit_count || 0;
     
     for (let i = tpHitCount; i < tpLevels.length; i++) {
@@ -279,16 +285,6 @@ export async function updatePositionPnL(db, position, currentPrice) {
     unrealized_pnl: pnl,
     current_price: currentPrice
   });
-  
-  console.log(`[PaperTrading] Partial closed ${position.side} position for ${position.symbol}:`, {
-    position_id: position.position_id,
-    close_price: currentPrice,
-    close_size: closeSize,
-    close_reason: closeReason,
-    partial_pnl: partialPnl.toFixed(2)
-  });
-  
-  return { closedPosition: position, realizedPnl: partialPnl, isWin: partialPnl > 0 };
 }
 
 /**
@@ -422,7 +418,15 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
         results.closed.push(result);
       } else if (hitTPs.length > 0) {
         // Handle TP hits using ICT strategy
-        const ictStrategy = position.ict_strategy ? JSON.parse(position.ict_strategy) : null;
+        let ictStrategy = null;
+        if (position.ict_strategy) {
+          try {
+            ictStrategy = JSON.parse(position.ict_strategy);
+          } catch (error) {
+            console.error('[PaperTrading] Error parsing ict_strategy:', error.message);
+            continue; // Skip to next position
+          }
+        }
         
         if (ictStrategy) {
           for (const tpHit of hitTPs) {
@@ -448,8 +452,13 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
               if (slMoveIndex === 0) {
                 newStopLoss = position.entry_price; // Move to breakeven
               } else if (slMoveIndex > 0 && position.tp_levels) {
-                const tpLevels = JSON.parse(position.tp_levels);
-                newStopLoss = tpLevels[slMoveIndex - 1]; // Move to previous TP level
+                try {
+                  const tpLevels = JSON.parse(position.tp_levels);
+                  newStopLoss = tpLevels[slMoveIndex - 1]; // Move to previous TP level
+                } catch (error) {
+                  console.error('[PaperTrading] Error parsing tp_levels for SL movement:', error.message);
+                  newStopLoss = position.entry_price; // Fallback to breakeven
+                }
               }
               
               await updatePosition(db, position.id, {
