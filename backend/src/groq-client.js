@@ -5,6 +5,10 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = 'llama-3.1-8b-instant';
 const FALLBACK_MODEL = 'llama3-8b-8192';
 
+// Rate limiting protection
+let lastCallTime = 0;
+const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
+
 class GroqClient {
   constructor(apiKey) {
     this.apiKey = apiKey;
@@ -20,7 +24,17 @@ class GroqClient {
    * @param {number} params.maxRetries - Max retry attempts
    * @returns {Promise<Object>} Parsed JSON response
    */
-  async analyze({ systemPrompt, userPrompt, temperature = 0.2, maxRetries = 2 }) {
+  async analyze({ systemPrompt, userPrompt, temperature = 0.2, maxRetries = 5 }) {
+    // Rate limiting protection
+    const now = Date.now();
+    const timeSinceLastCall = now - lastCallTime;
+    if (timeSinceLastCall < MIN_CALL_INTERVAL) {
+      const waitTime = MIN_CALL_INTERVAL - timeSinceLastCall;
+      console.log(`[GroqClient] Rate limiting: waiting ${waitTime}ms before API call`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    lastCallTime = Date.now();
+
     const requestBody = {
       model: DEFAULT_MODEL,
       messages: [
@@ -75,8 +89,19 @@ class GroqClient {
         console.error(`[GroqClient] Attempt ${attempt + 1} failed:`, error.message);
         
         if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
-          console.log(`[GroqClient] Retrying in ${delay}ms...`);
+          let delay;
+          
+          // Check for specific 429 rate limit error
+          if (error.message.includes('429') || error.message.includes('rate limit')) {
+            // For 429 errors, use much longer delays
+            delay = Math.min(60000, Math.pow(2, attempt) * 5000); // Start at 5s, max 60s
+            console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms before retry...`);
+          } else {
+            // For other errors, use normal exponential backoff
+            delay = Math.pow(2, attempt) * 1000;
+            console.log(`[GroqClient] Retrying in ${delay}ms...`);
+          }
+          
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
