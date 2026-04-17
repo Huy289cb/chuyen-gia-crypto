@@ -495,7 +495,16 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
     errors: []
   };
 
+  const MAX_POSITION_ITERATIONS = 1000; // Prevent infinite loops
+  let iterationCount = 0;
+  
   for (const position of openPositions) {
+    iterationCount++;
+    if (iterationCount > MAX_POSITION_ITERATIONS) {
+      console.error('[PaperTrading] Maximum position iterations reached, stopping to prevent infinite loop');
+      break;
+    }
+    
     try {
       // Check SL and TP levels using ICT strategy
       const { hitSL, hitTPs, nextTPLevel } = checkStopLevels(position, currentPrice);
