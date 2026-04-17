@@ -242,6 +242,18 @@ export function calculateUnrealizedPnL(position, currentPrice) {
 }
 
 /**
+ * Safe price comparison to handle floating point precision issues
+ */
+function safePriceComparison(currentPrice, targetPrice, side) {
+  const epsilon = 0.001; // Small epsilon for floating point comparison
+  if (side === 'long') {
+    return currentPrice >= (targetPrice - epsilon);
+  } else {
+    return currentPrice <= (targetPrice + epsilon);
+  }
+}
+
+/**
  * Check if position hit SL or any TP levels using ICT strategy
  */
 export function checkStopLevels(position, currentPrice) {
@@ -271,20 +283,41 @@ export function checkStopLevels(position, currentPrice) {
     }
     const tpHitCount = position.tp_hit_count || 0;
     
+    console.log(`[PaperTrading] Checking TP levels for position ${position.position_id}:`, {
+      side: position.side,
+      entry_price: position.entry_price,
+      current_price: currentPrice,
+      tp_levels: tpLevels,
+      tp_hit_count: tpHitCount,
+      expected_rr: position.expected_rr,
+      precision_debug: {
+        entry_price_rounded: parseFloat(position.entry_price.toFixed(8)),
+        current_price_rounded: parseFloat(currentPrice.toFixed(8)),
+        tp3_rounded: parseFloat(tpLevels[2].toFixed(8)),
+        price_difference: parseFloat((currentPrice - tpLevels[2]).toFixed(8))
+      }
+    });
+    
     for (let i = tpHitCount; i < tpLevels.length; i++) {
       const tpLevel = tpLevels[i];
       let hitTP = false;
       
-      if (position.side === 'long') {
-        hitTP = currentPrice >= tpLevel;
-      } else {
-        hitTP = currentPrice <= tpLevel;
-      }
+      hitTP = safePriceComparison(currentPrice, tpLevel, position.side);
+      
+      console.log(`[PaperTrading] TP Level ${i + 1} check:`, {
+        tp_level_price: tpLevel,
+        current_price: currentPrice,
+        side: position.side,
+        hitTP: hitTP,
+        comparison: position.side === 'long' ? `${currentPrice} >= ${tpLevel}` : `${currentPrice} <= ${tpLevel}`
+      });
       
       if (hitTP) {
         hitTPs.push({ level: i + 1, price: tpLevel });
+        console.log(`[PaperTrading] TP Level ${i + 1} HIT at price ${tpLevel}`);
       } else {
         nextTPLevel = { level: i + 1, price: tpLevel };
+        console.log(`[PaperTrading] TP Level ${i + 1} NOT HIT, next target: ${tpLevel}`);
         break; // Found next unhit TP level
       }
     }
