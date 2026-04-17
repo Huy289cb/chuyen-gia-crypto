@@ -9,6 +9,27 @@ const FALLBACK_MODEL = 'llama3-8b-8192';
 let lastCallTime = 0;
 const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
 
+// Fetch with timeout to prevent hanging in production
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
 class GroqClient {
   constructor(apiKey) {
     this.apiKey = apiKey;
@@ -52,14 +73,14 @@ class GroqClient {
       try {
         console.log(`[GroqClient] Attempt ${attempt + 1}/${maxRetries + 1}`);
         
-        const response = await fetch(this.baseUrl, {
+        const response = await fetchWithTimeout(this.baseUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(requestBody)
-        });
+        }, 30000); // 30s timeout for Groq API
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -116,11 +137,11 @@ class GroqClient {
    */
   async validateKey() {
     try {
-      const response = await fetch('https://api.groq.com/openai/v1/models', {
+      const response = await fetchWithTimeout('https://api.groq.com/openai/v1/models', {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`
         }
-      });
+      }, 10000); // 10s timeout for validation
       return response.ok;
     } catch {
       return false;

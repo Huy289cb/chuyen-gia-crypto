@@ -99,17 +99,29 @@ export async function fetchPrices(db = null) {
           const ethOHLC = await fetchOHLCFromBinance('ETHUSDT', '15m', 672);
           
           if (btcOHLC.length > 0) {
+            let savedCount = 0;
             for (const candle of btcOHLC) {
-              await saveOHLCCandleWithTimeframe(db, 'BTC', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              try {
+                await saveOHLCCandleWithTimeframe(db, 'BTC', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+                savedCount++;
+              } catch (saveError) {
+                console.error(`[PriceFetcher] Failed to save BTC candle at ${candle.timestamp}:`, saveError.message);
+              }
             }
-            console.log(`[PriceFetcher] Saved ${btcOHLC.length} BTC OHLC candles (15m) from Binance`);
+            console.log(`[PriceFetcher] Saved ${savedCount}/${btcOHLC.length} BTC OHLC candles (15m) from Binance`);
           }
           
           if (ethOHLC.length > 0) {
+            let savedCount = 0;
             for (const candle of ethOHLC) {
-              await saveOHLCCandleWithTimeframe(db, 'ETH', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              try {
+                await saveOHLCCandleWithTimeframe(db, 'ETH', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+                savedCount++;
+              } catch (saveError) {
+                console.error(`[PriceFetcher] Failed to save ETH candle at ${candle.timestamp}:`, saveError.message);
+              }
             }
-            console.log(`[PriceFetcher] Saved ${ethOHLC.length} ETH OHLC candles (15m) from Binance`);
+            console.log(`[PriceFetcher] Saved ${savedCount}/${ethOHLC.length} ETH OHLC candles (15m) from Binance`);
           }
           
           // Save latest prices
@@ -214,15 +226,29 @@ async function fetchWithFallback(db) {
         const ethOHLC = await fetchOHLCFromBinance('ETHUSDT', '15m', 672);
         
         if (btcOHLC.length > 0) {
+          let savedCount = 0;
           for (const candle of btcOHLC) {
-            await saveOHLCCandleWithTimeframe(db, 'BTC', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+            try {
+              await saveOHLCCandleWithTimeframe(db, 'BTC', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              savedCount++;
+            } catch (saveError) {
+              console.error(`[PriceFetcher] Failed to save BTC candle at ${candle.timestamp}:`, saveError.message);
+            }
           }
+          console.log(`[PriceFetcher] Saved ${savedCount}/${btcOHLC.length} BTC OHLC candles from Binance`);
         }
         
         if (ethOHLC.length > 0) {
+          let savedCount = 0;
           for (const candle of ethOHLC) {
-            await saveOHLCCandleWithTimeframe(db, 'ETH', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+            try {
+              await saveOHLCCandleWithTimeframe(db, 'ETH', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              savedCount++;
+            } catch (saveError) {
+              console.error(`[PriceFetcher] Failed to save ETH candle at ${candle.timestamp}:`, saveError.message);
+            }
           }
+          console.log(`[PriceFetcher] Saved ${savedCount}/${ethOHLC.length} ETH OHLC candles from Binance`);
         }
         
         // Save latest prices

@@ -60,10 +60,15 @@ export async function checkPredictionReversal(db, newAnalysis, symbol = 'BTC') {
       if (isReversal) {
         console.log(`[PredictionReversal] Detected reversal for ${symbol}: position=${positionBias}, new_analysis=${newBias} (${newConfidence.toFixed(0)}% confidence)`);
         
-        // Get current price for closure
-        const { fetchRealTimePrices } = await import('../price-fetcher.js');
-        const priceData = await fetchRealTimePrices();
-        const currentPrice = priceData[symbol.toLowerCase()]?.price || position.current_price;
+        // Get current price for closure with error handling
+        let currentPrice = position.current_price;
+        try {
+          const { fetchRealTimePrices } = await import('../price-fetcher.js');
+          const priceData = await fetchRealTimePrices();
+          currentPrice = priceData[symbol.toLowerCase()]?.price || position.current_price;
+        } catch (priceError) {
+          console.error(`[PredictionReversal] Failed to fetch current price, using position.current_price:`, priceError.message);
+        }
         
         // Close position due to prediction reversal
         const closeResult = await closePosition(db, position, currentPrice, 'prediction_reversal');

@@ -46,13 +46,17 @@ export async function startScheduler() {
   // Initialize database
   await initDb();
   
-  // Run immediately on startup
-  runAnalysisJob();
+  // Run immediately on startup (fire and forget with error handling)
+  runAnalysisJob().catch(err => {
+    console.error('[Scheduler] Initial job failed:', err.message);
+  });
   
   // Schedule: every 15 minutes
   cron.schedule('*/15 * * * *', () => {
     console.log('[Scheduler] Triggering scheduled analysis...');
-    runAnalysisJob();
+    runAnalysisJob().catch(err => {
+      console.error('[Scheduler] Scheduled job failed:', err.message);
+    });
   });
   
   // Validate expired predictions every hour (only if db enabled)
@@ -115,17 +119,29 @@ async function runAnalysisJob() {
         const ethOHLC = await fetchOHLCFromBinance('ETHUSDT', '15m', 672);
         
         if (btcOHLC.length > 0) {
+          let savedCount = 0;
           for (const candle of btcOHLC) {
-            await saveOHLCCandleWithTimeframe(db, 'BTC', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+            try {
+              await saveOHLCCandleWithTimeframe(db, 'BTC', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              savedCount++;
+            } catch (saveError) {
+              console.error(`[Scheduler] Failed to save BTC candle at ${candle.timestamp}:`, saveError.message);
+            }
           }
-          console.log(`[Scheduler] Saved ${btcOHLC.length} BTC OHLC candles (15m) from Binance`);
+          console.log(`[Scheduler] Saved ${savedCount}/${btcOHLC.length} BTC OHLC candles (15m) from Binance`);
         }
         
         if (ethOHLC.length > 0) {
+          let savedCount = 0;
           for (const candle of ethOHLC) {
-            await saveOHLCCandleWithTimeframe(db, 'ETH', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+            try {
+              await saveOHLCCandleWithTimeframe(db, 'ETH', candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume, '15m');
+              savedCount++;
+            } catch (saveError) {
+              console.error(`[Scheduler] Failed to save ETH candle at ${candle.timestamp}:`, saveError.message);
+            }
           }
-          console.log(`[Scheduler] Saved ${ethOHLC.length} ETH OHLC candles (15m) from Binance`);
+          console.log(`[Scheduler] Saved ${savedCount}/${ethOHLC.length} ETH OHLC candles (15m) from Binance`);
         }
         
         // Save latest prices
