@@ -63,9 +63,9 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
               return [analysisData as PredictionWithAnalysis];
             }
             
-            // Only show 4h timeframe predictions
+            // Only show 1h timeframe predictions
             return analysis.predictions
-              .filter((p: any) => p.timeframe === '4h')
+              .filter((p: any) => p.timeframe === '1h')
               .map((pred: any) => ({
                 ...analysisData,
                 ...pred,
@@ -112,7 +112,7 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
       <section className="mb-8">
         <CardHeader 
           title="Prediction Timeline" 
-          subtitle="4H timeframe predictions"
+          subtitle="1H timeframe predictions"
           icon={<Brain className="w-5 h-5" />}
         />
         <Card className="mt-4">
@@ -128,7 +128,7 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
     <section className="mb-8">
       <CardHeader 
         title="Prediction Timeline"
-        subtitle={`${symbol} 4H timeframe predictions & outcomes`}
+        subtitle={`${symbol} 1H timeframe predictions & outcomes`}
         icon={<Brain className="w-5 h-5" />}
       />
       

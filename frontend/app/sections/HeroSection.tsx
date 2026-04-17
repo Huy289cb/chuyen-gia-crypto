@@ -40,7 +40,7 @@ export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis, showEt
       <div>
         <CardHeader 
           title="Price Analysis" 
-          subtitle="4H candlestick with prediction levels"
+          subtitle="1H candlestick with prediction levels"
           icon={<BarChart3 className="w-5 h-5" />}
         />
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">

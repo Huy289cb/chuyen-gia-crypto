@@ -40,7 +40,7 @@ export function PriceChartContainer({
   const [data, setData] = useState<OHLCData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<TimeFrame>('4h');
+  const [timeframe, setTimeframe] = useState<TimeFrame>('1h');
 
   useEffect(() => {
     const fetchOHLC = async () => {
