@@ -300,6 +300,53 @@ Positions can have the following statuses:
 - **API Limitations**: Analysis runs every 15 minutes due to free Groq API limits.
 - **Data Freshness**: Price updates every 30 seconds for position monitoring.
 
+## Position Opening Logic (Updated 17/04/2026)
+
+### Critical Rule: Price Must Reach Entry Level
+
+**IMPORTANT**: All positions can only be opened when the market price actually reaches the suggested entry price level. This is a fundamental trading rule that ensures realistic execution.
+
+### Implementation Details
+
+1. **Limit Order Only Strategy**
+   - All trading suggestions are converted to limit orders
+   - No immediate market order execution is allowed
+   - Positions wait in "pending" status until price reaches entry
+
+2. **Price Monitoring System**
+   - Price updates every 30 seconds
+   - Automatic execution when price hits entry level
+   - Full SL/TP management once position is opened
+
+3. **Order Creation Process**
+   ```
+   AI Analysis Entry Price: $74,000
+   Current Market Price: $73,500
+   Action: Create pending limit order at $74,000
+   Status: Wait for price to reach $74,000
+   Execution: Automatic when price hits $74,000
+   ```
+
+4. **Price Difference Tracking**
+   - System logs price difference percentages
+   - Example: "Entry $74,000 vs current $73,500 (0.68% away)"
+   - Helps monitor how close price is to entry level
+
+### Why This Matters
+
+- **Realistic Trading**: Real brokers only execute at actual market prices
+- **Risk Management**: Prevents positions at unfavorable prices
+- **Strategy Integrity**: Ensures AI suggestions are executed at intended levels
+- **Performance Accuracy**: True reflection of strategy performance
+
+### Monitoring
+
+Check backend logs for:
+```
+[AutoEntry] Limit order created: entry=74000.00, current=73500.00, diff=0.68%
+[PriceScheduler] BTC limit order executed: side=long @ $74000.00
+```
+
 ## Configuration (Updated 17/04/2026)
 
 Key configuration options in `.env`:

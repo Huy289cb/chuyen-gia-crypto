@@ -157,27 +157,16 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     return decision;
   }
 
-  // Check if entry price is far from current price (limit order vs market order)
+  // ALL positions should only open when price reaches the suggested entry level
   const currentPrice = analysis.current_price || 0;
   const suggestedEntry = decision.suggestedPosition.entry_price;
   const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
   
-  // If entry is more than 0.5% away from current price, treat as limit order (pending)
-  if (priceDiff > 0.005) {
-    decision.orderType = 'limit'; // Will create pending order
-    decision.reason += ` | Limit order: entry ${suggestedEntry.toFixed(2)} vs current ${currentPrice.toFixed(2)} (${(priceDiff * 100).toFixed(2)}% away)`;
-    // For limit orders, keep the suggested entry (waiting for price to hit)
-  } else {
-    decision.orderType = 'market'; // Execute immediately
-    decision.reason += ` | Market order: entry at current price ${currentPrice.toFixed(2)} (suggested was ${suggestedEntry.toFixed(2)})`;
-    // CRITICAL FIX: For market orders, entry price must be current market price, not suggested!
-    const originalEntry = decision.suggestedPosition.entry_price;
-    decision.suggestedPosition.entry_price = currentPrice;
-    // Recalculate size based on new entry price
-    const newSizeUsd = decision.suggestedPosition.size_qty * currentPrice;
-    decision.suggestedPosition.size_usd = newSizeUsd;
-    console.log(`[AutoEntry] Market order adjusted: original_entry=${originalEntry}, current_price=${currentPrice}, new_entry=${decision.suggestedPosition.entry_price}, size_usd=${newSizeUsd.toFixed(2)}`);
-  }
+  // Always treat as limit order - wait for price to reach entry level
+  decision.orderType = 'limit'; // Will create pending order
+  decision.reason += ` | Limit order: waiting for price to reach entry ${suggestedEntry.toFixed(2)} (current: ${currentPrice.toFixed(2)}, ${(priceDiff * 100).toFixed(2)}% away)`;
+  // For limit orders, keep the suggested entry (waiting for price to hit)
+  console.log(`[AutoEntry] Limit order created: entry=${suggestedEntry.toFixed(2)}, current=${currentPrice.toFixed(2)}, diff=${(priceDiff * 100).toFixed(2)}%`);
 
   return decision;
 }

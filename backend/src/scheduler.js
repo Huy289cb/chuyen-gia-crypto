@@ -195,19 +195,13 @@ async function runAnalysisJob() {
             const { createPendingOrder } = await import('./db/database.js');
             const { randomUUID } = await import('crypto');
             
-            if (btcDecision.orderType === 'market') {
-              // Execute market order immediately with linked prediction
-              const position = btcDecision.suggestedPosition;
-              console.log(`[Scheduler] BTC market order BEFORE execution: side=${position.side}, entry=${position.entry_price}, current_price=${analysis.btc.current_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
-              await openPosition(db, btcAccount, position, btcPredictionId);
-              console.log(`[Scheduler] BTC market order executed: side=${position.side}, entry=${position.entry_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
-            } else {
-              // Create limit order (pending)
-              const position = btcDecision.suggestedPosition;
-              await createPendingOrder(db, {
-                order_id: randomUUID(),
-                account_id: btcAccount.id,
-                symbol: 'BTC',
+            // All orders are now limit orders - create pending order and wait for price to reach entry
+            const position = btcDecision.suggestedPosition;
+            console.log(`[Scheduler] BTC limit order created: side=${position.side}, entry=${position.entry_price}, current_price=${analysis.btc.current_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
+            await createPendingOrder(db, {
+              order_id: randomUUID(),
+              account_id: btcAccount.id,
+              symbol: 'BTC',
                 side: position.side,
                 entry_price: position.entry_price,
                 stop_loss: position.stop_loss,
@@ -221,7 +215,6 @@ async function runAnalysisJob() {
                 invalidation_level: position.invalidation_level
               });
               console.log(`[Scheduler] BTC limit order created (pending): entry ${position.entry_price}`);
-            }
           } catch (posError) {
             console.error(`[Scheduler] Failed to process BTC order:`, posError.message);
           }
@@ -239,32 +232,26 @@ async function runAnalysisJob() {
             const { createPendingOrder } = await import('./db/database.js');
             const { randomUUID } = await import('crypto');
             
-            if (ethDecision.orderType === 'market') {
-              // Execute market order immediately with linked prediction
-              const position = ethDecision.suggestedPosition;
-              await openPosition(db, ethAccount, position, ethPredictionId);
-              console.log(`[Scheduler] ETH market order executed: side=${position.side}, entry=${position.entry_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
-            } else {
-              // Create limit order (pending)
-              const position = ethDecision.suggestedPosition;
-              await createPendingOrder(db, {
-                order_id: randomUUID(),
-                account_id: ethAccount.id,
-                symbol: 'ETH',
-                side: position.side,
-                entry_price: position.entry_price,
-                stop_loss: position.stop_loss,
-                take_profit: position.take_profit,
-                size_usd: position.size_usd,
-                size_qty: position.size_qty,
-                risk_usd: position.risk_usd,
-                risk_percent: position.risk_percent,
-                expected_rr: position.expected_rr,
-                linked_prediction_id: ethPredictionId,
-                invalidation_level: position.invalidation_level
-              });
-              console.log(`[Scheduler] ETH limit order created (pending): entry ${position.entry_price}`);
-            }
+            // All orders are now limit orders - create pending order and wait for price to reach entry
+            const position = ethDecision.suggestedPosition;
+            console.log(`[Scheduler] ETH limit order created: side=${position.side}, entry=${position.entry_price}, current_price=${analysis.eth.current_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
+            await createPendingOrder(db, {
+              order_id: randomUUID(),
+              account_id: ethAccount.id,
+              symbol: 'ETH',
+              side: position.side,
+              entry_price: position.entry_price,
+              stop_loss: position.stop_loss,
+              take_profit: position.take_profit,
+              size_usd: position.size_usd,
+              size_qty: position.size_qty,
+              risk_usd: position.risk_usd,
+              risk_percent: position.risk_percent,
+              expected_rr: position.expected_rr,
+              linked_prediction_id: ethPredictionId,
+              invalidation_level: position.invalidation_level
+            });
+            console.log(`[Scheduler] ETH limit order created (pending): entry ${position.entry_price}`);
           } catch (posError) {
             console.error(`[Scheduler] Failed to process ETH order:`, posError.message);
           }
