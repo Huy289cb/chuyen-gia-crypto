@@ -56,7 +56,9 @@ export async function initDatabase() {
             market_sentiment TEXT,
             disclaimer TEXT
           )
-        `);
+        `, (err) => {
+          if (err) console.error('[Database] Error creating analysis_history table:', err.message);
+        });
         
         // Predictions - stores individual timeframe predictions
         db.run(`
@@ -87,7 +89,9 @@ export async function initDatabase() {
             model_version TEXT DEFAULT '1.0',
             FOREIGN KEY (analysis_id) REFERENCES analysis_history(id)
           )
-        `);
+        `, (err) => {
+          if (err) console.error('[Database] Error creating predictions table:', err.message);
+        });
         
         // Key levels - stores ICT key levels for each analysis
         db.run(`
@@ -100,7 +104,9 @@ export async function initDatabase() {
             price_levels TEXT,
             FOREIGN KEY (analysis_id) REFERENCES analysis_history(id)
           )
-        `);
+        `, (err) => {
+          if (err) console.error('[Database] Error creating key_levels table:', err.message);
+        });
         
         // OHLCV candles - stores 15-minute candles (primary data source)
         db.run(`
@@ -116,7 +122,9 @@ export async function initDatabase() {
             timeframe TEXT DEFAULT '15m',
             UNIQUE(coin, timestamp, timeframe)
           )
-        `);
+        `, (err) => {
+          if (err) console.error('[Database] Error creating ohlcv_candles table:', err.message);
+        });
         
         // Latest prices - stores most recent price for quick access
         db.run(`
@@ -129,7 +137,9 @@ export async function initDatabase() {
             volume_24h REAL,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
           )
-        `);
+        `, (err) => {
+          if (err) console.error('[Database] Error creating latest_prices table:', err.message);
+        });
         
         // Price history - stores actual prices for validation (legacy, kept for compatibility)
         db.run(`
@@ -139,14 +149,26 @@ export async function initDatabase() {
             price REAL NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
           )
-        `);
+        `, (err) => {
+          if (err) console.error('[Database] Error creating price_history table:', err.message);
+        });
         
         // Create indexes for performance
-        db.run(`CREATE INDEX IF NOT EXISTS idx_ohlcv_coin_time ON ohlcv_candles(coin, timestamp)`);
-        db.run(`CREATE INDEX IF NOT EXISTS idx_ohlcv_timeframe ON ohlcv_candles(coin, timeframe, timestamp)`);
-        db.run(`CREATE INDEX IF NOT EXISTS idx_predictions_analysis ON predictions(analysis_id)`);
-        db.run(`CREATE INDEX IF NOT EXISTS idx_predictions_coin_time ON predictions(coin, predicted_at)`);
-        db.run(`CREATE INDEX IF NOT EXISTS idx_price_history_coin_time ON price_history(coin, timestamp)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_ohlcv_coin_time ON ohlcv_candles(coin, timestamp)`, (err) => {
+          if (err) console.error('[Database] Error creating idx_ohlcv_coin_time index:', err.message);
+        });
+        db.run(`CREATE INDEX IF NOT EXISTS idx_ohlcv_timeframe ON ohlcv_candles(coin, timeframe, timestamp)`, (err) => {
+          if (err) console.error('[Database] Error creating idx_ohlcv_timeframe index:', err.message);
+        });
+        db.run(`CREATE INDEX IF NOT EXISTS idx_predictions_analysis ON predictions(analysis_id)`, (err) => {
+          if (err) console.error('[Database] Error creating idx_predictions_analysis index:', err.message);
+        });
+        db.run(`CREATE INDEX IF NOT EXISTS idx_predictions_coin_time ON predictions(coin, predicted_at)`, (err) => {
+          if (err) console.error('[Database] Error creating idx_predictions_coin_time index:', err.message);
+        });
+        db.run(`CREATE INDEX IF NOT EXISTS idx_price_history_coin_time ON price_history(coin, timestamp)`, (err) => {
+          if (err) console.error('[Database] Error creating idx_price_history_coin_time index:', err.message);
+        });
         
         console.log('[Database] Tables initialized successfully');
         resolve(db);
@@ -210,10 +232,10 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
               const predictionId = await new Promise((res, rej) => {
                 db.run(
                   `INSERT INTO predictions 
-                   (analysis_id, coin, timeframe, direction, target_price, confidence, expires_at, 
+                   (analysis_id, coin, timeframe, direction, target_price, confidence, predicted_at, expires_at, 
                     suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr, 
                     invalidation_level, reason_summary, model_version)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                   [
                     analysisId,
                     coin.toUpperCase(),
@@ -221,6 +243,7 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
                     pred.direction || 'neutral',
                     pred.target || 0,
                     pred.confidence || 0,
+                    new Date().toISOString(),
                     expiresAt.toISOString(),
                     coinData.suggested_entry || null,
                     coinData.suggested_stop_loss || null,
