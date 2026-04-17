@@ -5,6 +5,16 @@ import sqlite3 from 'sqlite3';
  * Run all migrations to add paper trading tables
  */
 export async function runMigrations(db) {
+  // Helper for Promise.all with timeout
+  const promiseAllWithTimeout = (promises, timeoutMs = 30000) => {
+    return Promise.race([
+      Promise.all(promises),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Promise.all timeout after ${timeoutMs}ms`)), timeoutMs)
+      )
+    ]);
+  };
+
   return new Promise((resolve, reject) => {
     db.serialize(() => {
       // Migration 1: Create accounts table
@@ -258,12 +268,15 @@ function runMigration5(db, resolve, reject) {
       'realized_pnl', 'realized_pnl_percent', 'close_reason'
     ];
     
-    Promise.all(missingColumnsToAdd.map(col => addMissingColumn(col)))
+    promiseAllWithTimeout(missingColumnsToAdd.map(col => addMissingColumn(col)), 30000)
       .then(() => {
         console.log('[Migration] Updated pending_orders table from 19 to 21 columns');
         resolve();
       })
-      .catch(reject);
+      .catch((err) => {
+        console.error('[Migration] Error adding columns:', err.message);
+        reject(err);
+      });
   });
 }
   db.all("PRAGMA table_info(predictions)", (err, columns) => {

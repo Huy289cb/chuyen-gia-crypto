@@ -5,6 +5,16 @@ import { mkdir } from 'fs/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Helper for Promise.all with timeout to prevent hanging
+const promiseAllWithTimeout = (promises, timeoutMs = 30000) => {
+  return Promise.race([
+    Promise.all(promises),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Promise.all timeout after ${timeoutMs}ms`)), timeoutMs)
+    )
+  ]);
+};
+
 // Use absolute path and ensure directory exists
 const DATA_DIR = join(__dirname, '../../data');
 const DB_PATH = join(DATA_DIR, 'predictions.db');
@@ -247,8 +257,8 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
           [coin.toUpperCase(), currentPrice]
         );
         
-        // Wait for async operations to complete
-        Promise.all([savePredictions(), saveKeyLevels()])
+        // Wait for async operations to complete with timeout
+        promiseAllWithTimeout([savePredictions(), saveKeyLevels()], 30000)
           .then(() => {
             console.log(`[Database] Saved analysis #${analysisId} for ${coin}`);
             resolve({ analysisId, predictionIds });
@@ -485,8 +495,8 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50) {
           };
         });
         
-        // Wait for all validations to complete
-        await Promise.all(promises);
+        // Wait for all validations to complete with timeout
+        await promiseAllWithTimeout(promises, 60000); // 60s timeout for validations
         
         resolve(results);
       }

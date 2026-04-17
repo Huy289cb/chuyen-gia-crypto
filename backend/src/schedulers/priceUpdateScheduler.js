@@ -37,12 +37,16 @@ export async function initPriceUpdateScheduler(database, enabled) {
   console.log('[PriceScheduler] Initializing 30-second price update scheduler...');
   
   // Run immediately on startup
-  runPriceUpdateJob();
+  runPriceUpdateJob().catch(err => {
+    console.error('[PriceScheduler] Initial job failed:', err.message);
+  });
   
   // Schedule: every 30 seconds
   cron.schedule('*/30 * * * * *', () => {
     if (!isRunning) {
-      runPriceUpdateJob();
+      runPriceUpdateJob().catch(err => {
+        console.error('[PriceScheduler] Scheduled job failed:', err.message);
+      });
     } else {
       console.log('[PriceScheduler] Previous job still running, skipping this cycle');
     }
@@ -51,7 +55,9 @@ export async function initPriceUpdateScheduler(database, enabled) {
   // Schedule: account snapshot every 5 minutes
   cron.schedule('0 */5 * * * *', () => {
     if (dbEnabled && db) {
-      runAccountSnapshotJob();
+      runAccountSnapshotJob().catch(err => {
+        console.error('[PriceScheduler] Snapshot job failed:', err.message);
+      });
     }
   });
   
