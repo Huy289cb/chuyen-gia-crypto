@@ -24,6 +24,19 @@ function formatVietnamTime(date) {
 // Initialize database on startup (optional)
 async function initDb() {
   try {
+    // Check if sqlite3 is available
+    let sqlite3;
+    try {
+      sqlite3 = await import('sqlite3');
+      console.log('[Scheduler] sqlite3 module is available');
+    } catch (importError) {
+      console.error('[Scheduler] sqlite3 module not found:', importError.message);
+      console.log('[Scheduler] Running without database persistence');
+      db = null;
+      dbEnabled = false;
+      return;
+    }
+
     // Dynamically import to avoid startup failure if sqlite3 not installed
     const { initDatabase } = await import('./db/database.js');
     const { runMigrations } = await import('./db/migrations.js');
@@ -32,7 +45,8 @@ async function initDb() {
     dbEnabled = true;
     console.log('[Scheduler] Database initialized and migrations run');
   } catch (error) {
-    console.log('[Scheduler] Database not available:', error.message);
+    console.error('[Scheduler] Database initialization failed:', error.message);
+    console.error('[Scheduler] Error stack:', error.stack);
     console.log('[Scheduler] Running without database persistence');
     db = null;
     dbEnabled = false;
