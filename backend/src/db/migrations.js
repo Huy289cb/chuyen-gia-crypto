@@ -179,13 +179,18 @@ export async function runMigrations(db) {
           risk_usd REAL NOT NULL,
           risk_percent REAL NOT NULL,
           expected_rr REAL NOT NULL,
+          linked_prediction_id INTEGER,
+          invalidation_level REAL,
           status TEXT NOT NULL DEFAULT 'pending',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           executed_at DATETIME,
-          linked_prediction_id INTEGER,
-          invalidation_level REAL,
-          FOREIGN KEY (account_id) REFERENCES accounts(id),
-          FOREIGN KEY (linked_prediction_id) REFERENCES predictions(id)
+          executed_price REAL,
+          executed_size_qty REAL,
+          executed_size_usd REAL,
+          realized_pnl REAL,
+          realized_pnl_percent REAL,
+          close_reason TEXT
+        )  FOREIGN KEY (linked_prediction_id) REFERENCES predictions(id)
         )
       `, (err) => {
         if (err) {
@@ -196,7 +201,10 @@ export async function runMigrations(db) {
         console.log('[Migration] Pending orders table created/verified');
 
         // Migration 5: Add columns to predictions table (after pending_orders is created)
-        runMigration5(db, resolve, reject);
+      runMigration5(db, resolve, reject);
+      
+      // Migration 6: Update pending_orders table schema from 19 to 21 columns
+      runMigration6(db, resolve, reject);
       });
     });
   });
@@ -206,6 +214,58 @@ export async function runMigrations(db) {
  * Migration 5: Add columns to predictions table
  */
 function runMigration5(db, resolve, reject) {
+  db.all("PRAGMA table_info(pending_orders)", (err, columns) => {
+    if (err) {
+      console.error('[Migration] Error checking pending_orders table:', err.message);
+      reject(err);
+      return;
+    }
+    
+    // Check if we need to add the missing columns
+    const currentColumns = columns.map(col => col.name);
+    const requiredColumns = [
+      'id', 'order_id', 'account_id', 'symbol', 'side', 'entry_price', 
+      'stop_loss', 'take_profit', 'size_usd', 'size_qty', 'risk_usd', 
+      'risk_percent', 'expected_rr', 'linked_prediction_id', 'invalidation_level', 
+      'status', 'created_at'
+    ];
+    
+    const missingColumns = requiredColumns.filter(col => !currentColumns.includes(col));
+    
+    if (missingColumns.length === 0) {
+      console.log('[Migration] pending_orders table schema already up to date');
+      resolve();
+      return;
+    }
+    
+    // Add missing columns
+    const addMissingColumn = (columnName) => {
+      return new Promise((resolve, reject) => {
+        db.run(`ALTER TABLE pending_orders ADD COLUMN ${columnName} REAL`, (err) => {
+          if (err && !err.message.includes('duplicate column name')) {
+            console.error(`[Migration] Error adding ${columnName} column:`, err.message);
+          } else {
+            console.log(`[Migration] Added ${columnName} column to pending_orders`);
+          }
+          resolve();
+        });
+      });
+    };
+    
+    // Add the missing columns in sequence
+    const missingColumnsToAdd = [
+      'executed_at', 'executed_price', 'executed_size_qty', 'executed_size_usd', 
+      'realized_pnl', 'realized_pnl_percent', 'close_reason'
+    ];
+    
+    Promise.all(missingColumnsToAdd.map(col => addMissingColumn(col)))
+      .then(() => {
+        console.log('[Migration] Updated pending_orders table from 19 to 21 columns');
+        resolve();
+      })
+      .catch(reject);
+  });
+}
   db.all("PRAGMA table_info(predictions)", (err, columns) => {
     if (err) {
       console.error('[Migration] Error checking predictions table:', err.message);
@@ -277,7 +337,6 @@ function runMigration5(db, resolve, reject) {
       });
     }
   });
-}
 
 // Migration 6: Add current_price column to positions table
 function runMigration6(db, resolve, reject) {

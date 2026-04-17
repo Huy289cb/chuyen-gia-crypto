@@ -1527,8 +1527,9 @@ export async function createPendingOrder(db, orderData) {
       `INSERT INTO pending_orders 
        (order_id, account_id, symbol, side, entry_price, stop_loss, take_profit, 
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
-        linked_prediction_id, invalidation_level, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        linked_prediction_id, invalidation_level, status, created_at, executed_at, 
+        executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
@@ -1543,7 +1544,16 @@ export async function createPendingOrder(db, orderData) {
         risk_percent,
         expected_rr,
         linked_prediction_id,
-        invalidation_level
+        invalidation_level,
+        'pending',
+        new Date().toISOString(), // created_at
+        null, // executed_at
+        null, // executed_price
+        null, // executed_size_qty
+        null, // executed_size_usd
+        null, // realized_pnl
+        null, // realized_pnl_percent
+        null  // close_reason
       ],
       function(err) {
         if (err) {
