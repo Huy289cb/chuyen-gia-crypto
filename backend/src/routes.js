@@ -11,6 +11,19 @@ let dbEnabled = false;
 // Initialize database connection (optional)
 export async function initDb() {
   try {
+    // Check if sqlite3 is available
+    let sqlite3;
+    try {
+      sqlite3 = await import('sqlite3');
+      console.log('[Routes] sqlite3 module is available');
+    } catch (importError) {
+      console.error('[Routes] sqlite3 module not found:', importError.message);
+      console.log('[Routes] Running without database persistence');
+      db = null;
+      dbEnabled = false;
+      return { db, dbEnabled };
+    }
+
     const { initDatabase } = await import('./db/database.js');
     const { runMigrations } = await import('./db/migrations.js');
     db = await initDatabase();
@@ -18,7 +31,9 @@ export async function initDb() {
     dbEnabled = true;
     console.log('[Routes] Database connected and migrations run');
   } catch (error) {
-    console.log('[Routes] Database not available:', error.message);
+    console.error('[Routes] Database initialization failed:', error.message);
+    console.error('[Routes] Error stack:', error.stack);
+    console.log('[Routes] Running without database persistence');
     db = null;
     dbEnabled = false;
   }
