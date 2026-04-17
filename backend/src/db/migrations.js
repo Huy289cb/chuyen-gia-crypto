@@ -199,8 +199,8 @@ export async function runMigrations(db) {
           executed_size_usd REAL,
           realized_pnl REAL,
           realized_pnl_percent REAL,
-          close_reason TEXT
-        )  FOREIGN KEY (linked_prediction_id) REFERENCES predictions(id)
+          close_reason TEXT,
+          FOREIGN KEY (linked_prediction_id) REFERENCES predictions(id)
         )
       `, (err) => {
         if (err) {
