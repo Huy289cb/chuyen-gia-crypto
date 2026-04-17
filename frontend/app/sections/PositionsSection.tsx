@@ -13,7 +13,10 @@ interface PositionsSectionProps {
 }
 
 export function PositionsSection({ positions, onClosePosition }: PositionsSectionProps) {
-  if (positions.length === 0) {
+  // Filter out ETH positions - only show BTC positions
+  const btcPositions = positions.filter(position => position.symbol === 'BTC');
+  
+  if (btcPositions.length === 0) {
     return (
       <section className="mb-8">
         <CardHeader 
@@ -33,12 +36,12 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
   return (
     <section className="mb-8">
       <CardHeader 
-        title={`Open Positions (${positions.length})`}
+        title={`Open Positions (${btcPositions.length})`}
         icon={<Target className="w-5 h-5" />}
       />
       
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {positions.map(position => (
+        {btcPositions.map(position => (
           <PositionCard 
             key={position.id} 
             position={position} 

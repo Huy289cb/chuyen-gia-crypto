@@ -74,6 +74,7 @@ export default function Home() {
           ethData={prices?.eth}
           btcAnalysis={analysis?.btc}
           ethAnalysis={analysis?.eth}
+          showEthTrading={false} // Hide ETH trading information
         />
 
         {/* Paper Trading Dashboard */}

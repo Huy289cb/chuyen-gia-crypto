@@ -4,6 +4,13 @@
 
 The Crypto Trend Analyzer includes a comprehensive paper trading system for simulating trades on BTC and ETH without real money. This system uses ICT Smart Money Concepts analysis to automatically suggest and manage positions.
 
+> **IMPORTANT UPDATE (17/04/2026)**: Due to poor performance metrics (1/9 win rate), ETH trading has been **temporarily disabled** to focus on improving core BTC trading skills and achieving profitability before re-enabling multi-symbol trading.
+> 
+> **ADDITIONAL UPDATES (17/04/2026)**: 
+> - Changed main prediction timeframe from 4h+1d to **1h primary + 4h secondary**
+> - Increased max concurrent positions from 5 to **8**
+> - AI now analyzes open positions and can recommend early closure (>80% confidence)
+
 ## Features
 
 - **Auto-Entry Logic**: Automatically suggests positions when confidence >= 80% and ICT criteria are met
@@ -11,27 +18,39 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 - **Pending Orders System**: Automatically creates limit orders when entry price differs from current price
 - **Risk Management**: 1% risk per trade with risk-based position sizing
 - **Position Management**: Automatic Stop Loss (SL) and Take Profit (TP) monitoring
+- **Early Position Closure**: Automatic closure on prediction reversal (>80% confidence, opposite bias)
+- **AI Position Analysis**: AI evaluates open positions every 15 minutes and recommends closure (>80% confidence)
+- **AI Limit Order Analysis**: AI evaluates pending limit orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
-- **Account Management**: Separate 100U accounts for BTC and ETH
+- **Account Management**: 100U BTC account (ETH trading temporarily disabled)
 - **Cooldown System**: 4-hour cooldown after 3 consecutive losses
+- **Position Limits**: Maximum 8 concurrent BTC positions
+- **Trade History Pagination**: Paginated viewing of trade history (10 trades per page)
+- **Limit Order Management**: Automatic execution when price hits entry, manual cancellation available
 
 ## Account Structure
+
+**Current Status (17/04/2026)**:
+- **BTC Account**: 100 USDT starting balance, fully active
+- **ETH Account**: 100 USDT starting balance, trading temporarily disabled
+- **Focus**: BTC-only trading to improve core skills and achieve profitability
 
 Each cryptocurrency has its own paper trading account:
 - **Starting Balance**: 100 USDT
 - **Independent Tracking**: Separate equity, PnL, and performance metrics
 - **Auto-Initialization**: Accounts created automatically on first run
 
-## Auto-Entry Criteria
+## Auto-Entry Criteria (Updated 17/04/2026)
 
 A position is suggested when ALL of the following conditions are met:
 
-1. **Confidence >= 80%**: AI confidence score must be at least 80%
-2. **Clear Bias**: Bias must be bullish or bearish (not neutral)
-3. **Multi-Timeframe Alignment**: Majority of 4h and 1d timeframes must align with bias
-4. **Risk/Reward >= 2.0**: Expected R:R ratio must be at least 1:2
-5. **No Cooldown**: Account must not be in cooldown period
-6. **Max Positions**: No open positions for the symbol (max 1 per symbol)
+1. **Symbol Enablement**: Symbol must be in enabled list (currently only BTC)
+2. **Confidence >= 80%**: AI confidence score must be at least 80%
+3. **Clear Bias**: Bias must be bullish or bearish (not neutral)
+4. **Multi-Timeframe Alignment**: Majority of 1h and 4h timeframes must align with bias (1h primary)
+5. **Risk/Reward >= 2.0**: Expected R:R ratio must be at least 1:2
+6. **No Cooldown**: Account must not be in cooldown period
+7. **Position Limit**: Less than 8 concurrent BTC positions open
 
 ## Order Types
 
@@ -41,12 +60,15 @@ When AI suggests entry price within **0.5%** of current market price:
 - No waiting required
 - Best for high-confidence, immediate execution scenarios
 
-### Limit Orders (Pending Orders)
+### Limit Orders (Pending Orders) - Enhanced (17/04/2026)
 When AI suggests entry price **more than 0.5%** away from current price:
 - Order stored as **pending** and monitored every 30 seconds
 - **Long positions**: Executed when price drops to entry level
 - **Short positions**: Executed when price rises to entry level
 - Entry price validated to be within 10% of current price (realistic range)
+- **AI Analysis**: AI evaluates pending orders every 15 minutes and recommends keep/cancel (>80% confidence)
+- **Manual Cancellation**: Users can cancel pending orders via UI
+- **Frontend Display**: Dedicated Pending Orders section shows all active limit orders
 
 Example:
 - Current BTC price: $71,000
@@ -203,7 +225,7 @@ The system tracks the following metrics:
 - **Winning/Losing Trades**: Count of profitable and unprofitable trades
 - **Consecutive Losses**: Current loss streak
 
-## Position Status
+## Position Status (Updated 17/04/2026)
 
 Positions can have the following statuses:
 
@@ -212,7 +234,62 @@ Positions can have the following statuses:
 - `stopped`: Closed by hitting stop loss
 - `taken_profit`: Closed by hitting take profit
 - `closed_manual`: Closed manually by user
+- `closed_reversal`: Closed due to prediction reversal (new)
 - `expired`: Closed due to time expiration
+
+## Performance Optimization (17/04/2026)
+
+### Problem Identified
+- **Win Rate**: 1/9 (11%) - unsustainable with current R:R ratios
+- **Root Cause**: ETH trading contributing to poor performance, unlimited position accumulation, no early closure mechanism
+
+### Implemented Solutions
+
+#### 1. BTC-Only Focus
+- **ETH Trading**: Temporarily disabled to eliminate ETH-related losses
+- **Symbol Configuration**: `enabledSymbols: ['BTC']` in auto-entry logic
+- **Frontend**: ETH trading information hidden, price charts and predictions preserved
+
+#### 2. Position Management
+- **Position Limit**: Maximum 8 concurrent BTC positions (increased from 5)
+- **Entry Logic**: Each new prediction (>80% confidence) can open 1 position if total <8
+- **Validation**: Symbol enablement check at entry level
+- **Timeframe Priority**: 1h primary, 4h secondary (changed from 4h+1d)
+
+#### 3. Early Closure System
+- **Trigger**: New analysis with opposite bias AND confidence > 80%
+- **Frequency**: Runs every 15 minutes (when new analysis generated)
+- **Scope**: BTC positions only
+- **Close Reason**: `prediction_reversal` with proper status tracking
+
+#### 4. AI Position Analysis (New - 17/04/2026)
+- **Open Position Monitoring**: AI receives all open positions in analysis prompt
+- **Intelligent Decisions**: AI can recommend position closure, SL/TP adjustments
+- **Confidence Threshold**: Recommendations only if confidence > 80%
+- **Risk Assessment**: AI evaluates current PnL, risk %, and market conditions
+- **Integration**: Position decisions included in AI response JSON structure
+
+#### 5. AI Limit Order Analysis (New - 17/04/2026)
+- **Pending Order Monitoring**: AI receives all pending limit orders in analysis prompt
+- **Intelligent Decisions**: AI can recommend keep/cancel/modify limit orders
+- **Confidence Threshold**: Recommendations only if confidence > 80%
+- **Market Conditions**: AI evaluates if setup is still valid or market has changed
+- **Time Analysis**: AI considers how long orders have been waiting
+- **Integration**: Limit order decisions included in AI response JSON structure
+
+#### 6. UI Enhancements
+- **Trade History**: Pagination (10 trades per page) with BTC-only filtering
+- **Dashboard**: BTC-focused metrics display
+- **Performance**: Enhanced position limit indicators
+- **Pending Orders**: Dedicated section showing all active limit orders with cancellation capability
+
+### Expected Outcomes
+- **ETH Losses**: Eliminated to zero
+- **Position Management**: Better risk control with 8-position limit and 1h timeframe focus
+- **Early Loss Cutting**: Reduced losses through AI-driven position analysis and prediction reversal
+- **Limit Order Intelligence**: AI-powered limit order management to keep only valid setups
+- **Focus**: Improved BTC trading skills before multi-symbol expansion
+- **AI Intelligence**: Enhanced decision-making with open position and limit order analysis
 
 ## Important Notes
 
@@ -222,18 +299,48 @@ Positions can have the following statuses:
 - **API Limitations**: Analysis runs every 15 minutes due to free Groq API limits.
 - **Data Freshness**: Price updates every 30 seconds for position monitoring.
 
-## Configuration
+## Configuration (Updated 17/04/2026)
 
-Configuration is done via environment variables in `backend/.env`:
+Key configuration options in `.env`:
 
-```env
-RISK_PER_TRADE_PERCENT=1          # Risk percentage per trade
-MIN_CONFIDENCE_THRESHOLD=80       # Minimum confidence for auto-entry
-MIN_RR_RATIO=2                    # Minimum risk/reward ratio
-PRICE_UPDATE_INTERVAL=30          # Price update interval in seconds
-MAX_CONSECUTIVE_LOSSES=3          # Losses before cooldown
-COOLDOWN_HOURS=4                  # Cooldown duration in hours
+```bash
+# Paper Trading Configuration
+RISK_PER_TRADE_PERCENT=1
+MIN_CONFIDENCE_THRESHOLD=80
+MIN_RR_RATIO=2
+PRICE_UPDATE_INTERVAL=30
+MAX_CONSECUTIVE_LOSSES=3
+COOLDOWN_HOURS=4
+
+# Symbol Configuration (BTC-only trading - Updated 17/04/2026)
+ENABLED_SYMBOLS=BTC
+MAX_POSITIONS_PER_SYMBOL=8
+
+# Prediction Reversal Check (New - 17/04/2026)
+PREDICTION_REVERSAL_ENABLED=true
+PREDICTION_REVERSAL_CONFIDENCE=80
+
+# Session Timing (ICT: focus on high-liquidity sessions)
+ALLOWED_SESSIONS=london,ny_killzone
+
+# Partial Take Profits (ICT: take profits in stages)
+PARTIAL_TP_ENABLED=true
+PARTIAL_TP_RATIOS=0.5,0.5
+PARTIAL_TP_RR_LEVELS=1.0,2.0
+
+# Trailing Stop (ICT: move SL to breakeven after TP1)
+TRAILING_STOP_ENABLED=true
+TRAIL_AFTER_RR=1.0
+TRAIL_DISTANCE_PCT=0.5
 ```
+
+### New Configuration Variables (Updated 17/04/2026)
+
+- **ENABLED_SYMBOLS**: Controls which symbols can trade (currently BTC only)
+- **MAX_POSITIONS_PER_SYMBOL**: Maximum concurrent positions per symbol (8 for BTC, increased from 5)
+- **PREDICTION_REVERSAL_ENABLED**: Enable/disable early closure on prediction reversal
+- **PREDICTION_REVERSAL_CONFIDENCE**: Minimum confidence for reversal-triggered closure (80%)
+- **AI_POSITION_ANALYSIS**: AI analyzes open positions every 15 minutes for closure recommendations
 
 ## Future Enhancements
 

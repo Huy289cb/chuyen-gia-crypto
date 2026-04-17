@@ -13,6 +13,7 @@ interface CryptoCardProps {
   data?: PriceData;
   analysis?: Analysis;
   color: string;
+  showTradingInfo?: boolean; // Control visibility of trading-specific information
 }
 
 const actionConfig = {
@@ -45,7 +46,7 @@ const biasConfig = {
   neutral: { color: 'text-foreground-tertiary', bg: 'bg-surface-2', text: 'NEUTRAL' },
 };
 
-export function CryptoCard({ name, symbol, data, analysis, color }: CryptoCardProps) {
+export function CryptoCard({ name, symbol, data, analysis, color, showTradingInfo = true }: CryptoCardProps) {
   const price = data?.price || 0;
   const change24h = data?.change24h || 0;
   const sparkline = data?.sparkline7d || [];
@@ -85,14 +86,16 @@ export function CryptoCard({ name, symbol, data, analysis, color }: CryptoCardPr
             <p className="text-sm text-foreground-tertiary">{symbol}/USD</p>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <Badge variant={action === 'buy' ? 'success' : action === 'sell' ? 'danger' : 'warning'}>
-            {actionCfg.text}
-          </Badge>
-          <Badge variant={bias === 'bullish' ? 'success' : bias === 'bearish' ? 'danger' : 'neutral'} size="sm">
-            {biasCfg.text}
-          </Badge>
-        </div>
+        {showTradingInfo && (
+          <div className="flex flex-col items-end gap-1">
+            <Badge variant={action === 'buy' ? 'success' : action === 'sell' ? 'danger' : 'warning'}>
+              {actionCfg.text}
+            </Badge>
+            <Badge variant={bias === 'bullish' ? 'success' : bias === 'bearish' ? 'danger' : 'neutral'} size="sm">
+              {biasCfg.text}
+            </Badge>
+          </div>
+        )}
       </div>
 
       {/* Price */}
@@ -116,38 +119,40 @@ export function CryptoCard({ name, symbol, data, analysis, color }: CryptoCardPr
         </div>
       )}
 
-      {/* ICT Analysis */}
-      <div className={cn('p-4 rounded-lg border', actionCfg.bg, actionCfg.border)}>
-        <div className="flex items-center gap-2 mb-3">
-          <ActionIcon size={18} className={actionCfg.color} />
-          <span className={cn('font-semibold', actionCfg.color)}>ICT Smart Money Analysis</span>
-        </div>
-        
-        {/* Narrative */}
-        {narrative && (
-          <div className={cn('p-3 rounded-lg mb-3', biasCfg.bg)}>
-            <div className="flex items-center gap-2 mb-2">
-              <div className={cn('w-2 h-2 rounded-full', biasCfg.color?.replace('text-', 'bg-') || 'bg-foreground-tertiary')} />
-              <span className={cn('text-xs font-bold uppercase', biasCfg.color)}>
-                {biasCfg.text} BIAS
-              </span>
-            </div>
-            <p className="text-sm text-foreground-secondary leading-relaxed">{narrative}</p>
+      {/* ICT Analysis - Only show if trading info is enabled */}
+      {showTradingInfo && (
+        <div className={cn('p-4 rounded-lg border', actionCfg.bg, actionCfg.border)}>
+          <div className="flex items-center gap-2 mb-3">
+            <ActionIcon size={18} className={actionCfg.color} />
+            <span className={cn('font-semibold', actionCfg.color)}>ICT Smart Money Analysis</span>
           </div>
-        )}
-        
-        {/* Confidence Bar */}
-        <ConfidenceBar confidence={confidence} colorClass={actionCfg.color} />
-        
-        {/* Timeframe Structure */}
-        {timeframes && <TimeframeStructure timeframes={timeframes} />}
-        
-        {/* Key Levels */}
-        {keyLevels && <KeyLevelsSection keyLevels={keyLevels} />}
-      </div>
+          
+          {/* Narrative */}
+          {narrative && (
+            <div className={cn('p-3 rounded-lg mb-3', biasCfg.bg)}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={cn('w-2 h-2 rounded-full', biasCfg.color?.replace('text-', 'bg-') || 'bg-foreground-tertiary')} />
+                <span className={cn('text-xs font-bold uppercase', biasCfg.color)}>
+                  {biasCfg.text} BIAS
+                </span>
+              </div>
+              <p className="text-sm text-foreground-secondary leading-relaxed">{narrative}</p>
+            </div>
+          )}
+          
+          {/* Confidence Bar */}
+          <ConfidenceBar confidence={confidence} colorClass={actionCfg.color} />
+          
+          {/* Timeframe Structure */}
+          {timeframes && <TimeframeStructure timeframes={timeframes} />}
+          
+          {/* Key Levels */}
+          {keyLevels && <KeyLevelsSection keyLevels={keyLevels} />}
+        </div>
+      )}
 
-      {/* Risk Note */}
-      {riskNotes && (
+      {/* Risk Note - Only show if trading info is enabled */}
+      {showTradingInfo && riskNotes && (
         <div className="flex items-start gap-2 mt-3 text-xs text-foreground-tertiary bg-surface-1 p-3 rounded-lg">
           <Shield size={14} className="mt-0.5 flex-shrink-0 text-warning" />
           <span>{riskNotes}</span>

@@ -13,6 +13,70 @@ const PAPER_TRADING_CONFIG = {
 };
 
 /**
+ * Check if any open positions should be closed due to prediction reversal
+ * This runs only when new analysis is generated (every 15 minutes)
+ */
+export async function checkPredictionReversal(db, newAnalysis, symbol = 'BTC') {
+  const { getPositions, getPosition } = await import('../db/database.js');
+  const openPositions = await getPositions(db, { symbol, status: 'open' });
+  
+  if (openPositions.length === 0) {
+    return { checked: 0, closed: [], errors: [] };
+  }
+
+  const results = {
+    checked: openPositions.length,
+    closed: [],
+    errors: []
+  };
+
+  // Only check if new analysis has opposite bias and high confidence
+  const newBias = newAnalysis.bias;
+  const newConfidence = newAnalysis.confidence * 100;
+
+  if (!newBias || newConfidence < 80) {
+    return { ...results, reason: 'New analysis confidence too low or no bias' };
+  }
+
+  for (const position of openPositions) {
+    try {
+      const positionBias = position.side === 'long' ? 'bullish' : 'bearish';
+      
+      // Check if new analysis opposes position bias
+      const isReversal = (newBias === 'bullish' && positionBias === 'bearish') ||
+                        (newBias === 'bearish' && positionBias === 'bullish');
+
+      if (isReversal) {
+        console.log(`[PredictionReversal] Detected reversal for ${symbol}: position=${positionBias}, new_analysis=${newBias} (${newConfidence.toFixed(0)}% confidence)`);
+        
+        // Get current price for closure
+        const { fetchRealTimePrices } = await import('../price-fetcher.js');
+        const priceData = await fetchRealTimePrices();
+        const currentPrice = priceData[symbol.toLowerCase()]?.price || position.current_price;
+        
+        // Close position due to prediction reversal
+        const closeResult = await closePosition(db, position, currentPrice, 'prediction_reversal');
+        results.closed.push({
+          position_id: position.position_id,
+          reason: 'prediction_reversal',
+          pnl: closeResult.realizedPnl,
+          is_win: closeResult.isWin,
+          new_bias: newBias,
+          old_bias: positionBias
+        });
+        
+        console.log(`[PredictionReversal] Closed position ${position.position_id} due to prediction reversal`);
+      }
+    } catch (error) {
+      console.error(`[PredictionReversal] Error checking position ${position.id}:`, error.message);
+      results.errors.push({ position_id: position.id, error: error.message });
+    }
+  }
+
+  return results;
+}
+
+/**
  * Calculate TP1 and TP2 levels based on R:R ratios
  */
 function calculateTPLevels(entry, sl, rrLevels) {

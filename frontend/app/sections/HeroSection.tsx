@@ -11,9 +11,10 @@ interface HeroSectionProps {
   ethData?: PriceData;
   btcAnalysis?: Analysis;
   ethAnalysis?: Analysis;
+  showEthTrading?: boolean; // New prop to control ETH trading visibility
 }
 
-export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis }: HeroSectionProps) {
+export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis, showEthTrading = false }: HeroSectionProps) {
   return (
     <section className="mb-8 space-y-6">
       {/* Crypto Cards - Overview */}
@@ -31,6 +32,7 @@ export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis }: Hero
           data={ethData}
           analysis={ethAnalysis}
           color="#627eea"
+          showTradingInfo={showEthTrading}
         />
       </div>
 

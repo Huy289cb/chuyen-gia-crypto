@@ -96,7 +96,7 @@ router.get('/equity-curve', async (req, res) => {
   }
 });
 
-// GET /api/performance/trades - Get trade history
+// GET /api/performance/trades - Get trade history with pagination
 router.get('/trades', async (req, res) => {
   const db = req.db;
   const dbEnabled = req.dbEnabled;
@@ -108,23 +108,48 @@ router.get('/trades', async (req, res) => {
     });
   }
 
-  const { symbol, limit = 50 } = req.query;
+  const { symbol, limit = 10, page = 1, outcome } = req.query;
 
   try {
     const { getPositions } = await import('../db/database.js');
-    const filters = { status: ['closed', 'stopped', 'taken_profit', 'closed_manual'] };
+    const filters = { status: ['closed', 'stopped', 'taken_profit', 'closed_manual', 'prediction_reversal'] };
     
     if (symbol) {
       filters.symbol = symbol;
     }
     
+    if (outcome) {
+      filters.outcome = outcome;
+    }
+    
     const trades = await getPositions(db, filters);
-    const limitedTrades = trades.slice(0, parseInt(limit));
+    const limitNum = parseInt(limit);
+    const pageNum = parseInt(page);
+    const offset = (pageNum - 1) * limitNum;
+    
+    // Sort by close_time descending (newest first)
+    const sortedTrades = trades.sort((a, b) => {
+      const timeA = new Date(a.close_time || b.close_time || 0).getTime();
+      const timeB = new Date(b.close_time || a.close_time || 0).getTime();
+      return timeB - timeA;
+    });
+    
+    const paginatedTrades = sortedTrades.slice(offset, offset + limitNum);
+    const totalCount = sortedTrades.length;
+    const totalPages = Math.ceil(totalCount / limitNum);
     
     res.json({
       success: true,
-      data: limitedTrades,
-      meta: { count: limitedTrades.length, symbol }
+      data: paginatedTrades,
+      meta: { 
+        count: paginatedTrades.length,
+        totalCount,
+        currentPage: pageNum,
+        totalPages,
+        limit: limitNum,
+        symbol,
+        outcome: outcome || 'all'
+      }
     });
   } catch (error) {
     res.status(500).json({

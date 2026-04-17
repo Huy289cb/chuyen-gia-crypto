@@ -162,6 +162,27 @@ async function runAnalysisJob() {
         const ethResult = await saveAnalysis(db, 'ETH', priceData, analysis);
         const ethPredictionId = ethResult.predictionIds?.['4h'] || ethResult.predictionIds?.['1d'];
         
+        // Check for prediction reversals and close positions if needed (BTC only)
+        if (analysis.btc && btcResult.analysisId) {
+          try {
+            const { checkPredictionReversal } = await import('./services/paperTradingEngine.js');
+            const reversalResult = await checkPredictionReversal(db, analysis.btc, 'BTC');
+            
+            if (reversalResult.closed.length > 0) {
+              console.log(`[Scheduler] Prediction reversal check closed ${reversalResult.closed.length} BTC positions`);
+              reversalResult.closed.forEach(closed => {
+                console.log(`[Scheduler] - Position ${closed.position_id}: ${closed.reason}, PnL: $${closed.pnl.toFixed(2)}, Win: ${closed.is_win}`);
+              });
+            } else if (reversalResult.reason) {
+              console.log(`[Scheduler] Prediction reversal check: ${reversalResult.reason}`);
+            } else {
+              console.log(`[Scheduler] Prediction reversal check: ${reversalResult.checked} positions checked, no reversals detected`);
+            }
+          } catch (reversalError) {
+            console.error('[Scheduler] Error during prediction reversal check:', reversalError.message);
+          }
+        }
+        
         // Auto-entry evaluation for BTC
         const btcAccount = await getOrCreateAccount(db, 'BTC', 100);
         const btcOpenPositions = await getPositions(db, { symbol: 'BTC', status: 'open' });

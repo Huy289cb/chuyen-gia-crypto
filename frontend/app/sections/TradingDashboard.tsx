@@ -15,16 +15,15 @@ interface TradingDashboardProps {
 
 export function TradingDashboard({ accounts, loading, onReset }: TradingDashboardProps) {
   const btcAccount = accounts.find(a => a.symbol === 'BTC');
-  const ethAccount = accounts.find(a => a.symbol === 'ETH');
-
-  const totalEquity = accounts.reduce((sum, acc) => sum + (acc.equity || 0), 0);
-  const totalStarting = accounts.reduce((sum, acc) => sum + (acc.starting_balance || 0), 0);
-  const totalReturn = totalStarting > 0 ? ((totalEquity - totalStarting) / totalStarting) * 100 : 0;
-  const totalRealizedPnl = accounts.reduce((sum, acc) => sum + (acc.realized_pnl || 0), 0);
-  const totalTrades = accounts.reduce((sum, acc) => sum + (acc.total_trades || 0), 0);
   
-  const totalWins = accounts.reduce((sum, acc) => sum + (acc.winning_trades || 0), 0);
-  const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(0) : '0';
+  // Focus on BTC-only metrics since ETH trading is disabled
+  const btcEquity = btcAccount?.equity || 0;
+  const btcStarting = btcAccount?.starting_balance || 100;
+  const btcReturn = btcStarting > 0 ? ((btcEquity - btcStarting) / btcStarting) * 100 : 0;
+  const btcRealizedPnl = btcAccount?.realized_pnl || 0;
+  const btcTrades = btcAccount?.total_trades || 0;
+  const btcWins = btcAccount?.winning_trades || 0;
+  const btcWinRate = btcTrades > 0 ? ((btcWins / btcTrades) * 100).toFixed(0) : '0';
 
   return (
     <section className="mb-8">
@@ -54,58 +53,55 @@ export function TradingDashboard({ accounts, loading, onReset }: TradingDashboar
         {/* BTC Equity */}
         <StatCard
           title="BTC Equity"
-          value={`$${formatPrice(btcAccount?.equity || 0)}`}
-          subtitle={`${btcAccount && btcAccount.realized_pnl >= 0 ? '+' : ''}$${formatPrice(btcAccount?.realized_pnl || 0)} PnL`}
-          subtitleColor={btcAccount && btcAccount.realized_pnl >= 0 ? 'text-success' : 'text-danger'}
+          value={`$${formatPrice(btcEquity)}`}
+          subtitle={`${btcRealizedPnl >= 0 ? '+' : ''}$${formatPrice(btcRealizedPnl)} PnL`}
+          subtitleColor={btcRealizedPnl >= 0 ? 'text-success' : 'text-danger'}
           icon={<DollarSign className="w-4 h-4 text-btc" />}
         />
 
-        {/* ETH Equity */}
+        {/* BTC Return */}
         <StatCard
-          title="ETH Equity"
-          value={`$${formatPrice(ethAccount?.equity || 0)}`}
-          subtitle={`${ethAccount && ethAccount.realized_pnl >= 0 ? '+' : ''}$${formatPrice(ethAccount?.realized_pnl || 0)} PnL`}
-          subtitleColor={ethAccount && ethAccount.realized_pnl >= 0 ? 'text-success' : 'text-danger'}
-          icon={<DollarSign className="w-4 h-4 text-eth" />}
-        />
-
-        {/* Total Return */}
-        <StatCard
-          title="Total Return"
-          value={`${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(2)}%`}
-          subtitle={`$${formatPrice(totalEquity)} / $${formatPrice(totalStarting)}`}
+          title="BTC Return"
+          value={`${btcReturn >= 0 ? '+' : ''}${btcReturn.toFixed(2)}%`}
+          subtitle={`$${formatPrice(btcEquity)} / $${formatPrice(btcStarting)}`}
           subtitleColor="text-foreground-tertiary"
-          icon={totalReturn >= 0 ? <TrendingUp className="w-4 h-4 text-success" /> : <TrendingDown className="w-4 h-4 text-danger" />}
-          valueColor={totalReturn >= 0 ? 'text-success' : 'text-danger'}
+          icon={btcReturn >= 0 ? <TrendingUp className="w-4 h-4 text-success" /> : <TrendingDown className="w-4 h-4 text-danger" />}
+          valueColor={btcReturn >= 0 ? 'text-success' : 'text-danger'}
         />
 
-        {/* Total Trades */}
+        {/* BTC Trades */}
         <StatCard
-          title="Total Trades"
-          value={totalTrades.toString()}
-          subtitle={`Win Rate: ${winRate}%`}
+          title="BTC Trades"
+          value={btcTrades.toString()}
+          subtitle={`Win Rate: ${btcWinRate}%`}
           subtitleColor="text-foreground-tertiary"
           icon={<Activity className="w-4 h-4 text-accent-primary" />}
         />
+
+        {/* Position Limit */}
+        <StatCard
+          title="Max Positions"
+          value="8"
+          subtitle="BTC concurrent limit"
+          subtitleColor="text-foreground-tertiary"
+          icon={<DollarSign className="w-4 h-4 text-info" />}
+        />
       </div>
 
-      {/* Cooldown Alert */}
-      {accounts.map(account => {
-        if (account.cooldown_until && new Date(account.cooldown_until) > new Date()) {
-          const minutesLeft = Math.ceil((new Date(account.cooldown_until).getTime() - Date.now()) / 60000);
-          return (
-            <div key={account.symbol} className="mt-4 p-3 rounded-lg bg-warning-dim border border-warning/20">
-              <div className="flex items-center gap-2">
-                <Badge variant="warning">COOLDOWN</Badge>
-                <span className="text-sm text-warning">
-                  {account.symbol} account in cooldown for {minutesLeft} minutes (3 consecutive losses)
-                </span>
-              </div>
+      {/* BTC Cooldown Alert */}
+      {btcAccount?.cooldown_until && new Date(btcAccount.cooldown_until) > new Date() && (() => {
+        const minutesLeft = Math.ceil((new Date(btcAccount.cooldown_until!).getTime() - Date.now()) / 60000);
+        return (
+          <div className="mt-4 p-3 rounded-lg bg-warning-dim border border-warning/20">
+            <div className="flex items-center gap-2">
+              <Badge variant="warning">COOLDOWN</Badge>
+              <span className="text-sm text-warning">
+                BTC account in cooldown for {minutesLeft} minutes (3 consecutive losses)
+              </span>
             </div>
-          );
-        }
-        return null;
-      })}
+          </div>
+        );
+      })()}
     </section>
   );
 }

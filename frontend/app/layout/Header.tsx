@@ -1,6 +1,6 @@
 'use client';
 
-import { Zap, RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon } from 'lucide-react';
+import { Zap, RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen } from 'lucide-react';
 import { getTimeSince, cn } from '@/lib/utils';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -42,19 +42,31 @@ export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpda
     <header className="sticky top-0 z-50 glass border-b border-border-default">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="relative p-2 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-xl animate-pulse-glow">
-              <Zap className="w-5 h-5 text-bg-primary" />
+          {/* Logo + Navigation */}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="relative p-2 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-xl animate-pulse-glow">
+                <Zap className="w-5 h-5 text-bg-primary" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">
+                  Crypto<span className="text-gradient">Analyzer</span>
+                </h1>
+                <p className="text-xs text-foreground-tertiary hidden sm:block">
+                  AI-Powered Trading Analysis
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">
-                Crypto<span className="text-gradient">Analyzer</span>
-              </h1>
-              <p className="text-xs text-foreground-tertiary hidden sm:block">
-                AI-Powered Trading Analysis
-              </p>
-            </div>
+            
+            {/* Rules Link */}
+            <a
+              href="/rules"
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 bg-surface-1 hover:bg-surface-2 border border-border-default hover:border-border-strong text-foreground-secondary hover:text-foreground"
+              title="View System Rules & Behavior"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span className="text-sm font-medium">Rules</span>
+            </a>
           </div>
 
           {/* Data Freshness + Refresh */}

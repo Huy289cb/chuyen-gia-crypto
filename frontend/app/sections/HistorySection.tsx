@@ -1,8 +1,10 @@
 'use client';
 
-import { History, TrendingUp, TrendingDown, XCircle, CheckCircle2, Target } from 'lucide-react';
+import { useState } from 'react';
+import { History, TrendingUp, TrendingDown, XCircle, CheckCircle2, Target, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
 import { cn, formatPrice } from '@/lib/utils';
 import type { Trade } from '../types';
 
@@ -11,7 +13,13 @@ interface HistorySectionProps {
 }
 
 export function HistorySection({ trades }: HistorySectionProps) {
-  if (trades.length === 0) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const tradesPerPage = 10;
+  
+  // Filter BTC trades only
+  const btcTrades = trades.filter(trade => trade.symbol === 'BTC');
+  
+  if (btcTrades.length === 0) {
     return (
       <section className="mb-8">
         <CardHeader 
@@ -28,21 +36,24 @@ export function HistorySection({ trades }: HistorySectionProps) {
     );
   }
 
-  // Show only last 10 trades
-  const recentTrades = trades.slice(0, 10);
+  // Pagination logic
+  const totalPages = Math.ceil(btcTrades.length / tradesPerPage);
+  const startIndex = (currentPage - 1) * tradesPerPage;
+  const endIndex = startIndex + tradesPerPage;
+  const currentTrades = btcTrades.slice(startIndex, endIndex);
 
   return (
     <section className="mb-8">
       <CardHeader 
-        title={`Trade History (${trades.length})`}
-        subtitle="Last 10 closed positions"
+        title={`Trade History (${btcTrades.length})`}
+        subtitle={`Page ${currentPage} of ${totalPages} (BTC trades only)`}
         icon={<History className="w-5 h-5" />}
       />
       
       <Card className="mt-4 overflow-hidden" padding="none">
         {/* Mobile View */}
         <div className="sm:hidden">
-          {recentTrades.map(trade => (
+          {currentTrades.map((trade: Trade) => (
             <TradeCardMobile key={trade.id} trade={trade} />
           ))}
         </div>
@@ -64,7 +75,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
               </tr>
             </thead>
             <tbody>
-              {recentTrades.map((trade, index) => (
+              {currentTrades.map((trade: Trade, index: number) => (
                 <tr 
                   key={trade.id} 
                   className={cn(
@@ -113,6 +124,45 @@ export function HistorySection({ trades }: HistorySectionProps) {
           </table>
         </div>
       </Card>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            leftIcon={<ChevronLeft size={16} />}
+          >
+            Previous
+          </Button>
+          
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <Button
+                key={page}
+                variant={currentPage === page ? "primary" : "ghost"}
+                size="sm"
+                onClick={() => setCurrentPage(page)}
+                className="min-w-[2.5rem]"
+              >
+                {page}
+              </Button>
+            ))}
+          </div>
+          
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+            rightIcon={<ChevronRight size={16} />}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
@@ -153,6 +203,7 @@ function ExitReasonBadge({ reason }: { reason: string | undefined }) {
     'take_profit': { variant: 'success', icon: <CheckCircle2 size={12} /> },
     'stop_loss': { variant: 'danger', icon: <XCircle size={12} /> },
     'manual': { variant: 'info', icon: <Target size={12} /> },
+    'prediction_reversal': { variant: 'warning', icon: <Activity size={12} /> },
   };
 
   const safeReason = reason || 'unknown';

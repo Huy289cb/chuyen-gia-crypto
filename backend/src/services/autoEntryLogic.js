@@ -5,11 +5,12 @@ const AUTO_ENTRY_CONFIG = {
   minConfidence: 80,           // Minimum confidence score (0-100)
   minRRRatio: 2.0,             // Minimum risk/reward ratio
   riskPerTrade: 0.01,          // 1% of account balance
-  maxPositionsPerSymbol: 1,    // Max concurrent positions per symbol
+  maxPositionsPerSymbol: 8,    // Max concurrent positions per symbol (BTC only) - Updated 17/04/2026
   maxConsecutiveLosses: 3,     // Trigger cooldown
   cooldownHours: 4,            // Cooldown duration in hours
-  requiredTimeframes: ['4h', '1d'],  // Check these for alignment
+  requiredTimeframes: ['1h', '4h'],  // Check these for alignment - Updated 17/04/2026 (1h primary)
   minAlignment: 0.5,           // Majority (50%+) required
+  enabledSymbols: ['BTC'],     // Only enable BTC trading
   // Session timing (UTC hours)
   allowedSessions: ['london', 'ny_killzone'],
   londonSession: { start: 7, end: 10 },  // 07:00-10:00 UTC
@@ -76,6 +77,15 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     suggestedPosition: null
   };
 
+  // Extract symbol from analysis or account
+  const symbol = analysis.symbol || account.symbol || 'BTC';
+
+  // Check 0: Symbol enablement (ETH trading disabled)
+  if (!AUTO_ENTRY_CONFIG.enabledSymbols.includes(symbol)) {
+    decision.reason = `Trading disabled for ${symbol}. Only ${AUTO_ENTRY_CONFIG.enabledSymbols.join(', ')} enabled`;
+    return decision;
+  }
+
   // Check 1: Account cooldown
   if (account.cooldown_until) {
     const cooldownEnd = new Date(account.cooldown_until);
@@ -91,9 +101,9 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     return decision;
   }
 
-  // Check 3: Max positions per symbol
+  // Check 3: Max positions per symbol (5 for BTC)
   if (openPositions.length >= AUTO_ENTRY_CONFIG.maxPositionsPerSymbol) {
-    decision.reason = `Maximum positions (${AUTO_ENTRY_CONFIG.maxPositionsPerSymbol}) already open for this symbol`;
+    decision.reason = `Maximum positions (${AUTO_ENTRY_CONFIG.maxPositionsPerSymbol}) already open for ${symbol}`;
     return decision;
   }
 

@@ -1175,6 +1175,7 @@ export async function closePosition(db, positionId, closePrice, closeReason) {
          WHEN close_reason = 'stop_loss' THEN 'stopped'
          WHEN close_reason = 'take_profit' THEN 'taken_profit'
          WHEN close_reason = 'manual' THEN 'closed_manual'
+         WHEN close_reason = 'prediction_reversal' THEN 'closed_reversal'
          ELSE 'closed'
        END,
        close_price = ?,
@@ -1189,7 +1190,10 @@ export async function closePosition(db, positionId, closePrice, closeReason) {
         }
         
         // Log trade event
-        logTradeEvent(db, positionId, closeReason === 'stop_loss' ? 'sl_hit' : closeReason === 'take_profit' ? 'tp_hit' : 'closed', 
+        const eventType = closeReason === 'stop_loss' ? 'sl_hit' : 
+                         closeReason === 'take_profit' ? 'tp_hit' : 
+                         closeReason === 'prediction_reversal' ? 'reversal_close' : 'closed';
+        logTradeEvent(db, positionId, eventType, 
           JSON.stringify({ close_price: closePrice, close_reason: closeReason })).catch(console.error);
         
         resolve(this.changes);

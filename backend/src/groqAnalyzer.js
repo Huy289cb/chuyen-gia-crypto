@@ -30,11 +30,13 @@ export async function analyzeWithGroq(priceData, db = null) {
 
     console.log('[GroqAnalyzer] Starting ICT Smart Money analysis...');
 
-    // Fetch historical prediction context if database is available
+    // Fetch historical prediction context, open positions, and pending orders if database is available
     let historicalContext = '';
+    let openPositionsContext = '';
+    let pendingOrdersContext = '';
     if (db) {
       try {
-        const { getRecentAnalysisWithPredictions } = await import('./db/database.js');
+        const { getRecentAnalysisWithPredictions, getPositions, getPendingOrders } = await import('./db/database.js');
         
         // Get predictions from last 24 hours, limit to 10 per coin
         const btcHistory = await getRecentAnalysisWithPredictions(db, 'BTC', 20);
@@ -81,11 +83,82 @@ export async function analyzeWithGroq(priceData, db = null) {
         } else {
           console.log('[GroqAnalyzer] No historical predictions available in last 24h');
         }
+        
+        // Fetch open positions for AI decision making
+        try {
+          const btcOpenPositions = await getPositions(db, { symbol: 'BTC', status: 'open' });
+          const ethOpenPositions = await getPositions(db, { symbol: 'ETH', status: 'open' });
+          
+          const formatOpenPositions = (positions, coinName) => {
+            if (!positions || positions.length === 0) return '';
+            
+            const lines = [`OPEN ${coinName} POSITIONS:`];
+            positions.forEach(pos => {
+              const pnl = ((priceData[coinName.toLowerCase()]?.price || pos.entry_price) - pos.entry_price) * (pos.side === 'long' ? 1 : -1);
+              const pnlPercent = (pnl / (pos.entry_price * pos.size_qty)) * 100;
+              const riskPercent = ((pos.entry_price - pos.stop_loss) / pos.entry_price) * 100;
+              
+              lines.push(
+                `- ${pos.side.toUpperCase()}: Entry $${pos.entry_price.toLocaleString()}, Current $${(priceData[coinName.toLowerCase()]?.price || pos.entry_price).toLocaleString()}, SL $${pos.stop_loss.toLocaleString()}, TP $${pos.take_profit.toLocaleString()}`,
+                `  PnL: $${pnl.toFixed(2)} (${pnlPercent.toFixed(2)}%), Risk: ${riskPercent.toFixed(2)}%, Size: ${pos.size_qty} ${coinName}`
+              );
+            });
+            return lines.join('\n');
+          };
+          
+          const btcPositions = formatOpenPositions(btcOpenPositions, 'BTC');
+          const ethPositions = formatOpenPositions(ethOpenPositions, 'ETH');
+          
+          if (btcPositions || ethPositions) {
+            openPositionsContext = `\n\n${btcPositions}\n${ethPositions}\n\nANALYZE OPEN POSITIONS: If confidence > 80%, recommend whether to CLOSE any positions early. Consider current market conditions vs original entry logic. Provide specific recommendations with confidence levels.`;
+            console.log('[GroqAnalyzer] Open positions context included:', btcOpenPositions.length + ethOpenPositions.length, 'positions');
+          } else {
+            console.log('[GroqAnalyzer] No open positions to analyze');
+          }
+        } catch (error) {
+          console.log('[GroqAnalyzer] Failed to fetch open positions:', error.message);
+        }
+        
+        // Fetch pending orders for AI decision making
+        try {
+          const btcPendingOrders = await getPendingOrders(db, { symbol: 'BTC', status: 'pending' });
+          const ethPendingOrders = await getPendingOrders(db, { symbol: 'ETH', status: 'pending' });
+          
+          const formatPendingOrders = (orders, coinName) => {
+            if (!orders || orders.length === 0) return '';
+            
+            const lines = [`PENDING ${coinName} LIMIT ORDERS:`];
+            orders.forEach(order => {
+              const currentPrice = priceData[coinName.toLowerCase()]?.price || order.entry_price;
+              const priceDiff = ((currentPrice - order.entry_price) / order.entry_price) * 100;
+              const timeWaiting = order.created_at ? Math.floor((Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60)) : 0;
+              
+              lines.push(
+                `- ${order.side.toUpperCase()}: Entry $${order.entry_price.toLocaleString()}, Current $${(priceData[coinName.toLowerCase()]?.price || order.entry_price).toLocaleString()}`,
+                `  SL $${order.stop_loss.toLocaleString()}, TP $${order.take_profit.toLocaleString()}, Size $${order.size_usd.toLocaleString()}`,
+                `  Price Diff: ${priceDiff.toFixed(2)}%, Waiting: ${timeWaiting}h, Risk: ${order.risk_percent.toFixed(2)}%, R:R ${order.expected_rr.toFixed(1)}`
+              );
+            });
+            return lines.join('\n');
+          };
+          
+          const btcPending = formatPendingOrders(btcPendingOrders, 'BTC');
+          const ethPending = formatPendingOrders(ethPendingOrders, 'ETH');
+          
+          if (btcPending || ethPending) {
+            pendingOrdersContext = `\n\n${btcPending}\n${ethPending}\n\nPENDING ORDER ANALYSIS: If confidence > 80%, recommend whether to KEEP or CANCEL any limit orders. Consider if market conditions have changed since order creation, if price is moving away from entry, or if setup is no longer valid.`;
+            console.log('[GroqAnalyzer] Pending orders context included:', btcPendingOrders.length + ethPendingOrders.length, 'orders');
+          } else {
+            console.log('[GroqAnalyzer] No pending orders to analyze');
+          }
+        } catch (error) {
+          console.log('[GroqAnalyzer] Failed to fetch pending orders:', error.message);
+        }
       } catch (error) {
         console.log('[GroqAnalyzer] Failed to fetch historical context:', error.message);
       }
     } else {
-      console.log('[GroqAnalyzer] Database not available, skipping historical context');
+      console.log('[GroqAnalyzer] Database not available, skipping historical context, open positions and pending orders');
     }
 
     const systemPrompt = `You are an ICT (Inner Circle Trader) crypto analyst. Use Smart Money Concepts. Return ONLY valid JSON with ALL text fields in VIETNAMESE language.
@@ -178,7 +251,34 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
     "suggested_take_profit": number (optional - TP at liquidity target or FVG fill),
     "expected_rr": number (optional - risk/reward ratio, minimum 2.0),
     "invalidation_level": number (optional - price level that invalidates the setup),
-    "reason_summary": "brief reason in Vietnamese for the trading suggestion (max 200 chars)"
+    "reason_summary": "brief reason in Vietnamese for the trading suggestion (max 200 chars)",
+    "position_decisions": {
+      "recommendations": [
+        {
+          "position_id": "string (if available)",
+          "action": "close | hold | adjust_sl | adjust_tp",
+          "confidence": 0-1,
+          "reason": "reason in Vietnamese (max 200 chars)",
+          "risk_percent": number (current risk % of position),
+          "pnl_percent": number (current PnL % of position)
+        }
+      ],
+      "overall_strategy": "brief position management strategy in Vietnamese (max 300 chars)"
+    },
+    "pending_order_decisions": {
+      "recommendations": [
+        {
+          "order_id": "string (if available)",
+          "action": "keep | cancel | modify",
+          "confidence": 0-1,
+          "reason": "reason in Vietnamese (max 200 chars)",
+          "price_diff_percent": number (difference from current price),
+          "waiting_hours": number (hours since order creation),
+          "risk_percent": number (order risk %)
+        }
+      ],
+      "overall_strategy": "brief pending order management strategy in Vietnamese (max 300 chars)"
+    }
   },
   "eth": { ... same structure ... },
   "marketSentiment": "bullish | bearish | neutral | mixed",
@@ -237,8 +337,10 @@ ETH DATA:
 - Timeframe Changes: 15m=${ethChanges['15m']?.toFixed(3)}%, 1h=${ethChanges['1h']?.toFixed(3)}%, 4h=${ethChanges['4h']?.toFixed(3)}%, 1d=${ethChanges['1d']?.toFixed(3)}%
 - Recent Prices (last points): ${JSON.stringify(priceData.eth.prices1d?.slice(-6) || [])}
 ${historicalContext}
+${openPositionsContext}
+${pendingOrdersContext}
 Apply ICT methodology:
-1. Check multi-timeframe structure (15m, 1h, 4h, 1d)
+1. Check multi-timeframe structure (15m, 1h, 4h, 1d) - Priority: 1h primary, 4h secondary
 2. Identify liquidity levels (recent highs/lows)
 3. Look for BOS (Break of Structure) or CHOCH (Change of Character) patterns
 4. Note any FVGs in recent price action
@@ -246,6 +348,8 @@ Apply ICT methodology:
 6. Give directional bias and action
 7. Market Sentiment: Determine overall market sentiment (bullish/bearish/neutral/mixed) based on both coins
 8. Comparison: Briefly compare BTC vs ETH performance and structure
+9. Position Management: If open positions exist, evaluate if they should be closed early based on current analysis
+10. Pending Order Management: If limit orders exist, evaluate if they should be kept or cancelled based on current market conditions
 
 IMPORTANT: Identify specific price levels for:
 - BOS: Price where structure broke (new highs/lows)
