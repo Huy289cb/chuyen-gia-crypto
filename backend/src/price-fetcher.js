@@ -13,6 +13,27 @@ const COINGECKO_MIN_DELAY = 2000; // 2 seconds between CoinGecko calls
 // Delay helper to avoid rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Fetch with timeout to prevent hanging in production
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
 /**
  * Fetch real-time prices from Binance for paper trading
  * Binance has much higher rate limits (1200 requests/minute) than CoinGecko
@@ -24,8 +45,8 @@ export async function fetchRealTimePrices() {
     console.log('[PriceFetcher] Fetching real-time prices from Binance...');
     
     // Fetch current prices from Binance ticker API (no rate limit issues)
-    const btcRes = await fetch(`${BINANCE_API}/ticker/price?symbol=BTCUSDT`);
-    const ethRes = await fetch(`${BINANCE_API}/ticker/price?symbol=ETHUSDT`);
+    const btcRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=BTCUSDT`, {}, 5000);
+    const ethRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=ETHUSDT`, {}, 5000);
     
     if (!btcRes.ok || !ethRes.ok) {
       throw new Error(`Binance ticker error: BTC=${btcRes.status}, ETH=${ethRes.status}`);
@@ -263,7 +284,7 @@ function processCandleData(candles, latest) {
  */
 async function fetchFearGreedIndex() {
   try {
-    const res = await fetch('https://api.alternative.me/fng/?limit=1');
+    const res = await fetchWithTimeout('https://api.alternative.me/fng/?limit=1', {}, 5000);
     if (!res.ok) return null;
     
     const data = await res.json();
@@ -290,8 +311,10 @@ async function fetchFearGreedIndex() {
  */
 export async function fetchOHLCFromBinance(symbol, interval = '15m', limit = 1000) {
   try {
-    const res = await fetch(
-      `${BINANCE_API}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
+    const res = await fetchWithTimeout(
+      `${BINANCE_API}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
+      {},
+      10000
     );
     
     if (!res.ok) {
@@ -325,8 +348,10 @@ export async function fetchOHLCFromBinance(symbol, interval = '15m', limit = 100
  */
 export async function fetchOHLCFromCoinGecko(coinId, days = 7) {
   try {
-    const res = await fetch(
-      `${COINGECKO_API}/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`
+    const res = await fetchWithTimeout(
+      `${COINGECKO_API}/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`,
+      {},
+      10000
     );
     
     if (!res.ok) {
@@ -361,8 +386,8 @@ async function fetchFromBinance() {
     console.log('[PriceFetcher] Fetching market data from Binance...');
     
     // Fetch 24h ticker data for BTC and ETH (includes price, change, volume)
-    const btcRes = await fetch(`${BINANCE_API}/ticker/24hr?symbol=BTCUSDT`);
-    const ethRes = await fetch(`${BINANCE_API}/ticker/24hr?symbol=ETHUSDT`);
+    const btcRes = await fetchWithTimeout(`${BINANCE_API}/ticker/24hr?symbol=BTCUSDT`, {}, 10000);
+    const ethRes = await fetchWithTimeout(`${BINANCE_API}/ticker/24hr?symbol=ETHUSDT`, {}, 10000);
     
     if (!btcRes.ok || !ethRes.ok) {
       throw new Error(`Binance ticker error: BTC=${btcRes.status}, ETH=${ethRes.status}`);
@@ -447,8 +472,10 @@ async function fetchFromCoinGecko() {
   lastCoinGeckoCall = Date.now();
 
   // Get current prices
-  const priceRes = await fetch(
-    `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`
+  const priceRes = await fetchWithTimeout(
+    `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`,
+    {},
+    10000
   );
   
   if (!priceRes.ok) {
@@ -463,8 +490,10 @@ async function fetchFromCoinGecko() {
   await delay(1000);
   
   // Get market data with sparklines AND volume
-  const marketRes = await fetch(
-    `${COINGECKO_API}/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&sparkline=true&price_change_percentage=24h,7d`
+  const marketRes = await fetchWithTimeout(
+    `${COINGECKO_API}/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&sparkline=true&price_change_percentage=24h,7d`,
+    {},
+    10000
   );
   
   if (!marketRes.ok) {

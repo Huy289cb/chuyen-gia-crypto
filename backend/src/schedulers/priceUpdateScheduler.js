@@ -68,12 +68,11 @@ async function runPriceUpdateJob() {
   try {
     console.log(`[PriceScheduler] ${formatVietnamTime(new Date())} - Updating prices and positions...`);
     
-    // Fetch current prices
+    // Fetch current prices with timeout protection
     const prices = await fetchCurrentPrices();
     
     if (!prices) {
-      console.log('[PriceScheduler] Failed to fetch prices, using cached data');
-      isRunning = false;
+      console.log('[PriceScheduler] Failed to fetch prices, skipping this cycle');
       return;
     }
     
@@ -91,7 +90,8 @@ async function runPriceUpdateJob() {
     console.log(`[PriceScheduler] Completed in ${duration}ms`);
     
   } catch (error) {
-    console.error('[PriceScheduler] Error:', error.message);
+    console.error('[PriceScheduler] Error in price update job:', error.message);
+    console.error('[PriceScheduler] Stack:', error.stack);
   } finally {
     isRunning = false;
   }
@@ -139,7 +139,9 @@ async function fetchCurrentPrices() {
     };
   } catch (error) {
     console.error('[PriceScheduler] Real-time price fetch error:', error.message);
-    throw error;
+    console.error('[PriceScheduler] Error stack:', error.stack);
+    // Return null to indicate failure, but don't throw to prevent hanging
+    return null;
   }
 }
 
