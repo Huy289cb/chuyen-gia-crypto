@@ -162,9 +162,9 @@ const translations = {
     performanceRisk: {
       consecutiveLosses: {
         title: 'Bảo Vệ Lỗ Liên Tiếp',
-        description: 'Nghỉ 4 giờ sau 3 lỗ liên tiếp',
+        description: 'Nghỉ 4 giờ sau 8 lỗ liên tiếp',
         status: 'active',
-        details: 'MAX_CONSECUTIVE_LOSSES: 3, COOLDOWN_HOURS: 4'
+        details: 'MAX_CONSECUTIVE_LOSSES: 8, COOLDOWN_HOURS: 4'
       },
       performanceTracking: {
         title: 'Theo Dõi Hiệu Suất',
@@ -379,9 +379,9 @@ const translations = {
     performanceRisk: {
       consecutiveLosses: {
         title: 'Consecutive Loss Protection',
-        description: '4-hour cooldown after 3 consecutive losses',
+        description: '4-hour cooldown after 8 consecutive losses',
         status: 'active',
-        details: 'MAX_CONSECUTIVE_LOSSES: 3, COOLDOWN_HOURS: 4'
+        details: 'MAX_CONSECUTIVE_LOSSES: 8, COOLDOWN_HOURS: 4'
       },
       performanceTracking: {
         title: 'Performance Tracking',
