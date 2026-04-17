@@ -73,6 +73,18 @@ export async function initDatabase() {
             actual_price REAL,
             accuracy REAL,
             is_correct BOOLEAN,
+            outcome TEXT,
+            pnl REAL DEFAULT 0,
+            hit_tp INTEGER DEFAULT 0,
+            hit_sl INTEGER DEFAULT 0,
+            linked_position_id INTEGER,
+            suggested_entry REAL,
+            suggested_stop_loss REAL,
+            suggested_take_profit REAL,
+            expected_rr REAL,
+            invalidation_level REAL,
+            reason_summary TEXT,
+            model_version TEXT DEFAULT '1.0',
             FOREIGN KEY (analysis_id) REFERENCES analysis_history(id)
           )
         `);
@@ -1539,7 +1551,7 @@ export async function createPendingOrder(db, orderData) {
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
         linked_prediction_id, invalidation_level, status, created_at, executed_at, 
         executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
