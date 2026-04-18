@@ -54,8 +54,8 @@ const translations = {
       },
       confidenceThreshold: {
         title: '2. Ngưỡng Tự Tin',
-        description: 'Tự tin của AI phải >= 80% để xem xét vào lệnh',
-        details: 'MIN_CONFIDENCE_THRESHOLD: 80 - Tín hiệu tự tin thấp hơn bị bỏ qua'
+        description: 'Tự tin của AI phải >= 70% để xem xét vào lệnh',
+        details: 'MIN_CONFIDENCE_THRESHOLD: 70 - Tín hiệu tự tin thấp hơn bị bỏ qua'
       },
       clearBias: {
         title: '3. Thiên Hướng Thị Trường Rõ Ràng',
@@ -210,7 +210,7 @@ const translations = {
     tradingSettings: {
       title: 'Thiết Lập Giao Dịch',
       riskPerTrade: '1%',
-      minConfidence: '80%',
+      minConfidence: '70%',
       minRR: '2.0',
       maxPositions: '8 BTC',
       enabledSymbols: 'Chỉ BTC',
@@ -221,7 +221,7 @@ const translations = {
       priceUpdates: '30 giây',
       aiAnalysis: '15 phút',
       cooldownDuration: '4 giờ',
-      maxConsecutiveLosses: '3',
+      maxConsecutiveLosses: '8',
       timeframePriority: '1h chính, 4h phụ'
     }
   },
@@ -271,8 +271,8 @@ const translations = {
       },
       confidenceThreshold: {
         title: '2. Confidence Threshold',
-        description: 'AI confidence must be >= 80% to consider entry',
-        details: 'MIN_CONFIDENCE_THRESHOLD: 80 - Lower confidence signals are ignored'
+        description: 'AI confidence must be >= 70% to consider entry',
+        details: 'MIN_CONFIDENCE_THRESHOLD: 70 - Lower confidence signals are ignored'
       },
       clearBias: {
         title: '3. Clear Market Bias',
@@ -427,7 +427,7 @@ const translations = {
     tradingSettings: {
       title: 'Trading Settings',
       riskPerTrade: '1%',
-      minConfidence: '80%',
+      minConfidence: '70%',
       minRR: '2.0',
       maxPositions: '8 BTC',
       enabledSymbols: 'BTC only',
@@ -438,7 +438,7 @@ const translations = {
       priceUpdates: '30 seconds',
       aiAnalysis: '15 minutes',
       cooldownDuration: '4 hours',
-      maxConsecutiveLosses: '3',
+      maxConsecutiveLosses: '8',
       timeframePriority: '1h primary, 4h secondary'
     }
   }
