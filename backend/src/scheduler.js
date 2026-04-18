@@ -201,7 +201,8 @@ async function runAnalysisJob() {
             if (reversalResult.closed.length > 0) {
               console.log(`[Scheduler] Prediction reversal check closed ${reversalResult.closed.length} BTC positions`);
               reversalResult.closed.forEach(closed => {
-                console.log(`[Scheduler] - Position ${closed.position_id}: ${closed.reason}, PnL: $${closed.pnl.toFixed(2)}, Win: ${closed.is_win}`);
+                const pnlDisplay = closed.pnl !== undefined && closed.pnl !== null ? closed.pnl.toFixed(2) : 'N/A';
+                console.log(`[Scheduler] - Position ${closed.position_id}: ${closed.reason}, PnL: $${pnlDisplay}, Win: ${closed.is_win}`);
               });
             } else if (reversalResult.reason) {
               console.log(`[Scheduler] Prediction reversal check: ${reversalResult.reason}`);
