@@ -112,9 +112,10 @@ async function fetchCurrentPrices() {
   try {
     const { fetchRealTimePrices } = await import('../price-fetcher.js');
     const { saveLatestPrice } = await import('../db/database.js');
-    
-    const priceData = await fetchRealTimePrices();
-    
+
+    // Pass db parameter to enable database fallback
+    const priceData = await fetchRealTimePrices(db);
+
     // Update latest_prices in database to ensure fresh data for analysis
     console.log(`[PriceScheduler] Checking DB state: db=${db ? 'OK' : 'NULL'}, priceData=${priceData ? 'OK' : 'NULL'}`);
     if (db && priceData) {
@@ -123,13 +124,13 @@ async function fetchCurrentPrices() {
         const btcPrice = priceData.btc?.price || 0;
         const ethPrice = priceData.eth?.price || 0;
         console.log(`[PriceScheduler] Prices to save - BTC: $${btcPrice}, ETH: $${ethPrice}`);
-        
+
         await saveLatestPrice(db, 'BTC', btcPrice, 0, 0, 0, 0);
         console.log(`[PriceScheduler] Saved BTC price to DB`);
-        
+
         await saveLatestPrice(db, 'ETH', ethPrice, 0, 0, 0, 0);
         console.log(`[PriceScheduler] Saved ETH price to DB`);
-        
+
         console.log(`[PriceScheduler] Updated latest_prices - BTC: $${btcPrice}, ETH: $${ethPrice}`);
       } catch (saveError) {
         console.error('[PriceScheduler] Failed to update latest_prices:', saveError.message);
@@ -138,7 +139,7 @@ async function fetchCurrentPrices() {
     } else {
       console.log(`[PriceScheduler] Skipping DB update: db=${db ? 'OK' : 'NULL'}, priceData.btc=${priceData?.btc ? 'OK' : 'NULL'}, priceData.eth=${priceData?.eth ? 'OK' : 'NULL'}`);
     }
-    
+
     return {
       btc: priceData.btc?.price || null,
       eth: priceData.eth?.price || null

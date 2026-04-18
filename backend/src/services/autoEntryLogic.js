@@ -157,16 +157,38 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     return decision;
   }
 
-  // ALL positions should only open when price reaches the suggested entry level
+  // Check if entry price is already hit by current market price
   const currentPrice = analysis.current_price || 0;
   const suggestedEntry = decision.suggestedPosition.entry_price;
   const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
-  
-  // Always treat as limit order - wait for price to reach entry level
-  decision.orderType = 'limit'; // Will create pending order
-  decision.reason += ` | Limit order: waiting for price to reach entry ${suggestedEntry.toFixed(2)} (current: ${currentPrice.toFixed(2)}, ${(priceDiff * 100).toFixed(2)}% away)`;
-  // For limit orders, keep the suggested entry (waiting for price to hit)
-  console.log(`[AutoEntry] Limit order created: entry=${suggestedEntry.toFixed(2)}, current=${currentPrice.toFixed(2)}, diff=${(priceDiff * 100).toFixed(2)}%`);
+  const epsilon = 0.001; // Small tolerance for floating point comparison
+
+  console.log(`[AutoEntry] DEBUG - action=${decision.action}, currentPrice=${currentPrice}, suggestedEntry=${suggestedEntry}, priceDiff=${(priceDiff * 100).toFixed(2)}%`);
+
+  let entryAlreadyHit = false;
+
+  if (decision.action === 'enter_long') {
+    // For LONG: entry is hit if current price <= entry price (price already dropped to entry)
+    entryAlreadyHit = currentPrice <= (suggestedEntry + epsilon);
+    console.log(`[AutoEntry] DEBUG - LONG check: ${currentPrice} <= (${suggestedEntry} + ${epsilon}) = ${entryAlreadyHit}`);
+  } else if (decision.action === 'enter_short') {
+    // For SHORT: entry is hit if current price >= entry price (price already rose to entry)
+    entryAlreadyHit = currentPrice >= (suggestedEntry - epsilon);
+    console.log(`[AutoEntry] DEBUG - SHORT check: ${currentPrice} >= (${suggestedEntry} - ${epsilon}) = ${entryAlreadyHit}`);
+  }
+
+  if (entryAlreadyHit) {
+    // Entry already hit - execute as market order immediately
+    decision.orderType = 'market';
+    decision.suggestedPosition.entry_price = currentPrice; // Use current price as entry
+    decision.reason += ` | Market order: entry ${suggestedEntry.toFixed(2)} already hit (current: ${currentPrice.toFixed(2)})`;
+    console.log(`[AutoEntry] Market order: entry already hit - entry=${suggestedEntry.toFixed(2)}, current=${currentPrice.toFixed(2)}`);
+  } else {
+    // Entry not yet hit - create pending limit order
+    decision.orderType = 'limit'; // Will create pending order
+    decision.reason += ` | Limit order: waiting for price to reach entry ${suggestedEntry.toFixed(2)} (current: ${currentPrice.toFixed(2)}, ${(priceDiff * 100).toFixed(2)}% away)`;
+    console.log(`[AutoEntry] Limit order created: entry=${suggestedEntry.toFixed(2)}, current=${currentPrice.toFixed(2)}, diff=${(priceDiff * 100).toFixed(2)}%`);
+  }
 
   return decision;
 }

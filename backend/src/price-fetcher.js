@@ -38,37 +38,77 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
  * Fetch real-time prices from Binance for paper trading
  * Binance has much higher rate limits (1200 requests/minute) than CoinGecko
  * This function should be used for paper trading position updates
+ * @param {Object} db - Database instance for fallback (optional)
  * @returns {Promise<Object>} Real-time prices for BTC and ETH
  */
-export async function fetchRealTimePrices() {
-  try {
-    console.log('[PriceFetcher] Fetching real-time prices from Binance...');
-    
-    // Fetch current prices from Binance ticker API (no rate limit issues)
-    const btcRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=BTCUSDT`, {}, 5000);
-    const ethRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=ETHUSDT`, {}, 5000);
-    
-    if (!btcRes.ok || !ethRes.ok) {
-      throw new Error(`Binance ticker error: BTC=${btcRes.status}, ETH=${ethRes.status}`);
-    }
-    
-    const btcPrice = await btcRes.json();
-    const ethPrice = await ethRes.json();
-    
-    console.log(`[PriceFetcher] Real-time prices - BTC: $${btcPrice.price}, ETH: $${ethPrice.price}`);
-    
-    return {
-      timestamp: new Date().toISOString(),
-      btc: {
-        price: parseFloat(btcPrice.price)
-      },
-      eth: {
-        price: parseFloat(ethPrice.price)
+export async function fetchRealTimePrices(db = null) {
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1 second between retries
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[PriceFetcher] Fetching real-time prices from Binance (attempt ${attempt}/${maxRetries})...`);
+
+      // Fetch current prices from Binance ticker API (no rate limit issues)
+      const btcRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=BTCUSDT`, {}, 10000);
+      const ethRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=ETHUSDT`, {}, 10000);
+
+      if (!btcRes.ok || !ethRes.ok) {
+        throw new Error(`Binance ticker error: BTC=${btcRes.status}, ETH=${ethRes.status}`);
       }
-    };
-  } catch (error) {
-    console.error('[PriceFetcher] Real-time price fetch failed:', error.message);
-    throw error;
+
+      const btcPrice = await btcRes.json();
+      const ethPrice = await ethRes.json();
+
+      console.log(`[PriceFetcher] Real-time prices - BTC: $${btcPrice.price}, ETH: $${ethPrice.price}`);
+
+      return {
+        timestamp: new Date().toISOString(),
+        btc: {
+          price: parseFloat(btcPrice.price)
+        },
+        eth: {
+          price: parseFloat(ethPrice.price)
+        }
+      };
+    } catch (error) {
+      console.error(`[PriceFetcher] Real-time price fetch failed (attempt ${attempt}/${maxRetries}):`, error.message);
+
+      // If not the last attempt, wait and retry
+      if (attempt < maxRetries) {
+        console.log(`[PriceFetcher] Retrying in ${retryDelay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        continue;
+      }
+
+      // Last attempt failed, try database fallback
+      console.log('[PriceFetcher] All retries failed, trying database fallback...');
+      if (db) {
+        try {
+          const { getLatestPrice } = await import('./db/database.js');
+          const btcLatest = await getLatestPrice(db, 'BTC');
+          const ethLatest = await getLatestPrice(db, 'ETH');
+
+          if (btcLatest && ethLatest) {
+            console.log(`[PriceFetcher] Using cached prices from DB - BTC: $${btcLatest.price}, ETH: $${ethLatest.price}`);
+            return {
+              timestamp: new Date().toISOString(),
+              btc: {
+                price: parseFloat(btcLatest.price)
+              },
+              eth: {
+                price: parseFloat(ethLatest.price)
+              }
+            };
+          }
+        } catch (dbError) {
+          console.error('[PriceFetcher] Database fallback failed:', dbError.message);
+        }
+      }
+
+      // All fallbacks failed, throw error
+      throw new Error(`Unable to fetch real-time prices after ${maxRetries} attempts: ${error.message}`);
+    }
   }
 }
 

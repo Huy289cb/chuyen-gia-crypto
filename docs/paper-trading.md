@@ -55,26 +55,45 @@ A position is suggested when ALL of the following conditions are met:
 ## Order Types
 
 ### Market Orders
-When AI suggests entry price within **0.5%** of current market price:
+When AI suggests entry price that is **already hit** by current market price:
+- **LONG**: Market order when `current_price <= entry_price` (price already dropped to entry)
+- **SHORT**: Market order when `current_price >= entry_price` (price already rose to entry)
 - Position opened **immediately** at current price
 - No waiting required
-- Best for high-confidence, immediate execution scenarios
+- Best for when setup is already active
 
-### Limit Orders (Pending Orders) - Enhanced (17/04/2026)
-When AI suggests entry price **more than 0.5%** away from current price:
+### Limit Orders (Pending Orders) - Updated (18/04/2026)
+When AI suggests entry price that **has not been hit** yet:
+- **LONG**: Pending when `current_price > entry_price` (waiting for price to drop to entry)
+- **SHORT**: Pending when `current_price < entry_price` (waiting for price to rise to entry)
 - Order stored as **pending** and monitored every 30 seconds
-- **Long positions**: Executed when price drops to entry level
-- **Short positions**: Executed when price rises to entry level
 - Entry price validated to be within 10% of current price (realistic range)
 - **AI Analysis**: AI evaluates pending orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Manual Cancellation**: Users can cancel pending orders via UI
 - **Frontend Display**: Dedicated Pending Orders section shows all active limit orders
 
-Example:
-- Current BTC price: $71,000
-- AI suggests short @ $67,000 (5.6% away)
-- System creates **pending limit order** at $67,000
-- When BTC drops to $67,000 → Position opened automatically
+Examples:
+- **LONG Pending Example**:
+  - Current BTC price: $77,000
+  - AI suggests long @ $76,500 (current > entry)
+  - System creates **pending limit order** at $76,500
+  - When BTC drops to $76,500 → Position opened automatically
+
+- **LONG Market Example**:
+  - Current BTC price: $76,000
+  - AI suggests long @ $76,500 (current <= entry)
+  - System executes **market order** immediately at $76,000
+
+- **SHORT Pending Example**:
+  - Current BTC price: $76,000
+  - AI suggests short @ $76,500 (current < entry)
+  - System creates **pending limit order** at $76,500
+  - When BTC rises to $76,500 → Position opened automatically
+
+- **SHORT Market Example**:
+  - Current BTC price: $77,000
+  - AI suggests short @ $76,500 (current >= entry)
+  - System executes **market order** immediately at $77,000
 
 ## Position Sizing (ICT-Based)
 
@@ -162,14 +181,14 @@ Each position opened is linked to a specific prediction timeframe for outcome tr
 
 ## Pending Orders System
 
-### How It Works
+### How It Works (Updated 18/04/2026)
 
 1. **AI Analysis**: Groq AI analyzes market and suggests entry price
-2. **Order Classification**:
-   - Entry near current price (≤0.5% diff) → **Market Order** (execute now)
-   - Entry far from price (>0.5% diff) → **Limit Order** (create pending)
+2. **Order Classification** (Direction-Based):
+   - **LONG**: Market order when `current_price <= entry_price`, Limit order when `current_price > entry_price`
+   - **SHORT**: Market order when `current_price >= entry_price`, Limit order when `current_price < entry_price`
 3. **Monitoring**: Every 30 seconds, system checks all pending orders
-4. **Execution**: When price hits entry level, position opened automatically
+4. **Execution**: When price crosses entry level, position opened automatically
 
 ### Pending Order Lifecycle
 
@@ -300,42 +319,71 @@ Positions can have the following statuses:
 - **API Limitations**: Analysis runs every 15 minutes due to free Groq API limits.
 - **Data Freshness**: Price updates every 30 seconds for position monitoring.
 
-## Position Opening Logic (Updated 17/04/2026)
+## Position Opening Logic (Updated 18/04/2026)
 
-### Critical Rule: Price Must Reach Entry Level
+### Smart Order Type Decision
 
-**IMPORTANT**: All positions can only be opened when the market price actually reaches the suggested entry price level. This is a fundamental trading rule that ensures realistic execution.
+**IMPORTANT**: The system intelligently decides between market and limit orders based on whether the suggested entry price has already been hit by current market price.
 
 ### Implementation Details
 
-1. **Limit Order Only Strategy**
-   - All trading suggestions are converted to limit orders
-   - No immediate market order execution is allowed
-   - Positions wait in "pending" status until price reaches entry
+1. **Order Type Decision Logic**
+   - **LONG positions**:
+     - Market order when `current_price <= entry_price` (price already dropped to entry)
+     - Limit order when `current_price > entry_price` (waiting for price to drop)
+   - **SHORT positions**:
+     - Market order when `current_price >= entry_price` (price already rose to entry)
+     - Limit order when `current_price < entry_price` (waiting for price to rise)
 
-2. **Price Monitoring System**
-   - Price updates every 30 seconds
-   - Automatic execution when price hits entry level
+2. **Market Order Execution**
+   - Position opened **immediately** at current market price
+   - No waiting required
+   - Best for when setup is already active
+
+3. **Limit Order (Pending) Execution**
+   - Order stored as **pending** and monitored every 30 seconds
+   - Automatic execution when price crosses entry level
    - Full SL/TP management once position is opened
 
-3. **Order Creation Process**
+4. **Order Creation Process Examples**
    ```
-   AI Analysis Entry Price: $74,000
-   Current Market Price: $73,500
-   Action: Create pending limit order at $74,000
-   Status: Wait for price to reach $74,000
-   Execution: Automatic when price hits $74,000
+   Example 1 - LONG Market Order:
+   AI Analysis Entry Price: $76,500
+   Current Market Price: $76,000
+   Decision: Market order (current <= entry)
+   Action: Execute immediately at $76,000
+
+   Example 2 - LONG Limit Order:
+   AI Analysis Entry Price: $76,500
+   Current Market Price: $77,000
+   Decision: Limit order (current > entry)
+   Action: Create pending order at $76,500
+   Status: Wait for price to drop to $76,500
+
+   Example 3 - SHORT Market Order:
+   AI Analysis Entry Price: $76,500
+   Current Market Price: $77,000
+   Decision: Market order (current >= entry)
+   Action: Execute immediately at $77,000
+
+   Example 4 - SHORT Limit Order:
+   AI Analysis Entry Price: $76,500
+   Current Market Price: $76,000
+   Decision: Limit order (current < entry)
+   Action: Create pending order at $76,500
+   Status: Wait for price to rise to $76,500
    ```
 
-4. **Price Difference Tracking**
+5. **Price Difference Tracking**
    - System logs price difference percentages
-   - Example: "Entry $74,000 vs current $73,500 (0.68% away)"
+   - Example: "Entry $76,500 vs current $77,000 (0.65% away)"
    - Helps monitor how close price is to entry level
 
 ### Why This Matters
 
-- **Realistic Trading**: Real brokers only execute at actual market prices
-- **Risk Management**: Prevents positions at unfavorable prices
+- **Realistic Trading**: Executes at appropriate prices based on market conditions
+- **Efficiency**: Market orders for immediate entry when setup is active
+- **Patience**: Limit orders for better entry prices when setup hasn't triggered
 - **Strategy Integrity**: Ensures AI suggestions are executed at intended levels
 - **Performance Accuracy**: True reflection of strategy performance
 
@@ -343,8 +391,11 @@ Positions can have the following statuses:
 
 Check backend logs for:
 ```
-[AutoEntry] Limit order created: entry=74000.00, current=73500.00, diff=0.68%
-[PriceScheduler] BTC limit order executed: side=long @ $74000.00
+[AutoEntry] Market order: entry already hit - entry=76500.00, current=76000.00
+[Scheduler] BTC market order executed immediately at 76000.00
+[AutoEntry] Limit order created: entry=76500.00, current=77000.00, diff=0.65%
+[Scheduler] BTC limit order created (pending): entry 76500.00
+[PriceScheduler] BTC limit order executed: side=long @ $76500.00
 ```
 
 ## ICT Position Management Strategies (Updated 17/04/2026)
