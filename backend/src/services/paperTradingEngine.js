@@ -644,7 +644,7 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
                 current_price: currentPrice
               });
 
-              console.log(`[PaperTrading] ${symbol} position ${position.position_id} hit TP${tpHit.level}, closed ${Math.round(closeRatio * 100)}%, SL moved to ${newStopLoss.toFixed(2)}`);
+              console.log(`[PaperTrading] ${symbol} position ${position.position_id} hit TP${tpHit.level}, closed ${Math.round(closeRatio * 100)}%, SL moved to ${newStopLoss?.toFixed(2) || 'N/A'}`);
             }
           }
         }
