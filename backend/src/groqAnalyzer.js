@@ -436,7 +436,7 @@ function formatAnalysisResponse(rawResponse, priceData) {
     };
 
     // Validate trading suggestion fields for limit orders
-    const validatePriceLevel = (price, currentPrice, type, bias = null) => {
+    const validatePriceLevel = (price, currentPrice, type, bias = null, suggestedEntry = null) => {
       if (!price || isNaN(price)) return null;
       
       const p = parseFloat(price);
@@ -474,6 +474,16 @@ function formatAnalysisResponse(rawResponse, priceData) {
       if (p > maxPrice || p < minPrice) {
         console.log(`[GroqAnalyzer] Fixing unrealistic ${type}: ${p} (outside valid range of ${currentPrice})`);
         return null;
+      }
+      
+      // Additional validation: ensure stop loss is at least 0.5% away from entry
+      if (type === 'stop_loss' && suggestedEntry) {
+        const distance = Math.abs(p - suggestedEntry);
+        const minDistance = suggestedEntry * 0.005; // 0.5% minimum
+        if (distance < minDistance) {
+          console.log(`[GroqAnalyzer] Stop loss ${p} too close to entry ${suggestedEntry} (distance ${distance.toFixed(2)} < minimum ${minDistance.toFixed(2)}), rejecting`);
+          return null;
+        }
       }
       
       return p;
@@ -516,7 +526,7 @@ function formatAnalysisResponse(rawResponse, priceData) {
       // New trading suggestion fields with bias-aware validation
       current_price: currentPrice,
       suggested_entry: validatePriceLevel(coinData?.suggested_entry, currentPrice, 'entry', bias),
-      suggested_stop_loss: validatePriceLevel(coinData?.suggested_stop_loss, currentPrice, 'stop_loss', bias),
+      suggested_stop_loss: validatePriceLevel(coinData?.suggested_stop_loss, currentPrice, 'stop_loss', bias, validatePriceLevel(coinData?.suggested_entry, currentPrice, 'entry', bias)),
       suggested_take_profit: validatePriceLevel(coinData?.suggested_take_profit, currentPrice, 'take_profit', bias),
       expected_rr: coinData?.expected_rr && !isNaN(coinData.expected_rr) ? Math.max(0, parseFloat(coinData.expected_rr)) : null,
       invalidation_level: validatePriceLevel(coinData?.invalidation_level, currentPrice, 'invalidation', bias),

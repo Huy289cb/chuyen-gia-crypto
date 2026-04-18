@@ -530,6 +530,43 @@ TRAIL_DISTANCE_PCT=0.5
 - **PREDICTION_REVERSAL_CONFIDENCE**: Minimum confidence for reversal-triggered closure (80%)
 - **AI_POSITION_ANALYSIS**: AI analyzes open positions every 15 minutes for closure recommendations
 
+## Bug Fixes (18/04/2026)
+
+### Fixed Logic Errors
+
+1. **Pending Order Execution After Restart**
+   - **Issue**: Pending orders wouldn't execute after server restart due to null `previousPrice`
+   - **Fix**: Execute orders if current price is at/beyond entry level regardless of previous price
+   - **Impact**: Limit orders now execute correctly even after server restart
+
+2. **Manual Position Limit Consistency**
+   - **Issue**: Manual opening rejected if ANY position existed, but auto-entry allows up to 8
+   - **Fix**: Manual opening now respects `maxPositionsPerSymbol` limit (8 positions)
+   - **Impact**: Consistent position limits across manual and auto-entry
+
+3. **Minimum Risk Distance Validation**
+   - **Issue**: Manual opening lacked validation for tight stop losses (could create positions with SL $1.27 away from entry on $76k price)
+   - **Fix**: Added 0.5% minimum risk distance validation to manual opening
+   - **Impact**: Prevents unrealistically tight stop losses in manual positions
+
+4. **Auto-Entry Stop Loss Validation**
+   - **Issue**: AI could suggest stop loss too close to entry (e.g., $1.27 difference on $76k price)
+   - **Fix**: Added 0.5% minimum risk distance validation in auto-entry logic
+   - **Impact**: AI suggestions with tight stop losses are rejected
+
+5. **Groq Analyzer Stop Loss Validation**
+   - **Issue**: AI validation only checked price range (50%-150%), not distance from entry
+   - **Fix**: Added minimum distance validation (0.5% from entry) in AI response validation
+   - **Impact**: AI-generated suggestions with tight stop losses are rejected at source
+
+### Validation Summary
+
+All position openings (manual and auto) now enforce:
+- **Minimum risk distance**: 0.5% of entry price (e.g., $380 minimum on $76k entry)
+- **Maximum positions**: 8 concurrent positions per symbol
+- **Price range validation**: Entry within 10% of current price for limit orders
+- **Direction alignment**: Entry price must align with trade direction
+
 ## Future Enhancements
 
 The following features are planned but not yet implemented:

@@ -215,16 +215,17 @@ async function checkAndExecutePendingOrders(symbol, currentPrice) {
       // Check if price crossed the entry level
       // For long: execute when price was ABOVE entry and now is AT or BELOW entry (price dropped to entry)
       // For short: execute when price was BELOW entry and now is AT or ABOVE entry (price rose to entry)
+      // Also execute if price is already at/beyond entry (e.g., after server restart when previousPrice is null)
       let shouldExecute = false;
       
       if (isLong) {
-        // Long: Price must drop from above to at/below entry
-        if (previousPrice !== null && previousPrice > entryPrice && currentPrice <= entryPrice) {
+        // Long: Execute if price is at or below entry (either crossed from above, or already there)
+        if (currentPrice <= entryPrice) {
           shouldExecute = true;
         }
       } else {
-        // Short: Price must rise from below to at/above entry
-        if (previousPrice !== null && previousPrice < entryPrice && currentPrice >= entryPrice) {
+        // Short: Execute if price is at or above entry (either crossed from below, or already there)
+        if (currentPrice >= entryPrice) {
           shouldExecute = true;
         }
       }

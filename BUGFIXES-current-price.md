@@ -1,6 +1,43 @@
-# Bug Fixes: current_price in Open Positions
+# Bug Fixes: Paper Trading Logic Errors
+
+## Date: 2026-04-18
+
+### Problem
+Multiple logic errors in paper trading system causing invalid positions and inconsistent behavior.
+
+### Root Causes Found & Fixed
+
+#### 1. Pending order execution fails after server restart
+**File**: `backend/src/schedulers/priceUpdateScheduler.js` (lines 220-230)
+- **Issue**: Logic checked `previousPrice !== null` before executing pending orders. After server restart, `previousPrice` is null, so orders wouldn't execute even if price was at entry level
+- **Fix**: Changed to execute if current price is at/beyond entry level regardless of previous price. Now executes orders immediately if price condition is met, even on first run after restart
+
+#### 2. Manual position opening inconsistent with auto-entry limit
+**File**: `backend/src/routes/positions.js` (lines 116-121)
+- **Issue**: Manual opening rejected if ANY position existed (`openPositions.length > 0`), but auto-entry allows up to 8 positions (`AUTO_ENTRY_CONFIG.maxPositionsPerSymbol = 8`)
+- **Fix**: Changed to respect `maxPositionsPerSymbol` limit by importing `AUTO_ENTRY_CONFIG` and checking `openPositions.length >= AUTO_ENTRY_CONFIG.maxPositionsPerSymbol`
+
+#### 3. Manual position opening missing minimum risk distance validation
+**File**: `backend/src/routes/positions.js` (lines 124-146)
+- **Issue**: Manual opening calculated position size with 1% risk but didn't validate minimum risk distance (0.5% of entry price) like auto-entry does. Could create positions with unrealistically tight stop losses
+- **Fix**: Added validation for minimum risk distance (0.5% of entry price) with appropriate error messages
+
+#### 4. Tight stop loss validation in auto-entry logic
+**File**: `backend/src/services/autoEntryLogic.js` (lines 265-274)
+- **Issue**: AI could suggest stop loss too close to entry (e.g., entry $76,148.72, SL $76,149.99 - only $1.27 difference), causing guaranteed losses
+- **Fix**: Added validation to ensure risk distance is at least 0.5% of entry price before creating position
+
+#### 5. Tight stop loss validation in Groq analyzer
+**File**: `backend/src/groqAnalyzer.js` (lines 479-487, 529)
+- **Issue**: AI validation only checked if SL/TP was within 50%-150% of current price, but didn't validate minimum distance from entry
+- **Fix**: Added validation in `validatePriceLevel` to ensure stop loss is at least 0.5% away from suggested entry price
+
+---
 
 ## Date: 2026-04-16
+
+### Problem
+Open Positions section not displaying current price properly.
 
 ### Problem
 Open Positions section not displaying current price properly.

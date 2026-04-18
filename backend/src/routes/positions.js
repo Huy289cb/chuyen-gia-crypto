@@ -107,22 +107,39 @@ router.post('/open', async (req, res) => {
     const { evaluateAutoEntry } = await import('../services/autoEntryLogic.js');
     const { openPosition } = await import('../services/paperTradingEngine.js');
     const { getPositions } = await import('../db/database.js');
+    const { AUTO_ENTRY_CONFIG } = await import('../services/autoEntryLogic.js');
     
     // Get account
     const account = await getOrCreateAccount(db, symbol, 100);
     
-    // Check if already has open position
+    // Check if already has too many open positions (respect maxPositionsPerSymbol limit)
     const openPositions = await getPositions(db, { symbol, status: 'open' });
-    if (openPositions.length > 0) {
+    if (openPositions.length >= AUTO_ENTRY_CONFIG.maxPositionsPerSymbol) {
       return res.status(400).json({
         success: false,
-        error: 'Maximum positions already open for this symbol'
+        error: `Maximum positions (${AUTO_ENTRY_CONFIG.maxPositionsPerSymbol}) already open for this symbol`
       });
     }
     
     // Calculate position parameters
     const riskAmount = account.current_balance * 0.01; // 1% risk
     const riskDistance = Math.abs(entry_price - stop_loss);
+    
+    // Validate minimum risk distance (0.5% of entry price to prevent tight stop losses)
+    const minRiskDistance = entry_price * 0.005; // 0.5% minimum
+    if (riskDistance <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid risk distance (entry equals stop loss)'
+      });
+    }
+    if (riskDistance < minRiskDistance) {
+      return res.status(400).json({
+        success: false,
+        error: `Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.5% of entry)`
+      });
+    }
+    
     const sizeQty = riskDistance > 0 ? riskAmount / riskDistance : 0;
     const actualSizeUsd = sizeQty * entry_price;
     const rewardDistance = Math.abs(take_profit - entry_price);
