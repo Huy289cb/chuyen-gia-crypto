@@ -58,7 +58,7 @@ export async function checkPredictionReversal(db, newAnalysis, symbol = 'BTC') {
                         (newBias === 'bearish' && positionBias === 'bullish');
 
       if (isReversal) {
-        console.log(`[PredictionReversal] Detected reversal for ${symbol}: position=${positionBias}, new_analysis=${newBias} (${newConfidence.toFixed(0)}% confidence)`);
+        console.log(`[PredictionReversal] Detected reversal for ${symbol}: position=${positionBias}, new_analysis=${newBias} (${newConfidence?.toFixed(0) || 'N/A'}% confidence)`);
         
         // Get current price for closure with error handling
         let currentPrice = position.current_price;
@@ -296,10 +296,10 @@ export function checkStopLevels(position, currentPrice) {
       tp_hit_count: tpHitCount,
       expected_rr: position.expected_rr,
       precision_debug: {
-        entry_price_rounded: parseFloat(position.entry_price.toFixed(8)),
-        current_price_rounded: parseFloat(currentPrice.toFixed(8)),
-        tp3_rounded: parseFloat(tpLevels[2].toFixed(8)),
-        price_difference: parseFloat((currentPrice - tpLevels[2]).toFixed(8))
+        entry_price_rounded: position.entry_price ? parseFloat(position.entry_price.toFixed(8)) : 'N/A',
+        current_price_rounded: currentPrice ? parseFloat(currentPrice.toFixed(8)) : 'N/A',
+        tp3_rounded: tpLevels[2] ? parseFloat(tpLevels[2].toFixed(8)) : 'N/A',
+        price_difference: (currentPrice && tpLevels[2]) ? parseFloat((currentPrice - tpLevels[2]).toFixed(8)) : 'N/A'
       }
     });
     
@@ -411,7 +411,7 @@ export async function closePartialPosition(db, position, currentPrice, closeSize
     close_price: currentPrice,
     close_size: closeSize,
     close_reason: closeReason,
-    partial_pnl: partialPnl.toFixed(2)
+    partial_pnl: partialPnl?.toFixed(2) || 'N/A'
   });
   
   return { closedPosition: position, realizedPnl: partialPnl, isWin: partialPnl > 0 };
@@ -446,7 +446,7 @@ export async function closePosition(db, position, currentPrice, closeReason) {
     realized_pnl: realizedPnl,
     close_price: currentPrice
   });
-  console.log(`[PaperTrading] Saved realized_pnl: ${realizedPnl.toFixed(2)} to position ${position.position_id}`);
+  console.log(`[PaperTrading] Saved realized_pnl: ${realizedPnl?.toFixed(2) || 'N/A'} to position ${position.position_id}`);
   
   // Update linked prediction with outcome and PnL
   if (position.linked_prediction_id) {
@@ -456,7 +456,7 @@ export async function closePosition(db, position, currentPrice, closeReason) {
         outcome: outcome,
         pnl: realizedPnl
       });
-      console.log(`[PaperTrading] Updated prediction ${position.linked_prediction_id}: ${outcome} (${realizedPnl.toFixed(2)} USDT)`);
+      console.log(`[PaperTrading] Updated prediction ${position.linked_prediction_id}: ${outcome} (${realizedPnl?.toFixed(2) || 'N/A'} USDT)`);
     } catch (err) {
       console.error('[PaperTrading] Failed to update prediction:', err.message);
     }
@@ -515,10 +515,10 @@ export async function closePosition(db, position, currentPrice, closeReason) {
     position_id: position.position_id,
     close_price: currentPrice,
     reason: closeReason,
-    pnl: realizedPnl.toFixed(2),
+    pnl: realizedPnl?.toFixed(2) || 'N/A',
     is_win: isWin,
-    new_balance: newBalance.toFixed(2),
-    new_equity: newEquity.toFixed(2)
+    new_balance: newBalance?.toFixed(2) || 'N/A',
+    new_equity: newEquity?.toFixed(2) || 'N/A'
   });
 
   return { closedPosition, realizedPnl, isWin };
