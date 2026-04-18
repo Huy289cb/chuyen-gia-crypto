@@ -5,11 +5,14 @@
 The Crypto Trend Analyzer includes a comprehensive paper trading system for simulating trades on BTC and ETH without real money. This system uses ICT Smart Money Concepts analysis to automatically suggest and manage positions.
 
 > **IMPORTANT UPDATE (17/04/2026)**: Due to poor performance metrics (1/9 win rate), ETH trading has been **temporarily disabled** to focus on improving core BTC trading skills and achieving profitability before re-enabling multi-symbol trading.
-> 
-> **ADDITIONAL UPDATES (17/04/2026)**: 
+>
+> **ADDITIONAL UPDATES (17/04/2026)**:
 > - Changed main prediction timeframe from 4h+1d to **1h primary + 4h secondary**
 > - Increased max concurrent positions from 5 to **8**
 > - AI now analyzes open positions and can recommend early closure (>80% confidence)
+>
+> **ADDITIONAL UPDATES (18/04/2026)**:
+> - Changed minimum confidence threshold from **80% to 70%** for position entry
 
 ## Features
 
@@ -40,12 +43,12 @@ Each cryptocurrency has its own paper trading account:
 - **Independent Tracking**: Separate equity, PnL, and performance metrics
 - **Auto-Initialization**: Accounts created automatically on first run
 
-## Auto-Entry Criteria (Updated 17/04/2026)
+## Auto-Entry Criteria (Updated 18/04/2026)
 
 A position is suggested when ALL of the following conditions are met:
 
 1. **Symbol Enablement**: Symbol must be in enabled list (currently only BTC)
-2. **Confidence >= 80%**: AI confidence score must be at least 80%
+2. **Confidence >= 70%**: AI confidence score must be at least 70% (updated from 80%)
 3. **Clear Bias**: Bias must be bullish or bearish (not neutral)
 4. **Multi-Timeframe Alignment**: Majority of 1h and 4h timeframes must align with bias (1h primary)
 5. **Risk/Reward >= 2.0**: Expected R:R ratio must be at least 1:2
@@ -494,7 +497,7 @@ Key configuration options in `.env`:
 ```bash
 # Paper Trading Configuration
 RISK_PER_TRADE_PERCENT=1
-MIN_CONFIDENCE_THRESHOLD=80
+MIN_CONFIDENCE_THRESHOLD=70  # Updated from 80% on 18/04/2026
 MIN_RR_RATIO=2
 PRICE_UPDATE_INTERVAL=30
 MAX_CONSECUTIVE_LOSSES=3
@@ -566,6 +569,7 @@ All position openings (manual and auto) now enforce:
 - **Maximum positions**: 8 concurrent positions per symbol
 - **Price range validation**: Entry within 10% of current price for limit orders
 - **Direction alignment**: Entry price must align with trade direction
+- **Minimum confidence**: 70% threshold for auto-entry (updated from 80% on 18/04/2026)
 
 ## Future Enhancements
 

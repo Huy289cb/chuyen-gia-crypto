@@ -2,7 +2,7 @@
 // Determines when to suggest opening positions based on ICT analysis
 
 const AUTO_ENTRY_CONFIG = {
-  minConfidence: 80,           // Minimum confidence score (0-100)
+  minConfidence: 70,           // Minimum confidence score (0-100) - Updated 18/04/2026
   minRRRatio: 2.0,             // Minimum risk/reward ratio
   riskPerTrade: 0.01,          // 1% of account balance
   maxPositionsPerSymbol: 8,    // Max concurrent positions per symbol (BTC only) - Updated 17/04/2026
