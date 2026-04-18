@@ -1006,11 +1006,11 @@ export async function createPosition(db, positionData) {
     } = positionData;
     
     db.run(
-      `INSERT INTO positions 
-       (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit, 
-        size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id, 
+      `INSERT INTO positions
+       (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit,
+        size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id,
         invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         position_id,
         account_id,
