@@ -628,7 +628,13 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
                   newStopLoss = position.entry_price; // Fallback to breakeven
                 }
               }
-              
+
+              // Safety check: ensure newStopLoss is defined
+              if (newStopLoss === undefined || newStopLoss === null) {
+                console.error(`[PaperTrading] newStopLoss is undefined for position ${position.position_id}, using entry_price as fallback`);
+                newStopLoss = position.entry_price;
+              }
+
               await updatePosition(db, position.id, {
                 size_qty: newSize,
                 size_usd: newSize * currentPrice,
@@ -637,7 +643,7 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
                 stop_loss: newStopLoss,
                 current_price: currentPrice
               });
-              
+
               console.log(`[PaperTrading] ${symbol} position ${position.position_id} hit TP${tpHit.level}, closed ${Math.round(closeRatio * 100)}%, SL moved to ${newStopLoss.toFixed(2)}`);
             }
           }
