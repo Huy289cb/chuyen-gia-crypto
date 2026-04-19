@@ -53,6 +53,10 @@ export function usePaperTrading(method: string = 'ict') {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // Clear state before fetching new data to prevent race condition
+    setAccounts([]);
+    setPositions([]);
+    setTradeHistory([]);
     try {
       await Promise.all([fetchAccounts(), fetchPositions(), fetchTradeHistory()]);
     } catch (err) {
