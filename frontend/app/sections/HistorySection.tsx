@@ -65,6 +65,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
               <tr className="bg-surface-1 border-b border-border-default">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-foreground-secondary">Symbol</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-foreground-secondary">Side</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Size</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Opened</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Entry</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Exit</th>
@@ -90,6 +91,9 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     <Badge variant={trade.side === 'long' ? 'success' : 'danger'} size="sm">
                       {trade.side.toUpperCase()}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-foreground">
+                    ${formatPrice(trade.size_usd)}
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
                     {trade.entry_time || trade.opened_at ? new Date(trade.entry_time || trade.opened_at!).toLocaleString() : '-'}
@@ -187,6 +191,8 @@ function TradeCardMobile({ trade }: { trade: Trade }) {
       <div className="grid grid-cols-2 gap-2 text-xs text-foreground-secondary mb-2">
         <div>Entry: <span className="font-mono text-foreground">${formatPrice(trade.entry_price)}</span></div>
         <div>Exit: <span className="font-mono text-foreground">${formatPrice(trade.close_price || trade.exit_price || 0)}</span></div>
+        <div>Size: <span className="font-mono text-foreground">${formatPrice(trade.size_usd)}</span></div>
+        <div>R: <span className="font-mono text-foreground">{trade.r_multiple?.toFixed(2) || '0.00'}R</span></div>
       </div>
       <div className="flex items-center justify-between text-xs">
         <ExitReasonBadge reason={trade.close_reason || trade.exit_reason} />
