@@ -86,7 +86,10 @@ export function PredictionsSection({ symbol, method = 'ict' }: PredictionsSectio
               current_price: analysis.current_price,
               bias: analysis.bias,
               confidence_score: analysis.confidence,
-              narrative_vi: analysis.narrative
+              narrative_vi: analysis.narrative,
+              breakout_retest: analysis.breakout_retest ? JSON.parse(analysis.breakout_retest) : undefined,
+              position_decisions: analysis.position_decisions ? JSON.parse(analysis.position_decisions) : undefined,
+              alternative_scenario: analysis.alternative_scenario ? JSON.parse(analysis.alternative_scenario) : undefined
             };
             
             if (!analysis.predictions || analysis.predictions.length === 0) {

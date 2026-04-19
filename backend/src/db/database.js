@@ -204,8 +204,8 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
     
     db.run(
       `INSERT INTO analysis_history 
-       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer, method_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer, method_id, breakout_retest, position_decisions, alternative_scenario)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         coin.toUpperCase(),
         currentPrice,
@@ -216,7 +216,10 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
         analysis.comparison,
         analysis.marketSentiment,
         analysis.disclaimer,
-        methodId
+        methodId,
+        coinData.breakout_retest ? JSON.stringify(coinData.breakout_retest) : null,
+        coinData.position_decisions ? JSON.stringify(coinData.position_decisions) : null,
+        coinData.alternative_scenario ? JSON.stringify(coinData.alternative_scenario) : null
       ],
       function(err) {
         if (err) {
@@ -514,7 +517,10 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50, met
             'outcome', p.outcome,
             'pnl', p.pnl
           )
-        ) as predictions
+        ) as predictions,
+        ah.breakout_retest,
+        ah.position_decisions,
+        ah.alternative_scenario
        FROM analysis_history ah
        LEFT JOIN predictions p ON ah.id = p.analysis_id
        WHERE ${conditions.join(' AND ')}

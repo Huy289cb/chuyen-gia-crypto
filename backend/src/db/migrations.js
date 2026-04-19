@@ -472,6 +472,39 @@ function createMethodIdIndexes(db, resolve, reject) {
       
       if (completed === indexes.length) {
         console.log('[Migration] Migration 6 completed successfully');
+        // Add Kim Nghia specific columns
+        addKimNghiaColumns(db, resolve, reject);
+      }
+    });
+  });
+}
+
+/**
+ * Add Kim Nghia specific columns to analysis_history table
+ */
+function addKimNghiaColumns(db, resolve, reject) {
+  const columns = [
+    'breakout_retest TEXT',
+    'position_decisions TEXT',
+    'alternative_scenario TEXT'
+  ];
+  
+  let completed = 0;
+  columns.forEach((column) => {
+    db.run(`ALTER TABLE analysis_history ADD COLUMN ${column}`, (err) => {
+      if (err) {
+        if (err.message.includes('duplicate column name')) {
+          console.log(`[Migration] Column ${column} already exists in analysis_history`);
+        } else {
+          console.error(`[Migration] Error adding ${column} to analysis_history:`, err.message);
+        }
+      } else {
+        console.log(`[Migration] Added ${column} to analysis_history`);
+      }
+      completed++;
+      
+      if (completed === columns.length) {
+        console.log('[Migration] Kim Nghia columns migration completed');
         resolve();
       }
     });
