@@ -62,7 +62,7 @@ CORE FRAMEWORK:
    For each timeframe (15m, 1h, 4h, 1d):
    - Direction: up/down/sideways
    - Target: next liquidity level or FVG fill zone
-   - Confidence: 0-1 based on structure clarity
+   - Confidence: 0.00-1.00 based on structure clarity
    
    Example: "15m": { "direction": "up", "target": 67500, "confidence": 0.7 }
 
@@ -71,7 +71,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
   "btc": {
     "bias": "bullish | bearish | neutral",
     "action": "buy | sell | hold",
-    "confidence": 0-1,
+    "confidence": 0.00-1.00,
     "narrative": "max 350 characters in Vietnamese - tell the market story with details about structure, liquidity, and price action",
     "timeframes": {
       "15m": "structure description in Vietnamese",
@@ -87,10 +87,10 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "choch": "change of character levels in Vietnamese"
     },
     "predictions": {
-      "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
-      "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
-      "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
-      "1d": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 }
+      "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
+      "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
+      "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
+      "1d": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 }
     },
     "risk": "volatility warning + invalidation scenario in Vietnamese",
     "suggested_entry": number (optional - specific entry price if bias is clear),
@@ -104,7 +104,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
         {
           "position_id": "string (if available)",
           "action": "close | hold | adjust_sl | adjust_tp",
-          "confidence": 0-1,
+          "confidence": 0.00-1.00,
           "reason": "reason in Vietnamese (max 200 chars)",
           "risk_percent": number (current risk % of position),
           "pnl_percent": number (current PnL % of position)
@@ -117,7 +117,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
         {
           "order_id": "string (if available)",
           "action": "keep | cancel | modify",
-          "confidence": 0-1,
+          "confidence": 0.00-1.00,
           "reason": "reason in Vietnamese (max 200 chars)",
           "price_diff_percent": number (difference from current price),
           "waiting_hours": number (hours since order creation),
@@ -164,7 +164,7 @@ RULES:
     description: 'SMC + Volume + Fibonacci analysis',
     scheduleOffset: 450, // 7.5 minutes = 450 seconds (runs at 7m30s, 22m30s, 37m30s, 52m30s)
     enabled: true,
-    systemPrompt: `Bạn là chuyên gia phân tích crypto theo phương pháp Kim Nghia (SMC + Volume + Fibonacci). Trả về JSON hợp lệ, TẤT CẢ text field bằng tiếng Việt.
+    systemPrompt: `Bạn là chuyên gia phân tích crypto theo phương pháp SMC + Volume + Fibonacci. Trả về JSON hợp lệ, TẤT CẢ text field bằng tiếng Việt.
 
 Phân tích xu hướng hiện tại:
 ↪ Dựa trên hành động giá (price action) và phân tích volume.
@@ -206,10 +206,6 @@ Entry kỳ vọng, vùng SL, các mức TP, xác suất thành công.
 → Giải thích logic dựa trên:
 Cấu trúc thị trường, hành vi giá, volume, Fibonacci zone và vùng liquidity.
 
-Cách trình bày:
-✅ Ưu tiên bảng, gạch đầu dòng rõ ràng, dễ đọc.
-✅ Logic xuyên suốt, thống nhất theo framework dưới đây.
-
 📌 Framework kỹ thuật được sử dụng:
 [Market Structure] + [Volume Analysis] + [Liquidity Zones]
 ↪ Xác định xu hướng, vùng vào lệnh hợp lý.
@@ -223,8 +219,8 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
   "btc": {
     "bias": "bullish | bearish | neutral",
     "action": "buy | sell | hold",
-    "confidence": 0-1,
-    "narrative": "max 350 ký tự tiếng Việt - giải thích cấu trúc, volume, liquidity, SMC, và Fibonacci",
+    "confidence": 0.00-1.00,
+    "narrative": "max 150 ký tự tiếng Việt - giải thích cấu trúc, volume, liquidity, SMC, và Fibonacci",
     "timeframes": {
       "4h": "mô tả cấu trúc tiếng Việt",
       "1h": "mô tả cấu trúc tiếng Việt", 
@@ -262,9 +258,9 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "analysis": "mô tả tiếng Việt"
     },
     "predictions": {
-      "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
-      "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
-      "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 }
+      "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
+      "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
+      "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 }
     },
     "risk": "cảnh báo biến động + kịch bản vô hiệu hóa tiếng Việt",
     "suggested_entry": number (optional - tại vùng Fibonacci),
@@ -278,7 +274,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
         {
           "position_id": "string (nếu có)",
           "action": "close | hold | move_sl | partial_tp | scale",
-          "confidence": 0-1,
+          "confidence": 0.00-1.00,
           "reason": "lý do tiếng Việt (max 200 ký tự)",
           "risk_percent": number,
           "pnl_percent": number,
