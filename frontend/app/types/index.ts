@@ -44,6 +44,15 @@ export interface Analysis {
   expected_rr?: number;
   invalidation_level?: number;
   reason_summary?: string;
+  indicators?: {
+    fibonacci?: {
+      retracement?: Array<{ level: number; price: number; label: string }>;
+      extension?: Array<{ level: number; price: number; label: string }>;
+    };
+    orderBlocks?: Array<{ type: 'bullish' | 'bearish'; high: number; low: number; timestamp: number }>;
+    fairValueGaps?: Array<{ start: { time: number; price: number }; end: { time: number; price: number } }>;
+    volume?: 'high' | 'low' | 'normal';
+  };
 }
 
 export interface CryptoData {
@@ -69,6 +78,7 @@ export interface MarketData {
 export interface TradingAccount {
   id: string;
   symbol: string;
+  method_id?: string;
   equity: number;
   starting_balance: number;
   available_balance: number;

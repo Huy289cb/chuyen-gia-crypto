@@ -178,7 +178,7 @@ export async function initDatabase() {
 }
 
 // Save analysis and predictions
-export async function saveAnalysis(db, coin, priceData, analysis) {
+export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ict') {
   return new Promise((resolve, reject) => {
     const coinData = analysis[coin.toLowerCase()];
     if (!coinData) {
@@ -188,12 +188,12 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
     
     const currentPrice = priceData[coin.toLowerCase()]?.price || 0;
     
-    console.log(`[Database] Saving analysis for ${coin}: currentPrice=${currentPrice}, bias=${coinData.bias}, confidence=${coinData.confidence}`);
+    console.log(`[Database] Saving analysis for ${coin} (method: ${methodId}): currentPrice=${currentPrice}, bias=${coinData.bias}, confidence=${coinData.confidence}`);
     
     db.run(
       `INSERT INTO analysis_history 
-       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer, method_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         coin.toUpperCase(),
         currentPrice,
@@ -203,7 +203,8 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
         coinData.narrative,
         analysis.comparison,
         analysis.marketSentiment,
-        analysis.disclaimer
+        analysis.disclaimer,
+        methodId
       ],
       function(err) {
         if (err) {
@@ -234,8 +235,8 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
                   `INSERT INTO predictions 
                    (analysis_id, coin, timeframe, direction, target_price, confidence, predicted_at, expires_at, 
                     suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr, 
-                    invalidation_level, reason_summary, model_version)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    invalidation_level, reason_summary, model_version, method_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                   [
                     analysisId,
                     coin.toUpperCase(),
@@ -251,7 +252,8 @@ export async function saveAnalysis(db, coin, priceData, analysis) {
                     coinData.expected_rr || null,
                     coinData.invalidation_level || null,
                     coinData.reason_summary || null,
-                    '1.0'
+                    '1.0',
+                    methodId
                   ],
                   function(insertErr) {
                     if (insertErr) rej(insertErr);
@@ -462,8 +464,18 @@ async function getPriceAtTime(db, coin, timestamp) {
 }
 
 // Get recent analysis with predictions for chart overlay
-export async function getRecentAnalysisWithPredictions(db, coin, limit = 50) {
+export async function getRecentAnalysisWithPredictions(db, coin, limit = 50, methodId = null) {
   return new Promise((resolve, reject) => {
+    const conditions = ['ah.coin = ?'];
+    const values = [coin.toUpperCase()];
+    
+    if (methodId) {
+      conditions.push('ah.method_id = ?');
+      values.push(methodId);
+    }
+    
+    values.push(limit);
+    
     db.all(
       `SELECT 
         ah.*,
@@ -490,11 +502,11 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50) {
         ) as predictions
        FROM analysis_history ah
        LEFT JOIN predictions p ON ah.id = p.analysis_id
-       WHERE ah.coin = ?
+       WHERE ${conditions.join(' AND ')}
        GROUP BY ah.id
        ORDER BY ah.timestamp DESC
        LIMIT ?`,
-      [coin.toUpperCase(), limit],
+      values,
       async (err, rows) => {
         if (err) {
           reject(err);
@@ -805,12 +817,12 @@ export async function runDataRetention(db) {
 // PAPER TRADING - ACCOUNT FUNCTIONS
 // ==========================================
 
-// Initialize or get account for a symbol
-export async function getOrCreateAccount(db, symbol, startingBalance = 100) {
+// Initialize or get account for a symbol and method
+export async function getOrCreateAccount(db, symbol, methodId = 'ict', startingBalance = 100) {
   return new Promise((resolve, reject) => {
     db.get(
-      `SELECT * FROM accounts WHERE symbol = ?`,
-      [symbol.toUpperCase()],
+      `SELECT * FROM accounts WHERE symbol = ? AND method_id = ?`,
+      [symbol.toUpperCase(), methodId],
       (err, row) => {
         if (err) {
           reject(err);
@@ -822,9 +834,9 @@ export async function getOrCreateAccount(db, symbol, startingBalance = 100) {
         } else {
           // Create new account
           db.run(
-            `INSERT INTO accounts (symbol, starting_balance, current_balance, equity)
-             VALUES (?, ?, ?, ?)`,
-            [symbol.toUpperCase(), startingBalance, startingBalance, startingBalance],
+            `INSERT INTO accounts (symbol, method_id, starting_balance, current_balance, equity)
+             VALUES (?, ?, ?, ?, ?)`,
+            [symbol.toUpperCase(), methodId, startingBalance, startingBalance, startingBalance],
             function(err) {
               if (err) {
                 reject(err);
@@ -927,11 +939,39 @@ export async function getAllAccounts(db) {
   });
 }
 
-// Get account by symbol
+// Get account by symbol and method
+export async function getAccountBySymbolAndMethod(db, symbol, methodId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM accounts WHERE symbol = ? AND method_id = ?`,
+      [symbol.toUpperCase(), methodId],
+      (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      }
+    );
+  });
+}
+
+// Get accounts by method
+export async function getAccountsByMethod(db, methodId) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM accounts WHERE method_id = ? ORDER BY symbol`,
+      [methodId],
+      (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      }
+    );
+  });
+}
+
+// Get account by symbol (legacy, returns first match)
 export async function getAccountBySymbol(db, symbol) {
   return new Promise((resolve, reject) => {
     db.get(
-      `SELECT * FROM accounts WHERE symbol = ?`,
+      `SELECT * FROM accounts WHERE symbol = ? LIMIT 1`,
       [symbol.toUpperCase()],
       (err, row) => {
         if (err) reject(err);
@@ -941,38 +981,46 @@ export async function getAccountBySymbol(db, symbol) {
   });
 }
 
-// Reset account to starting balance
-export async function resetAccount(db, symbol) {
+// Reset account to starting balance by symbol and method
+export async function resetAccount(db, symbol, methodId = 'ict') {
   return new Promise((resolve, reject) => {
-    // First, close all open positions for this symbol
-    db.run(
-      `UPDATE positions SET status = 'closed_manual', close_time = datetime('now'), close_reason = 'account_reset' WHERE symbol = ? AND status = 'open'`,
-      [symbol.toUpperCase()]
-    );
-
-    db.run(
-      `UPDATE accounts 
-       SET current_balance = starting_balance,
-           equity = starting_balance,
-           unrealized_pnl = 0,
-           realized_pnl = 0,
-           total_trades = 0,
-           winning_trades = 0,
-           losing_trades = 0,
-           max_drawdown = 0,
-           consecutive_losses = 0,
-           cooldown_until = NULL,
-           last_trade_time = NULL
-       WHERE symbol = ?`,
-      [symbol.toUpperCase()],
-      function(err) {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(this.changes);
+    // Get the account first
+    getAccountBySymbolAndMethod(db, symbol, methodId).then(account => {
+      if (!account) {
+        reject(new Error(`Account not found for ${symbol}-${methodId}`));
+        return;
       }
-    );
+      
+      // First, close all open positions for this account
+      db.run(
+        `UPDATE positions SET status = 'closed_manual', close_time = datetime('now'), close_reason = 'account_reset' WHERE account_id = ? AND status = 'open'`,
+        [account.id]
+      );
+
+      db.run(
+        `UPDATE accounts 
+         SET current_balance = starting_balance,
+             equity = starting_balance,
+             unrealized_pnl = 0,
+             realized_pnl = 0,
+             total_trades = 0,
+             winning_trades = 0,
+             losing_trades = 0,
+             max_drawdown = 0,
+             consecutive_losses = 0,
+             cooldown_until = NULL,
+             last_trade_time = NULL
+         WHERE id = ?`,
+        [account.id],
+        function(err) {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(this.changes);
+        }
+      );
+    }).catch(reject);
   });
 }
 
@@ -1002,15 +1050,16 @@ export async function createPosition(db, positionData) {
       ict_strategy,
       tp_levels,
       tp_hit_count,
-      partial_closed
+      partial_closed,
+      method_id = 'ict'
     } = positionData;
     
     db.run(
       `INSERT INTO positions
        (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit,
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id,
-        invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         position_id,
         account_id,
@@ -1030,7 +1079,8 @@ export async function createPosition(db, positionData) {
         ict_strategy,
         tp_levels,
         tp_hit_count || 0,
-        partial_closed || 0
+        partial_closed || 0,
+        method_id
       ],
       function(err) {
         if (err) {
@@ -1068,7 +1118,7 @@ export async function getPosition(db, positionId) {
   });
 }
 
-// Get positions by symbol and/or status
+// Get positions by symbol and/or status and/or method_id
 export async function getPositions(db, filters = {}) {
   return new Promise((resolve, reject) => {
     const conditions = [];
@@ -1093,6 +1143,10 @@ export async function getPositions(db, filters = {}) {
     if (filters.account_id) {
       conditions.push('account_id = ?');
       values.push(filters.account_id);
+    }
+    if (filters.method_id) {
+      conditions.push('method_id = ?');
+      values.push(filters.method_id);
     }
     
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1565,7 +1619,8 @@ export async function createPendingOrder(db, orderData) {
       risk_percent,
       expected_rr,
       linked_prediction_id,
-      invalidation_level
+      invalidation_level,
+      method_id = 'ict'
     } = orderData;
     
     db.run(
@@ -1573,8 +1628,8 @@ export async function createPendingOrder(db, orderData) {
        (order_id, account_id, symbol, side, entry_price, stop_loss, take_profit, 
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
         linked_prediction_id, invalidation_level, status, created_at, executed_at, 
-        executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
@@ -1598,7 +1653,8 @@ export async function createPendingOrder(db, orderData) {
         null, // executed_size_usd
         null, // realized_pnl
         null, // realized_pnl_percent
-        null  // close_reason
+        null, // close_reason
+        method_id
       ],
       function(err) {
         if (err) {
@@ -1619,7 +1675,7 @@ export async function createPendingOrder(db, orderData) {
   });
 }
 
-// Get pending orders by symbol and status
+// Get pending orders by symbol, status, and/or method_id
 export async function getPendingOrders(db, filters = {}) {
   return new Promise((resolve, reject) => {
     const conditions = [];
@@ -1636,6 +1692,10 @@ export async function getPendingOrders(db, filters = {}) {
     if (filters.account_id) {
       conditions.push('account_id = ?');
       values.push(filters.account_id);
+    }
+    if (filters.method_id) {
+      conditions.push('method_id = ?');
+      values.push(filters.method_id);
     }
     
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

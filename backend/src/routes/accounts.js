@@ -2,7 +2,7 @@ import express from 'express';
 
 const router = express.Router();
 
-// GET /api/accounts - Get all accounts
+// GET /api/accounts - Get all accounts (or filter by method)
 router.get('/', async (req, res) => {
   const db = req.db;
   const dbEnabled = req.dbEnabled;
@@ -14,14 +14,22 @@ router.get('/', async (req, res) => {
     });
   }
 
+  const { method } = req.query;
+
   try {
-    const { getAllAccounts } = await import('../db/database.js');
-    const accounts = await getAllAccounts(db);
+    let accounts;
+    if (method) {
+      const { getAccountsByMethod } = await import('../db/database.js');
+      accounts = await getAccountsByMethod(db, method);
+    } else {
+      const { getAllAccounts } = await import('../db/database.js');
+      accounts = await getAllAccounts(db);
+    }
     
     res.json({
       success: true,
       data: accounts,
-      meta: { count: accounts.length }
+      meta: { count: accounts.length, method: method || null }
     });
   } catch (error) {
     res.status(500).json({
@@ -31,7 +39,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/accounts/:symbol - Get account by symbol
+// GET /api/accounts/:symbol - Get account by symbol (and optionally method)
 router.get('/:symbol', async (req, res) => {
   const db = req.db;
   const dbEnabled = req.dbEnabled;
@@ -44,10 +52,17 @@ router.get('/:symbol', async (req, res) => {
   }
 
   const { symbol } = req.params;
+  const { method } = req.query;
 
   try {
-    const { getAccountBySymbol } = await import('../db/database.js');
-    const account = await getAccountBySymbol(db, symbol);
+    let account;
+    if (method) {
+      const { getAccountBySymbolAndMethod } = await import('../db/database.js');
+      account = await getAccountBySymbolAndMethod(db, symbol, method);
+    } else {
+      const { getAccountBySymbol } = await import('../db/database.js');
+      account = await getAccountBySymbol(db, symbol);
+    }
     
     if (!account) {
       return res.status(404).json({
@@ -58,7 +73,8 @@ router.get('/:symbol', async (req, res) => {
     
     res.json({
       success: true,
-      data: account
+      data: account,
+      meta: { method: method || null }
     });
   } catch (error) {
     res.status(500).json({
@@ -68,7 +84,7 @@ router.get('/:symbol', async (req, res) => {
   }
 });
 
-// POST /api/accounts/reset/:symbol - Reset account to starting balance
+// POST /api/accounts/reset/:symbol - Reset account to starting balance (and optionally method)
 router.post('/reset/:symbol', async (req, res) => {
   const db = req.db;
   const dbEnabled = req.dbEnabled;
@@ -81,24 +97,26 @@ router.post('/reset/:symbol', async (req, res) => {
   }
 
   const { symbol } = req.params;
+  const { method = 'ict' } = req.body;
 
   try {
     const { resetAccount } = await import('../db/database.js');
-    const changes = await resetAccount(db, symbol);
+    const changes = await resetAccount(db, symbol, method);
     
-    if (changes === 0) {
+    if (!changes) {
       return res.status(404).json({
         success: false,
         error: 'Account not found'
       });
     }
     
-    const { getAccountBySymbol } = await import('../db/database.js');
-    const account = await getAccountBySymbol(db, symbol);
+    const { getAccountBySymbolAndMethod } = await import('../db/database.js');
+    const account = await getAccountBySymbolAndMethod(db, symbol, method);
     
     res.json({
       success: true,
       data: account,
+      meta: { method },
       message: 'Account reset successfully'
     });
   } catch (error) {

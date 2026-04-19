@@ -14,6 +14,7 @@ interface PriceChartContainerProps {
   predictions?: Prediction[];
   analysis?: Analysis;
   color?: string;
+  method?: string;
 }
 
 interface OHLCData {
@@ -35,7 +36,8 @@ export function PriceChartContainer({
   symbol, 
   predictions,
   analysis,
-  color
+  color,
+  method = 'ict'
 }: PriceChartContainerProps) {
   const [data, setData] = useState<OHLCData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,6 +140,7 @@ export function PriceChartContainer({
         symbol={symbol}
         showPredictions={true}
         timeframe={timeframe}
+        method={method}
       />
     </div>
   );

@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
     });
   }
 
-  const { symbol } = req.query;
+  const { symbol, method } = req.query;
 
   if (!symbol) {
     return res.status(400).json({
@@ -24,8 +24,14 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    const { getAccountBySymbol, calculatePerformance } = await import('../db/database.js');
-    const account = await getAccountBySymbol(db, symbol);
+    let account;
+    if (method) {
+      const { getAccountBySymbolAndMethod } = await import('../db/database.js');
+      account = await getAccountBySymbolAndMethod(db, symbol, method);
+    } else {
+      const { getAccountBySymbol } = await import('../db/database.js');
+      account = await getAccountBySymbol(db, symbol);
+    }
     
     if (!account) {
       return res.status(404).json({
@@ -34,12 +40,13 @@ router.get('/', async (req, res) => {
       });
     }
     
+    const { calculatePerformance } = await import('../db/database.js');
     const performance = await calculatePerformance(db, account.id);
     
     res.json({
       success: true,
       data: performance,
-      meta: { symbol, account_id: account.id }
+      meta: { symbol, account_id: account.id, method: method || null }
     });
   } catch (error) {
     res.status(500).json({
@@ -61,7 +68,7 @@ router.get('/equity-curve', async (req, res) => {
     });
   }
 
-  const { symbol, hours = 168 } = req.query;
+  const { symbol, hours = 168, method } = req.query;
 
   if (!symbol) {
     return res.status(400).json({
@@ -71,8 +78,14 @@ router.get('/equity-curve', async (req, res) => {
   }
 
   try {
-    const { getAccountBySymbol, getAccountSnapshots } = await import('../db/database.js');
-    const account = await getAccountBySymbol(db, symbol);
+    let account;
+    if (method) {
+      const { getAccountBySymbolAndMethod } = await import('../db/database.js');
+      account = await getAccountBySymbolAndMethod(db, symbol, method);
+    } else {
+      const { getAccountBySymbol } = await import('../db/database.js');
+      account = await getAccountBySymbol(db, symbol);
+    }
     
     if (!account) {
       return res.status(404).json({
@@ -81,12 +94,13 @@ router.get('/equity-curve', async (req, res) => {
       });
     }
     
+    const { getAccountSnapshots } = await import('../db/database.js');
     const snapshots = await getAccountSnapshots(db, account.id, parseInt(hours));
     
     res.json({
       success: true,
       data: snapshots,
-      meta: { symbol, hours: parseInt(hours), count: snapshots.length }
+      meta: { symbol, hours: parseInt(hours), count: snapshots.length, method: method || null }
     });
   } catch (error) {
     res.status(500).json({
@@ -108,7 +122,7 @@ router.get('/trades', async (req, res) => {
     });
   }
 
-  const { symbol, limit = 10, page = 1, outcome } = req.query;
+  const { symbol, limit = 10, page = 1, outcome, method } = req.query;
 
   try {
     const { getPositions } = await import('../db/database.js');
@@ -120,6 +134,10 @@ router.get('/trades', async (req, res) => {
     
     if (outcome) {
       filters.outcome = outcome;
+    }
+    
+    if (method) {
+      filters.method_id = method;
     }
     
     const trades = await getPositions(db, filters);
@@ -148,7 +166,8 @@ router.get('/trades', async (req, res) => {
         totalPages,
         limit: limitNum,
         symbol,
-        outcome: outcome || 'all'
+        outcome: outcome || 'all',
+        method: method || null
       }
     });
   } catch (error) {
@@ -171,7 +190,7 @@ router.get('/accuracy-timeframe', async (req, res) => {
     });
   }
 
-  const { symbol } = req.query;
+  const { symbol, method } = req.query;
 
   if (!symbol) {
     return res.status(400).json({
@@ -181,8 +200,14 @@ router.get('/accuracy-timeframe', async (req, res) => {
   }
 
   try {
-    const { getAccountBySymbol, calculateAccuracyByTimeframe } = await import('../db/database.js');
-    const account = await getAccountBySymbol(db, symbol);
+    let account;
+    if (method) {
+      const { getAccountBySymbolAndMethod } = await import('../db/database.js');
+      account = await getAccountBySymbolAndMethod(db, symbol, method);
+    } else {
+      const { getAccountBySymbol } = await import('../db/database.js');
+      account = await getAccountBySymbol(db, symbol);
+    }
     
     if (!account) {
       return res.status(404).json({
@@ -191,12 +216,13 @@ router.get('/accuracy-timeframe', async (req, res) => {
       });
     }
     
+    const { calculateAccuracyByTimeframe } = await import('../db/database.js');
     const accuracy = await calculateAccuracyByTimeframe(db, account.id);
     
     res.json({
       success: true,
       data: accuracy,
-      meta: { symbol, account_id: account.id }
+      meta: { symbol, account_id: account.id, method: method || null }
     });
   } catch (error) {
     res.status(500).json({
@@ -218,7 +244,7 @@ router.get('/accuracy-bias', async (req, res) => {
     });
   }
 
-  const { symbol } = req.query;
+  const { symbol, method } = req.query;
 
   if (!symbol) {
     return res.status(400).json({
@@ -228,8 +254,14 @@ router.get('/accuracy-bias', async (req, res) => {
   }
 
   try {
-    const { getAccountBySymbol, calculateAccuracyByBias } = await import('../db/database.js');
-    const account = await getAccountBySymbol(db, symbol);
+    let account;
+    if (method) {
+      const { getAccountBySymbolAndMethod } = await import('../db/database.js');
+      account = await getAccountBySymbolAndMethod(db, symbol, method);
+    } else {
+      const { getAccountBySymbol } = await import('../db/database.js');
+      account = await getAccountBySymbol(db, symbol);
+    }
     
     if (!account) {
       return res.status(404).json({
@@ -238,12 +270,13 @@ router.get('/accuracy-bias', async (req, res) => {
       });
     }
     
+    const { calculateAccuracyByBias } = await import('../db/database.js');
     const accuracy = await calculateAccuracyByBias(db, account.id);
     
     res.json({
       success: true,
       data: accuracy,
-      meta: { symbol, account_id: account.id }
+      meta: { symbol, account_id: account.id, method: method || null }
     });
   } catch (error) {
     res.status(500).json({
@@ -265,7 +298,7 @@ router.get('/hold-time', async (req, res) => {
     });
   }
 
-  const { symbol } = req.query;
+  const { symbol, method } = req.query;
 
   if (!symbol) {
     return res.status(400).json({
@@ -275,8 +308,14 @@ router.get('/hold-time', async (req, res) => {
   }
 
   try {
-    const { getAccountBySymbol, calculateAverageHoldTime } = await import('../db/database.js');
-    const account = await getAccountBySymbol(db, symbol);
+    let account;
+    if (method) {
+      const { getAccountBySymbolAndMethod } = await import('../db/database.js');
+      account = await getAccountBySymbolAndMethod(db, symbol, method);
+    } else {
+      const { getAccountBySymbol } = await import('../db/database.js');
+      account = await getAccountBySymbol(db, symbol);
+    }
     
     if (!account) {
       return res.status(404).json({
@@ -285,12 +324,13 @@ router.get('/hold-time', async (req, res) => {
       });
     }
     
+    const { calculateAverageHoldTime } = await import('../db/database.js');
     const holdTime = await calculateAverageHoldTime(db, account.id);
     
     res.json({
       success: true,
       data: holdTime,
-      meta: { symbol, account_id: account.id }
+      meta: { symbol, account_id: account.id, method: method || null }
     });
   } catch (error) {
     res.status(500).json({

@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { BookOpen, Settings, Target, Shield, Clock, TrendingUp, AlertTriangle, CheckCircle, XCircle, Info, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BookOpen, Settings, Target, Shield, Clock, TrendingUp, AlertTriangle, CheckCircle, XCircle, Info, Globe, ArrowLeft } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { useSearchParams } from 'next/navigation';
+import { KimNghiaRules } from './kim-nghia-rules';
 
 type Language = 'vi' | 'en';
+type Method = 'ict' | 'kim_nghia';
 
 const translations = {
   vi: {
@@ -445,8 +448,30 @@ const translations = {
 };
 
 export default function RulesPage() {
+  const searchParams = useSearchParams();
   const [language, setLanguage] = useState<Language>('vi');
+  const method = (searchParams.get('method') as Method) || 'ict';
   const t = translations[language];
+
+  const methodName = method === 'ict' ? 'ICT Smart Money' : 'Kim Nghia (SMC + Volume + Fib)';
+  const methodBadge = method === 'ict' ? 'ICT Methodology' : 'Kim Nghia Methodology';
+
+  // Method-specific configuration
+  const methodConfig = method === 'ict' ? {
+    minConfidence: '70%',
+    minRR: '2.0',
+    maxPositions: '8 BTC',
+    timeframes: '1h primary, 4h secondary',
+    schedule: '0m, 15m, 30m, 45m',
+    riskPerTrade: '1%'
+  } : {
+    minConfidence: '75%',
+    minRR: '2.5',
+    maxPositions: '8 BTC',
+    timeframes: 'H4 primary, H1 secondary',
+    schedule: '7m30s, 22m30s, 37m30s, 52m30s',
+    riskPerTrade: '1%'
+  };
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -462,8 +487,9 @@ export default function RulesPage() {
           </p>
           <div className="mt-4 flex items-center justify-center gap-2">
             <Badge variant="info" size="sm">{t.badges.btcFocus}</Badge>
-            <Badge variant="success" size="sm">{t.badges.ictMethodology}</Badge>
+            <Badge variant="success" size="sm">{methodBadge}</Badge>
             <Badge variant="warning" size="sm">{t.badges.aiPowered}</Badge>
+            <Badge variant="default" size="sm">{methodName}</Badge>
           </div>
           
           {/* Language Toggle */}
@@ -471,19 +497,19 @@ export default function RulesPage() {
             <Globe className="w-4 h-4 text-foreground-secondary" />
             <button
               onClick={() => setLanguage(language === 'vi' ? 'en' : 'vi')}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 bg-surface-1 hover:bg-surface-2 border border-border-default hover:border-border-strong text-foreground-secondary hover:text-foreground"
+              className="text-sm text-foreground-secondary hover:text-foreground transition-colors"
             >
-              <span className="text-sm font-medium">
-                {language === 'vi' ? 'Tiếng Việt' : 'English'}
-              </span>
-              <span className="text-xs text-foreground-tertiary">
-                ({language === 'vi' ? 'EN' : 'VI'})
-              </span>
+              {language === 'vi' ? 'English' : 'Tiếng Việt'}
             </button>
           </div>
         </div>
 
-        {/* Auto-Entry Rules */}
+        {/* Method-specific content */}
+        {method === 'kim_nghia' ? (
+          <KimNghiaRules />
+        ) : (
+          <>
+        {/* Auto Entry Rules */}
         <section className="mb-12">
           <CardHeader 
             title={t.sections.autoEntry.title} 
@@ -493,22 +519,10 @@ export default function RulesPage() {
           <Card className="mt-4">
             <div className="space-y-6">
               <RuleCard
-                title={t.rules.symbolEnablement.title}
-                description={t.rules.symbolEnablement.description}
-                status="active"
-                details={t.rules.symbolEnablement.details}
-              />
-              <RuleCard
                 title={t.rules.confidenceThreshold.title}
                 description={t.rules.confidenceThreshold.description}
                 status="active"
                 details={t.rules.confidenceThreshold.details}
-              />
-              <RuleCard
-                title={t.rules.clearBias.title}
-                description={t.rules.clearBias.description}
-                status="active"
-                details={t.rules.clearBias.details}
               />
               <RuleCard
                 title={t.rules.multiTimeframe.title}
@@ -521,12 +535,6 @@ export default function RulesPage() {
                 description={t.rules.riskReward.description}
                 status="active"
                 details={t.rules.riskReward.details}
-              />
-              <RuleCard
-                title={t.rules.cooldown.title}
-                description={t.rules.cooldown.description}
-                status="active"
-                details={t.rules.cooldown.details}
               />
               <RuleCard
                 title={t.rules.positionLimit.title}
@@ -565,12 +573,6 @@ export default function RulesPage() {
                 action={t.orderTypes.limitOrders.action}
                 example={t.orderTypes.limitOrders.example}
               />
-              <OrderTypeCard
-                type={t.orderTypes.limitExecution.title}
-                condition={t.orderTypes.limitExecution.condition}
-                action={t.orderTypes.limitExecution.action}
-                example={t.orderTypes.limitExecution.example}
-              />
             </div>
           </Card>
         </section>
@@ -593,251 +595,140 @@ export default function RulesPage() {
               <RuleCard
                 title={t.positionManagement.earlyClosure.title}
                 description={t.positionManagement.earlyClosure.description}
-                status="active"
+                status={(t.positionManagement.earlyClosure.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
                 details={t.positionManagement.earlyClosure.details}
               />
               <RuleCard
                 title={t.positionManagement.aiAnalysis.title}
                 description={t.positionManagement.aiAnalysis.description}
-                status="active"
+                status={(t.positionManagement.aiAnalysis.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
                 details={t.positionManagement.aiAnalysis.details}
               />
               <RuleCard
                 title={t.positionManagement.riskManagement.title}
                 description={t.positionManagement.riskManagement.description}
-                status="active"
+                status={(t.positionManagement.riskManagement.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
                 details={t.positionManagement.riskManagement.details}
               />
             </div>
           </Card>
         </section>
 
-        {/* Limit Order Management */}
-        <section className="mb-12">
-          <CardHeader 
-            title={t.sections.limitOrderManagement.title} 
-            subtitle={t.sections.limitOrderManagement.subtitle}
-            icon={<Clock className="w-6 h-6" />}
-          />
-          <Card className="mt-4">
-            <div className="space-y-6">
-              <RuleCard
-                title={t.limitOrderManagement.priceMonitoring.title}
-                description={t.limitOrderManagement.priceMonitoring.description}
-                status="active"
-                details={t.limitOrderManagement.priceMonitoring.details}
-              />
-              <RuleCard
-                title={t.limitOrderManagement.aiAnalysis.title}
-                description={t.limitOrderManagement.aiAnalysis.description}
-                status="active"
-                details={t.limitOrderManagement.aiAnalysis.details}
-              />
-              <RuleCard
-                title={t.limitOrderManagement.manualCancellation.title}
-                description={t.limitOrderManagement.manualCancellation.description}
-                status="active"
-                details={t.limitOrderManagement.manualCancellation.details}
-              />
-              <RuleCard
-                title={t.limitOrderManagement.orderValidation.title}
-                description={t.limitOrderManagement.orderValidation.description}
-                status="active"
-                details={t.limitOrderManagement.orderValidation.details}
-              />
-            </div>
-          </Card>
-        </section>
-
-        {/* Performance & Cooldown */}
+        {/* Risk Management */}
         <section className="mb-12">
           <CardHeader 
             title={t.sections.performanceRisk.title} 
             subtitle={t.sections.performanceRisk.subtitle}
-            icon={<TrendingUp className="w-6 h-6" />}
+            icon={<AlertTriangle className="w-6 h-6" />}
           />
           <Card className="mt-4">
             <div className="space-y-6">
               <RuleCard
                 title={t.performanceRisk.consecutiveLosses.title}
                 description={t.performanceRisk.consecutiveLosses.description}
-                status="active"
+                status={(t.performanceRisk.consecutiveLosses.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
                 details={t.performanceRisk.consecutiveLosses.details}
               />
               <RuleCard
                 title={t.performanceRisk.performanceTracking.title}
                 description={t.performanceRisk.performanceTracking.description}
-                status="active"
+                status={(t.performanceRisk.performanceTracking.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
                 details={t.performanceRisk.performanceTracking.details}
               />
               <RuleCard
                 title={t.performanceRisk.accountSeparation.title}
                 description={t.performanceRisk.accountSeparation.description}
-                status="active"
+                status={(t.performanceRisk.accountSeparation.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
                 details={t.performanceRisk.accountSeparation.details}
               />
               <RuleCard
                 title={t.performanceRisk.tradeHistory.title}
                 description={t.performanceRisk.tradeHistory.description}
-                status="active"
+                status={(t.performanceRisk.tradeHistory.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
                 details={t.performanceRisk.tradeHistory.details}
               />
             </div>
           </Card>
         </section>
 
-        {/* Important Notes */}
-        <section className="mb-12">
-          <CardHeader 
-            title={t.sections.importantNotes.title} 
-            subtitle={t.sections.importantNotes.subtitle}
-            icon={<AlertTriangle className="w-6 h-6" />}
-          />
-          <Card className="mt-4">
-            <div className="space-y-4">
-              <NoteCard
-                type="warning"
-                title={t.importantNotes.paperTrading.title}
-                description={t.importantNotes.paperTrading.description}
-              />
-              <NoteCard
-                type="info"
-                title={t.importantNotes.educational.title}
-                description={t.importantNotes.educational.description}
-              />
-              <NoteCard
-                type="warning"
-                title={t.importantNotes.apiLimitations.title}
-                description={t.importantNotes.apiLimitations.description}
-              />
-              <NoteCard
-                type="info"
-                title={t.importantNotes.dataFreshness.title}
-                description={t.importantNotes.dataFreshness.description}
-              />
-              <NoteCard
-                type="warning"
-                title={t.importantNotes.ethDisabled.title}
-                description={t.importantNotes.ethDisabled.description}
-              />
-            </div>
-          </Card>
-        </section>
-
-        {/* Configuration Summary */}
+        {/* System Configuration */}
         <section className="mb-12">
           <CardHeader 
             title={t.sections.configuration.title} 
             subtitle={t.sections.configuration.subtitle}
-            icon={<Settings className="w-6 h-6" />}
+            icon={<Clock className="w-6 h-6" />}
           />
           <Card className="mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <ConfigSection title={t.tradingSettings.title}>
-                <ConfigItem label="Risk Per Trade" value={t.tradingSettings.riskPerTrade} />
-                <ConfigItem label="Min Confidence" value={t.tradingSettings.minConfidence} />
-                <ConfigItem label="Min R:R Ratio" value={t.tradingSettings.minRR} />
-                <ConfigItem label="Max Positions" value={t.tradingSettings.maxPositions} />
-                <ConfigItem label="Enabled Symbols" value={t.tradingSettings.enabledSymbols} />
-                <ConfigItem label="Timeframes" value={t.tradingSettings.timeframes} />
-              </ConfigSection>
-              <ConfigSection title={t.systemSettings.title}>
-                <ConfigItem label="Price Updates" value={t.systemSettings.priceUpdates} />
-                <ConfigItem label="AI Analysis" value={t.systemSettings.aiAnalysis} />
-                <ConfigItem label="Cooldown Duration" value={t.systemSettings.cooldownDuration} />
-                <ConfigItem label="Max Consecutive Losses" value={t.systemSettings.maxConsecutiveLosses} />
-                <ConfigItem label="Timeframe Priority" value={t.systemSettings.timeframePriority} />
-              </ConfigSection>
-            </div>
+            <ConfigSection title={t.tradingSettings.title}>
+              <ConfigItem label="Method" value={methodName} />
+              <ConfigItem label="Risk Per Trade" value={methodConfig.riskPerTrade} />
+              <ConfigItem label="Min Confidence" value={methodConfig.minConfidence} />
+              <ConfigItem label="Min R:R Ratio" value={methodConfig.minRR} />
+              <ConfigItem label="Max Positions" value={methodConfig.maxPositions} />
+              <ConfigItem label="Enabled Symbols" value={t.tradingSettings.enabledSymbols} />
+              <ConfigItem label="Timeframes" value={methodConfig.timeframes} />
+            </ConfigSection>
+            <ConfigSection title={t.systemSettings.title}>
+              <ConfigItem label="Analysis Schedule" value={methodConfig.schedule} />
+              <ConfigItem label="Price Updates" value={t.systemSettings.priceUpdates} />
+              <ConfigItem label="Cooldown Duration" value={t.systemSettings.cooldownDuration} />
+              <ConfigItem label="Max Consecutive Losses" value={t.systemSettings.maxConsecutiveLosses} />
+            </ConfigSection>
           </Card>
         </section>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function RuleCard({ title, description, status, details }: {
-  title: string;
-  description: string;
-  status: 'active' | 'inactive' | 'conditional';
-  details: string;
-}) {
-  const StatusIcon = status === 'active' ? CheckCircle : status === 'inactive' ? XCircle : AlertTriangle;
-  const statusColor = status === 'active' ? 'text-success' : status === 'inactive' ? 'text-danger' : 'text-warning';
-  
+// Component Definitions
+function RuleCard({ title, description, status, details }: { title: string; description: string; status: 'active' | 'inactive' | 'conditional' | 'monitoring'; details: string }) {
+  const statusColors = {
+    active: 'text-success',
+    inactive: 'text-foreground-tertiary',
+    conditional: 'text-warning',
+    monitoring: 'text-info'
+  };
+
   return (
-    <div className="border border-border-subtle rounded-lg p-4 bg-surface-1/50">
-      <div className="flex items-start gap-3">
-        <StatusIcon className={`w-5 h-5 ${statusColor} mt-0.5 flex-shrink-0`} />
-        <div className="flex-1">
-          <h3 className="font-semibold text-foreground mb-1">{title}</h3>
-          <p className="text-foreground-secondary text-sm mb-2">{description}</p>
-          <p className="text-foreground-tertiary text-xs font-mono bg-surface-1 rounded px-2 py-1">
-            {details}
-          </p>
-        </div>
+    <div className="p-4 rounded-lg bg-surface-1 border border-border-default">
+      <div className="flex items-start justify-between mb-2">
+        <h3 className="font-medium text-foreground">{title}</h3>
+        <span className={`text-xs font-medium ${statusColors[status]}`}>{status}</span>
       </div>
+      <p className="text-sm text-foreground-secondary mb-2">{description}</p>
+      <p className="text-xs text-foreground-tertiary font-mono">{details}</p>
     </div>
   );
 }
 
-function OrderTypeCard({ type, condition, action, example }: {
-  type: string;
-  condition: string;
-  action: string;
-  example: string;
-}) {
+function OrderTypeCard({ type, condition, action, example }: { type: string; condition: string; action: string; example: string }) {
   return (
-    <div className="border border-border-subtle rounded-lg p-4 bg-surface-1/50">
-      <h3 className="font-semibold text-foreground mb-3">{type}</h3>
+    <div className="p-4 rounded-lg bg-surface-1 border border-border-default">
+      <h3 className="font-medium text-foreground mb-3">{type}</h3>
       <div className="space-y-2">
         <div className="flex items-start gap-2">
-          <div className="w-2 h-2 bg-accent-primary rounded-full mt-1.5 flex-shrink-0" />
+          <span className="text-xs text-accent-primary mt-0.5">•</span>
           <div>
-            <p className="text-foreground-secondary text-sm font-medium">Condition:</p>
-            <p className="text-foreground text-sm">{condition}</p>
+            <span className="text-xs text-foreground-tertiary">Condition: </span>
+            <span className="text-sm text-foreground">{condition}</span>
           </div>
         </div>
         <div className="flex items-start gap-2">
-          <div className="w-2 h-2 bg-success rounded-full mt-1.5 flex-shrink-0" />
+          <span className="text-xs text-accent-primary mt-0.5">•</span>
           <div>
-            <p className="text-foreground-secondary text-sm font-medium">Action:</p>
-            <p className="text-foreground text-sm">{action}</p>
+            <span className="text-xs text-foreground-tertiary">Action: </span>
+            <span className="text-sm text-foreground">{action}</span>
           </div>
         </div>
         <div className="flex items-start gap-2">
-          <div className="w-2 h-2 bg-info rounded-full mt-1.5 flex-shrink-0" />
+          <span className="text-xs text-accent-primary mt-0.5">•</span>
           <div>
-            <p className="text-foreground-secondary text-sm font-medium">Example:</p>
-            <p className="text-foreground text-sm">{example}</p>
+            <span className="text-xs text-foreground-tertiary">Example: </span>
+            <span className="text-sm text-foreground">{example}</span>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NoteCard({ type, title, description }: {
-  type: 'warning' | 'info' | 'success' | 'danger';
-  title: string;
-  description: string;
-}) {
-  const colors = {
-    warning: 'bg-warning-dim text-warning border-warning/20',
-    info: 'bg-info-dim text-info border-info/20',
-    success: 'bg-success-dim text-success border-success/20',
-    danger: 'bg-danger-dim text-danger border-danger/20'
-  };
-  
-  const Icon = type === 'warning' ? AlertTriangle : type === 'info' ? Info : type === 'success' ? CheckCircle : XCircle;
-  
-  return (
-    <div className={`border rounded-lg p-4 ${colors[type]}`}>
-      <div className="flex items-start gap-3">
-        <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
-        <div>
-          <h4 className="font-semibold mb-1">{title}</h4>
-          <p className="text-sm">{description}</p>
         </div>
       </div>
     </div>
@@ -846,20 +737,18 @@ function NoteCard({ type, title, description }: {
 
 function ConfigSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <h3 className="font-semibold text-foreground mb-3">{title}</h3>
-      <div className="space-y-2">
-        {children}
-      </div>
+    <div className="mb-6">
+      <h3 className="text-sm font-medium text-foreground mb-3">{title}</h3>
+      <div className="space-y-2">{children}</div>
     </div>
   );
 }
 
 function ConfigItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-center py-2 border-b border-border-subtle">
-      <span className="text-foreground-secondary text-sm">{label}</span>
-      <span className="text-foreground font-mono text-sm font-medium">{value}</span>
+    <div className="flex items-center justify-between py-2 border-b border-border-default last:border-0">
+      <span className="text-sm text-foreground-secondary">{label}</span>
+      <span className="text-sm font-medium text-foreground">{value}</span>
     </div>
   );
 }

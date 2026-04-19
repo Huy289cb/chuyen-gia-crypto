@@ -21,6 +21,7 @@ const biasLabels: Record<string, string> = {
 
 interface PredictionsSectionProps {
   symbol: string;
+  method?: string;
 }
 
 // Extended prediction with analysis data
@@ -34,7 +35,7 @@ interface PredictionWithAnalysis extends PredictionHistory {
   suggested_take_profit?: number;
 }
 
-export function PredictionsSection({ symbol }: PredictionsSectionProps) {
+export function PredictionsSection({ symbol, method = 'ict' }: PredictionsSectionProps) {
   const [predictions, setPredictions] = useState<PredictionWithAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +45,7 @@ export function PredictionsSection({ symbol }: PredictionsSectionProps) {
         const API_BASE = process.env.NODE_ENV === 'development' 
           ? 'http://localhost:3000/api' 
           : '/api';
-        const response = await fetch(`${API_BASE}/predictions/${symbol}?limit=20`);
+        const response = await fetch(`${API_BASE}/predictions/${symbol}?limit=20&method=${method}`);
         const data = await response.json();
         if (data.success && data.data) {
           // Flatten predictions from all analyses like old frontend

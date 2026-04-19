@@ -2,7 +2,10 @@
 
 ## Overview
 
-The Crypto Trend Analyzer includes a comprehensive paper trading system for simulating trades on BTC and ETH without real money. This system uses ICT Smart Money Concepts analysis to automatically suggest and manage positions.
+The Crypto Trend Analyzer includes a comprehensive paper trading system for simulating trades on BTC and ETH without real money. This system supports **multiple trading methods** for parallel analysis and comparison:
+
+- **ICT Smart Money**: ICT concepts with 1h/4h timeframe analysis
+- **Kim Nghia Method**: SMC + Volume + Fibonacci with H4/H1 timeframe analysis
 
 > **IMPORTANT UPDATE (17/04/2026)**: Due to poor performance metrics (1/9 win rate), ETH trading has been **temporarily disabled** to focus on improving core BTC trading skills and achieving profitability before re-enabling multi-symbol trading.
 >
@@ -13,8 +16,30 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 >
 > **ADDITIONAL UPDATES (18/04/2026)**:
 > - Changed minimum confidence threshold from **80% to 70%** for position entry
+>
+> **MULTI-METHOD UPDATE (19/04/2026)**:
+> - Added support for multiple trading methods (ICT and Kim Nghia)
+> - Method-specific accounts with separate 100U starting balance per method
+> - Staggered scheduling: ICT at 0/15/30/45m, Kim Nghia at 7m30s/22m30s/37m30s/52m30s
+> - Method tab switcher in frontend header for easy method switching
+> - Method filtering on all API endpoints
+> - Method comparison endpoint for side-by-side performance analysis
 
 ## Features
+
+### Multi-Method Support (New - 19/04/2026)
+
+- **Method-Specific Accounts**: Separate 100U accounts for each trading method (ICT, Kim Nghia)
+- **Staggered Scheduling**: Methods run on different schedules to avoid API rate limits
+  - ICT: Runs at 0m, 15m, 30m, 45m past the hour
+  - Kim Nghia: Runs at 7m30s, 22m30s, 37m30s, 52m30s past the hour
+- **Method Configuration**: Each method has its own system prompt, auto-entry thresholds, and trading rules
+- **Frontend Method Switcher**: Tab-based switcher in header for easy method selection
+- **Method Filtering**: All API endpoints support `?method=ict|kim_nghia` query parameter
+- **Method Comparison**: `/api/compare` endpoint provides side-by-side performance comparison
+- **Method-Specific Cache**: Separate analysis cache per method to prevent data mixing
+
+### Existing Features
 
 - **Auto-Entry Logic**: Automatically suggests positions when confidence >= 80% and ICT criteria are met
 - **Dual Order Types**: Supports both **Market Orders** (immediate execution) and **Limit Orders** (wait for price)
@@ -33,15 +58,23 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 
 ## Account Structure
 
-**Current Status (17/04/2026)**:
-- **BTC Account**: 100 USDT starting balance, fully active
-- **ETH Account**: 100 USDT starting balance, trading temporarily disabled
+**Current Status (19/04/2026)**:
+- **ICT Method Accounts**: 100 USDT starting balance per symbol (BTC, ETH)
+- **Kim Nghia Method Accounts**: 100 USDT starting balance per symbol (BTC, ETH)
+- **ETH Trading**: Temporarily disabled for both methods to focus on BTC
 - **Focus**: BTC-only trading to improve core skills and achieve profitability
 
-Each cryptocurrency has its own paper trading account:
-- **Starting Balance**: 100 USDT
-- **Independent Tracking**: Separate equity, PnL, and performance metrics
-- **Auto-Initialization**: Accounts created automatically on first run
+Each trading method has its own independent paper trading accounts:
+- **Starting Balance**: 100 USDT per method per symbol
+- **Method-Specific Tracking**: Separate equity, PnL, and performance metrics per method
+- **Auto-Initialization**: Accounts created automatically on first run per method
+- **Database Schema**: Accounts table uses UNIQUE(symbol, method_id) for method separation
+
+**Account Examples**:
+- `BTC - ICT Method`: 100U starting balance, ICT analysis
+- `BTC - Kim Nghia Method`: 100U starting balance, Kim Nghia analysis
+- `ETH - ICT Method`: 100U starting balance (trading disabled)
+- `ETH - Kim Nghia Method`: 100U starting balance (trading disabled)
 
 ## Auto-Entry Criteria (Updated 18/04/2026)
 
@@ -215,21 +248,48 @@ Each position opened is linked to a specific prediction timeframe for outcome tr
 
 ## API Endpoints
 
-### Positions
-- `GET /api/positions` - Get all positions (filter by symbol, status)
+### Analysis (Updated - 19/04/2026)
+- `GET /api/analysis` - Get cached trend analysis (supports `?method=ict|kim_nghia`)
+- `GET /api/analysis?method=ict` - Get ICT method analysis
+- `GET /api/analysis?method=kim_nghia` - Get Kim Nghia method analysis
+
+### Predictions (Updated - 19/04/2026)
+- `GET /api/predictions/:coin` - Get prediction history (supports `?method=ict|kim_nghia`)
+- `GET /api/predictions/:coin?method=ict` - Get ICT predictions
+- `GET /api/predictions/:coin?method=kim_nghia` - Get Kim Nghia predictions
+
+### Positions (Updated - 19/04/2026)
+- `GET /api/positions` - Get all positions (filter by symbol, status, method)
+- `GET /api/positions?method=ict` - Get ICT method positions
+- `GET /api/positions?method=kim_nghia` - Get Kim Nghia method positions
 - `GET /api/positions/:id` - Get specific position
 - `POST /api/positions/open` - Open new position
 - `POST /api/positions/close/:id` - Close position
 
-### Accounts
-- `GET /api/accounts` - Get all accounts
-- `GET /api/accounts/:symbol` - Get account by symbol
-- `POST /api/accounts/reset/:symbol` - Reset account to starting balance
+### Accounts (Updated - 19/04/2026)
+- `GET /api/accounts` - Get all accounts (supports `?method=ict|kim_nghia`)
+- `GET /api/accounts?method=ict` - Get ICT method accounts
+- `GET /api/accounts?method=kim_nghia` - Get Kim Nghia method accounts
+- `GET /api/accounts/:symbol` - Get account by symbol (supports `?method=ict|kim_nghia`)
+- `POST /api/accounts/reset/:symbol` - Reset account to starting balance (requires `method` in body)
 
-### Performance
-- `GET /api/performance?symbol=` - Get performance metrics
-- `GET /api/performance/equity-curve?symbol=` - Get equity curve data
-- `GET /api/performance/trades?symbol=` - Get trade history
+### Performance (Updated - 19/04/2026)
+- `GET /api/performance?symbol=` - Get performance metrics (supports `?method=ict|kim_nghia`)
+- `GET /api/performance/equity-curve?symbol=` - Get equity curve data (supports `?method=ict|kim_nghia`)
+- `GET /api/performance/trades?symbol=` - Get trade history (supports `?method=ict|kim_nghia`)
+- `GET /api/performance/accuracy-timeframe?symbol=` - Get accuracy by timeframe (supports `?method=ict|kim_nghia`)
+- `GET /api/performance/accuracy-bias?symbol=` - Get accuracy by bias (supports `?method=ict|kim_nghia`)
+- `GET /api/performance/hold-time?symbol=` - Get average hold time (supports `?method=ict|kim_nghia`)
+
+### Method Comparison (New - 19/04/2026)
+- `GET /api/compare` - Side-by-side comparison of ICT and Kim Nghia methods
+  - Returns account metrics, performance stats, open positions, latest analysis for both methods
+  - Includes summary showing which method performs better in each category
+
+### Pending Orders (Updated - 19/04/2026)
+- `GET /api/pending-orders` - Get all pending orders (supports `?method=ict|kim_nghia`)
+- `GET /api/pending-orders/:id` - Get specific pending order
+- `POST /api/pending-orders/:id/cancel` - Cancel a pending order
 
 ## Performance Metrics
 

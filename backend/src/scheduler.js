@@ -2,6 +2,8 @@ import cron from 'node-cron';
 import { fetchPrices } from './price-fetcher.js';
 import { analyzeWithGroq } from './groqAnalyzer.js';
 import { cache } from './cache.js';
+import { METHODS } from './config/methods.js';
+import { createAnalyzer } from './analyzers/analyzerFactory.js';
 
 let db = null;
 let dbEnabled = false;
@@ -55,21 +57,24 @@ async function initDb() {
 
 // Run analysis job every 15 minutes
 export async function startScheduler() {
-  console.log('[Scheduler] Starting 15-minute job scheduler...');
+  console.log('[Scheduler] Starting multi-method staggered scheduler...');
   
   // Initialize database
   await initDb();
   
-  // Run immediately on startup (fire and forget with error handling)
-  runAnalysisJob().catch(err => {
-    console.error('[Scheduler] Initial job failed:', err.message);
+  // ICT Method - Runs at 0m, 15m, 30m, 45m (every 15 minutes)
+  cron.schedule('*/15 * * * *', () => {
+    console.log('[Scheduler] Triggering ICT analysis...');
+    runMethodAnalysis('ict').catch(err => {
+      console.error('[Scheduler] ICT analysis failed:', err.message);
+    });
   });
   
-  // Schedule: every 15 minutes
-  cron.schedule('*/15 * * * *', () => {
-    console.log('[Scheduler] Triggering scheduled analysis...');
-    runAnalysisJob().catch(err => {
-      console.error('[Scheduler] Scheduled job failed:', err.message);
+  // KimNghia Method - Runs at 7m30s, 22m30s, 37m30s, 52m30s (7.5 min offset)
+  cron.schedule('7,22,37,52 * * * *', () => {
+    console.log('[Scheduler] Triggering KimNghia analysis...');
+    runMethodAnalysis('kim_nghia').catch(err => {
+      console.error('[Scheduler] KimNghia analysis failed:', err.message);
     });
   });
   
@@ -111,7 +116,105 @@ export async function startScheduler() {
     })();
   }
   
-  console.log('[Scheduler] Scheduled job registered (*/15 * * * *)');
+  console.log('[Scheduler] Staggered scheduler registered (ICT: */15 * * * *, KimNghia: 7,22,37,52 * * * *)');
+}
+
+/**
+ * Run analysis for a specific method
+ * @param {string} methodId - Method ID ('ict' or 'kim_nghia')
+ */
+async function runMethodAnalysis(methodId) {
+  const startTime = Date.now();
+  const method = METHODS[methodId];
+  
+  console.log(`\n[Scheduler][${method.name}] Starting analysis at ${formatVietnamTime(new Date())}...`);
+  
+  try {
+    // Step 1: Fetch price data
+    const priceData = await fetchPrices(db);
+    
+    // Step 2: Get or create method-specific account for BTC
+    const account = await getOrCreateAccount(db, 'BTC', methodId, 100);
+    
+    // Step 3: Run method-specific analysis using analyzer factory
+    const analyzer = createAnalyzer(method);
+    const analysis = await analyzer.analyze(priceData, db);
+    
+    // Step 4: Save to database with method_id
+    if (dbEnabled && db) {
+      try {
+        const { saveAnalysis, getPositions, evaluateAutoEntry } = await import('./db/database.js');
+        const { openPosition } = await import('./services/paperTradingEngine.js');
+        
+        // Save analysis for BTC with method_id
+        const btcResult = await saveAnalysis(db, 'BTC', priceData, analysis, methodId);
+        const btcPredictionId = btcResult.predictionIds?.['4h'] || btcResult.predictionIds?.['1d'];
+        
+        // Cache with method_id
+        cache.setMethod(methodId, {
+          prices: priceData,
+          analysis: analysis,
+          lastUpdated: priceData.timestamp
+        });
+        
+        // Get open positions for this method's account
+        const openPositions = await getPositions(db, { account_id: account.id, status: 'open' });
+        
+        // Auto-entry evaluation (method-specific)
+        const decision = evaluateAutoEntry(analysis.btc, account, openPositions, method.autoEntry);
+        
+        console.log(`[Scheduler][${method.name}] Auto-entry decision: ${decision.action} - ${decision.reason}`);
+        
+        if (decision.shouldEnter && decision.suggestedPosition) {
+          try {
+            const position = decision.suggestedPosition;
+            console.log(`[Scheduler][${method.name}] BTC order: type=${decision.orderType}, side=${position.side}, entry=${position.entry_price}, current_price=${analysis.btc.current_price}, SL=${position.stop_loss}, TP=${position.take_profit}`);
+
+            if (decision.orderType === 'market') {
+              // Execute immediately as market order
+              await openPosition(db, account, position, btcPredictionId, methodId);
+              console.log(`[Scheduler][${method.name}] BTC market order executed immediately at ${position.entry_price}`);
+            } else {
+              // Create pending limit order
+              const { createPendingOrder } = await import('./db/database.js');
+              const { randomUUID } = await import('crypto');
+              await createPendingOrder(db, {
+                order_id: randomUUID(),
+                account_id: account.id,
+                symbol: 'BTC',
+                side: position.side,
+                entry_price: position.entry_price,
+                stop_loss: position.stop_loss,
+                take_profit: position.take_profit,
+                size_usd: position.size_usd,
+                size_qty: position.size_qty,
+                risk_usd: position.risk_usd,
+                risk_percent: position.risk_percent,
+                expected_rr: position.expected_rr,
+                linked_prediction_id: btcPredictionId,
+                invalidation_level: position.invalidation_level,
+                method_id: methodId
+              });
+              console.log(`[Scheduler][${method.name}] BTC limit order created (pending): entry ${position.entry_price}`);
+            }
+          } catch (posError) {
+            console.error(`[Scheduler][${method.name}] Failed to process BTC order:`, posError.message);
+          }
+        }
+        
+        console.log(`[Scheduler][${method.name}] Analysis complete - Account: ${account.id}, Balance: $${account.current_balance.toFixed(2)}`);
+      } catch (dbError) {
+        console.error(`[Scheduler][${method.name}] Database save error:`, dbError.message);
+      }
+    }
+    
+    const duration = Date.now() - startTime;
+    console.log(`[Scheduler][${method.name}] Completed in ${duration}ms\n`);
+    
+  } catch (error) {
+    console.error(`[Scheduler][${method.name}] Failed:`, error.message);
+    console.log(`[Scheduler][${method.name}] Will retry in next scheduled run\n`);
+  }
 }
 
 async function runAnalysisJob() {

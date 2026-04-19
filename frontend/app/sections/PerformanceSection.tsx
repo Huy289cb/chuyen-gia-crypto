@@ -9,9 +9,10 @@ import type { PerformanceMetrics, ApiResponse } from '../types';
 
 interface PerformanceSectionProps {
   symbol: string;
+  method?: string;
 }
 
-export function PerformanceSection({ symbol }: PerformanceSectionProps) {
+export function PerformanceSection({ symbol, method = 'ict' }: PerformanceSectionProps) {
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +22,7 @@ export function PerformanceSection({ symbol }: PerformanceSectionProps) {
         const API_BASE = process.env.NODE_ENV === 'development' 
           ? 'http://localhost:3000/api' 
           : '/api';
-        const response = await fetch(`${API_BASE}/performance?symbol=${symbol}`);
+        const response = await fetch(`${API_BASE}/performance?symbol=${symbol}&method=${method}`);
         const data: ApiResponse<PerformanceMetrics> = await response.json();
         if (data.success && data.data) {
           setMetrics(data.data);

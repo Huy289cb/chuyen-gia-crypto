@@ -21,6 +21,7 @@ interface PriceChartProps {
   symbol?: string;
   showPredictions?: boolean;
   timeframe?: string;
+  method?: string;
 }
 
 // Helper to extract prices from text
@@ -43,17 +44,18 @@ export function PriceChart({
   height = 300,
   symbol,
   showPredictions = true,
-  timeframe = '1h'
+  timeframe = '1h',
+  method = 'ict'
 }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   // Extract ICT levels
   const ictLevels = useMemo(() => {
     if (!analysis?.key_levels) return { orderBlocks: [], fvg: [], liquidity: [], bos: [], choch: [] };
-    
+
     const { liquidity, order_blocks, fvg, bos, choch } = analysis.key_levels;
     const currentPrice = data[data.length - 1]?.close || 0;
-    
+
     return {
       orderBlocks: extractPrices(order_blocks, currentPrice),
       fvg: extractPrices(fvg, currentPrice),
@@ -63,9 +65,44 @@ export function PriceChart({
     };
   }, [analysis, data]);
 
+  // Extract Kim Nghia indicators
+  const kimNghiaIndicators = useMemo(() => {
+    if (method !== 'kim_nghia') {
+      return { fibonacci: null, orderBlocks: [], fairValueGaps: [], volume: 'normal' };
+    }
+
+    // If method is kim_nghia but analysis.indicators is missing, return default indicators
+    if (!analysis?.indicators) {
+      const currentPrice = data[data.length - 1]?.close || 0;
+      return {
+        fibonacci: {
+          retracement: [
+            { level: 0.382, price: currentPrice * 0.95, label: '38.2%' },
+            { level: 0.5, price: currentPrice * 0.975, label: '50%' },
+            { level: 0.618, price: currentPrice, label: '61.8%' }
+          ],
+          extension: [
+            { level: 1.272, price: currentPrice * 1.05, label: '127.2%' },
+            { level: 1.618, price: currentPrice * 1.08, label: '161.8%' }
+          ]
+        },
+        orderBlocks: [],
+        fairValueGaps: [],
+        volume: 'normal'
+      };
+    }
+
+    return {
+      fibonacci: analysis.indicators.fibonacci || null,
+      orderBlocks: analysis.indicators.orderBlocks || [],
+      fairValueGaps: analysis.indicators.fairValueGaps || [],
+      volume: analysis.indicators.volume || 'normal'
+    };
+  }, [analysis, method, data]);
+
   // Generate prediction line data like Vite implementation
   const predictionLineData = useMemo(() => {
-    console.log('[PriceChart] Generating prediction line data:', { showPredictions, predictionsCount: predictions?.length, dataCount: data.length });
+    console.log('[PriceChart] Generating prediction line data:', { showPredictions, predictions?.length, data.length });
     
     if (!showPredictions || !predictions || predictions.length === 0 || data.length === 0) {
       console.log('[PriceChart] Returning empty - missing data');
@@ -226,20 +263,68 @@ export function PriceChart({
       console.log('[PriceChart] NOT adding prediction line - showPredictions:', showPredictions, 'data length:', predictionLineData.length);
     }
 
-    // Parse and add ICT indicators using createPriceLine
-    console.log('[PriceChart] ICT analysis?.key_levels:', !!analysis?.key_levels);
-    console.log('[PriceChart] ICT levels:', ictLevels);
-    
-    if (analysis?.key_levels) {
-      const currentPrice = data[data.length - 1]?.close || 0;
-      
-      const getPriceRange = (coin: string, price: number): [number, number] => {
-        return [price * 0.7, price * 1.3];
-      };
-      
-      const validRange = getPriceRange(symbol || '', currentPrice);
+    // Parse and add method-specific indicators
+    const currentPrice = data[data.length - 1]?.close || 0;
+    const getPriceRange = (coin: string, price: number): [number, number] => {
+      return [price * 0.7, price * 1.3];
+    };
+    const validRange = getPriceRange(symbol || '', currentPrice);
+
+    if (method === 'kim_nghia' && kimNghiaIndicators.fibonacci) {
+      // Kim Nghia: Render Fibonacci levels
+      console.log('[PriceChart] Rendering Kim Nghia Fibonacci levels');
+
+      // Retracement levels (green dashed)
+      kimNghiaIndicators.fibonacci.retracement?.forEach((fib, i) => {
+        if (fib.price >= validRange[0] && fib.price <= validRange[1]) {
+          candleSeries.createPriceLine({
+            price: fib.price,
+            color: '#22c55e',
+            lineWidth: 1,
+            lineStyle: 2,
+            title: fib.label,
+          });
+        }
+      });
+
+      // Extension levels (orange dashed)
+      kimNghiaIndicators.fibonacci.extension?.forEach((fib, i) => {
+        if (fib.price >= validRange[0] && fib.price <= validRange[1]) {
+          candleSeries.createPriceLine({
+            price: fib.price,
+            color: '#f97316',
+            lineWidth: 1,
+            lineStyle: 2,
+            title: fib.label,
+          });
+        }
+      });
+
+      // Order Blocks as shaded zones (purple)
+      kimNghiaIndicators.orderBlocks?.forEach((ob, i) => {
+        if (ob.low >= validRange[0] && ob.high <= validRange[1]) {
+          candleSeries.createPriceLine({
+            price: ob.low,
+            color: '#8b5cf6',
+            lineWidth: 2,
+            lineStyle: 0,
+            title: i === 0 ? 'OB' : '',
+          });
+          candleSeries.createPriceLine({
+            price: ob.high,
+            color: '#8b5cf6',
+            lineWidth: 2,
+            lineStyle: 0,
+            title: '',
+          });
+        }
+      });
+    } else if (method === 'ict' && analysis?.key_levels) {
+      // ICT: Render existing indicators
+      console.log('[PriceChart] ICT analysis?.key_levels:', !!analysis?.key_levels);
+      console.log('[PriceChart] ICT levels:', ictLevels);
       console.log('[PriceChart] ICT validRange:', validRange);
-      
+
       // Add liquidity levels (blue)
       console.log('[PriceChart] Adding liquidity levels:', ictLevels.liquidity.length);
       ictLevels.liquidity.forEach((price, i) => {
@@ -254,7 +339,7 @@ export function PriceChart({
           });
         }
       });
-      
+
       // Add order block levels (purple)
       ictLevels.orderBlocks.forEach((price, i) => {
         if (price >= validRange[0] && price <= validRange[1]) {
@@ -267,7 +352,7 @@ export function PriceChart({
           });
         }
       });
-      
+
       // Add FVG levels (amber)
       ictLevels.fvg.forEach((price, i) => {
         if (price >= validRange[0] && price <= validRange[1]) {
@@ -280,7 +365,7 @@ export function PriceChart({
           });
         }
       });
-      
+
       // Add BOS levels (red)
       ictLevels.bos.forEach((price, i) => {
         if (price >= validRange[0] && price <= validRange[1]) {
@@ -293,7 +378,7 @@ export function PriceChart({
           });
         }
       });
-      
+
       // Add CHOCH levels (cyan)
       ictLevels.choch.forEach((price, i) => {
         if (price >= validRange[0] && price <= validRange[1]) {
@@ -324,7 +409,7 @@ export function PriceChart({
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [data, predictionLineData, ictLevels, color, analysis, showPredictions, symbol, height]);
+  }, [data, predictionLineData, ictLevels, kimNghiaIndicators, color, analysis, showPredictions, symbol, height, method]);
 
   return (
     <div 

@@ -40,12 +40,13 @@ function formatVietnamTime(date) {
 
 /**
  * Check if current time is within allowed trading sessions
+ * @param {Object} config - Configuration object (optional, defaults to AUTO_ENTRY_CONFIG)
  */
-function isWithinAllowedSessions() {
+function isWithinAllowedSessions(config = AUTO_ENTRY_CONFIG) {
   const now = new Date();
   const utcHour = now.getUTCHours();
   
-  const sessions = AUTO_ENTRY_CONFIG.allowedSessions;
+  const sessions = config.allowedSessions;
   
   // Check if all timeframes are enabled
   if (sessions.includes('all_timeframes')) {
@@ -55,10 +56,10 @@ function isWithinAllowedSessions() {
   // Fallback to session-based trading (for backward compatibility)
   for (const session of sessions) {
     if (session === 'london') {
-      const { start, end } = AUTO_ENTRY_CONFIG.londonSession;
+      const { start, end } = config.londonSession || AUTO_ENTRY_CONFIG.londonSession;
       if (utcHour >= start && utcHour < end) return true;
     } else if (session === 'ny_killzone') {
-      const { start, end } = AUTO_ENTRY_CONFIG.nyKillzone;
+      const { start, end } = config.nyKillzone || AUTO_ENTRY_CONFIG.nyKillzone;
       if (utcHour >= start && utcHour < end) return true;
     }
   }
@@ -71,9 +72,13 @@ function isWithinAllowedSessions() {
  * @param {Object} analysis - ICT analysis result
  * @param {Object} account - Account data
  * @param {Array} openPositions - Current open positions for symbol
+ * @param {Object} methodConfig - Method-specific configuration (optional, defaults to AUTO_ENTRY_CONFIG)
  * @returns {Object} Entry decision with reasoning
  */
-export function evaluateAutoEntry(analysis, account, openPositions = []) {
+export function evaluateAutoEntry(analysis, account, openPositions = [], methodConfig = null) {
+  // Use method-specific config if provided, otherwise use default
+  const config = methodConfig || AUTO_ENTRY_CONFIG;
+  
   const decision = {
     shouldEnter: false,
     action: 'no_trade',
@@ -86,8 +91,8 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
   const symbol = analysis.symbol || account.symbol || 'BTC';
 
   // Check 0: Symbol enablement (ETH trading disabled)
-  if (!AUTO_ENTRY_CONFIG.enabledSymbols.includes(symbol)) {
-    decision.reason = `Trading disabled for ${symbol}. Only ${AUTO_ENTRY_CONFIG.enabledSymbols.join(', ')} enabled`;
+  if (!config.enabledSymbols.includes(symbol)) {
+    decision.reason = `Trading disabled for ${symbol}. Only ${config.enabledSymbols.join(', ')} enabled`;
     return decision;
   }
 
@@ -100,22 +105,22 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     }
   }
 
-  // Check 2: Trading session timing (ICT: focus on high-liquidity sessions)
-  if (!isWithinAllowedSessions()) {
-    decision.reason = 'Outside allowed trading sessions (London/NY killzones only)';
+  // Check 2: Trading session timing
+  if (!isWithinAllowedSessions(config)) {
+    decision.reason = 'Outside allowed trading sessions';
     return decision;
   }
 
-  // Check 3: Max positions per symbol (5 for BTC)
-  if (openPositions.length >= AUTO_ENTRY_CONFIG.maxPositionsPerSymbol) {
-    decision.reason = `Maximum positions (${AUTO_ENTRY_CONFIG.maxPositionsPerSymbol}) already open for ${symbol}`;
+  // Check 3: Max positions per symbol
+  if (openPositions.length >= config.maxPositionsPerSymbol) {
+    decision.reason = `Maximum positions (${config.maxPositionsPerSymbol}) already open for ${symbol}`;
     return decision;
   }
 
   // Check 4: Confidence threshold
   const confidenceScore = analysis.confidence * 100;
-  if (confidenceScore < AUTO_ENTRY_CONFIG.minConfidence) {
-    decision.reason = `Confidence too low (${confidenceScore.toFixed(0)}% < ${AUTO_ENTRY_CONFIG.minConfidence}%)`;
+  if (confidenceScore < config.minConfidence) {
+    decision.reason = `Confidence too low (${confidenceScore.toFixed(0)}% < ${config.minConfidence}%)`;
     return decision;
   }
 
@@ -125,17 +130,17 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
     return decision;
   }
 
-  // Check 6: Multi-timeframe alignment (4h and 1d only)
-  const alignment = checkTimeframeAlignment(analysis, AUTO_ENTRY_CONFIG.requiredTimeframes);
-  if (alignment.alignedCount < AUTO_ENTRY_CONFIG.requiredTimeframes.length * AUTO_ENTRY_CONFIG.minAlignment) {
-    decision.reason = `Multi-timeframe alignment insufficient (${alignment.alignedCount}/${AUTO_ENTRY_CONFIG.requiredTimeframes.length} aligned)`;
+  // Check 6: Multi-timeframe alignment (4h and 1d only for ICT, H4 and H1 for KimNghia)
+  const alignment = checkTimeframeAlignment(analysis, config.requiredTimeframes);
+  if (alignment.alignedCount < config.requiredTimeframes.length * config.minAlignment) {
+    decision.reason = `Multi-timeframe alignment insufficient (${alignment.alignedCount}/${config.requiredTimeframes.length} aligned)`;
     return decision;
   }
 
   // Check 7: Expected R:R ratio from analysis
   const expectedRR = analysis.expected_rr || 2.0;
-  if (expectedRR < AUTO_ENTRY_CONFIG.minRRRatio) {
-    decision.reason = `Risk/Reward ratio too low (${expectedRR.toFixed(1)} < ${AUTO_ENTRY_CONFIG.minRRRatio})`;
+  if (expectedRR < config.minRRRatio) {
+    decision.reason = `Risk/Reward ratio too low (${expectedRR.toFixed(1)} < ${config.minRRRatio})`;
     return decision;
   }
 
@@ -143,10 +148,10 @@ export function evaluateAutoEntry(analysis, account, openPositions = []) {
   decision.shouldEnter = true;
   decision.action = analysis.bias === 'bullish' ? 'enter_long' : 'enter_short';
   decision.confidence = confidenceScore;
-  decision.reason = `All criteria met: ${confidenceScore.toFixed(0)}% confidence, ${alignment.alignedCount}/${AUTO_ENTRY_CONFIG.requiredTimeframes.length} timeframes aligned, R:R ${expectedRR.toFixed(1)}`;
+  decision.reason = `All criteria met: ${confidenceScore.toFixed(0)}% confidence, ${alignment.alignedCount}/${config.requiredTimeframes.length} timeframes aligned, R:R ${expectedRR.toFixed(1)}`;
 
   // Calculate suggested position parameters
-  decision.suggestedPosition = calculateSuggestedPosition(analysis, account);
+  decision.suggestedPosition = calculateSuggestedPosition(analysis, account, config);
   
   // If position calculation failed, reject entry
   if (!decision.suggestedPosition) {
@@ -236,11 +241,14 @@ function checkTimeframeAlignment(analysis, requiredTimeframes) {
 
 /**
  * Calculate suggested position parameters based on ICT concepts
+ * @param {Object} analysis - Analysis result
+ * @param {Object} account - Account data
+ * @param {Object} config - Configuration object (optional, defaults to AUTO_ENTRY_CONFIG)
  */
-function calculateSuggestedPosition(analysis, account) {
+function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFIG) {
   const currentPrice = analysis.current_price || 0;
   const bias = analysis.bias;
-  const riskAmount = account.current_balance * AUTO_ENTRY_CONFIG.riskPerTrade;
+  const riskAmount = account.current_balance * config.riskPerTrade;
 
   // Use AI suggested entry for limit orders (or fallback to current price)
   const suggestedEntry = analysis.suggested_entry || currentPrice;
@@ -297,7 +305,7 @@ function calculateSuggestedPosition(analysis, account) {
     size_usd: sizeUsd,
     size_qty: sizeQty,
     risk_usd: riskAmount,
-    risk_percent: AUTO_ENTRY_CONFIG.riskPerTrade * 100,
+    risk_percent: config.riskPerTrade * 100,
     expected_rr: actualRR,
     invalidation_level: analysis.invalidation_level || stopLoss
   };

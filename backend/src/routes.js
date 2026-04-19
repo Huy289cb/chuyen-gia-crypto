@@ -49,7 +49,10 @@ router.use((req, res, next) => {
 
 // GET /api/analysis - Get cached trend analysis
 router.get('/analysis', (req, res) => {
-  const cached = cache.get();
+  const { method } = req.query;
+  
+  // Get method-specific cache if method is specified, otherwise get default (ict)
+  const cached = method ? cache.getMethod(method) : cache.get();
   
   if (!cached) {
     return res.status(503).json({
@@ -66,7 +69,8 @@ router.get('/analysis', (req, res) => {
     meta: {
       cachedAt: cached.cachedAt,
       ageSeconds: cached.age,
-      nextUpdateIn: Math.max(0, 900 - cached.age) // seconds until next update (15 min = 900s)
+      nextUpdateIn: Math.max(0, 900 - cached.age), // seconds until next update (15 min = 900s)
+      method: method || 'ict'
     }
   });
 });
@@ -82,15 +86,15 @@ router.get('/predictions/:coin', async (req, res) => {
   }
   
   const { coin } = req.params;
-  const { limit = 50 } = req.query;
+  const { limit = 50, method } = req.query;
   
   try {
     const { getRecentAnalysisWithPredictions } = await import('./db/database.js');
-    const history = await getRecentAnalysisWithPredictions(db, coin, parseInt(limit));
+    const history = await getRecentAnalysisWithPredictions(db, coin, parseInt(limit), method || null);
     res.json({
       success: true,
       data: history,
-      meta: { coin, limit: parseInt(limit) }
+      meta: { coin, limit: parseInt(limit), method: method || 'ict' }
     });
   } catch (error) {
     res.status(500).json({
@@ -315,11 +319,12 @@ router.get('/pending-orders', async (req, res) => {
     });
   }
   
-  const { symbol, status } = req.query;
+  const { symbol, status, method } = req.query;
   const filters = {};
   
   if (symbol) filters.symbol = symbol;
   if (status) filters.status = status;
+  if (method) filters.method_id = method;
   
   try {
     const { getPendingOrders } = await import('./db/database.js');
@@ -328,7 +333,7 @@ router.get('/pending-orders', async (req, res) => {
     res.json({
       success: true,
       data: orders,
-      meta: { count: orders.length, filters }
+      meta: { count: orders.length, filters, method: method || 'ict' }
     });
   } catch (error) {
     res.status(500).json({
@@ -399,6 +404,103 @@ router.post('/pending-orders/:id/cancel', async (req, res) => {
     res.json({
       success: true,
       message: 'Pending order cancelled successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// GET /api/compare - Compare methods side-by-side
+router.get('/compare', async (req, res) => {
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+  
+  try {
+    const { getAllAccounts, getPositions, calculatePerformance, getAccountsByMethod } = await import('./db/database.js');
+    
+    // Get all method-specific accounts
+    const ictAccounts = await getAccountsByMethod(db, 'ict');
+    const kimNghiaAccounts = await getAccountsByMethod(db, 'kim_nghia');
+    
+    // Get BTC accounts for each method
+    const ictBtcAccount = ictAccounts.find(a => a.symbol === 'BTC');
+    const kimNghiaBtcAccount = kimNghiaAccounts.find(a => a.symbol === 'BTC');
+    
+    if (!ictBtcAccount || !kimNghiaBtcAccount) {
+      return res.status(404).json({
+        success: false,
+        error: 'One or both method accounts not found'
+      });
+    }
+    
+    // Get performance metrics for each method
+    const ictPerformance = await calculatePerformance(db, ictBtcAccount.id);
+    const kimNghiaPerformance = await calculatePerformance(db, kimNghiaBtcAccount.id);
+    
+    // Get open positions for each method
+    const ictPositions = await getPositions(db, { account_id: ictBtcAccount.id, status: 'open' });
+    const kimNghiaPositions = await getPositions(db, { account_id: kimNghiaBtcAccount.id, status: 'open' });
+    
+    // Get recent analysis from cache
+    const ictCache = cache.getMethod('ict');
+    const kimNghiaCache = cache.getMethod('kim_nghia');
+    
+    const comparison = {
+      ict: {
+        account: {
+          id: ictBtcAccount.id,
+          symbol: ictBtcAccount.symbol,
+          method_id: 'ict',
+          current_balance: ictBtcAccount.current_balance,
+          equity: ictBtcAccount.equity,
+          starting_balance: ictBtcAccount.starting_balance,
+          total_trades: ictBtcAccount.total_trades,
+          winning_trades: ictBtcAccount.winning_trades,
+          losing_trades: ictBtcAccount.losing_trades,
+          max_drawdown: ictBtcAccount.max_drawdown
+        },
+        performance: ictPerformance,
+        open_positions: ictPositions.length,
+        latest_analysis: ictCache?.data?.analysis || null
+      },
+      kim_nghia: {
+        account: {
+          id: kimNghiaBtcAccount.id,
+          symbol: kimNghiaBtcAccount.symbol,
+          method_id: 'kim_nghia',
+          current_balance: kimNghiaBtcAccount.current_balance,
+          equity: kimNghiaBtcAccount.equity,
+          starting_balance: kimNghiaBtcAccount.starting_balance,
+          total_trades: kimNghiaBtcAccount.total_trades,
+          winning_trades: kimNghiaBtcAccount.winning_trades,
+          losing_trades: kimNghiaBtcAccount.losing_trades,
+          max_drawdown: kimNghiaBtcAccount.max_drawdown
+        },
+        performance: kimNghiaPerformance,
+        open_positions: kimNghiaPositions.length,
+        latest_analysis: kimNghiaCache?.data?.analysis || null
+      },
+      summary: {
+        better_balance: ictBtcAccount.current_balance > kimNghiaBtcAccount.current_balance ? 'ict' : 'kim_nghia',
+        better_win_rate: ictPerformance.win_rate > kimNghiaPerformance.win_rate ? 'ict' : 'kim_nghia',
+        better_profit_factor: ictPerformance.profit_factor > kimNghiaPerformance.profit_factor ? 'ict' : 'kim_nghia',
+        lower_drawdown: ictPerformance.max_drawdown < kimNghiaPerformance.max_drawdown ? 'ict' : 'kim_nghia'
+      }
+    };
+    
+    res.json({
+      success: true,
+      data: comparison,
+      meta: {
+        timestamp: new Date().toISOString()
+      }
     });
   } catch (error) {
     res.status(500).json({

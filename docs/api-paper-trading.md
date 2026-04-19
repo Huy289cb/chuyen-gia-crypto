@@ -32,6 +32,7 @@ Get all positions with optional filters.
 **Query Parameters:**
 - `symbol` (optional): Filter by symbol (e.g., BTC, ETH)
 - `status` (optional): Filter by status (open, closed, stopped, taken_profit, closed_manual, expired)
+- `method` (optional): Filter by trading method (ict, kim_nghia) - defaults to ict
 
 **Response Example:**
 ```json
@@ -175,6 +176,9 @@ Close a position manually.
 
 Get all paper trading accounts.
 
+**Query Parameters:**
+- `method` (optional): Filter by trading method (ict, kim_nghia) - defaults to ict
+
 **Response Example:**
 ```json
 {
@@ -183,6 +187,7 @@ Get all paper trading accounts.
     {
       "id": 1,
       "symbol": "BTC",
+      "method_id": "ict",
       "starting_balance": 100,
       "current_balance": 95.5,
       "equity": 100.2,
@@ -200,7 +205,9 @@ Get all paper trading accounts.
     },
     {
       "id": 2,
-      "symbol": "ETH",
+      "symbol": "BTC",
+      "method_id": "kim_nghia",
+      "starting_balance": 100,
       ...
     }
   ],
@@ -276,6 +283,7 @@ Get performance metrics for an account.
 
 **Query Parameters:**
 - `symbol` (required): Symbol (BTC or ETH)
+- `method` (optional): Filter by trading method (ict, kim_nghia) - defaults to ict
 
 **Response Example:**
 ```json

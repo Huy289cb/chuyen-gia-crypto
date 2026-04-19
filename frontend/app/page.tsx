@@ -1,6 +1,8 @@
 'use client';
 
 // Cache-bust: v2
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
 import { HeroSection } from './sections/HeroSection';
@@ -15,8 +17,26 @@ import { usePaperTrading } from './hooks/usePaperTrading';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 export default function Home() {
-  const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends();
-  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const methodParam = searchParams.get('method') as string;
+  const [selectedMethod, setSelectedMethod] = useState(methodParam || 'ict');
+
+  useEffect(() => {
+    if (methodParam && methodParam !== selectedMethod) {
+      setSelectedMethod(methodParam);
+    }
+  }, [methodParam, selectedMethod]);
+
+  const handleMethodChange = (newMethod: string) => {
+    setSelectedMethod(newMethod);
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('method', newMethod);
+    router.push(`/?${newParams.toString()}`, { scroll: false });
+  };
+  
+  const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends(selectedMethod);
+  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading(selectedMethod);
 
   const prices = data?.prices;
   const analysis = data?.analysis;
@@ -65,16 +85,19 @@ export default function Home() {
         isLoading={trendsLoading}
         lastPriceUpdate={lastPriceUpdate}
         lastAnalysisUpdate={lastAnalysisUpdate}
+        selectedMethod={selectedMethod}
+        onMethodChange={handleMethodChange}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Hero Section - Crypto Cards with Charts */}
         <HeroSection 
-          btcData={prices?.btc} 
-          ethData={prices?.eth}
-          btcAnalysis={analysis?.btc}
-          ethAnalysis={analysis?.eth}
-          showEthTrading={false} // Hide ETH trading information
+          btcData={data?.prices.btc}
+          ethData={data?.prices.eth}
+          btcAnalysis={data?.analysis.btc}
+          ethAnalysis={data?.analysis.eth}
+          showEthTrading={false}
+          method={selectedMethod}
         />
 
         {/* Paper Trading Dashboard */}
@@ -82,6 +105,7 @@ export default function Home() {
           accounts={accounts}
           loading={ptLoading}
           onReset={resetAccount}
+          method={selectedMethod}
         />
 
         {/* Open Positions */}
@@ -101,11 +125,13 @@ export default function Home() {
         {/* Prediction Timeline */}
         <PredictionsSection 
           symbol="BTC"
+          method={selectedMethod}
         />
 
         {/* Performance Charts & Metrics */}
         <PerformanceSection 
           symbol="BTC"
+          method={selectedMethod}
         />
       </main>
 

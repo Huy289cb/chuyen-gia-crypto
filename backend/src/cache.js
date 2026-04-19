@@ -1,32 +1,53 @@
-// Simple in-memory cache with TTL
+// Multi-method in-memory cache with TTL
 class Cache {
   constructor() {
-    this.data = null;
-    this.timestamp = null;
+    this.caches = {
+      ict: { data: null, timestamp: null },
+      kim_nghia: { data: null, timestamp: null }
+    };
     this.ttlMs = 20 * 60 * 1000; // 20 minutes (longer than 15min schedule + buffer)
   }
 
-  set(data) {
-    this.data = data;
-    this.timestamp = Date.now();
-    console.log(`[Cache] Data cached at ${new Date().toISOString()}`);
+  setMethod(methodId, data) {
+    this.caches[methodId] = {
+      data,
+      timestamp: Date.now()
+    };
+    console.log(`[Cache][${methodId}] Data cached at ${new Date().toISOString()}`);
   }
 
-  get() {
-    if (!this.data || !this.timestamp) return null;
+  getMethod(methodId) {
+    const cache = this.caches[methodId];
+    if (!cache || !cache.data) return null;
     
-    const age = Date.now() - this.timestamp;
+    const age = Date.now() - cache.timestamp;
     if (age > this.ttlMs) {
-      console.log('[Cache] Data expired');
+      console.log(`[Cache][${methodId}] Data expired`);
       return null;
     }
     
     return {
-      data: this.data,
-      age: Math.floor(age / 1000), // seconds
-      cachedAt: new Date(this.timestamp).toISOString()
+      data: cache.data,
+      age: Math.floor(age / 1000),
+      cachedAt: new Date(cache.timestamp).toISOString()
     };
   }
+
+  getAllMethods() {
+    const result = {};
+    for (const [methodId, cache] of Object.entries(this.caches)) {
+      const cached = this.getMethod(methodId);
+      if (cached) {
+        result[methodId] = cached;
+      }
+    }
+    return result;
+  }
+
+  // Keep existing set/get for backward compatibility (defaults to 'ict')
+  set(data) { this.setMethod('ict', data); }
+  
+  get() { return this.getMethod('ict'); }
 
   isValid() {
     return this.get() !== null;

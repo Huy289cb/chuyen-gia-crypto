@@ -7,14 +7,14 @@ const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:3000/api' 
   : '/api';
 
-export function useTrends() {
+export function useTrends(method: string = 'ict') {
   const [data, setData] = useState<TrendsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/analysis`);
+      const response = await fetch(`${API_URL}/analysis?method=${method}`);
       const result: ApiResponse<TrendsData> = await response.json();
       
       if (result.success && result.data) {
@@ -28,7 +28,7 @@ export function useTrends() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [method]);
 
   useEffect(() => {
     fetchData();

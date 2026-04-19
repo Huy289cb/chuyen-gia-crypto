@@ -7,7 +7,7 @@ const API_BASE = process.env.NODE_ENV === 'development'
   ? 'http://localhost:3000/api'
   : '/api';
 
-export function usePaperTrading() {
+export function usePaperTrading(method: string = 'ict') {
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
@@ -16,7 +16,7 @@ export function usePaperTrading() {
 
   const fetchAccounts = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/accounts`);
+      const response = await fetch(`${API_BASE}/accounts?method=${method}`);
       const data: ApiResponse<TradingAccount[]> = await response.json();
       if (data.success && data.data) {
         setAccounts(data.data);
@@ -24,11 +24,11 @@ export function usePaperTrading() {
     } catch (err) {
       console.error('Error fetching accounts:', err);
     }
-  }, []);
+  }, [method]);
 
   const fetchPositions = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/positions?status=open`);
+      const response = await fetch(`${API_BASE}/positions?status=open&method=${method}`);
       const data: ApiResponse<Position[]> = await response.json();
       if (data.success && data.data) {
         setPositions(data.data);
@@ -36,11 +36,11 @@ export function usePaperTrading() {
     } catch (err) {
       console.error('Error fetching positions:', err);
     }
-  }, []);
+  }, [method]);
 
   const fetchTradeHistory = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/performance/trades`);
+      const response = await fetch(`${API_BASE}/performance/trades?symbol=BTC&method=${method}`);
       const data: ApiResponse<Trade[]> = await response.json();
       if (data.success && data.data) {
         setTradeHistory(data.data);
@@ -48,7 +48,7 @@ export function usePaperTrading() {
     } catch (err) {
       console.error('Error fetching trade history:', err);
     }
-  }, []);
+  }, [method]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -72,7 +72,9 @@ export function usePaperTrading() {
   const resetAccount = useCallback(async (symbol: string) => {
     try {
       const response = await fetch(`${API_BASE}/accounts/reset/${symbol}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method })
       });
       const data: ApiResponse<void> = await response.json();
       if (data.success) {
@@ -83,7 +85,7 @@ export function usePaperTrading() {
     } catch (err) {
       return { success: false, error: (err as Error).message };
     }
-  }, [fetchData]);
+  }, [fetchData, method]);
 
   const closePosition = useCallback(async (positionId: string, reason: string = 'manual') => {
     try {

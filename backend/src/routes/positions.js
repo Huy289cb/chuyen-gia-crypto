@@ -14,11 +14,12 @@ router.get('/', async (req, res) => {
     });
   }
 
-  const { symbol, status } = req.query;
+  const { symbol, status, method } = req.query;
   const filters = {};
   
   if (symbol) filters.symbol = symbol;
   if (status) filters.status = status;
+  if (method) filters.method_id = method;
 
   try {
     const { getPositions } = await import('../db/database.js');
@@ -27,7 +28,7 @@ router.get('/', async (req, res) => {
     res.json({
       success: true,
       data: positions,
-      meta: { count: positions.length, filters }
+      meta: { count: positions.length, filters, method: method || 'ict' }
     });
   } catch (error) {
     res.status(500).json({

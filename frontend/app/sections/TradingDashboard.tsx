@@ -11,10 +11,12 @@ interface TradingDashboardProps {
   accounts: TradingAccount[];
   loading?: boolean;
   onReset: (symbol: string) => Promise<{ success: boolean; error?: string }>;
+  method?: string;
 }
 
-export function TradingDashboard({ accounts, loading, onReset }: TradingDashboardProps) {
-  const btcAccount = accounts.find(a => a.symbol === 'BTC');
+export function TradingDashboard({ accounts, loading, onReset, method = 'ict' }: TradingDashboardProps) {
+  const methodName = method === 'ict' ? 'ICT Method' : 'Kim Nghia Method';
+  const btcAccount = accounts.find(a => a.symbol === 'BTC' && a.method_id === method);
   
   // Focus on BTC-only metrics since ETH trading is disabled
   const btcEquity = btcAccount?.equity || 0;
@@ -28,7 +30,10 @@ export function TradingDashboard({ accounts, loading, onReset }: TradingDashboar
   return (
     <section className="mb-8">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-foreground">Paper Trading Dashboard</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-foreground">Paper Trading Dashboard</h2>
+          <Badge variant="default" size="sm">{methodName}</Badge>
+        </div>
         <div className="flex gap-2">
           {/* <Button 
             variant="ghost" 
