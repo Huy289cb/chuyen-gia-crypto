@@ -138,10 +138,11 @@ RULES:
 - If signals conflict → HOLD
 - Predictions must target specific liquidity/FVG levels
 - Only provide suggested_entry, suggested_stop_loss, suggested_take_profit if confidence >= 0.8 and bias is clear
-- SL must be placed at actual swing low (long) or swing high (short) based on market structure
-- TP must target next liquidity zone or FVG fill zone based on market structure with minimum 1:2 R:R
-- Calculate SL/TP using actual price levels from market structure, NOT fixed percentages
-- NEVER use fixed values like 75000 or 78000 - always use actual market structure levels
+- SL must be placed at actual swing low (long) or swing high (short) based on ICT market structure
+- TP must target next liquidity zone or FVG fill zone based on ICT analysis with minimum 1:2 R:R
+- For ICT: Use liquidity sweeps, order blocks, and FVG levels for SL/TP placement
+- Calculate SL/TP using actual price levels from ICT structure analysis, NOT fixed percentages
+- NEVER use fixed values like 75000 or 78000 - always use actual ICT market structure levels
 - expected_rr must be >= 2.0 if suggesting a trade
 - No text outside JSON
 - reasoning ≤ 350 characters in Vietnamese`,
@@ -305,14 +306,17 @@ RULES:
 - TẤT CẢ text field phải bằng tiếng Việt
 - Giải thích logic rõ ràng
 - Xác nhận breakout với volume
-- Bao gồm SMC nếu có
-- Bao gồm mức Fibonacci
+- Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
+- Bao gồm mức Fibonacci (Retracement 38.2%, 50%, 61.8% và Extension 127.2%, 161.8%)
+- Entry: tại vùng Fibonacci Retracement (38.2%, 50%, hoặc 61.8%) hoặc SMC zone
+- SL: dưới swing low (long) hoặc trên swing high (short) dựa trên SMC structure, KHÔNG dùng giá cố định
+- TP: tại vùng Fibonacci Extension (127.2%, 161.8%) hoặc liquidity zone, KHÔNG dùng giá cố định
 - Output phải có thể thực hiện được
 - Nếu tín hiệu xung đột → HOLD
 - Chỉ cung cấp entry/SL/TP nếu confidence >= 0.60
 - expected_rr phải >= 2.5 nếu đề xuất giao dịch
 - Với quyết định lệnh: tính PnL (USD, %) nếu có dữ liệu lệnh
-- Giải thích role breakout/retest với volume/SMC/liquidity
+- Giải thích role breakout/retest với volume/SMC/liquidity/Fibonacci
 - Không có text ngoài JSON`,
     autoEntry: {
       minConfidence: 60,
