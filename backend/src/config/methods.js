@@ -138,8 +138,9 @@ RULES:
 - If signals conflict → HOLD
 - Predictions must target specific liquidity/FVG levels
 - Only provide suggested_entry, suggested_stop_loss, suggested_take_profit if confidence >= 0.8 and bias is clear
-- SL should be placed below recent swing low (long) or above swing high (short)
-- TP should target next liquidity level or FVG fill zone with minimum 1:2 R:R
+- SL must be calculated as percentage from entry (long: ~2% below, short: ~2% above)
+- TP must be calculated as percentage from entry (long: ~4% above, short: ~4% below) with minimum 1:2 R:R
+- NEVER use fixed values like 75000 or 78000 - always calculate based on current price
 - expected_rr must be >= 2.0 if suggesting a trade
 - No text outside JSON
 - reasoning ≤ 350 characters in Vietnamese`,
