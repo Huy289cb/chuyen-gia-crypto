@@ -158,7 +158,7 @@ async function fetchCurrentPrices() {
 async function updateSymbolPositions(symbol, currentPrice) {
   try {
     const { updateOpenPositions, calculateAccountEquity } = await import('../services/paperTradingEngine.js');
-    const { getAccountBySymbol } = await import('../db/database.js');
+    const { getAllAccounts } = await import('../db/database.js');
     
     console.log(`[PriceScheduler] Updating ${symbol} positions at $${currentPrice.toLocaleString()}`);
     
@@ -174,10 +174,13 @@ async function updateSymbolPositions(symbol, currentPrice) {
       console.error(`[PriceScheduler] ${symbol} errors:`, result.errors);
     }
     
-    // Update account equity
-    const account = await getAccountBySymbol(db, symbol);
-    if (account) {
+    // Update account equity for ALL accounts for this symbol
+    const allAccounts = await getAllAccounts(db);
+    const symbolAccounts = allAccounts.filter(a => a.symbol === symbol);
+    
+    for (const account of symbolAccounts) {
       await calculateAccountEquity(db, account);
+      console.log(`[PriceScheduler] Updated equity for account ${account.id} (${account.method_id}): ${account.equity}`);
     }
     
   } catch (error) {
@@ -196,7 +199,7 @@ const previousPrices = {
  */
 async function checkAndExecutePendingOrders(symbol, currentPrice) {
   try {
-    const { getPendingOrders, executePendingOrder, getAccountBySymbol } = await import('../db/database.js');
+    const { getPendingOrders, executePendingOrder, getAccountById } = await import('../db/database.js');
     const { openPosition } = await import('../services/paperTradingEngine.js');
     
     // Get all pending orders for this symbol
@@ -232,9 +235,9 @@ async function checkAndExecutePendingOrders(symbol, currentPrice) {
       
       if (shouldExecute) {
         try {
-          const account = await getAccountBySymbol(db, symbol);
+          const account = await getAccountById(db, order.account_id);
           if (!account) {
-            console.error(`[PriceScheduler] Account not found for ${symbol}`);
+            console.error(`[PriceScheduler] Account not found for order ${order.id} (account_id: ${order.account_id})`);
             continue;
           }
           
