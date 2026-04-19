@@ -34,8 +34,6 @@ export async function initPriceUpdateScheduler(database, enabled) {
     return;
   }
   
-  console.log('[PriceScheduler] Initializing 30-second price update scheduler...');
-  
   // Run immediately on startup
   runPriceUpdateJob().catch(err => {
     console.error('[PriceScheduler] Initial job failed:', err.message);
@@ -60,8 +58,6 @@ export async function initPriceUpdateScheduler(database, enabled) {
       });
     }
   });
-  
-  console.log('[PriceScheduler] 30-second scheduler registered');
 }
 
 /**
@@ -72,8 +68,6 @@ async function runPriceUpdateJob() {
   const startTime = Date.now();
   
   try {
-    console.log(`[PriceScheduler] ${formatVietnamTime(new Date())} - Updating prices and positions...`);
-    
     // Fetch current prices with timeout protection
     const prices = await fetchCurrentPrices();
     
@@ -94,7 +88,7 @@ async function runPriceUpdateJob() {
     
     const duration = Date.now() - startTime;
     console.log(`[PriceScheduler] Completed in ${duration}ms`);
-    
+
   } catch (error) {
     console.error('[PriceScheduler] Error in price update job:', error.message);
     console.error('[PriceScheduler] Stack:', error.stack);
@@ -117,19 +111,13 @@ async function fetchCurrentPrices() {
     const priceData = await fetchRealTimePrices(db);
 
     // Update latest_prices in database to ensure fresh data for analysis
-    console.log(`[PriceScheduler] Checking DB state: db=${db ? 'OK' : 'NULL'}, priceData=${priceData ? 'OK' : 'NULL'}`);
     if (db && priceData) {
       try {
-        console.log(`[PriceScheduler] Saving latest prices to DB...`);
         const btcPrice = priceData.btc?.price || 0;
         const ethPrice = priceData.eth?.price || 0;
-        console.log(`[PriceScheduler] Prices to save - BTC: $${btcPrice}, ETH: $${ethPrice}`);
 
         await saveLatestPrice(db, 'BTC', btcPrice, 0, 0, 0, 0);
-        console.log(`[PriceScheduler] Saved BTC price to DB`);
-
         await saveLatestPrice(db, 'ETH', ethPrice, 0, 0, 0, 0);
-        console.log(`[PriceScheduler] Saved ETH price to DB`);
 
         console.log(`[PriceScheduler] Updated latest_prices - BTC: $${btcPrice}, ETH: $${ethPrice}`);
       } catch (saveError) {

@@ -165,7 +165,7 @@ async function runMethodAnalysis(methodId) {
         const openPositions = await getPositions(db, { account_id: account.id, status: 'open' });
         
         // Auto-entry evaluation (method-specific)
-        const decision = evaluateAutoEntry(analysis.btc, account, openPositions, method.autoEntry);
+        const decision = await evaluateAutoEntry(analysis.btc, account, openPositions, method.autoEntry, db);
         
         console.log(`[Scheduler][${method.name}] Auto-entry decision: ${decision.action} - ${decision.reason}`);
         

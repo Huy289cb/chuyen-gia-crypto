@@ -11,7 +11,7 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 >
 > **ADDITIONAL UPDATES (17/04/2026)**:
 > - Changed main prediction timeframe from 4h+1d to **1h primary + 4h secondary**
-> - Increased max concurrent positions from 5 to **8**
+> - Increased max concurrent positions from 5 to **9**
 > - AI now analyzes open positions and can recommend early closure (>80% confidence)
 >
 > **ADDITIONAL UPDATES (18/04/2026)**:
@@ -52,7 +52,7 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
 - **Account Management**: 100U BTC account (ETH trading temporarily disabled)
 - **Cooldown System**: 4-hour cooldown after 3 consecutive losses
-- **Position Limits**: Maximum 8 concurrent BTC positions
+- **Position Limits**: Maximum 9 concurrent BTC positions
 - **Trade History Pagination**: Paginated viewing of trade history (10 trades per page)
 - **Limit Order Management**: Automatic execution when price hits entry, manual cancellation available
 
@@ -86,7 +86,7 @@ A position is suggested when ALL of the following conditions are met:
 4. **Multi-Timeframe Alignment**: Majority of 1h and 4h timeframes must align with bias (1h primary)
 5. **Risk/Reward >= 2.0**: Expected R:R ratio must be at least 1:2
 6. **No Cooldown**: Account must not be in cooldown period
-7. **Position Limit**: Less than 8 concurrent BTC positions open
+7. **Position Limit**: Less than 9 concurrent BTC positions open
 
 ## Order Types
 
@@ -333,8 +333,8 @@ Positions can have the following statuses:
 - **Frontend**: ETH trading information hidden, price charts and predictions preserved
 
 #### 2. Position Management
-- **Position Limit**: Maximum 8 concurrent BTC positions (increased from 5)
-- **Entry Logic**: Each new prediction (>80% confidence) can open 1 position if total <8
+- **Position Limit**: Maximum 9 concurrent BTC positions (increased from 5)
+- **Entry Logic**: Each new prediction (>80% confidence) can open 1 position if total <9
 - **Validation**: Symbol enablement check at entry level
 - **Timeframe Priority**: 1h primary, 4h secondary (changed from 4h+1d)
 
@@ -367,7 +367,7 @@ Positions can have the following statuses:
 
 ### Expected Outcomes
 - **ETH Losses**: Eliminated to zero
-- **Position Management**: Better risk control with 8-position limit and 1h timeframe focus
+- **Position Management**: Better risk control with 9-position limit and 1h timeframe focus
 - **Early Loss Cutting**: Reduced losses through AI-driven position analysis and prediction reversal
 - **Limit Order Intelligence**: AI-powered limit order management to keep only valid setups
 - **Focus**: Improved BTC trading skills before multi-symbol expansion
@@ -603,8 +603,8 @@ TRAIL_DISTANCE_PCT=0.5
    - **Impact**: Limit orders now execute correctly even after server restart
 
 2. **Manual Position Limit Consistency**
-   - **Issue**: Manual opening rejected if ANY position existed, but auto-entry allows up to 8
-   - **Fix**: Manual opening now respects `maxPositionsPerSymbol` limit (8 positions)
+   - **Issue**: Manual opening rejected if ANY position existed, but auto-entry allows up to 9
+   - **Fix**: Manual opening now respects `maxPositionsPerSymbol` limit (9 positions)
    - **Impact**: Consistent position limits across manual and auto-entry
 
 3. **Minimum Risk Distance Validation**
@@ -626,7 +626,7 @@ TRAIL_DISTANCE_PCT=0.5
 
 All position openings (manual and auto) now enforce:
 - **Minimum risk distance**: 0.5% of entry price (e.g., $380 minimum on $76k entry)
-- **Maximum positions**: 8 concurrent positions per symbol
+- **Maximum positions**: 9 concurrent positions per symbol
 - **Price range validation**: Entry within 10% of current price for limit orders
 - **Direction alignment**: Entry price must align with trade direction
 - **Minimum confidence**: 70% threshold for auto-entry (updated from 80% on 18/04/2026)

@@ -144,13 +144,16 @@ RULES:
 - Calculate SL/TP using actual price levels from ICT structure analysis, NOT fixed percentages
 - NEVER use fixed values like 75000 or 78000 - always use actual ICT market structure levels
 - expected_rr must be >= 2.0 if suggesting a trade
+- confidence should be a decimal between 0.00 and 1.00 with at least 2 decimal places (e.g., 0.75, 0.82, 0.87)
+- Avoid rounding confidence to even percentages (0.50, 0.60, 0.70, 0.80)
+- Use precise confidence based on signal strength (e.g., 0.73, 0.78, 0.84, 0.91)
 - No text outside JSON
 - reasoning ≤ 350 characters in Vietnamese`,
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
       riskPerTrade: 0.01,
-      maxPositionsPerSymbol: 8,
+      maxPositionsPerSymbol: 9,
       cooldownAfterLosses: 3,
       cooldownDuration: 240, // 4 hours in minutes
       maxConsecutiveLosses: 3,
@@ -337,6 +340,9 @@ RULES:
   - Order Blocks: Cung cấp high/low price range và timestamp
   - Fair Value Gaps: Cung cấp start/end coordinates (time, price)
   - Volume: Đánh giá high/low/normal dựa trên volume analysis
+- confidence phải là số thập phân từ 0.00 đến 1.00 với ít nhất 2 số sau dấu phẩy (ví dụ: 0.75, 0.82, 0.87)
+- Tránh làm tròn confidence sang số chẵn (0.50, 0.60, 0.70, 0.80)
+- Sử dụng confidence chính xác dựa trên độ mạnh của tín hiệu (ví dụ: 0.73, 0.78, 0.84, 0.91)
 - Output phải có thể thực hiện được
 - Nếu tín hiệu xung đột → HOLD
 - Chỉ cung cấp entry/SL/TP nếu confidence >= 0.60
@@ -348,7 +354,7 @@ RULES:
       minConfidence: 60,
       minRRRatio: 2.5,
       riskPerTrade: 0.10,
-      maxPositionsPerSymbol: 8,
+      maxPositionsPerSymbol: 9,
       cooldownAfterLosses: 3,
       cooldownDuration: 240, // 4 hours in minutes
       maxConsecutiveLosses: 3,

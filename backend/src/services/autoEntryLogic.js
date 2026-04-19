@@ -5,7 +5,7 @@ const AUTO_ENTRY_CONFIG = {
   minConfidence: 70,           // Minimum confidence score (0-100) - Updated 18/04/2026
   minRRRatio: 2.0,             // Minimum risk/reward ratio
   riskPerTrade: 0.01,          // 1% of account balance
-  maxPositionsPerSymbol: 8,    // Max concurrent positions per symbol (BTC only) - Updated 17/04/2026
+  maxPositionsPerSymbol: 9,    // Max concurrent positions per symbol (BTC only) - Updated 20/04/2026
   maxConsecutiveLosses: 8,     // Trigger cooldown
   cooldownHours: 4,            // Cooldown duration in hours
   requiredTimeframes: ['1h', '4h'],  // Check these for alignment - Updated 17/04/2026 (1h primary)
@@ -37,6 +37,55 @@ function formatVietnamTime(date) {
     minute: '2-digit'
   });
 }
+
+/**
+ * Check for duplicate positions before opening new position
+ * @param {Object} db - Database instance
+ * @param {string} symbol - Trading symbol (BTC, ETH)
+ * @param {string} side - Position side (long, short)
+ * @param {number} suggestedEntry - Suggested entry price
+ * @param {number} currentPrice - Current market price
+ * @param {number} confidence - Analysis confidence (0-100)
+ * @returns {Promise<Object>} - { shouldSkip: boolean, reason: string }
+ */
+async function checkDuplicatePosition(db, symbol, side, suggestedEntry, currentPrice, confidence) {
+  const { getPositions } = await import('../db/database.js');
+
+  // Get open positions for this symbol
+  const openPositions = await getPositions(db, { symbol, status: 'open' });
+
+  // Get pending orders for this symbol
+  const { getPendingOrders } = await import('../db/database.js');
+  const pendingOrders = await getPendingOrders(db, { symbol, status: 'pending' });
+
+  // Check for duplicate entries (within 0.5% price range, ~$375 for BTC at $75,000)
+  const priceTolerance = currentPrice * 0.005;
+
+  // Check open positions
+  const duplicateInOpen = openPositions.some(pos =>
+    pos.side === side &&
+    Math.abs(pos.entry_price - suggestedEntry) < priceTolerance
+  );
+
+  // Check pending orders
+  const duplicateInPending = pendingOrders.some(order =>
+    order.side === side &&
+    Math.abs(order.price - suggestedEntry) < priceTolerance
+  );
+
+  const duplicateExists = duplicateInOpen || duplicateInPending;
+
+  // If duplicate exists, require confidence >= 85% (fixed threshold, not percentage)
+  if (duplicateExists && confidence < 85) {
+    return {
+      shouldSkip: true,
+      reason: `Duplicate position/order exists. Confidence ${confidence}% < threshold 85%`
+    };
+  }
+
+  return { shouldSkip: false };
+}
+
 
 /**
  * Check if current time is within allowed trading sessions
@@ -73,9 +122,10 @@ function isWithinAllowedSessions(config = AUTO_ENTRY_CONFIG) {
  * @param {Object} account - Account data
  * @param {Array} openPositions - Current open positions for symbol
  * @param {Object} methodConfig - Method-specific configuration (optional, defaults to AUTO_ENTRY_CONFIG)
- * @returns {Object} Entry decision with reasoning
+ * @param {Object} db - Database instance (for duplicate position check)
+ * @returns {Promise<Object>} Entry decision with reasoning
  */
-export function evaluateAutoEntry(analysis, account, openPositions = [], methodConfig = null) {
+export async function evaluateAutoEntry(analysis, account, openPositions = [], methodConfig = null, db = null) {
   // Use method-specific config if provided, otherwise use default
   const config = methodConfig || AUTO_ENTRY_CONFIG;
   
@@ -162,24 +212,43 @@ export function evaluateAutoEntry(analysis, account, openPositions = [], methodC
     return decision;
   }
 
+  // Check for duplicate positions if db is available
+  if (db && decision.shouldEnter) {
+    const confidenceScore = analysis.confidence * 100;
+    const side = decision.suggestedPosition.side;
+    const duplicateCheck = await checkDuplicatePosition(
+      db,
+      symbol,
+      side,
+      suggestedEntry,
+      currentPrice,
+      confidenceScore
+    );
+
+    if (duplicateCheck.shouldSkip) {
+      decision.shouldEnter = false;
+      decision.action = 'no_trade';
+      decision.reason = duplicateCheck.reason;
+      decision.suggestedPosition = null;
+      console.log(`[AutoEntry] ${duplicateCheck.reason}`);
+      return decision;
+    }
+  }
+
   // Check if entry price is already hit by current market price
   const currentPrice = analysis.current_price || 0;
   const suggestedEntry = decision.suggestedPosition.entry_price;
   const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
   const epsilon = 0.001; // Small tolerance for floating point comparison
 
-  console.log(`[AutoEntry] DEBUG - action=${decision.action}, currentPrice=${currentPrice}, suggestedEntry=${suggestedEntry}, priceDiff=${(priceDiff * 100).toFixed(2)}%`);
-
   let entryAlreadyHit = false;
 
   if (decision.action === 'enter_long') {
     // For LONG: entry is hit if current price <= entry price (price already dropped to entry)
     entryAlreadyHit = currentPrice <= (suggestedEntry + epsilon);
-    console.log(`[AutoEntry] DEBUG - LONG check: ${currentPrice} <= (${suggestedEntry} + ${epsilon}) = ${entryAlreadyHit}`);
   } else if (decision.action === 'enter_short') {
     // For SHORT: entry is hit if current price >= entry price (price already rose to entry)
     entryAlreadyHit = currentPrice >= (suggestedEntry - epsilon);
-    console.log(`[AutoEntry] DEBUG - SHORT check: ${currentPrice} >= (${suggestedEntry} - ${epsilon}) = ${entryAlreadyHit}`);
   }
 
   if (entryAlreadyHit) {
@@ -187,12 +256,10 @@ export function evaluateAutoEntry(analysis, account, openPositions = [], methodC
     decision.orderType = 'market';
     decision.suggestedPosition.entry_price = currentPrice; // Use current price as entry
     decision.reason += ` | Market order: entry ${suggestedEntry.toFixed(2)} already hit (current: ${currentPrice.toFixed(2)})`;
-    console.log(`[AutoEntry] Market order: entry already hit - entry=${suggestedEntry.toFixed(2)}, current=${currentPrice.toFixed(2)}`);
   } else {
     // Entry not yet hit - create pending limit order
     decision.orderType = 'limit'; // Will create pending order
     decision.reason += ` | Limit order: waiting for price to reach entry ${suggestedEntry.toFixed(2)} (current: ${currentPrice.toFixed(2)}, ${(priceDiff * 100).toFixed(2)}% away)`;
-    console.log(`[AutoEntry] Limit order created: entry=${suggestedEntry.toFixed(2)}, current=${currentPrice.toFixed(2)}, diff=${(priceDiff * 100).toFixed(2)}%`);
   }
 
   return decision;
@@ -293,8 +360,6 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   // Calculate actual R:R
   const rewardDistance = Math.abs(takeProfit - suggestedEntry);
   const actualRR = riskDistance > 0 ? rewardDistance / riskDistance : 0;
-
-  console.log(`[AutoEntry] Position calc: suggested_entry=${suggestedEntry}, current=${currentPrice}, SL=${stopLoss}, TP=${takeProfit}, RR=${actualRR.toFixed(2)}`);
 
   return {
     side: bias === 'bullish' ? 'long' : 'short',
