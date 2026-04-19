@@ -1,7 +1,7 @@
 // Analyzer Factory for multi-method paper trading system
 // Creates method-specific analyzers with their own prompts and configurations
 
-import { getGroqClient } from '../groq-client.js';
+import { createGroqClient } from '../groq-client.js';
 import { getMethodConfig } from '../config/methods.js';
 
 /**
@@ -21,7 +21,7 @@ export function createAnalyzer(methodConfig) {
      * @returns {Promise<Object>} Analysis result
      */
     analyze: async (priceData, db = null) => {
-      const client = getGroqClient();
+      const client = createGroqClient(process.env.GROQ_API_KEY);
       
       // If no Groq API key, use fallback immediately
       if (!client) {
