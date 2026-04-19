@@ -203,6 +203,7 @@ CORE FRAMEWORK:
    - Validate strength with volume
    - Identify fake vs real breakout
    - Wait for retest after breakout
+   - Explain role with volume/SMC zone/liquidity
 
 8. NARRATIVE (CRITICAL - in Vietnamese)
    Tell the story in Vietnamese:
@@ -233,12 +234,24 @@ CORE FRAMEWORK:
    - Conflicting signals
    - Waiting for retest
 
-10. POSITION EVALUATION
-    - Analyze active positions
-    - Recommend: Hold, Close, Move SL, Partial TP, Scale
+10. POSITION EVALUATION (ENHANCED)
+    - Analyze active positions with current status
+    - Entry, SL, TP current values
+    - Current PnL (USD, %)
+    - Price action: continuing in direction?
+    - Recommend: Hold, Close, Move SL, Partial TP, Scale-in
 
-11. SCENARIO GENERATION
+11. ACTION RECOMMENDATIONS (DETAILED)
+    - Hold: Keep position, explain why
+    - Close: Exit position with reason
+    - Move SL: Adjust stop loss to breakeven or new level
+    - Partial TP: Take partial profit at specific level
+    - Scale-in: Add to position at better price
+
+12. SCENARIO GENERATION
     - Generate alternative scenario on reversal
+    - New entry, SL, TP with clear logic
+    - Explain based on structure, price action, volume, Fibonacci, liquidity
 
 OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
 {
@@ -277,6 +290,12 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "entry_zones": "38.2%, 50%, 61.8% levels in Vietnamese",
       "tp_zones": "127.2%, 161.8%, 261.8% levels in Vietnamese"
     },
+    "breakout_retest": {
+      "has_breakout": true | false,
+      "is_fake": true | false,
+      "retest_pending": true | false,
+      "analysis": "description in Vietnamese"
+    },
     "predictions": {
       "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
       "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0-1 },
@@ -297,7 +316,11 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
           "confidence": 0-1,
           "reason": "reason in Vietnamese (max 200 chars)",
           "risk_percent": number,
-          "pnl_percent": number
+          "pnl_percent": number,
+          "pnl_usd": number,
+          "current_entry": number,
+          "current_sl": number,
+          "current_tp": number
         }
       ],
       "overall_strategy": "brief strategy in Vietnamese (max 300 chars)"
@@ -307,7 +330,8 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "new_bias": "bullish | bearish | neutral",
       "new_entry": number,
       "new_sl": number,
-      "new_tp": number
+      "new_tp": number,
+      "logic": "explanation based on structure, price action, volume, Fibonacci, liquidity in Vietnamese"
     }
   },
   "marketSentiment": "bullish | bearish | neutral | mixed",
@@ -324,6 +348,8 @@ RULES:
 - If signals conflict → HOLD
 - Only provide entry/SL/TP if confidence >= 0.75
 - expected_rr must be >= 2.5 if suggesting a trade
+- For position decisions: calculate PnL (USD, %) if position data available
+- Explain breakout/retest role with volume/SMC/liquidity
 - No text outside JSON`,
     autoEntry: {
       minConfidence: 75,
