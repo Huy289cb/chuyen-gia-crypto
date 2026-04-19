@@ -378,11 +378,16 @@ function PredictionItem({
           <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
             <div className="text-xs">
               <span className="font-medium text-gray-900 dark:text-gray-100">Đề xuất vị thế:</span>
-              {prediction.position_decisions.recommendations
-                .filter((rec, idx, self) => 
-                  idx === self.findIndex(r => r.action === rec.action && r.reason === rec.reason)
-                )
-                .map((rec, idx) => (
+              {(() => {
+                // Group recommendations by action to avoid duplicates
+                const grouped: Record<string, any> = {};
+                prediction.position_decisions.recommendations.forEach((rec) => {
+                  if (rec.action && !grouped[rec.action]) {
+                    grouped[rec.action] = rec;
+                  }
+                });
+                return Object.values(grouped);
+              })().map((rec, idx) => (
                 <div key={idx} className="mt-1 p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
