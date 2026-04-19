@@ -1,7 +1,8 @@
 'use client';
 
-// Cache-bust: v2.0.3
+// Cache-bust: v{APP_VERSION}
 import { useState, useEffect, Suspense } from 'react';
+import { APP_VERSION } from '@/lib/version';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';

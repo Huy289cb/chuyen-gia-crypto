@@ -1,8 +1,11 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Zap, RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen } from 'lucide-react';
 import { getTimeSince, cn } from '@/lib/utils';
 import { useTheme } from '../components/ThemeProvider';
+import { useSearchParams } from 'next/navigation';
+import { APP_VERSION } from '@/lib/version';
 
 interface HeaderProps {
   onRefresh: () => void;
@@ -58,7 +61,7 @@ export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpda
               <div>
                 <h1 className="text-lg font-bold text-foreground">
                   Crypto<span className="text-gradient">Analyzer</span>
-                  <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded-full">v2.0.3</span>
+                  <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded-full">v{APP_VERSION}</span>
                 </h1>
                 <p className="text-xs text-foreground-tertiary hidden sm:block">
                   AI-Powered Trading Analysis
