@@ -87,7 +87,7 @@ export function PredictionsSection({ symbol, method = 'ict' }: PredictionsSectio
     };
 
     fetchPredictions();
-  }, [symbol]);
+  }, [symbol, method]);
 
   if (loading) {
     return (
