@@ -29,7 +29,7 @@ This method focuses on identifying high-probability setups using multi-timeframe
 - **Schedule**: Runs at 7m30s, 22m30s, 37m30s, 52m30s past the hour (staggered from ICT)
 - **Account**: Separate 100U account (BTC-KimNghia) for independent performance tracking
 - **Auto-Entry Thresholds**:
-  - Minimum Confidence: 75%
+  - Minimum Confidence: 62%
   - Minimum R:R: 2.5
   - Risk Per Trade: 10%
   - Max Positions: 8

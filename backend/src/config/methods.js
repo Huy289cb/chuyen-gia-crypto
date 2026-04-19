@@ -346,13 +346,13 @@ RULES:
 - Must include Fibonacci levels
 - Output must be actionable
 - If signals conflict → HOLD
-- Only provide entry/SL/TP if confidence >= 0.75
+- Only provide entry/SL/TP if confidence >= 0.62
 - expected_rr must be >= 2.5 if suggesting a trade
 - For position decisions: calculate PnL (USD, %) if position data available
 - Explain breakout/retest role with volume/SMC/liquidity
 - No text outside JSON`,
     autoEntry: {
-      minConfidence: 75,
+      minConfidence: 62,
       minRRRatio: 2.5,
       riskPerTrade: 0.10,
       maxPositionsPerSymbol: 8,

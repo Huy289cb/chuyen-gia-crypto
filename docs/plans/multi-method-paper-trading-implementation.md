@@ -368,7 +368,7 @@ export const METHODS = {
   kim_nghia: {
     // ... existing fields
     autoEntry: {
-      minConfidence: 75, // Different threshold
+      minConfidence: 62, // Different threshold
       minRRRatio: 2.5, // Different R:R
       riskPerTrade: 0.10, // 10% risk per trade
       maxPositionsPerSymbol: 8,
