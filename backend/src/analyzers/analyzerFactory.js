@@ -414,6 +414,10 @@ function formatAnalysisResponse(rawResponse, priceData, methodId) {
       expected_rr: coinData?.expected_rr && !isNaN(coinData.expected_rr) ? Math.max(0, parseFloat(coinData.expected_rr)) : null,
       invalidation_level: validatePriceLevel(coinData?.invalidation_level, currentPrice, 'invalidation', bias),
       reason_summary: coinData?.reason_summary ? coinData.reason_summary.substring(0, 200) : null,
+      // Position and order management decisions
+      position_decisions: coinData?.position_decisions || null,
+      alternative_scenario: coinData?.alternative_scenario || null,
+      breakout_retest: coinData?.breakout_retest || null,
       // Method-specific indicators for chart visualization
       indicators: methodId === 'kim_nghia' ? {
         fibonacci: {
