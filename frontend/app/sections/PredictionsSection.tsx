@@ -33,6 +33,35 @@ interface PredictionWithAnalysis extends PredictionHistory {
   suggested_entry?: number;
   suggested_stop_loss?: number;
   suggested_take_profit?: number;
+  breakout_retest?: {
+    has_breakout?: boolean;
+    is_fake?: boolean;
+    retest_pending?: boolean;
+    analysis?: string;
+  };
+  position_decisions?: {
+    recommendations?: Array<{
+      position_id?: string;
+      action?: string;
+      confidence?: number;
+      reason?: string;
+      risk_percent?: number;
+      pnl_percent?: number;
+      pnl_usd?: number;
+      current_entry?: number;
+      current_sl?: number;
+      current_tp?: number;
+    }>;
+    overall_strategy?: string;
+  };
+  alternative_scenario?: {
+    trigger?: string;
+    new_bias?: string;
+    new_entry?: number;
+    new_sl?: number;
+    new_tp?: number;
+    logic?: string;
+  };
 }
 
 export function PredictionsSection({ symbol, method = 'ict' }: PredictionsSectionProps) {
@@ -314,6 +343,105 @@ function PredictionItem({
                 TP: ${formatPrice(prediction.suggested_take_profit)}
               </span>
             )}
+          </div>
+        )}
+
+        {/* Breakout/Retest Analysis (Kim Nghia) */}
+        {prediction.breakout_retest && (
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <div className="text-xs">
+              <span className="font-medium text-gray-900 dark:text-gray-100">Breakout/Retest:</span>
+              {prediction.breakout_retest.has_breakout && (
+                <span className="ml-2 px-2 py-0.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded">
+                  {prediction.breakout_retest.is_fake ? 'Fake' : 'Real'} Breakout
+                </span>
+              )}
+              {prediction.breakout_retest.retest_pending && (
+                <span className="ml-2 px-2 py-0.5 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded">
+                  Retest Pending
+                </span>
+              )}
+              {prediction.breakout_retest.analysis && (
+                <div className="mt-1 text-gray-600 dark:text-gray-400">
+                  {prediction.breakout_retest.analysis}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Position Decisions (Kim Nghia) */}
+        {prediction.position_decisions?.recommendations && prediction.position_decisions.recommendations.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <div className="text-xs">
+              <span className="font-medium text-gray-900 dark:text-gray-100">Đề xuất vị thế:</span>
+              {prediction.position_decisions.recommendations.map((rec, idx) => (
+                <div key={idx} className="mt-1 p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
+                      {rec.action}
+                    </span>
+                    {rec.pnl_usd !== undefined && rec.pnl_usd !== null && (
+                      <span className={`text-xs font-medium ${rec.pnl_usd >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        PnL: ${rec.pnl_usd.toFixed(2)} ({rec.pnl_percent?.toFixed(2)}%)
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-gray-600 dark:text-gray-400">{rec.reason}</div>
+                  {rec.current_entry && (
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-500">
+                      Entry: ${formatPrice(rec.current_entry)} | SL: ${formatPrice(rec.current_sl)} | TP: ${formatPrice(rec.current_tp)}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {prediction.position_decisions.overall_strategy && (
+                <div className="mt-2 text-gray-600 dark:text-gray-400 italic">
+                  {prediction.position_decisions.overall_strategy}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Alternative Scenario (Kim Nghia) */}
+        {prediction.alternative_scenario && prediction.alternative_scenario.trigger && (
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <div className="text-xs">
+              <span className="font-medium text-gray-900 dark:text-gray-100">Kịch bản đảo chiều:</span>
+              <div className="mt-1 p-2 bg-orange-50 dark:bg-orange-900/20 rounded">
+                <div className="text-gray-700 dark:text-gray-300 mb-1">
+                  <span className="font-medium">Trigger:</span> {prediction.alternative_scenario.trigger}
+                </div>
+                {prediction.alternative_scenario.new_bias && (
+                  <div className="text-gray-700 dark:text-gray-300 mb-1">
+                    <span className="font-medium">New Bias:</span> {prediction.alternative_scenario.new_bias}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 text-xs mt-1">
+                  {prediction.alternative_scenario.new_entry && (
+                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                      Entry: ${formatPrice(prediction.alternative_scenario.new_entry)}
+                    </span>
+                  )}
+                  {prediction.alternative_scenario.new_sl && (
+                    <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded">
+                      SL: ${formatPrice(prediction.alternative_scenario.new_sl)}
+                    </span>
+                  )}
+                  {prediction.alternative_scenario.new_tp && (
+                    <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded">
+                      TP: ${formatPrice(prediction.alternative_scenario.new_tp)}
+                    </span>
+                  )}
+                </div>
+                {prediction.alternative_scenario.logic && (
+                  <div className="mt-2 text-gray-600 dark:text-gray-400 text-xs">
+                    {prediction.alternative_scenario.logic}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
