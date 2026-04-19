@@ -153,6 +153,7 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
     risk_percent: suggestion.risk_percent,
     expected_rr: suggestion.expected_rr,
     invalidation_level: suggestion.invalidation_level,
+    method_id: account.method_id || 'ict', // Ensure method_id is set from account
     // ICT strategy tracking
     ict_strategy: JSON.stringify(ictStrategy),
     tp_levels: JSON.stringify(tpLevels),
