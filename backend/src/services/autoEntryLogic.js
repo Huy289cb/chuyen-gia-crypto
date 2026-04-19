@@ -212,6 +212,10 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     return decision;
   }
 
+  // Define variables needed for duplicate check and entry hit check
+  const currentPrice = analysis.current_price || 0;
+  const suggestedEntry = decision.suggestedPosition.entry_price;
+
   // Check for duplicate positions if db is available
   if (db && decision.shouldEnter) {
     const confidenceScore = analysis.confidence * 100;
@@ -236,8 +240,6 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
 
   // Check if entry price is already hit by current market price
-  const currentPrice = analysis.current_price || 0;
-  const suggestedEntry = decision.suggestedPosition.entry_price;
   const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
   const epsilon = 0.001; // Small tolerance for floating point comparison
 
