@@ -296,6 +296,26 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "new_sl": number,
       "new_tp": number,
       "logic": "giải thích dựa trên cấu trúc, price action, volume, Fibonacci, liquidity tiếng Việt"
+    },
+    "indicators": {
+      "fibonacci": {
+        "retracement": [
+          { "level": 0.382, "price": number, "label": "38.2%" },
+          { "level": 0.50, "price": number, "label": "50%" },
+          { "level": 0.618, "price": number, "label": "61.8%" }
+        ],
+        "extension": [
+          { "level": 1.272, "price": number, "label": "127.2%" },
+          { "level": 1.618, "price": number, "label": "161.8%" }
+        ]
+      },
+      "orderBlocks": [
+        { "high": number, "low": number, "timestamp": number, "type": "bullish|bearish" }
+      ],
+      "fairValueGaps": [
+        { "start": { "time": number, "price": number }, "end": { "time": number, "price": number } }
+      ],
+      "volume": "high|low|normal"
     }
   },
   "marketSentiment": "bullish | bearish | neutral | mixed",
@@ -311,6 +331,12 @@ RULES:
 - Entry: tại vùng Fibonacci Retracement (38.2%, 50%, hoặc 61.8%) hoặc SMC zone
 - SL: dưới swing low (long) hoặc trên swing high (short) dựa trên SMC structure, KHÔNG dùng giá cố định
 - TP: tại vùng Fibonacci Extension (127.2%, 161.8%) hoặc liquidity zone, KHÔNG dùng giá cố định
+- indicators field: Tính toán và trả về coordinates cho Fibonacci, OB, FVG
+  - Fibonacci retracement: Tính price tại các mức 38.2%, 50%, 61.8% dựa trên swing high/low
+  - Fibonacci extension: Tính price tại các mức 127.2%, 161.8% dựa trên swing point
+  - Order Blocks: Cung cấp high/low price range và timestamp
+  - Fair Value Gaps: Cung cấp start/end coordinates (time, price)
+  - Volume: Đánh giá high/low/normal dựa trên volume analysis
 - Output phải có thể thực hiện được
 - Nếu tín hiệu xung đột → HOLD
 - Chỉ cung cấp entry/SL/TP nếu confidence >= 0.60
