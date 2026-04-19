@@ -102,7 +102,7 @@ export function PriceChart({
 
   // Generate prediction line data like Vite implementation
   const predictionLineData = useMemo(() => {
-    console.log('[PriceChart] Generating prediction line data:', { showPredictions, predictions?.length, data.length });
+    console.log('[PriceChart] Generating prediction line data:', { showPredictions, predictionsLength: predictions?.length || 0, dataLength: data.length });
     
     if (!showPredictions || !predictions || predictions.length === 0 || data.length === 0) {
       console.log('[PriceChart] Returning empty - missing data');
