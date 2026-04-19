@@ -1006,6 +1006,20 @@ export async function getAccountBySymbol(db, symbol) {
   });
 }
 
+// Get account by ID
+export async function getAccountById(db, accountId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM accounts WHERE id = ?`,
+      [accountId],
+      (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      }
+    );
+  });
+}
+
 // Reset account to starting balance by symbol and method
 export async function resetAccount(db, symbol, methodId = 'ict') {
   return new Promise((resolve, reject) => {
