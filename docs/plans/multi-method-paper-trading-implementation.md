@@ -370,7 +370,7 @@ export const METHODS = {
     autoEntry: {
       minConfidence: 75, // Different threshold
       minRRRatio: 2.5, // Different R:R
-      riskPerTrade: 0.01,
+      riskPerTrade: 0.10, // 10% risk per trade
       maxPositionsPerSymbol: 8,
       // ... other settings
     }

@@ -488,7 +488,7 @@ function RulesPageContentWrapper({ method }: { method: Method }) {
     maxPositions: '8 BTC',
     timeframes: 'H4 primary, H1 secondary',
     schedule: '7m30s, 22m30s, 37m30s, 52m30s',
-    riskPerTrade: '1%'
+    riskPerTrade: '10%'
   };
 
   return (

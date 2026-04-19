@@ -350,7 +350,7 @@ export function KimNghiaRules({ language = 'en' }: KimNghiaRulesProps) {
             </div>
             <div>
               <span className="text-xs text-foreground-secondary">Risk Per Trade</span>
-              <p className="text-sm font-medium text-foreground">1%</p>
+              <p className="text-sm font-medium text-foreground">10%</p>
             </div>
           </div>
         </Card>

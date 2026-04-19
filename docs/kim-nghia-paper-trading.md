@@ -31,7 +31,7 @@ This method focuses on identifying high-probability setups using multi-timeframe
 - **Auto-Entry Thresholds**:
   - Minimum Confidence: 75%
   - Minimum R:R: 2.5
-  - Risk Per Trade: 1%
+  - Risk Per Trade: 10%
   - Max Positions: 8
 
 ### Database Integration
