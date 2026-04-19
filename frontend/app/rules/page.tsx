@@ -556,7 +556,7 @@ function RulesPageContentWrapper({ method }: { method: Method }) {
 
         {/* Method-specific content */}
         {method === 'kim_nghia' ? (
-          <KimNghiaRules />
+          <KimNghiaRules language={language} />
         ) : (
           <>
             {/* Auto Entry Rules */}

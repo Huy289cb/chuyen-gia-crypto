@@ -4,26 +4,144 @@ import { BookOpen, Target, Shield, Clock, TrendingUp, BarChart3, Layers, Activit
 import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 
-export function KimNghiaRules() {
+interface KimNghiaRulesProps {
+  language?: 'vi' | 'en';
+}
+
+const translations = {
+  vi: {
+    title: 'Phương Pháp Kim Nghia',
+    subtitle: 'Phân tích SMC + Volume + Fibonacci',
+    overview: 'Phương pháp Kim Nghia kết hợp Smart Money Concepts (SMC), Phân tích Volume, và Fibonacci Retracement & Extension để xác định giao dịch có xác suất cao sử dụng sự hội tụ đa khung thời gian.',
+    badges: {
+      smc: 'SMC',
+      volume: 'Volume',
+      fibonacci: 'Fibonacci',
+      multiTimeframe: 'Đa khung thời gian'
+    },
+    multiTimeframe: {
+      title: 'Phân Tích Đa Khung Thời Gian',
+      subtitle: 'H4 + H1 để xác định xu hướng, M15 để thực hiện',
+      h4: {
+        title: 'H4 - Xu hướng',
+        desc: 'Xác định hướng thị trường tổng thể và cấu trúc xu hướng'
+      },
+      h1: {
+        title: 'H1 - Xác nhận',
+        desc: 'Xác nhận hướng xu hướng và xác định vùng entry'
+      },
+      m15: {
+        title: 'M15 - Thực hiện',
+        desc: 'Thời điểm entry chính xác với đặt stop loss'
+      }
+    },
+    smc: {
+      title: 'Smart Money Concepts (SMC)',
+      subtitle: 'Order Blocks, FVG, Cấu trúc thị trường'
+    },
+    volume: {
+      title: 'Phân Tích Volume',
+      subtitle: 'Volume mở rộng/thu hẹp, xác nhận breakout'
+    },
+    fibonacci: {
+      title: 'Fibonacci',
+      subtitle: 'Retracement zones (38.2%, 50%, 61.8%) và Extension (127.2%, 161.8%)'
+    },
+    breakout: {
+      title: 'Breakout / Retest',
+      subtitle: 'Xác nhận sức mạnh với volume, chờ retest sau breakout'
+    },
+    positionManagement: {
+      title: 'Quản Lý Vị Thế',
+      subtitle: 'Đánh giá và quyết định giao dịch đang hoạt động'
+    },
+    aiAnalysis: {
+      title: 'Phân Tích Vị Thế AI',
+      desc: 'AI đánh giá vị thế đang mở mỗi 15 phút để đưa ra khuyến nghị đóng'
+    },
+    decisionOptions: {
+      title: 'Tùy Chọn Quyết Định',
+      desc: 'Giữ nguyên, đóng một phần, hoặc đóng toàn bộ dựa trên phân tích AI'
+    }
+  },
+  en: {
+    title: 'Kim Nghia Trading Method',
+    subtitle: 'SMC + Volume + Fibonacci Analysis',
+    overview: 'Kim Nghia method combines Smart Money Concepts (SMC), Volume Analysis, and Fibonacci Retracement & Extension for high-probability trade identification using multi-timeframe confluence.',
+    badges: {
+      smc: 'SMC',
+      volume: 'Volume',
+      fibonacci: 'Fibonacci',
+      multiTimeframe: 'Multi-Timeframe'
+    },
+    multiTimeframe: {
+      title: 'Multi-Timeframe Analysis',
+      subtitle: 'H4 + H1 for direction, M15 for execution',
+      h4: {
+        title: 'H4 - Bias & Trend',
+        desc: 'Determine overall market direction and trend structure'
+      },
+      h1: {
+        title: 'H1 - Confirmation',
+        desc: 'Confirm trend direction and identify entry zones'
+      },
+      m15: {
+        title: 'M15 - Execution',
+        desc: 'Precise entry timing with stop loss placement'
+      }
+    },
+    smc: {
+      title: 'Smart Money Concepts (SMC)',
+      subtitle: 'Order Blocks, FVG, Market Structure'
+    },
+    volume: {
+      title: 'Volume Analysis',
+      subtitle: 'Volume expansion/contraction, breakout confirmation'
+    },
+    fibonacci: {
+      title: 'Fibonacci',
+      subtitle: 'Retracement zones (38.2%, 50%, 61.8%) and Extension (127.2%, 161.8%)'
+    },
+    breakout: {
+      title: 'Breakout / Retest',
+      subtitle: 'Validate strength with volume, wait for retest after breakout'
+    },
+    positionManagement: {
+      title: 'Position Management',
+      subtitle: 'Active trade evaluation and decisions'
+    },
+    aiAnalysis: {
+      title: 'AI Position Analysis',
+      desc: 'AI evaluates open positions every 15 minutes for closure recommendations'
+    },
+    decisionOptions: {
+      title: 'Decision Options',
+      desc: 'Hold, partial close, or full close based on AI analysis'
+    }
+  }
+};
+
+export function KimNghiaRules({ language = 'en' }: KimNghiaRulesProps) {
+  const t = translations[language];
+  
   return (
     <div className="space-y-8">
       {/* Overview */}
       <section>
         <CardHeader 
-          title="Kim Nghia Trading Method" 
-          subtitle="SMC + Volume + Fibonacci Analysis"
+          title={t.title} 
+          subtitle={t.subtitle}
           icon={<BookOpen className="w-6 h-6" />}
         />
         <Card className="mt-4 p-6">
           <p className="text-foreground-secondary mb-4">
-            Kim Nghia method combines Smart Money Concepts (SMC), Volume Analysis, and Fibonacci Retracement & Extension 
-            for high-probability trade identification using multi-timeframe confluence.
+            {t.overview}
           </p>
           <div className="flex gap-2 flex-wrap">
-            <Badge variant="info">SMC</Badge>
-            <Badge variant="success">Volume</Badge>
-            <Badge variant="warning">Fibonacci</Badge>
-            <Badge variant="default">Multi-Timeframe</Badge>
+            <Badge variant="info">{t.badges.smc}</Badge>
+            <Badge variant="success">{t.badges.volume}</Badge>
+            <Badge variant="warning">{t.badges.fibonacci}</Badge>
+            <Badge variant="default">{t.badges.multiTimeframe}</Badge>
           </div>
         </Card>
       </section>
@@ -31,8 +149,8 @@ export function KimNghiaRules() {
       {/* Multi-Timeframe Analysis */}
       <section>
         <CardHeader 
-          title="Multi-Timeframe Analysis" 
-          subtitle="H4 + H1 for direction, M15 for execution"
+          title={t.multiTimeframe.title} 
+          subtitle={t.multiTimeframe.subtitle}
           icon={<Layers className="w-6 h-6" />}
         />
         <Card className="mt-4 p-6">
@@ -42,8 +160,8 @@ export function KimNghiaRules() {
                 <span className="text-accent-primary text-sm font-bold">H4</span>
               </div>
               <div>
-                <h4 className="font-medium text-foreground">H4 - Bias & Trend</h4>
-                <p className="text-sm text-foreground-secondary">Determine overall market direction and trend structure</p>
+                <h4 className="font-medium text-foreground">{t.multiTimeframe.h4.title}</h4>
+                <p className="text-sm text-foreground-secondary">{t.multiTimeframe.h4.desc}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -51,8 +169,8 @@ export function KimNghiaRules() {
                 <span className="text-accent-primary text-sm font-bold">H1</span>
               </div>
               <div>
-                <h4 className="font-medium text-foreground">H1 - Confirmation</h4>
-                <p className="text-sm text-foreground-secondary">Confirm trend direction and identify entry zones</p>
+                <h4 className="font-medium text-foreground">{t.multiTimeframe.h1.title}</h4>
+                <p className="text-sm text-foreground-secondary">{t.multiTimeframe.h1.desc}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -60,8 +178,8 @@ export function KimNghiaRules() {
                 <span className="text-accent-primary text-sm font-bold">M15</span>
               </div>
               <div>
-                <h4 className="font-medium text-foreground">M15 - Execution</h4>
-                <p className="text-sm text-foreground-secondary">Precise entry timing with stop loss placement</p>
+                <h4 className="font-medium text-foreground">{t.multiTimeframe.m15.title}</h4>
+                <p className="text-sm text-foreground-secondary">{t.multiTimeframe.m15.desc}</p>
               </div>
             </div>
           </div>
@@ -71,8 +189,8 @@ export function KimNghiaRules() {
       {/* SMC Concepts */}
       <section>
         <CardHeader 
-          title="Smart Money Concepts (SMC)" 
-          subtitle="Order Blocks, FVG, Market Structure"
+          title={t.smc.title} 
+          subtitle={t.smc.subtitle}
           icon={<Target className="w-6 h-6" />}
         />
         <Card className="mt-4 p-6">
@@ -104,8 +222,8 @@ export function KimNghiaRules() {
       {/* Volume Analysis */}
       <section>
         <CardHeader 
-          title="Volume Analysis" 
-          subtitle="Confirm breakouts and reversals"
+          title={t.volume.title} 
+          subtitle={t.volume.subtitle}
           icon={<Activity className="w-6 h-6" />}
         />
         <Card className="mt-4 p-6">
@@ -129,8 +247,8 @@ export function KimNghiaRules() {
       {/* Fibonacci Confluence */}
       <section>
         <CardHeader 
-          title="Fibonacci Levels" 
-          subtitle="Retracement for entry, Extension for TP"
+          title={t.fibonacci.title} 
+          subtitle={t.fibonacci.subtitle}
           icon={<BarChart3 className="w-6 h-6" />}
         />
         <Card className="mt-4 p-6">
@@ -191,23 +309,19 @@ export function KimNghiaRules() {
       {/* Position Management */}
       <section>
         <CardHeader 
-          title="Position Management" 
-          subtitle="Active trade evaluation and decisions"
+          title={t.positionManagement.title} 
+          subtitle={t.positionManagement.subtitle}
           icon={<TrendingUp className="w-6 h-6" />}
         />
         <Card className="mt-4 p-6">
           <div className="space-y-4">
             <div>
-              <h4 className="font-medium text-foreground mb-2">AI Position Analysis</h4>
-              <p className="text-sm text-foreground-secondary">AI evaluates open positions every 15 minutes for closure recommendations</p>
+              <h4 className="font-medium text-foreground mb-2">{t.aiAnalysis.title}</h4>
+              <p className="text-sm text-foreground-secondary">{t.aiAnalysis.desc}</p>
             </div>
             <div>
-              <h4 className="font-medium text-foreground mb-2">Decision Options</h4>
-              <p className="text-sm text-foreground-secondary">Hold, Close, Move SL, Partial TP, Scale in/out based on market conditions</p>
-            </div>
-            <div>
-              <h4 className="font-medium text-foreground mb-2">Risk Management</h4>
-              <p className="text-sm text-foreground-secondary">1% risk per trade with method-specific stop loss levels</p>
+              <h4 className="font-medium text-foreground mb-2">{t.decisionOptions.title}</h4>
+              <p className="text-sm text-foreground-secondary">{t.decisionOptions.desc}</p>
             </div>
           </div>
         </Card>
