@@ -54,7 +54,11 @@ export async function initDatabase() {
             narrative TEXT,
             comparison TEXT,
             market_sentiment TEXT,
-            disclaimer TEXT
+            disclaimer TEXT,
+            method_id TEXT DEFAULT 'ict',
+            breakout_retest TEXT,
+            position_decisions TEXT,
+            alternative_scenario TEXT
           )
         `, (err) => {
           if (err) console.error('[Database] Error creating analysis_history table:', err.message);
