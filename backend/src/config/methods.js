@@ -150,6 +150,8 @@ RULES:
       maxPositionsPerSymbol: 8,
       cooldownAfterLosses: 3,
       cooldownDuration: 240, // 4 hours in minutes
+      maxConsecutiveLosses: 3,
+      cooldownHours: 4,
       enabledSymbols: ['BTC'],
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1d'],
@@ -330,6 +332,8 @@ RULES:
       maxPositionsPerSymbol: 8,
       cooldownAfterLosses: 3,
       cooldownDuration: 240, // 4 hours in minutes
+      maxConsecutiveLosses: 3,
+      cooldownHours: 4,
       enabledSymbols: ['BTC'],
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
