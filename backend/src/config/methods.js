@@ -151,7 +151,9 @@ RULES:
       cooldownAfterLosses: 3,
       cooldownDuration: 240, // 4 hours in minutes
       enabledSymbols: ['BTC'],
-      allowedSessions: ['all_timeframes']
+      allowedSessions: ['all_timeframes'],
+      requiredTimeframes: ['4h', '1d'],
+      minAlignment: 0.5
     }
   },
   kim_nghia: {
@@ -329,7 +331,9 @@ RULES:
       cooldownAfterLosses: 3,
       cooldownDuration: 240, // 4 hours in minutes
       enabledSymbols: ['BTC'],
-      allowedSessions: ['all_timeframes']
+      allowedSessions: ['all_timeframes'],
+      requiredTimeframes: ['4h', '1h'],
+      minAlignment: 0.5
     }
   }
 };
