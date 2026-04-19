@@ -58,7 +58,7 @@ export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpda
               <div>
                 <h1 className="text-lg font-bold text-foreground">
                   Crypto<span className="text-gradient">Analyzer</span>
-                  <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded-full">v2.0.1</span>
+                  <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded-full">v2.0.2</span>
                 </h1>
                 <p className="text-xs text-foreground-tertiary hidden sm:block">
                   AI-Powered Trading Analysis
