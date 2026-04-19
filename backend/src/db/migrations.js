@@ -241,7 +241,8 @@ function runMigration5(db, resolve, reject) {
     
     if (missingColumns.length === 0) {
       console.log('[Migration] pending_orders table schema already up to date');
-      resolve();
+      // Still run Migration 6 to add method_id columns
+      runMigration6(db, resolve, reject);
       return;
     }
     
@@ -268,12 +269,14 @@ function runMigration5(db, resolve, reject) {
     promiseAllWithTimeout(missingColumnsToAdd.map(col => addMissingColumn(col)), 30000)
       .then(() => {
         console.log('[Migration] Updated pending_orders table from 19 to 21 columns');
-        // Run Migration 6: Add method_id columns for multi-method support
-        runMigration6(db, resolve, reject);
       })
       .catch((err) => {
         console.error('[Migration] Error adding columns:', err.message);
-        reject(err);
+        // Continue with Migration 6 even if column update fails
+      })
+      .finally(() => {
+        // Always run Migration 6: Add method_id columns for multi-method support
+        runMigration6(db, resolve, reject);
       });
   });
 }
