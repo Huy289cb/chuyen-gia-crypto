@@ -489,6 +489,19 @@ function addKimNghiaColumns(db, resolve, reject) {
     'alternative_scenario TEXT'
   ];
   
+  // Add r_multiple column to positions table
+  db.run(`ALTER TABLE positions ADD COLUMN r_multiple REAL DEFAULT 0`, (err) => {
+    if (err) {
+      if (err.message.includes('duplicate column name')) {
+        console.log('[Migration] r_multiple column already exists in positions');
+      } else {
+        console.error('[Migration] Error adding r_multiple to positions:', err.message);
+      }
+    } else {
+      console.log('[Migration] Added r_multiple column to positions');
+    }
+  });
+  
   let completed = 0;
   columns.forEach((column) => {
     db.run(`ALTER TABLE analysis_history ADD COLUMN ${column}`, (err) => {
