@@ -670,7 +670,7 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
  */
 export async function calculateAccountEquity(db, account) {
   const { getPositions } = await import('../db/database.js');
-  const openPositions = await getPositions(db, { symbol: account.symbol, status: 'open' });
+  const openPositions = await getPositions(db, { account_id: account.id, status: 'open' });
 
   let totalUnrealizedPnL = 0;
   for (const position of openPositions) {
