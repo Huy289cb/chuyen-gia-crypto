@@ -486,6 +486,9 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50, met
       values.push(methodId);
     }
     
+    // Exclude predictions with null method_id to prevent old data from showing in both methods
+    conditions.push('ah.method_id IS NOT NULL');
+    
     values.push(limit);
     
     db.all(
