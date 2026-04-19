@@ -465,11 +465,11 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   // Get updated position
   const closedPosition = await getPosition(db, position.id);
   
-  // Update account
-  const account = await (await import('../db/database.js')).getAccountBySymbol(db, position.symbol);
+  // Update account - use position's account_id to get correct account
+  const account = await (await import('../db/database.js')).getAccountById(db, position.account_id);
   
-  // Calculate new unrealized PnL from remaining open positions
-  const openPositions = await getPositions(db, { symbol: position.symbol, status: 'open' });
+  // Calculate new unrealized PnL from remaining open positions for this account
+  const openPositions = await getPositions(db, { account_id: position.account_id, status: 'open' });
   const newUnrealizedPnl = openPositions.reduce((sum, pos) => sum + (pos.unrealized_pnl || 0), 0);
   
   const isWin = realizedPnl > 0;
