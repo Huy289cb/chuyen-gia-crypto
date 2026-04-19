@@ -1,7 +1,7 @@
 'use client';
 
 // Cache-bust: v2
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
@@ -16,25 +16,41 @@ import { useTrends } from './hooks/useTrends';
 import { usePaperTrading } from './hooks/usePaperTrading';
 import { Loader2, AlertCircle } from 'lucide-react';
 
-export default function Home() {
+function MethodSelector({ onMethodChange, selectedMethod }: { onMethodChange: (method: string) => void, selectedMethod: string }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const methodParam = searchParams.get('method') as string;
-  const [selectedMethod, setSelectedMethod] = useState(methodParam || 'ict');
 
   useEffect(() => {
     if (methodParam && methodParam !== selectedMethod) {
-      setSelectedMethod(methodParam);
+      onMethodChange(methodParam);
     }
-  }, [methodParam, selectedMethod]);
+  }, [methodParam, selectedMethod, onMethodChange]);
 
-  const handleMethodChange = (newMethod: string) => {
-    setSelectedMethod(newMethod);
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set('method', newMethod);
-    router.push(`/?${newParams.toString()}`, { scroll: false });
-  };
+  return null;
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-bg-primary flex items-center justify-center"><Loader2 className="w-12 h-12 text-accent-primary animate-spin" /></div>}>
+      <HomeContentWithSelector />
+    </Suspense>
+  );
+}
+
+function HomeContentWithSelector() {
+  const [selectedMethod, setSelectedMethod] = useState('ict');
+  const handleMethodChange = (newMethod: string) => setSelectedMethod(newMethod);
   
+  return (
+    <>
+      <MethodSelector onMethodChange={handleMethodChange} selectedMethod={selectedMethod} />
+      <HomeContentWrapper selectedMethod={selectedMethod} handleMethodChange={handleMethodChange} />
+    </>
+  );
+}
+
+function HomeContentWrapper({ selectedMethod, handleMethodChange }: { selectedMethod: string, handleMethodChange: (method: string) => void }) {
+  const router = useRouter();
   const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends(selectedMethod);
   const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading(selectedMethod);
 
@@ -78,6 +94,13 @@ export default function Home() {
     );
   }
 
+  const handleMethodChangeWithRouter = (newMethod: string) => {
+    handleMethodChange(newMethod);
+    const url = new URL(window.location.href);
+    url.searchParams.set('method', newMethod);
+    router.push(`?${url.searchParams.toString()}`, { scroll: false });
+  };
+
   return (
     <div className="min-h-screen bg-bg-primary">
       <Header 
@@ -86,7 +109,7 @@ export default function Home() {
         lastPriceUpdate={lastPriceUpdate}
         lastAnalysisUpdate={lastAnalysisUpdate}
         selectedMethod={selectedMethod}
-        onMethodChange={handleMethodChange}
+        onMethodChange={handleMethodChangeWithRouter}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
