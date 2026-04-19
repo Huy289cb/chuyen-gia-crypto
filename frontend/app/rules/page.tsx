@@ -483,7 +483,7 @@ function RulesPageContentWrapper({ method }: { method: Method }) {
     schedule: '0m, 15m, 30m, 45m',
     riskPerTrade: '1%'
   } : {
-    minConfidence: '62%',
+    minConfidence: '60%',
     minRR: '2.5',
     maxPositions: '8 BTC',
     timeframes: 'H4 primary, H1 secondary',
