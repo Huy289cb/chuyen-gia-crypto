@@ -510,8 +510,40 @@ function RulesPageContentWrapper({ method }: { method: Method }) {
             <Badge variant="default" size="sm">{methodName}</Badge>
           </div>
           
-          {/* Language Toggle */}
+          {/* Method Toggle */}
           <div className="mt-6 flex items-center justify-center gap-2">
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('method', 'ict');
+                window.location.href = url.toString();
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                method === 'ict' 
+                  ? 'bg-accent-primary text-bg-primary' 
+                  : 'bg-surface-1 text-foreground hover:bg-surface-2'
+              }`}
+            >
+              ICT Smart Money
+            </button>
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('method', 'kim_nghia');
+                window.location.href = url.toString();
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                method === 'kim_nghia' 
+                  ? 'bg-accent-primary text-bg-primary' 
+                  : 'bg-surface-1 text-foreground hover:bg-surface-2'
+              }`}
+            >
+              Kim Nghia
+            </button>
+          </div>
+          
+          {/* Language Toggle */}
+          <div className="mt-4 flex items-center justify-center gap-2">
             <Globe className="w-4 h-4 text-foreground-secondary" />
             <button
               onClick={() => setLanguage(language === 'vi' ? 'en' : 'vi')}
