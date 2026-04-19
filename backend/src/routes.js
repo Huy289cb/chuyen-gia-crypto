@@ -54,12 +54,26 @@ router.get('/analysis', (req, res) => {
   // Get method-specific cache if method is specified, otherwise get default (ict)
   const cached = method ? cache.getMethod(method) : cache.get();
   
+  // Return empty data structure instead of 503 error
   if (!cached) {
-    return res.status(503).json({
-      success: false,
-      error: 'Data not available yet',
-      message: 'Analysis is running. Please try again in a few moments.',
-      status: 'initializing'
+    return res.json({
+      success: true,
+      data: {
+        prices: {
+          btc: null,
+          eth: null
+        },
+        analysis: {
+          btc: null,
+          eth: null
+        }
+      },
+      meta: {
+        cachedAt: null,
+        age: null,
+        status: 'initializing',
+        message: 'Analysis is running. Please try again in a few moments.'
+      }
     });
   }
   
