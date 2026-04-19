@@ -171,7 +171,19 @@ export async function initDatabase() {
         });
         
         console.log('[Database] Tables initialized successfully');
-        resolve(db);
+        
+        // Run migrations to add paper trading tables and method_id columns
+        (async () => {
+          try {
+            const { runMigrations } = await import('./migrations.js');
+            await runMigrations(db);
+            resolve(db);
+          } catch (migrationError) {
+            console.error('[Database] Migration failed:', migrationError.message);
+            // Still resolve db even if migration fails to allow app to start
+            resolve(db);
+          }
+        })();
       });
     });
   });

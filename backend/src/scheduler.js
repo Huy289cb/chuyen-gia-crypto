@@ -130,6 +130,9 @@ async function runMethodAnalysis(methodId) {
   console.log(`\n[Scheduler][${method.name}] Starting analysis at ${formatVietnamTime(new Date())}...`);
   
   try {
+    // Import database functions
+    const { getOrCreateAccount } = await import('./db/database.js');
+    
     // Step 1: Fetch price data
     const priceData = await fetchPrices(db);
     
