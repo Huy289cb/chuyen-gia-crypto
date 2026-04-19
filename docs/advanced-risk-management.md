@@ -301,7 +301,7 @@ If advanced risk management causes issues:
 1. Disable features via environment variables
 2. Reset risk_adjustment_factor to 1.0
 3. Clear suspension flags
-4. Revert to fixed 1% risk per trade
+4. Revert to fixed 10% risk per trade
 5. Monitor for 24 hours before re-enabling
 
 ---

@@ -152,7 +152,7 @@ RULES:
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
-      riskPerTrade: 0.01,
+      riskPerTrade: 0.10,
       maxPositionsPerSymbol: 9,
       cooldownAfterLosses: 3,
       cooldownDuration: 240, // 4 hours in minutes

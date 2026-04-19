@@ -44,7 +44,7 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 - **Auto-Entry Logic**: Automatically suggests positions when confidence >= 80% and ICT criteria are met
 - **Dual Order Types**: Supports both **Market Orders** (immediate execution) and **Limit Orders** (wait for price)
 - **Pending Orders System**: Automatically creates limit orders when entry price differs from current price
-- **Risk Management**: 1% risk per trade with risk-based position sizing
+- **Risk Management**: 10% risk per trade with risk-based position sizing
 - **Position Management**: Automatic Stop Loss (SL) and Take Profit (TP) monitoring
 - **Early Position Closure**: Automatic closure on prediction reversal (>80% confidence, opposite bias)
 - **AI Position Analysis**: AI evaluates open positions every 15 minutes and recommends closure (>80% confidence)

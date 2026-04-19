@@ -360,7 +360,7 @@ export const METHODS = {
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
-      riskPerTrade: 0.01,
+      riskPerTrade: 0.10,
       maxPositionsPerSymbol: 9,
       // ... other settings
     }
