@@ -180,7 +180,6 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
   // Update account - in paper trading, balance stays the same, equity = balance + unrealized_pnl
   // We don't deduct from balance because the position is just allocated, not spent
   await updateAccount(db, account.id, {
-    total_trades: (account.total_trades || 0) + 1,
     last_trade_time: new Date().toISOString()
   });
 
@@ -482,7 +481,8 @@ export async function closePosition(db, position, currentPrice, closeReason) {
     current_balance: newBalance,
     equity: newEquity,
     unrealized_pnl: newUnrealizedPnl,
-    realized_pnl: (account.realized_pnl || 0) + realizedPnl
+    realized_pnl: (account.realized_pnl || 0) + realizedPnl,
+    total_trades: (account.total_trades || 0) + 1
   };
 
   if (isWin) {
