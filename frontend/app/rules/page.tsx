@@ -131,9 +131,9 @@ const translations = {
       },
       riskManagement: {
         title: 'Quản Lý Rủi Ro',
-        description: '1% rủi ro mỗi lệnh với tính toán kích thước vị thế',
+        description: '10% rủi ro mỗi lệnh với tính toán kích thước vị thế',
         status: 'active',
-        details: 'RISK_PER_TRADE_PERCENT: 1 - 1% rủi ro tài khoản cố định mỗi vị thế'
+        details: 'RISK_PER_TRADE_PERCENT: 10 - 10% rủi ro tài khoản cố định mỗi vị thế'
       }
     },
     limitOrderManagement: {
@@ -212,10 +212,10 @@ const translations = {
     },
     tradingSettings: {
       title: 'Thiết Lập Giao Dịch',
-      riskPerTrade: '1%',
+      riskPerTrade: '10%',
       minConfidence: '70%',
       minRR: '2.0',
-      maxPositions: '8 BTC',
+      maxPositions: '9 BTC',
       enabledSymbols: 'Chỉ BTC',
       timeframes: '1h chính, 4h phụ'
     },
@@ -348,9 +348,9 @@ const translations = {
       },
       riskManagement: {
         title: 'Risk Management',
-        description: '1% risk per trade with position sizing',
+        description: '10% risk per trade with position sizing',
         status: 'active',
-        details: 'RISK_PER_TRADE_PERCENT: 1 - Fixed 1% account risk per position'
+        details: 'RISK_PER_TRADE_PERCENT: 10 - Fixed 10% account risk per position'
       }
     },
     limitOrderManagement: {
@@ -429,10 +429,10 @@ const translations = {
     },
     tradingSettings: {
       title: 'Trading Settings',
-      riskPerTrade: '1%',
+      riskPerTrade: '10%',
       minConfidence: '70%',
       minRR: '2.0',
-      maxPositions: '8 BTC',
+      maxPositions: '9 BTC',
       enabledSymbols: 'BTC only',
       timeframes: '1h primary, 4h secondary'
     },
@@ -478,14 +478,14 @@ function RulesPageContentWrapper({ method }: { method: Method }) {
   const methodConfig = method === 'ict' ? {
     minConfidence: '70%',
     minRR: '2.0',
-    maxPositions: '8 BTC',
+    maxPositions: '9 BTC',
     timeframes: '1h primary, 4h secondary',
     schedule: '0m, 15m, 30m, 45m',
-    riskPerTrade: '1%'
+    riskPerTrade: '10%'
   } : {
     minConfidence: '60%',
     minRR: '2.5',
-    maxPositions: '8 BTC',
+    maxPositions: '9 BTC',
     timeframes: 'H4 primary, H1 secondary',
     schedule: '7m30s, 22m30s, 37m30s, 52m30s',
     riskPerTrade: '10%'
