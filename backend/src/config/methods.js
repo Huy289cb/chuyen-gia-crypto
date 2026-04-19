@@ -149,7 +149,9 @@ RULES:
       riskPerTrade: 0.01,
       maxPositionsPerSymbol: 8,
       cooldownAfterLosses: 3,
-      cooldownDuration: 240 // 4 hours in minutes
+      cooldownDuration: 240, // 4 hours in minutes
+      enabledSymbols: ['BTC'],
+      allowedSessions: ['all_timeframes']
     }
   },
   kim_nghia: {
@@ -325,7 +327,9 @@ RULES:
       riskPerTrade: 0.01,
       maxPositionsPerSymbol: 8,
       cooldownAfterLosses: 3,
-      cooldownDuration: 240 // 4 hours in minutes
+      cooldownDuration: 240, // 4 hours in minutes
+      enabledSymbols: ['BTC'],
+      allowedSessions: ['all_timeframes']
     }
   }
 };
