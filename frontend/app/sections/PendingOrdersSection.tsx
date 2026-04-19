@@ -10,9 +10,10 @@ import type { PendingOrder, ApiResponse } from '../types';
 
 interface PendingOrdersSectionProps {
   symbol?: string;
+  method?: string;
 }
 
-export function PendingOrdersSection({ symbol }: PendingOrdersSectionProps) {
+export function PendingOrdersSection({ symbol, method = 'ict' }: PendingOrdersSectionProps) {
   const [orders, setOrders] = useState<PendingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -24,9 +25,10 @@ export function PendingOrdersSection({ symbol }: PendingOrdersSectionProps) {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const url = symbol 
-          ? `${API_BASE}/pending-orders?symbol=${symbol}`
-          : `${API_BASE}/pending-orders`;
+        const params = new URLSearchParams();
+        if (symbol) params.set('symbol', symbol);
+        if (method) params.set('method', method);
+        const url = `${API_BASE}/pending-orders?${params.toString()}`;
         const response = await fetch(url);
         const data: ApiResponse<PendingOrder[]> = await response.json();
         if (data.success && data.data) {
@@ -45,7 +47,7 @@ export function PendingOrdersSection({ symbol }: PendingOrdersSectionProps) {
     // Refresh every 10 seconds
     const interval = setInterval(fetchOrders, 10000);
     return () => clearInterval(interval);
-  }, [symbol, API_BASE]);
+  }, [symbol, method, API_BASE]);
 
   const cancelOrder = async (orderId: string) => {
     setCancellingId(orderId);

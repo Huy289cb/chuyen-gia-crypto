@@ -35,7 +35,7 @@ export function PerformanceSection({ symbol, method = 'ict' }: PerformanceSectio
     };
 
     fetchMetrics();
-  }, [symbol]);
+  }, [symbol, method]);
 
   if (loading) {
     return (

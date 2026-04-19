@@ -138,7 +138,7 @@ function HomeContentWrapper({ selectedMethod, handleMethodChange }: { selectedMe
         />
 
         {/* Pending Orders */}
-        <PendingOrdersSection />
+        <PendingOrdersSection method={selectedMethod} />
 
         {/* Trade History */}
         <HistorySection 
