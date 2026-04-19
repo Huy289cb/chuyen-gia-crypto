@@ -146,7 +146,8 @@ async function runMethodAnalysis(methodId) {
     // Step 4: Save to database with method_id
     if (dbEnabled && db) {
       try {
-        const { saveAnalysis, getPositions, evaluateAutoEntry } = await import('./db/database.js');
+        const { saveAnalysis, getPositions } = await import('./db/database.js');
+        const { evaluateAutoEntry } = await import('./services/autoEntryLogic.js');
         const { openPosition } = await import('./services/paperTradingEngine.js');
         
         // Save analysis for BTC with method_id
