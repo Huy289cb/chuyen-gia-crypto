@@ -30,13 +30,13 @@ try {
   db = result.db;
   dbEnabled = result.dbEnabled;
   
-  // Initialize paper trading accounts for BTC and ETH
+  // Initialize paper trading accounts for BTC (ICT and Kim Nghia only)
   if (dbEnabled && db) {
     try {
       const { getOrCreateAccount } = await import('./db/database.js');
-      await getOrCreateAccount(db, 'BTC', 100);
-      await getOrCreateAccount(db, 'ETH', 100);
-      console.log('[Index] Paper trading accounts initialized (BTC: 100U, ETH: 100U)');
+      await getOrCreateAccount(db, 'BTC', 'ict', 100);
+      await getOrCreateAccount(db, 'BTC', 'kim_nghia', 100);
+      console.log('[Index] Paper trading accounts initialized (BTC-ICT: 100U, BTC-KimNghia: 100U)');
     } catch (accountError) {
       console.log('[Index] Account initialization failed:', accountError.message);
     }

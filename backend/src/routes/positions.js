@@ -87,7 +87,7 @@ router.post('/open', async (req, res) => {
     });
   }
 
-  const { symbol, side, entry_price, stop_loss, take_profit, size_usd } = req.body;
+  const { symbol, side, entry_price, stop_loss, take_profit, size_usd, method_id } = req.body;
 
   if (!symbol || !side || !entry_price || !stop_loss || !take_profit) {
     return res.status(400).json({
@@ -111,7 +111,7 @@ router.post('/open', async (req, res) => {
     const { AUTO_ENTRY_CONFIG } = await import('../services/autoEntryLogic.js');
     
     // Get account
-    const account = await getOrCreateAccount(db, symbol, 100);
+    const account = await getOrCreateAccount(db, symbol, method_id || 'ict', 100);
     
     // Check if already has too many open positions (respect maxPositionsPerSymbol limit)
     const openPositions = await getPositions(db, { symbol, status: 'open' });
