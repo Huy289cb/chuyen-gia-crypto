@@ -2,6 +2,22 @@
 
 All notable changes to the project will be documented in this file.
 
+## [20/04/2026] - v2.2.2 - Bug Fixes
+
+### Bug Fixes
+
+**Issue 1: getOHLCData Function Not Found**
+- **Problem**: analyzerFactory.js called non-existent getOHLCData function for Fibonacci calculation
+- **Fix**: Changed to getOHLCCandles with correct function signature
+- **Impact**: Kim Nghia method Fibonacci calculation now works correctly
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 2: Debug Logs for SL Calculation**
+- **Problem**: SHORT SL placement error persisted, needed to diagnose root cause
+- **Fix**: Added debug logs to track suggestedEntry, bias, and calculated suggestedSL values
+- **Impact**: Can now diagnose why SL is being calculated incorrectly (75245 vs expected 76150)
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
 ## [20/04/2026] - v2.2.1 - Bug Fixes
 
 ### Bug Fixes
