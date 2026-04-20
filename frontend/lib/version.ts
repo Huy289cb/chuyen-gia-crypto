@@ -1,2 +1,2 @@
 // Version configuration - automatically read from package.json via next.config.js
-export const APP_VERSION = process.env.APP_VERSION || '2.1.0';
+export const APP_VERSION = '2.2.0';

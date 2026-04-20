@@ -98,15 +98,16 @@ When AI suggests entry price that is **already hit** by current market price:
 - No waiting required
 - Best for when setup is already active
 
-### Limit Orders (Pending Orders) - Updated (18/04/2026)
+### Limit Orders (Pending Orders) - Updated (20/04/2026)
 When AI suggests entry price that **has not been hit** yet:
 - **LONG**: Pending when `current_price > entry_price` (waiting for price to drop to entry)
 - **SHORT**: Pending when `current_price < entry_price` (waiting for price to rise to entry)
-- Order stored as **pending** and monitored every 30 seconds
+- Order stored as **pending** and monitored every 1 minute using 1-minute candle data
 - Entry price validated to be within 10% of current price (realistic range)
 - **AI Analysis**: AI evaluates pending orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Manual Cancellation**: Users can cancel pending orders via UI
 - **Frontend Display**: Dedicated Pending Orders section shows all active limit orders
+- **Accurate Trigger Detection**: Uses candle high/low to detect if entry was hit during fast price moves
 
 Examples:
 - **LONG Pending Example**:
@@ -152,16 +153,18 @@ Position Size = (Account Balance × Risk%) / |Entry Price - Stop Loss|
 
 This prevents overtrading during drawdown periods.
 
-## Price Updates
+## Price Updates (Updated 20/04/2026)
 
-- **Frequency**: Every 30 seconds
+- **Frequency**: Every 1 minute (changed from 30 seconds)
+- **Data Source**: 1-minute candle OHLC data from Binance (open, high, low, close, volume)
 - **Actions**:
-  - **Check pending orders**: Execute limit orders when price hits entry level
-  - Update unrealized PnL for all open positions
-  - Check if SL or TP levels are hit
+  - **Check pending orders**: Execute limit orders when candle high/low crosses entry level
+  - Update unrealized PnL for all open positions using candle close price
+  - Check if SL or TP levels are hit using candle high/low for accurate detection
   - Auto-close positions on SL/TP hit
   - Update account equity
 - **Account Snapshots**: Created every 5 minutes for equity curve
+- **Why 1-minute candles**: Single price every 30 seconds cannot detect if TP/SL was hit during fast price moves. 1-minute candle high/low provides accurate trigger detection.
 
 ## Prediction Tracking System
 
@@ -223,8 +226,8 @@ Each position opened is linked to a specific prediction timeframe for outcome tr
 2. **Order Classification** (Direction-Based):
    - **LONG**: Market order when `current_price <= entry_price`, Limit order when `current_price > entry_price`
    - **SHORT**: Market order when `current_price >= entry_price`, Limit order when `current_price < entry_price`
-3. **Monitoring**: Every 30 seconds, system checks all pending orders
-4. **Execution**: When price crosses entry level, position opened automatically
+3. **Monitoring**: Every 1 minute using 1-minute candle data, system checks all pending orders
+4. **Execution**: When candle high/low crosses entry level, position opened automatically
 
 ### Pending Order Lifecycle
 
@@ -380,7 +383,7 @@ Positions can have the following statuses:
 - **Educational Purpose**: Designed for learning and evaluating AI performance.
 - **No Financial Advice**: All suggestions are for educational purposes only.
 - **API Limitations**: Analysis runs every 15 minutes due to free Groq API limits.
-- **Data Freshness**: Price updates every 30 seconds for position monitoring.
+- **Data Freshness**: Price updates every 1 minute using 1-minute candle data for accurate SL/TP detection.
 
 ## Position Opening Logic (Updated 18/04/2026)
 
@@ -404,8 +407,8 @@ Positions can have the following statuses:
    - Best for when setup is already active
 
 3. **Limit Order (Pending) Execution**
-   - Order stored as **pending** and monitored every 30 seconds
-   - Automatic execution when price crosses entry level
+   - Order stored as **pending** and monitored every 1 minute using 1-minute candle data
+   - Automatic execution when candle high/low crosses entry level
    - Full SL/TP management once position is opened
 
 4. **Order Creation Process Examples**

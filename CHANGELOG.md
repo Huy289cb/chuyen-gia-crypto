@@ -2,6 +2,60 @@
 
 All notable changes to the project will be documented in this file.
 
+## [20/04/2026] - v2.2.0 - 1-Minute Candle Scheduler & Testing Infrastructure
+
+### Scheduler Update
+
+**Issue 1: Accurate SL/TP Detection**
+- **Problem**: Single price every 30 seconds cannot detect if TP/SL was hit during fast price moves
+- **Fix**: Changed scheduler interval from 30s to 1 minute, fetch 1-minute candle OHLC data from Binance
+- **Impact**: SL/TP detection now uses candle high/low for accurate trigger detection
+- **Files**: `backend/src/schedulers/priceUpdateScheduler.js`, `backend/src/price-fetcher.js`, `backend/src/services/paperTradingEngine.js`
+
+**Issue 2: Candle Data Structure**
+- **Problem**: Price fetching only returned single price, no high/low data
+- **Fix**: Updated fetchRealTimePrices to return full 1-minute candle data (open, high, low, close, volume)
+- **Impact**: All price-based operations now use candle data for accurate detection
+- **Files**: `backend/src/price-fetcher.js`
+
+**Issue 3: Pending Order Trigger Detection**
+- **Problem**: Pending orders couldn't detect if entry was hit during candle formation
+- **Fix**: Updated checkAndExecutePendingOrders to use candle high/low for trigger detection
+- **Impact**: Limit orders execute accurately even during fast price moves
+- **Files**: `backend/src/schedulers/priceUpdateScheduler.js`
+
+### Testing Infrastructure
+
+**Issue 4: No Test Coverage**
+- **Problem**: No automated tests for new features (Fibonacci, alternative scenario validation)
+- **Fix**: Installed Vitest, created test structure, implemented unit and integration tests
+- **Impact**: 53 tests covering new features and affected functionality
+- **Files**: `backend/vitest.config.js`, `backend/tests/unit/`, `backend/tests/integration/`, `backend/tests/fixtures/`
+
+**Issue 5: Fibonacci Utility Tests**
+- **Problem**: No validation for automatic Fibonacci calculation
+- **Fix**: Created unit tests for detectSwingPoints, calculateFibonacciLevels, getFibonacciFromOHLC
+- **Impact**: 12 tests validating Fibonacci calculation logic
+- **Files**: `backend/tests/unit/fibonacci.test.js`
+
+**Issue 6: Alternative Scenario Validation Tests**
+- **Problem**: No validation for alternative scenario SL/TP placement
+- **Fix**: Created unit tests for SL/TP placement validation, R:R ratio validation, structure validation
+- **Impact**: 15 tests ensuring alternative scenarios follow trading rules
+- **Files**: `backend/tests/unit/alternativeScenario.test.js`
+
+**Issue 7: AnalyzerFactory Tests**
+- **Problem**: No tests for AI response formatting and validation
+- **Fix**: Created unit tests for validatePriceLevel, formatAnalysisResponse, AI response structure
+- **Impact**: 13 tests validating analyzer formatting logic
+- **Files**: `backend/tests/unit/analyzerFactory.test.js`
+
+**Issue 8: Price Scheduler Integration Tests**
+- **Problem**: No tests for candle-based SL/TP detection
+- **Fix**: Created integration tests for candle data structure, SL/TP detection, pending order execution
+- **Impact**: 13 tests validating end-to-end scheduler logic
+- **Files**: `backend/tests/integration/priceScheduler.test.js`
+
 ## [20/04/2026] - v2.1.0 - Timezone Fixes & SL/TP Validation
 
 ### Timezone Fixes

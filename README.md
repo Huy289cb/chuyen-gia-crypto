@@ -36,6 +36,17 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - Lưu trữ OHLCV candles trong SQLite database
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
 - Không còn lỗi 429 rate limit (Binance: 1200 req/min vs CoinGecko: ~10-50 req/min)
+- **1-minute Candle Data**: Sử dụng nến 1 phút (OHLC) để detect chính xác SL/TP (v2.2.0)
+
+### Testing (New - v2.2.0)
+- **Vitest Framework**: Unit và integration tests với Vitest
+- **Test Coverage**: 53 tests covering new features and affected functionality
+  - Fibonacci utility tests (12 tests)
+  - Alternative scenario validation tests (15 tests)
+  - AnalyzerFactory tests (13 tests)
+  - Price scheduler integration tests (13 tests)
+- **Run Tests**: `npm run test` (watch mode), `npm run test:run` (single run), `npm run test:coverage` (with coverage)
+- **Test Structure**: `backend/tests/unit/`, `backend/tests/integration/`, `backend/tests/fixtures/`
 
 ### Giao diện tương tác
 - Narrative hiển thị rõ ràng (Tiếng Việt)
