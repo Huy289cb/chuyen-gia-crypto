@@ -285,40 +285,7 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 - [API Spec](./docs/api-spec.md)
 - [ICT Rules](./rules/analysis.rules.md)
 - [Setup Guide](./docs/setup.md)
-
-## Changelog
-
-### Production Fixes (20/04/2026)
-
-**Issue 1: Granular SL/TP Values**
-- **Problem**: SL/TP values appearing as even numbers (e.g., 74800, 75600)
-- **Fix**: Added AI prompt rules requiring precise price levels with at least 2 decimal places
-- **Impact**: SL/TP now reflect actual market structure (e.g., 74835.52, 74787.06)
-
-**Issue 2: Short Position TP/SL Logic**
-- **Problem**: Short positions had TP higher than SL (incorrect)
-- **Fix**: Added validation ensuring SL > entry > TP for short positions
-- **Impact**: Correct SL/TP ordering for short positions
-
-**Issue 3: Prediction Timeline Close Prediction**
-- **Problem**: Predictions showed "close" but no positions were actually closed
-- **Fix**: Added processing of `position_decisions` from AI to close positions
-- **Impact**: Positions now close when AI recommends closure
-
-**Issue 4: Stop Loss PnL Positive**
-- **Problem**: Positions hit stop loss but showed positive PnL
-- **Fix**: Changed to use stop loss price instead of current price when closing
-- **Impact**: Accurate PnL calculation for stop loss events
-
-**Issue 5: Default SL/TP Fallback**
-- **Problem**: System used default percentage-based SL/TP when AI didn't provide values
-- **Fix**: Removed fallback and require AI-provided Entry, SL, TP
-- **Impact**: Only trades with proper market structure levels execute
-
-**Issue 6: SL Distance Too Small**
-- **Problem**: Entry and SL too close (e.g., $3.33 on $74k price)
-- **Fix**: Increased minimum SL distance from 0.5% to 1%, calculate from entry
-- **Impact**: Minimum $750 SL distance on $75k entry
+- [Changelog](./CHANGELOG.md)
 
 ## License
 

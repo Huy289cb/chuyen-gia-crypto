@@ -693,6 +693,27 @@ All position openings (manual and auto) now enforce:
 - **Files Modified**: `backend/src/services/autoEntryLogic.js`, `backend/src/analyzers/analyzerFactory.js`, `backend/src/config/methods.js`
 - **Impact**: Minimum $750 SL distance on $75k entry (1%)
 
+### Issue 7: AI Prompt SL/TP Placement Rules
+- **Problem**: AI suggesting TP on wrong side of entry for short positions
+- **Root Cause**: AI prompts lacked explicit SL/TP placement rules with examples
+- **Fix**: Added explicit SL/TP placement rules with examples for LONG/SHORT positions
+  - LONG: SL < Entry < TP (SL below entry, TP above entry)
+  - SHORT: Entry > TP > SL (TP below entry, SL above entry)
+- **Files Modified**: `backend/src/config/methods.js` (ICT and Kim Nghia prompts)
+- **Impact**: AI now follows correct SL/TP ordering for both long and short positions
+
+### Issue 8: Groq API Token Limit
+- **Problem**: Rate limit reached (496,843/500,000 tokens per day)
+- **Root Cause**: Prompts contained educational content that the AI already knows, and verbose JSON schema descriptions
+- **Fix**: Optimized prompts by:
+  - Removing educational content about ICT concepts (AI already knows BOS, CHOCH, liquidity, etc.)
+  - Condensing JSON schema from verbose to compact format
+  - Combining related rules into single lines
+  - Using symbols (|, ≥, ≤, →) for brevity
+  - Maintaining all method-specific information and validation rules
+- **Files Modified**: `backend/src/config/methods.js`
+- **Impact**: Token usage reduced by ~70% while maintaining method-specific information and output accuracy
+
 ## Future Enhancements
 
 The following features are planned but not yet implemented:
