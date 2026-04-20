@@ -702,8 +702,8 @@ export async function saveLatestPrice(db, coin, price, change24h, change7d, mark
     db.run(
       `INSERT OR REPLACE INTO latest_prices 
        (coin, price, change_24h, change_7d, market_cap, volume_24h, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      [coin.toUpperCase(), price, change24h, change7d, marketCap, volume24h],
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [coin.toUpperCase(), price, change24h, change7d, marketCap, volume24h, new Date().toISOString()],
       function(err) {
         if (err) {
           console.error('[Database] Error saving latest price:', err.message);
@@ -858,10 +858,11 @@ export async function getOrCreateAccount(db, symbol, methodId = 'ict', startingB
           resolve(row);
         } else {
           // Create new account
+          const now = new Date().toISOString();
           db.run(
-            `INSERT INTO accounts (symbol, method_id, starting_balance, current_balance, equity)
-             VALUES (?, ?, ?, ?, ?)`,
-            [symbol.toUpperCase(), methodId, startingBalance, startingBalance, startingBalance],
+            `INSERT INTO accounts (symbol, method_id, starting_balance, current_balance, equity, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [symbol.toUpperCase(), methodId, startingBalance, startingBalance, startingBalance, now, now],
             function(err) {
               if (err) {
                 reject(err);
@@ -934,7 +935,8 @@ export async function updateAccount(db, accountId, updates) {
       values.push(updates.cooldown_until);
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP');
+    fields.push('updated_at = ?');
+    values.push(new Date().toISOString());
     values.push(accountId);
     
     db.run(
@@ -1360,9 +1362,9 @@ export async function closePosition(db, positionId, closePrice, closeReason) {
 export async function createAccountSnapshot(db, accountId, balance, equity, unrealizedPnl, openPositions) {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO account_snapshots (account_id, balance, equity, unrealized_pnl, open_positions)
-       VALUES (?, ?, ?, ?, ?)`,
-      [accountId, balance, equity, unrealizedPnl, openPositions],
+      `INSERT INTO account_snapshots (account_id, balance, equity, unrealized_pnl, open_positions, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [accountId, balance, equity, unrealizedPnl, openPositions, new Date().toISOString()],
       function(err) {
         if (err) reject(err);
         else resolve(this.lastID);
@@ -1398,9 +1400,9 @@ export async function getAccountSnapshots(db, accountId, hoursBack = 168) {
 export async function logTradeEvent(db, positionId, eventType, eventData = '{}') {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO trade_events (position_id, event_type, event_data)
-       VALUES (?, ?, ?)`,
-      [positionId, eventType, eventData],
+      `INSERT INTO trade_events (position_id, event_type, event_data, timestamp)
+       VALUES (?, ?, ?, ?)`,
+      [positionId, eventType, eventData, new Date().toISOString()],
       function(err) {
         if (err) reject(err);
         else resolve(this.lastID);
