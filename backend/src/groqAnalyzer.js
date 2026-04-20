@@ -137,16 +137,42 @@ function formatAnalysisResponse(rawResponse, priceData) {
         return null;
       }
       
-      // Additional validation: ensure stop loss is at least 0.5% away from entry
+      // Additional validation: ensure stop loss is at least 1% away from entry
       if (type === 'stop_loss' && suggestedEntry) {
         const distance = Math.abs(p - suggestedEntry);
-        const minDistance = suggestedEntry * 0.005; // 0.5% minimum
+        const minDistance = suggestedEntry * 0.01; // 1% minimum
         if (distance < minDistance) {
           console.log(`[GroqAnalyzer] Stop loss ${p} too close to entry ${suggestedEntry} (distance ${distance.toFixed(2)} < minimum ${minDistance.toFixed(2)}), rejecting`);
           return null;
         }
+
+        // Validate SL is on correct side of entry based on bias
+        if (bias === 'bullish' && p >= suggestedEntry) {
+          // For long: SL must be below entry
+          console.log(`[GroqAnalyzer] Long stop loss ${p} must be below entry ${suggestedEntry}, rejecting`);
+          return null;
+        }
+        if (bias === 'bearish' && p <= suggestedEntry) {
+          // For short: SL must be above entry
+          console.log(`[GroqAnalyzer] Short stop loss ${p} must be above entry ${suggestedEntry}, rejecting`);
+          return null;
+        }
       }
-      
+
+      // Validate TP is on correct side of entry based on bias
+      if (type === 'take_profit' && suggestedEntry && bias) {
+        if (bias === 'bullish' && p <= suggestedEntry) {
+          // For long: TP must be above entry
+          console.log(`[GroqAnalyzer] Long take profit ${p} must be above entry ${suggestedEntry}, rejecting`);
+          return null;
+        }
+        if (bias === 'bearish' && p >= suggestedEntry) {
+          // For short: TP must be below entry
+          console.log(`[GroqAnalyzer] Short take profit ${p} must be below entry ${suggestedEntry}, rejecting`);
+          return null;
+        }
+      }
+
       return p;
     };
     
