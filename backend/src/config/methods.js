@@ -183,7 +183,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "tp_zones": "mức 127.2%, 161.8%, 261.8% tiếng Việt"
     },
     "breakout_retest": { "has_breakout":bool,"is_fake":bool,"retest_pending":bool,"analysis":"VIETNAMESE" },
-    "predictions": { "15m": {"direction":"up|down|sideways","target":number,"confidence":0.00-1.00}, "1h": {...}, "4h": {...} },
+    "price_prediction": { "direction":"up|down|sideways","target":number,"confidence":0.00-1.00 },
     "risk": "VIETNAMESE: volatility+invalidation",
     "suggested_entry": number (MUST provide if action=buy|sell, set to 0 if action=hold),
     "suggested_stop_loss": number (MUST provide if action=buy|sell, set to 0 if action=hold, LONG: BELOW entry, SHORT: ABOVE entry),

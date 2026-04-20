@@ -2,6 +2,74 @@
 
 All notable changes to the project will be documented in this file.
 
+## [20/04/2026] - v2.1.0 - Timezone Fixes & SL/TP Validation
+
+### Timezone Fixes
+
+**Issue 1: Chart Timezone Display**
+- **Problem**: Charts displayed UTC time instead of GMT+7
+- **Fix**: Added +7 hours offset to Unix timestamps in PriceChartContainer
+- **Impact**: Charts now display correct GMT+7 time
+- **Files**: `frontend/app/components/crypto/PriceChartContainer.tsx`
+
+**Issue 2: Trade History Timezone Display**
+- **Problem**: Trade history timestamps displayed in UTC instead of GMT+7
+- **Fix**: Added formatToGMT7 helper function with +7 hours offset
+- **Impact**: Trade history now displays correct GMT+7 time
+- **Files**: `frontend/app/sections/HistorySection.tsx`
+
+**Issue 3: Prediction Timeline Timezone Display**
+- **Problem**: Prediction timeline timestamps displayed in UTC instead of GMT+7
+- **Fix**: Updated formatDateTime to add +7 hours offset for GMT+7
+- **Impact**: Prediction timeline now displays correct GMT+7 time
+- **Files**: `frontend/app/sections/PredictionsSection.tsx`
+
+### SL/TP Validation & AI Prompt Fixes
+
+**Issue 4: SL/TP Side Validation**
+- **Problem**: System allowed SHORT positions with SL below entry
+- **Fix**: Added SL/TP side validation in autoEntryLogic, groqAnalyzer, analyzerFactory
+- **Impact**: System rejects invalid SL/TP placements
+- **Files**: `backend/src/services/autoEntryLogic.js`, `backend/src/groqAnalyzer.js`, `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 5: AI Prompt Specific Price Examples**
+- **Problem**: AI prompt used specific price values (e.g., Entry=75000, SL=74250) causing confusion
+- **Fix**: Removed specific price examples, used abstract positioning (SL BELOW/ABOVE entry, TP ABOVE/BELOW entry)
+- **Impact**: AI no longer uses example prices as actual values
+- **Files**: `backend/src/config/methods.js`
+
+**Issue 6: Database Column Mismatch**
+- **Problem**: SQLITE_ERROR: 22 values for 23 columns in Kim Nghia order processing
+- **Fix**: Added entry_time column back to INSERT statement with datetime('now')
+- **Impact**: Fixed column mismatch error
+- **Files**: `backend/src/db/database.js`
+
+**Issue 7: AI Not Returning SL/TP Fields**
+- **Problem**: AI not returning suggested_entry, suggested_stop_loss, suggested_take_profit
+- **Fix**: Marked fields as REQUIRED in prompts, added columns to analysis_history table
+- **Impact**: AI now provides required SL/TP fields
+- **Files**: `backend/src/config/methods.js`, `backend/src/db/migrations.js`, `backend/src/db/database.js`
+
+**Issue 8: Auto-Entry Calculate Position for Hold Action**
+- **Problem**: Auto-entry attempted to calculate position when AI action was "hold"
+- **Fix**: Added check to only calculate position when action is buy or sell
+- **Impact**: System skips position calculation for hold actions
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Issue 9: AI Returning Null SL for Sell Action**
+- **Problem**: AI returning suggested_stop_loss as null even when action is "sell"
+- **Fix**: Made prompt more explicit about SL/TP requirements, added fallback calculation
+- **Impact**: System calculates default SL/TP if AI doesn't provide them
+- **Files**: `backend/src/config/methods.js`, `backend/src/services/autoEntryLogic.js`
+
+### Documentation Updates
+
+**Issue 10: Timezone Configuration Documentation**
+- **Problem**: Documentation didn't specify timezone handling approach
+- **Fix**: Added timezone configuration documentation (backend UTC, frontend GMT+7)
+- **Impact**: Clear documentation for timezone setup
+- **Files**: `docs/setup.md`
+
 ## [20/04/2026] - Production Fixes & Prompt Optimization
 
 ### Production Fixes

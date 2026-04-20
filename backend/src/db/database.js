@@ -248,22 +248,28 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
         // Collect prediction IDs for linking with positions
         const predictionIds = {};
         const savePredictions = async () => {
+          // Skip prediction saving for Kim Nghia method (it uses price_prediction instead of timeframe predictions)
+          if (methodId === 'kim_nghia') {
+            console.log(`[Database] Skipping prediction saving for Kim Nghia method`);
+            return;
+          }
+
           if (coinData.predictions) {
             const predictions = Object.entries(coinData.predictions);
             const timeframeHours = { '15m': 0.25, '1h': 1, '4h': 4, '1d': 24 };
-            
+
             for (const [timeframe, pred] of predictions) {
               // Skip if pred is undefined or missing required properties
               if (!pred || typeof pred !== 'object') continue;
-              
+
               const expiresAt = new Date();
               expiresAt.setHours(expiresAt.getHours() + timeframeHours[timeframe]);
-              
+
               const predictionId = await new Promise((res, rej) => {
                 db.run(
-                  `INSERT INTO predictions 
-                   (analysis_id, coin, timeframe, direction, target_price, confidence, predicted_at, expires_at, 
-                    suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr, 
+                  `INSERT INTO predictions
+                   (analysis_id, coin, timeframe, direction, target_price, confidence, predicted_at, expires_at,
+                    suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr,
                     invalidation_level, reason_summary, model_version, method_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                   [

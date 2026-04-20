@@ -112,8 +112,11 @@ async function buildUserPrompt(priceData, db, methodId) {
       
       const btcContext = formatPredictionHistory(btcHistory, 'BTC');
       const ethContext = formatPredictionHistory(ethHistory, 'ETH');
-      
-      if (btcContext || ethContext) {
+
+      // Skip prediction history for Kim Nghia method (it doesn't use timeframe predictions)
+      if (methodId === 'kim_nghia') {
+        console.log(`[AnalyzerFactory][${methodId}] Skipping prediction history for Kim Nghia method`);
+      } else if (btcContext || ethContext) {
         historicalContext = `\n\nPREDICTION HISTORY (24H):\n${btcContext}\n${ethContext}\n\nReview past accuracy. If recent predictions were incorrect, be more conservative. If accurate, maintain confidence.`;
         console.log(`[AnalyzerFactory][${methodId}] Historical prediction context included`);
       } else {
