@@ -1093,6 +1093,33 @@ export async function createPosition(db, positionData) {
       method_id = 'ict'
     } = positionData;
     
+    // Final validation: SL/TP placement based on side
+    if (side === 'long') {
+      // LONG: SL must be below entry, TP must be above entry
+      if (stop_loss >= entry_price) {
+        console.error(`[createPosition] LONG stop loss ${stop_loss} must be below entry ${entry_price} - rejecting position`);
+        reject(new Error('Invalid SL placement: LONG SL must be below entry'));
+        return;
+      }
+      if (take_profit <= entry_price) {
+        console.error(`[createPosition] LONG take profit ${take_profit} must be above entry ${entry_price} - rejecting position`);
+        reject(new Error('Invalid TP placement: LONG TP must be above entry'));
+        return;
+      }
+    } else if (side === 'short') {
+      // SHORT: SL must be above entry, TP must be below entry
+      if (stop_loss <= entry_price) {
+        console.error(`[createPosition] SHORT stop loss ${stop_loss} must be above entry ${entry_price} - rejecting position`);
+        reject(new Error('Invalid SL placement: SHORT SL must be above entry'));
+        return;
+      }
+      if (take_profit >= entry_price) {
+        console.error(`[createPosition] SHORT take profit ${take_profit} must be below entry ${entry_price} - rejecting position`);
+        reject(new Error('Invalid TP placement: SHORT TP must be below entry'));
+        return;
+      }
+    }
+    
     db.run(
       `INSERT INTO positions
        (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit,
