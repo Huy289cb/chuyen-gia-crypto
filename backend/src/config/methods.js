@@ -133,30 +133,15 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
 }
 
 RULES:
-- ALL text fields must be in Vietnamese language
-- Build narrative BEFORE decision
-- If signals conflict → HOLD
-- Predictions must target specific liquidity/FVG levels
-- Only provide suggested_entry, suggested_stop_loss, suggested_take_profit if confidence >= 0.8 and bias is clear
-- SL must be placed at actual swing low (long) or swing high (short) based on ICT market structure
-- QUAN TRỌNG: SL/TP must follow these rules:
-  - LONG (buy): SL < Entry < TP (SL below entry, TP above entry)
-    - Example LONG: Entry $74,500, SL $73,755 (below), TP $75,612 (above)
-  - SHORT (sell): Entry > TP > SL (TP below entry, SL above entry)
-    - Example SHORT: Entry $74,500, TP $73,388 (below), SL $75,225 (above)
-- SL must be at least 1% away from entry price (minimum risk distance)
-- TP must be at least 2% away from entry price (ensures R:R >= 2.0)
-- TP must target next liquidity zone or FVG fill zone based on ICT analysis with minimum 1:2 R:R
-- For ICT: Use liquidity sweeps, order blocks, and FVG levels for SL/TP placement
-- Calculate SL/TP using actual price levels from ICT structure analysis, NOT fixed percentages
-- NEVER use fixed values like 75000 or 78000 - always use actual ICT market structure levels
-- suggested_entry, suggested_stop_loss, suggested_take_profit should be precise price levels with at least 2 decimal places (e.g., 74835.52, 74787.06, 75612.19)
-- Avoid rounding SL/TP to even numbers (74800, 74800, 75600) - use actual market structure levels
-- expected_rr must be >= 2.0 if suggesting a trade
-- confidence should be a decimal between 0.00 and 1.00 with at least 2 decimal places (e.g., 0.75, 0.82, 0.87)
-- Avoid rounding confidence to even percentages (0.50, 0.60, 0.70, 0.80)
-- Use precise confidence based on signal strength (e.g., 0.73, 0.78, 0.84, 0.91)
-- No text outside JSON
+- Vietnamese only, build narrative first
+- Conflict signals → HOLD
+- Entry/SL/TP only if confidence >= 0.8
+- SL/TP rules: LONG SL<Entry<TP, SHORT Entry>TP>SL
+- SL >= 1% from entry, TP >= 2% from entry
+- Use market structure levels, NOT fixed prices
+- SL/TP: 2 decimals (74835.52), NO rounding to even (74800)
+- expected_rr >= 2.0, confidence 2 decimals (0.75)
+- JSON only
 - reasoning ≤ 350 characters in Vietnamese`,
     autoEntry: {
       minConfidence: 70,
@@ -335,38 +320,20 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
 }
 
 RULES:
-- TẤT CẢ text field phải bằng tiếng Việt
-- Giải thích logic rõ ràng
+- Tiếng Việt, giải thích logic
 - Xác nhận breakout với volume
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
-- Bao gồm mức Fibonacci (Retracement 38.2%, 50%, 61.8% và Extension 127.2%, 161.8%)
-- Entry: tại vùng Fibonacci Retracement (38.2%, 50%, hoặc 61.8%) hoặc SMC zone
-- QUAN TRỌNG: SL/TP phải tuân thủ quy tắc sau:
-  - LONG (mua): SL < Entry < TP (SL dưới entry, TP trên entry)
-    - Ví dụ LONG: Entry $74,500, SL $73,755 (dưới), TP $75,612 (trên)
-  - SHORT (bán): Entry > TP > SL (TP dưới entry, SL trên entry)
-    - Ví dụ SHORT: Entry $74,500, TP $73,388 (dưới), SL $75,225 (trên)
-- SL phải cách entry ít nhất 1% (khoảng cách rủi ro tối thiểu)
-- TP phải cách entry ít nhất 2% (đảm bảo R:R >= 2.0)
-- TP: tại vùng Fibonacci Extension (127.2%, 161.8%) hoặc liquidity zone, KHÔNG dùng giá cố định
-- suggested_entry, suggested_stop_loss, suggested_take_profit phải là mức giá chính xác với ít nhất 2 số sau dấu phẩy (ví dụ: 74776.57, 75600.00, 75612.19)
-- Tránh làm tròn SL/TP sang số chẵn (74800, 75600) - dùng mức giá thực tế từ market structure
-- indicators field: Tính toán và trả về coordinates cho Fibonacci, OB, FVG
-  - Fibonacci retracement: Tính price tại các mức 38.2%, 50%, 61.8% dựa trên swing high/low
-  - Fibonacci extension: Tính price tại các mức 127.2%, 161.8% dựa trên swing point
-  - Order Blocks: Cung cấp high/low price range và timestamp
-  - Fair Value Gaps: Cung cấp start/end coordinates (time, price)
-  - Volume: Đánh giá high/low/normal dựa trên volume analysis
-- confidence phải là số thập phân từ 0.00 đến 1.00 với ít nhất 2 số sau dấu phẩy (ví dụ: 0.75, 0.82, 0.87)
-- Tránh làm tròn confidence sang số chẵn (0.50, 0.60, 0.70, 0.80)
-- Sử dụng confidence chính xác dựa trên độ mạnh của tín hiệu (ví dụ: 0.73, 0.78, 0.84, 0.91)
-- Output phải có thể thực hiện được
-- Nếu tín hiệu xung đột → HOLD
-- Chỉ cung cấp entry/SL/TP nếu confidence >= 0.60
-- expected_rr phải >= 2.5 nếu đề xuất giao dịch
-- Với quyết định lệnh: tính PnL (USD, %) nếu có dữ liệu lệnh
-- Giải thích role breakout/retest với volume/SMC/liquidity/Fibonacci
-- Không có text ngoài JSON`,
+- Fibonacci: Retracement 38.2%, 50%, 61.8%; Extension 127.2%, 161.8%
+- Entry: Fibonacci Retracement hoặc SMC zone
+- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL
+- SL >= 1% từ entry, TP >= 2% từ entry
+- SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
+- indicators: tính Fibonacci/OB/FVG coordinates
+- confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
+- Conflict → HOLD
+- Entry/SL/TP chỉ nếu confidence >= 0.60
+- expected_rr >= 2.5
+- JSON only`,
     autoEntry: {
       minConfidence: 60,
       minRRRatio: 2.5,
