@@ -130,8 +130,8 @@ async function fetchCurrentPrices() {
     }
 
     return {
-      btc: priceData.btc?.price || null,
-      eth: priceData.eth?.price || null
+      btc: priceData.btc || null,
+      eth: priceData.eth || null
     };
   } catch (error) {
     console.error('[PriceScheduler] Real-time price fetch error:', error.message);
