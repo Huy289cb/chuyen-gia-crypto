@@ -230,10 +230,12 @@ function PredictionItem({
   const formatDateTime = (timestamp: string) => {
     if (!timestamp) return 'N/A';
     const date = new Date(timestamp);
-    return date.toLocaleString('vi-VN', {
-      timeZone: 'Asia/Ho_Chi_Minh',
+    // Add 7 hours offset to convert UTC to GMT+7
+    const gmt7Date = new Date(date.getTime() + 7 * 60 * 60 * 1000);
+    return gmt7Date.toLocaleString('vi-VN', {
       day: '2-digit',
       month: '2-digit',
+      year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
