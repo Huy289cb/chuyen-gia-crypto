@@ -488,7 +488,16 @@ function addKimNghiaColumns(db, resolve, reject) {
     'position_decisions TEXT',
     'alternative_scenario TEXT'
   ];
-  
+
+  // Add suggested_entry, suggested_stop_loss, suggested_take_profit columns to analysis_history
+  const sltpColumns = [
+    'suggested_entry REAL',
+    'suggested_stop_loss REAL',
+    'suggested_take_profit REAL',
+    'expected_rr REAL',
+    'invalidation_level REAL'
+  ];
+
   // Add r_multiple column to positions table
   db.run(`ALTER TABLE positions ADD COLUMN r_multiple REAL DEFAULT 0`, (err) => {
     if (err) {
@@ -501,9 +510,10 @@ function addKimNghiaColumns(db, resolve, reject) {
       console.log('[Migration] Added r_multiple column to positions');
     }
   });
-  
+
   let completed = 0;
-  columns.forEach((column) => {
+  const allColumns = [...columns, ...sltpColumns];
+  allColumns.forEach((column) => {
     db.run(`ALTER TABLE analysis_history ADD COLUMN ${column}`, (err) => {
       if (err) {
         if (err.message.includes('duplicate column name')) {
@@ -515,8 +525,8 @@ function addKimNghiaColumns(db, resolve, reject) {
         console.log(`[Migration] Added ${column} to analysis_history`);
       }
       completed++;
-      
-      if (completed === columns.length) {
+
+      if (completed === allColumns.length) {
         console.log('[Migration] Kim Nghia columns migration completed');
         resolve();
       }

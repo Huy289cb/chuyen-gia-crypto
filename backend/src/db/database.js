@@ -207,9 +207,9 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
     console.log(`[Database] Saving analysis for ${coin} (method: ${methodId}): currentPrice=${currentPrice}, bias=${coinData.bias}, confidence=${coinData.confidence}`);
     
     db.run(
-      `INSERT INTO analysis_history 
-       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer, method_id, breakout_retest, position_decisions, alternative_scenario)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO analysis_history
+       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer, method_id, breakout_retest, position_decisions, alternative_scenario, suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr, invalidation_level)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         coin.toUpperCase(),
         currentPrice,
@@ -223,7 +223,12 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
         methodId,
         coinData.breakout_retest ? JSON.stringify(coinData.breakout_retest) : null,
         coinData.position_decisions ? JSON.stringify(coinData.position_decisions) : null,
-        coinData.alternative_scenario ? JSON.stringify(coinData.alternative_scenario) : null
+        coinData.alternative_scenario ? JSON.stringify(coinData.alternative_scenario) : null,
+        coinData.suggested_entry || null,
+        coinData.suggested_stop_loss || null,
+        coinData.suggested_take_profit || null,
+        coinData.expected_rr || null,
+        coinData.invalidation_level || null
       ],
       function(err) {
         if (err) {
