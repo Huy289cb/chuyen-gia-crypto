@@ -187,7 +187,13 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     return decision;
   }
 
-  // Check 7: Expected R:R ratio from analysis
+  // Check 7: AI action must be buy or sell (not hold)
+  if (analysis.action !== 'buy' && analysis.action !== 'sell') {
+    decision.reason = `AI action is '${analysis.action}' (not buy/sell)`;
+    return decision;
+  }
+
+  // Check 8: Expected R:R ratio from analysis
   const expectedRR = analysis.expected_rr || 2.0;
   if (expectedRR < config.minRRRatio) {
     decision.reason = `Risk/Reward ratio too low (${expectedRR.toFixed(1)} < ${config.minRRRatio})`;
