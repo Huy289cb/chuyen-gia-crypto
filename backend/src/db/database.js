@@ -1032,8 +1032,8 @@ export async function resetAccount(db, symbol, methodId = 'ict') {
       
       // First, close all open positions for this account
       db.run(
-        `UPDATE positions SET status = 'closed_manual', close_time = datetime('now'), close_reason = 'account_reset' WHERE account_id = ? AND status = 'open'`,
-        [account.id]
+        `UPDATE positions SET status = 'closed_manual', close_time = ?, close_reason = 'account_reset' WHERE account_id = ? AND status = 'open'`,
+        [new Date().toISOString(), account.id]
       );
 
       db.run(
