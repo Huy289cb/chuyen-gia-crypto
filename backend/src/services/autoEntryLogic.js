@@ -333,6 +333,7 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   // If AI didn't provide SL/TP, calculate defaults based on bias using suggested entry
   if (!suggestedSL || suggestedSL === 0) {
     console.warn('[AutoEntry] AI did not provide SL, calculating default based on bias using suggested entry');
+    console.log(`[AutoEntry] Debug - suggestedEntry: ${suggestedEntry}, bias: ${bias}`);
     if (bias === 'bullish') {
       // LONG: SL 1% below entry
       suggestedSL = suggestedEntry * 0.99;
@@ -340,6 +341,7 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
       // SHORT: SL 1% above entry
       suggestedSL = suggestedEntry * 1.01;
     }
+    console.log(`[AutoEntry] Debug - calculated suggestedSL: ${suggestedSL}`);
   }
 
   if (!suggestedTP || suggestedTP === 0) {

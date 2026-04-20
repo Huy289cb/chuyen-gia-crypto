@@ -274,9 +274,9 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId) {
   if (methodId === 'kim_nghia') {
     try {
       const { getFibonacciFromOHLC } = await import('../utils/fibonacci.js');
-      const { getOHLCData } = await import('../db/database.js');
-      const btcOhlc = await getOHLCData(priceData.btc?.db, 'BTC', '15m', 50);
-      const ethOhlc = await getOHLCData(priceData.eth?.db, 'ETH', '15m', 50);
+      const { getOHLCCandles } = await import('../db/database.js');
+      const btcOhlc = await getOHLCCandles(priceData.btc?.db, 'BTC', 50, '15m');
+      const ethOhlc = await getOHLCCandles(priceData.eth?.db, 'ETH', 50, '15m');
       const btcBias = rawResponse?.btc?.bias === 'bullish' ? 'up' : 'down';
       const ethBias = rawResponse?.eth?.bias === 'bullish' ? 'up' : 'down';
       kimNghiaFibonacci = {
