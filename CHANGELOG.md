@@ -2,6 +2,35 @@
 
 All notable changes to the project will be documented in this file.
 
+## [20/04/2026] - v2.2.1 - Bug Fixes
+
+### Bug Fixes
+
+**Issue 1: Syntax Errors in analyzerFactory.js**
+- **Problem**: Typos causing syntax errors in generateFallbackAnalysis function
+- **Fix**: Fixed "consg" → "console.log" and "lasole.lot" → "last"
+- **Impact**: Fallback analysis now works correctly when Groq API fails
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 2: Default SL/TP Calculation Using Wrong Price**
+- **Problem**: Default SL/TP calculated from currentPrice instead of suggestedEntry
+- **Impact**: For SHORT limit orders (entry > currentPrice), SL was placed below entry instead of above, causing position rejection
+- **Fix**: Changed default SL/TP calculation to use suggestedEntry
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Issue 3: Scheduler Returning Wrong Data Structure**
+- **Problem**: fetchCurrentPrices returned only price value instead of full candle object
+- **Impact**: Scheduler tried to access .price on undefined, causing "Cannot read properties of undefined (reading toLocaleString)" error
+- **Fix**: Changed return to include full candle object (price, open, high, low, close, volume)
+- **Files**: `backend/src/schedulers/priceUpdateScheduler.js`
+
+**Issue 4: Cron Schedule Running Every Second**
+- **Problem**: Cron schedule had 6 asterisks instead of 5, running every second instead of every minute
+- **Impact**: Excessive log spam every 50-700ms instead of every minute
+- **Fix**: Changed price update from '* * * * * *' to '* * * * *' (every minute)
+- **Fix**: Changed account snapshot from '0 */5 * * * *' to '0 */5 * * *' (every 5 minutes)
+- **Files**: `backend/src/schedulers/priceUpdateScheduler.js`
+
 ## [20/04/2026] - v2.2.0 - 1-Minute Candle Scheduler & Testing Infrastructure
 
 ### Scheduler Update
