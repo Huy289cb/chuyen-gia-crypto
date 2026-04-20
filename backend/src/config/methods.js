@@ -139,6 +139,7 @@ RULES:
 - Predictions must target specific liquidity/FVG levels
 - Only provide suggested_entry, suggested_stop_loss, suggested_take_profit if confidence >= 0.8 and bias is clear
 - SL must be placed at actual swing low (long) or swing high (short) based on ICT market structure
+- SL must be at least 1% away from entry price (minimum risk distance)
 - TP must target next liquidity zone or FVG fill zone based on ICT analysis with minimum 1:2 R:R
 - For ICT: Use liquidity sweeps, order blocks, and FVG levels for SL/TP placement
 - Calculate SL/TP using actual price levels from ICT structure analysis, NOT fixed percentages
@@ -335,6 +336,7 @@ RULES:
 - Bao gồm mức Fibonacci (Retracement 38.2%, 50%, 61.8% và Extension 127.2%, 161.8%)
 - Entry: tại vùng Fibonacci Retracement (38.2%, 50%, hoặc 61.8%) hoặc SMC zone
 - SL: dưới swing low (long) hoặc trên swing high (short) dựa trên SMC structure, KHÔNG dùng giá cố định
+- SL phải cách entry ít nhất 1% (khoảng cách rủi ro tối thiểu)
 - TP: tại vùng Fibonacci Extension (127.2%, 161.8%) hoặc liquidity zone, KHÔNG dùng giá cố định
 - suggested_entry, suggested_stop_loss, suggested_take_profit phải là mức giá chính xác với ít nhất 2 số sau dấu phẩy (ví dụ: 74776.57, 75600.00, 75612.19)
 - Tránh làm tròn SL/TP sang số chẵn (74800, 75600) - dùng mức giá thực tế từ market structure

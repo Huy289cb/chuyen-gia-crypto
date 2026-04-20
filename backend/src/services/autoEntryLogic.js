@@ -328,25 +328,25 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
 
   if (bias === 'bullish') {
     // Long position
-    stopLoss = suggestedSL || currentPrice * 0.98; // Default 2% below current
-    takeProfit = suggestedTP || currentPrice * 1.04; // Default 4% above current (1:2 R:R)
+    stopLoss = suggestedSL || suggestedEntry * 0.99; // Default 1% below entry
+    takeProfit = suggestedTP || suggestedEntry * 1.02; // Default 2% above entry (1:2 R:R)
   } else {
     // Short position
-    stopLoss = suggestedSL || currentPrice * 1.02; // Default 2% above current
-    takeProfit = suggestedTP || currentPrice * 0.96; // Default 4% below current (1:2 R:R)
+    stopLoss = suggestedSL || suggestedEntry * 1.01; // Default 1% above entry
+    takeProfit = suggestedTP || suggestedEntry * 0.98; // Default 2% below entry (1:2 R:R)
   }
 
   // Calculate position size based on risk
   const riskDistance = Math.abs(suggestedEntry - stopLoss);
-  
-  // Validate risk distance is at least 0.5% of entry price (minimum reasonable stop loss)
-  const minRiskDistance = suggestedEntry * 0.005; // 0.5% minimum
+
+  // Validate risk distance is at least 1% of entry price (minimum reasonable stop loss)
+  const minRiskDistance = suggestedEntry * 0.01; // 1% minimum
   if (riskDistance <= 0) {
     console.error('[AutoEntry] Invalid risk distance (entry equals stop loss)');
     return null;
   }
   if (riskDistance < minRiskDistance) {
-    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.5% of entry)`);
+    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 1% of entry)`);
     return null;
   }
   
