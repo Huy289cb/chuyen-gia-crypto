@@ -41,7 +41,7 @@ export async function initPriceUpdateScheduler(database, enabled) {
   });
   
   // Schedule: every 1 minute
-  cron.schedule('* * * * * *', () => {
+  cron.schedule('* * * * *', () => {
     if (!isRunning) {
       runPriceUpdateJob().catch(err => {
         console.error('[PriceScheduler] Scheduled job failed:', err.message);
@@ -52,7 +52,7 @@ export async function initPriceUpdateScheduler(database, enabled) {
   });
   
   // Schedule: account snapshot every 5 minutes
-  cron.schedule('0 */5 * * * *', () => {
+  cron.schedule('0 */5 * * *', () => {
     if (dbEnabled && db) {
       runAccountSnapshotJob().catch(err => {
         console.error('[PriceScheduler] Snapshot job failed:', err.message);
