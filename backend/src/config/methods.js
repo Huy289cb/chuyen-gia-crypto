@@ -139,7 +139,13 @@ RULES:
 - Predictions must target specific liquidity/FVG levels
 - Only provide suggested_entry, suggested_stop_loss, suggested_take_profit if confidence >= 0.8 and bias is clear
 - SL must be placed at actual swing low (long) or swing high (short) based on ICT market structure
+- QUAN TRỌNG: SL/TP must follow these rules:
+  - LONG (buy): SL < Entry < TP (SL below entry, TP above entry)
+    - Example LONG: Entry $74,500, SL $73,755 (below), TP $75,612 (above)
+  - SHORT (sell): Entry > TP > SL (TP below entry, SL above entry)
+    - Example SHORT: Entry $74,500, TP $73,388 (below), SL $75,225 (above)
 - SL must be at least 1% away from entry price (minimum risk distance)
+- TP must be at least 2% away from entry price (ensures R:R >= 2.0)
 - TP must target next liquidity zone or FVG fill zone based on ICT analysis with minimum 1:2 R:R
 - For ICT: Use liquidity sweeps, order blocks, and FVG levels for SL/TP placement
 - Calculate SL/TP using actual price levels from ICT structure analysis, NOT fixed percentages
@@ -335,8 +341,13 @@ RULES:
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
 - Bao gồm mức Fibonacci (Retracement 38.2%, 50%, 61.8% và Extension 127.2%, 161.8%)
 - Entry: tại vùng Fibonacci Retracement (38.2%, 50%, hoặc 61.8%) hoặc SMC zone
-- SL: dưới swing low (long) hoặc trên swing high (short) dựa trên SMC structure, KHÔNG dùng giá cố định
+- QUAN TRỌNG: SL/TP phải tuân thủ quy tắc sau:
+  - LONG (mua): SL < Entry < TP (SL dưới entry, TP trên entry)
+    - Ví dụ LONG: Entry $74,500, SL $73,755 (dưới), TP $75,612 (trên)
+  - SHORT (bán): Entry > TP > SL (TP dưới entry, SL trên entry)
+    - Ví dụ SHORT: Entry $74,500, TP $73,388 (dưới), SL $75,225 (trên)
 - SL phải cách entry ít nhất 1% (khoảng cách rủi ro tối thiểu)
+- TP phải cách entry ít nhất 2% (đảm bảo R:R >= 2.0)
 - TP: tại vùng Fibonacci Extension (127.2%, 161.8%) hoặc liquidity zone, KHÔNG dùng giá cố định
 - suggested_entry, suggested_stop_loss, suggested_take_profit phải là mức giá chính xác với ít nhất 2 số sau dấu phẩy (ví dụ: 74776.57, 75600.00, 75612.19)
 - Tránh làm tròn SL/TP sang số chẵn (74800, 75600) - dùng mức giá thực tế từ market structure
