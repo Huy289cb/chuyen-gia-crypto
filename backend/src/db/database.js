@@ -702,8 +702,8 @@ export async function saveLatestPrice(db, coin, price, change24h, change7d, mark
     db.run(
       `INSERT OR REPLACE INTO latest_prices 
        (coin, price, change_24h, change_7d, market_cap, volume_24h, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [coin.toUpperCase(), price, change24h, change7d, marketCap, volume24h, new Date().toISOString()],
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [coin.toUpperCase(), price, change24h, change7d, marketCap, volume24h],
       function(err) {
         if (err) {
           console.error('[Database] Error saving latest price:', err.message);
@@ -858,11 +858,10 @@ export async function getOrCreateAccount(db, symbol, methodId = 'ict', startingB
           resolve(row);
         } else {
           // Create new account
-          const now = new Date().toISOString();
           db.run(
-            `INSERT INTO accounts (symbol, method_id, starting_balance, current_balance, equity, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [symbol.toUpperCase(), methodId, startingBalance, startingBalance, startingBalance, now, now],
+            `INSERT INTO accounts (symbol, method_id, starting_balance, current_balance, equity)
+             VALUES (?, ?, ?, ?, ?)`,
+            [symbol.toUpperCase(), methodId, startingBalance, startingBalance, startingBalance],
             function(err) {
               if (err) {
                 reject(err);
@@ -935,8 +934,7 @@ export async function updateAccount(db, accountId, updates) {
       values.push(updates.cooldown_until);
     }
     
-    fields.push('updated_at = ?');
-    values.push(new Date().toISOString());
+    fields.push('updated_at = datetime("now")');
     values.push(accountId);
     
     db.run(
@@ -1034,8 +1032,8 @@ export async function resetAccount(db, symbol, methodId = 'ict') {
       
       // First, close all open positions for this account
       db.run(
-        `UPDATE positions SET status = 'closed_manual', close_time = ?, close_reason = 'account_reset' WHERE account_id = ? AND status = 'open'`,
-        [new Date().toISOString(), account.id]
+        `UPDATE positions SET status = 'closed_manual', close_time = datetime('now'), close_reason = 'account_reset' WHERE account_id = ? AND status = 'open'`,
+        [account.id]
       );
 
       db.run(
@@ -1099,8 +1097,8 @@ export async function createPosition(db, positionData) {
       `INSERT INTO positions
        (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit,
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id,
-        invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id, entry_time)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         position_id,
         account_id,
@@ -1121,8 +1119,7 @@ export async function createPosition(db, positionData) {
         tp_levels,
         tp_hit_count || 0,
         partial_closed || 0,
-        method_id,
-        new Date().toISOString() // Use current time in local timezone
+        method_id
       ],
       function(err) {
         if (err) {
@@ -1319,8 +1316,6 @@ export async function updatePrediction(db, predictionId, updates) {
 // Close position
 export async function closePosition(db, positionId, closePrice, closeReason) {
   return new Promise((resolve, reject) => {
-    const closeTime = new Date().toISOString();
-    
     db.run(
       `UPDATE positions 
        SET status = CASE 
@@ -1331,10 +1326,10 @@ export async function closePosition(db, positionId, closePrice, closeReason) {
          ELSE 'closed'
        END,
        close_price = ?,
-       close_time = ?,
+       close_time = datetime('now'),
        close_reason = ?
        WHERE id = ?`,
-      [closePrice, closeTime, closeReason, positionId],
+      [closePrice, closeReason, positionId],
       function(err) {
         if (err) {
           reject(err);
@@ -1362,9 +1357,9 @@ export async function closePosition(db, positionId, closePrice, closeReason) {
 export async function createAccountSnapshot(db, accountId, balance, equity, unrealizedPnl, openPositions) {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO account_snapshots (account_id, balance, equity, unrealized_pnl, open_positions, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [accountId, balance, equity, unrealizedPnl, openPositions, new Date().toISOString()],
+      `INSERT INTO account_snapshots (account_id, balance, equity, unrealized_pnl, open_positions)
+       VALUES (?, ?, ?, ?, ?)`,
+      [accountId, balance, equity, unrealizedPnl, openPositions],
       function(err) {
         if (err) reject(err);
         else resolve(this.lastID);
@@ -1400,9 +1395,9 @@ export async function getAccountSnapshots(db, accountId, hoursBack = 168) {
 export async function logTradeEvent(db, positionId, eventType, eventData = '{}') {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO trade_events (position_id, event_type, event_data, timestamp)
-       VALUES (?, ?, ?, ?)`,
-      [positionId, eventType, eventData, new Date().toISOString()],
+      `INSERT INTO trade_events (position_id, event_type, event_data)
+       VALUES (?, ?, ?)`,
+      [positionId, eventType, eventData],
       function(err) {
         if (err) reject(err);
         else resolve(this.lastID);
@@ -1669,9 +1664,9 @@ export async function createPendingOrder(db, orderData) {
       `INSERT INTO pending_orders 
        (order_id, account_id, symbol, side, entry_price, stop_loss, take_profit, 
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
-        linked_prediction_id, invalidation_level, status, created_at, executed_at, 
+        linked_prediction_id, invalidation_level, status, executed_at, 
         executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
@@ -1688,7 +1683,6 @@ export async function createPendingOrder(db, orderData) {
         linked_prediction_id,
         invalidation_level,
         'pending',
-        new Date().toISOString(), // created_at
         null, // executed_at
         null, // executed_price
         null, // executed_size_qty
@@ -1756,13 +1750,11 @@ export async function getPendingOrders(db, filters = {}) {
 // Execute a pending order (convert to actual position)
 export async function executePendingOrder(db, orderId, positionId) {
   return new Promise((resolve, reject) => {
-    const executedAt = new Date().toISOString();
-    
     db.run(
       `UPDATE pending_orders 
-       SET status = 'executed', executed_at = ?
+       SET status = 'executed', executed_at = datetime('now')
        WHERE id = ?`,
-      [executedAt, orderId],
+      [orderId],
       function(err) {
         if (err) {
           reject(err);
