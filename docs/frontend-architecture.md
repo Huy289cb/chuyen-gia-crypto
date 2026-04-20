@@ -124,7 +124,7 @@ const { data, loading, error, refetch } = useTrends();
 ### usePaperTrading Hook
 ```ts
 const { accounts, positions, tradeHistory, resetAccount, closePosition } = usePaperTrading();
-// Polling: 30 seconds
+// Polling: 1 minute (using 1-minute candle data for accurate SL/TP detection)
 ```
 
 ## Responsive Design
