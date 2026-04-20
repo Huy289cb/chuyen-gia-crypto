@@ -327,6 +327,7 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   // Reject if AI didn't provide clear entry, SL, TP
   if (!suggestedEntry || !suggestedSL || !suggestedTP) {
     console.error('[AutoEntry] AI did not provide clear entry, SL, or TP - rejecting trade');
+    console.error('[AutoEntry] AI analysis result:', JSON.stringify(analysis, null, 2));
     return null;
   }
 
