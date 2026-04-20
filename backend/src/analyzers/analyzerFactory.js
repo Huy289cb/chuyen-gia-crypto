@@ -43,11 +43,11 @@ export function createAnalyzer(methodConfig) {
         });
 
         // Format response with method_id tagging
-        const formatted = formatAnalysisResponse(response, priceData, methodConfig.methodId);
+        const formatted = await formatAnalysisResponse(response, priceData, methodConfig.methodId);
         console.log(`[${methodConfig.name}] Analysis complete`);
         console.log(`  BTC: ${formatted.btc.action} | bias: ${formatted.btc.bias} | confidence: ${(formatted.btc.confidence * 100).toFixed(0)}%`);
         console.log(`  ETH: ${formatted.eth.action} | bias: ${formatted.eth.bias} | confidence: ${(formatted.eth.confidence * 100).toFixed(0)}%`);
-        
+
         return formatted;
       } catch (error) {
         console.error(`[${methodConfig.name}] Error:`, error.message);
@@ -262,38 +262,34 @@ Return ONLY valid JSON following the system format.`;
 }
 
 /**
- * Format analysis response with method_id tagging
- * @param {Object} rawResponse - Raw response from Groq
+ * Format analysis response with method_id tagging and validation
+ * @param {Object} rawResponse - Raw response from analyzer
  * @param {Object} priceData - Price data
  * @param {string} methodId - Method ID
- * @returns {Object} Formatted analysis
+ * @returns {Promise<Object>} Formatted response
  */
-function formatAnalysisResponse(rawResponse, priceData, methodId) {
-  const defaultCoinAnalysis = {
-    bias: 'neutral',
-    action: 'hold',
-    confidence: 0.4,
-    narrative: 'Analysis error - using default',
-    timeframes: {
-      '1h': 'neutral',
-      '4h': 'neutral',
-      '1d': 'neutral'
-    },
-    key_levels: {
-      liquidity: 'not identified',
-      order_blocks: 'not identified',
-      fvg: 'not identified'
-    },
-    predictions: {
-      '15m': { direction: 'sideways', target: null, confidence: 0.3 },
-      '1h': { direction: 'sideways', target: null, confidence: 0.3 },
-      '4h': { direction: 'sideways', target: null, confidence: 0.3 },
-      '1d': { direction: 'sideways', target: null, confidence: 0.3 }
-    },
-    risk: 'High uncertainty - exercise caution'
-  };
+async function formatAnalysisResponse(rawResponse, priceData, methodId) {
+  // Calculate Fibonacci for Kim Nghia method before formatting
+  let kimNghiaFibonacci = null;
+  if (methodId === 'kim_nghia') {
+    try {
+      const { getFibonacciFromOHLC } = await import('../utils/fibonacci.js');
+      const { getOHLCData } = await import('../db/database.js');
+      const btcOhlc = await getOHLCData(priceData.btc?.db, 'BTC', '15m', 50);
+      const ethOhlc = await getOHLCData(priceData.eth?.db, 'ETH', '15m', 50);
+      const btcBias = rawResponse?.btc?.bias === 'bullish' ? 'up' : 'down';
+      const ethBias = rawResponse?.eth?.bias === 'bullish' ? 'up' : 'down';
+      kimNghiaFibonacci = {
+        btc: getFibonacciFromOHLC(btcOhlc, btcBias, 20),
+        eth: getFibonacciFromOHLC(ethOhlc, ethBias, 20)
+      };
+    } catch (error) {
+      console.error('[AnalyzerFactory] Error calculating Fibonacci:', error.message);
+      kimNghiaFibonacci = null;
+    }
+  }
 
-  const formatCoin = (coinData, currentPrice) => {
+  const formatCoin = (coinData, currentPrice, coin) => {
     // Check if predictions have valid targets
     const hasValidPredictions = coinData?.predictions && 
       Object.keys(coinData.predictions).length > 0 &&
@@ -449,13 +445,13 @@ function formatAnalysisResponse(rawResponse, priceData, methodId) {
       breakout_retest: coinData?.breakout_retest || null,
       // Method-specific indicators for chart visualization
       indicators: methodId === 'kim_nghia' ? {
-        fibonacci: {
-          retracement: coinData?.indicators?.fibonacci?.retracement || [
+        fibonacci: kimNghiaFibonacci?.[coin] || {
+          retracement: [
             { level: 0.382, price: currentPrice * 0.95, label: '38.2%' },
             { level: 0.5, price: currentPrice * 0.975, label: '50%' },
             { level: 0.618, price: currentPrice, label: '61.8%' }
           ],
-          extension: coinData?.indicators?.fibonacci?.extension || [
+          extension: [
             { level: 1.272, price: currentPrice * 1.05, label: '127.2%' },
             { level: 1.618, price: currentPrice * 1.08, label: '161.8%' }
           ]
@@ -468,8 +464,8 @@ function formatAnalysisResponse(rawResponse, priceData, methodId) {
   };
 
   return {
-    btc: formatCoin(rawResponse?.btc, priceData.btc?.price || 0),
-    eth: formatCoin(rawResponse?.eth, priceData.eth?.price || 0),
+    btc: formatCoin(rawResponse?.btc, priceData.btc?.price || 0, 'btc'),
+    eth: formatCoin(rawResponse?.eth, priceData.eth?.price || 0, 'eth'),
     comparison: rawResponse?.comparison || '',
     marketSentiment: rawResponse?.marketSentiment || 'neutral',
     disclaimer: rawResponse?.disclaimer || 'This is NOT financial advice. Crypto is high risk. Only invest what you can afford to lose completely.'
@@ -483,12 +479,12 @@ function formatAnalysisResponse(rawResponse, priceData, methodId) {
  * @returns {Object} Fallback analysis
  */
 function generateFallbackAnalysis(priceData, methodId) {
-  console.log(`[AnalyzerFactory][${methodId}] Generating fallback analysis`);
+  consg(`[AnalyzerFactory][${methodId}] Generating fallback analysis`);
 
   const calcChange = (arr) => {
     if (!arr || arr.length < 2) return 0;
     const first = arr[0];
-    const last = arr[arr.length - 1];
+    const lasole.lot = arr[arr.length - 1];
     return ((last - first) / first) * 100;
   };
 

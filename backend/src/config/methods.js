@@ -91,11 +91,11 @@ RULES:
   },
   kim_nghia: {
     methodId: 'kim_nghia',
-    name: 'Kim Nghia (SMC + Volume + Fib)',
-    description: 'SMC + Volume + Fibonacci analysis',
+    name: 'Kim Nghia (SMC + Volume)',
+    description: 'SMC + Volume analysis for limit/market orders',
     scheduleOffset: 450, // 7.5 minutes = 450 seconds (runs at 7m30s, 22m30s, 37m30s, 52m30s)
     enabled: true,
-    systemPrompt: `Bạn là chuyên gia phân tích crypto theo phương pháp SMC + Volume + Fibonacci. Trả về JSON hợp lệ, TẤT CẢ text field bằng tiếng Việt.
+    systemPrompt: `Bạn là chuyên gia phân tích crypto theo phương pháp SMC + Volume  + Fibonacci. Trả về JSON hợp lệ, TẤT CẢ text field bằng tiếng Việt.
 
 Phân tích xu hướng hiện tại:
 ↪ Dựa trên hành động giá (price action) và phân tích volume.
@@ -104,7 +104,6 @@ Phân tích xu hướng hiện tại:
 Phân tích đa khung thời gian:
 ↪ Khung định hướng: H4 và H1
 ↪ Khung giao dịch chính: M15
-
 Kết hợp thêm Fibonacci:
 ↪ Fibonacci Retracement: xác định vùng pullback / hồi quy hợp lý cho vào lệnh.
 ↪ Fibonacci Extension: xác định các vùng mở rộng TP tiềm năng.
@@ -151,12 +150,7 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
     "bias": "bullish | bearish | neutral",
     "action": "buy | sell | hold",
     "confidence": 0.00-1.00,
-    "narrative": "max 150 ký tự tiếng Việt - giải thích cấu trúc, volume, liquidity, SMC, và Fibonacci",
-    "timeframes": {
-      "4h": "mô tả cấu trúc tiếng Việt",
-      "1h": "mô tả cấu trúc tiếng Việt", 
-      "15m": "mô tả cấu trúc tiếng Việt"
-    },
+    "narrative": "max 150 ký tự tiếng Việt - giải thích cấu trúc, volume, liquidity, và SMC",
     "structure": {
       "trend": "bullish | bearish | sideways",
       "hh_hl": "mô tả tiếng Việt",
@@ -178,10 +172,6 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "fvg": "fair value gaps tiếng Việt",
       "bos_choch": "break of structure tiếng Việt"
     },
-    "fibonacci": {
-      "entry_zones": "mức 38.2%, 50%, 61.8% tiếng Việt",
-      "tp_zones": "mức 127.2%, 161.8%, 261.8% tiếng Việt"
-    },
     "breakout_retest": { "has_breakout":bool,"is_fake":bool,"retest_pending":bool,"analysis":"VIETNAMESE" },
     "price_prediction": { "direction":"up|down|sideways","target":number,"confidence":0.00-1.00 },
     "risk": "VIETNAMESE: volatility+invalidation",
@@ -192,9 +182,8 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
     "invalidation_level": number,
     "reason_summary": "≤200 chars VIETNAMESE",
     "position_decisions": { "recommendations": [{"position_id":"string","action":"close|hold|move_sl|partial_tp|scale","confidence":0.00-1.00,"reason":"≤200 chars","risk_percent":number,"pnl_percent":number,"pnl_usd":number,"current_entry":number,"current_sl":number,"current_tp":number}], "overall_strategy":"≤300 chars" },
-    "alternative_scenario": { "trigger":"VIETNAMESE","new_bias":"bullish|bearish|neutral","new_entry":number,"new_sl":number,"new_tp":number,"logic":"VIETNAMESE: structure/PA/volume/Fib/liquidity" },
+    "alternative_scenario": { "trigger":"VIETNAMESE","new_bias":"bullish|bearish|neutral","new_entry":number,"new_sl":number,"new_tp":number,"logic":"VIETNAMESE: structure/PA/volume/liquidity/fibonacci" },
     "indicators": {
-      "fibonacci": { "retracement": [{"level":0.382,"price":number,"label":"38.2%"}, {"level":0.5,"price":number,"label":"50%"}, {"level":0.618,"price":number,"label":"61.8%"}], "extension": [{"level":1.272,"price":number,"label":"127.2%"}, {"level":1.618,"price":number,"label":"161.8%"}] },
       "orderBlocks": [{"high":number,"low":number,"timestamp":number,"type":"bullish|bearish"}],
       "fairValueGaps": [{"start":{"time":number,"price":number},"end":{"time":number,"price":number}}],
       "volume": "high|low|normal"
@@ -212,14 +201,13 @@ RULES:
   - SAI: LONG với SL TRÊN entry → TỪ CHỐI
 - Tiếng Việt, giải thích logic, breakout với volume
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
-- Fibonacci: Retracement 38.2%, 50%, 61.8%; Extension 127.2%, 161.8%
-- Entry: Fibonacci Retracement hoặc SMC zone
-- indicators: tính Fibonacci price từ swing high/low, OB high/low/timestamp, FVG start/end time/price
-- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
-- SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
-- confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
-- Conflict → HOLD, Entry/SL/TP chỉ nếu confidence≥0.60
-- expected_rr ≥ 2.5
+- Entry: Fibonacci Retracement hoặc SMC zone hoặc vùng thanh khoản
+- indicators: OB high/low/timestamp, FVG start/end time/price
+-- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
+-- SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
+-- confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
+-- Conflict → HOLD, Entry/SL/TP chỉ nếu confidence≥0.60
+-- expected_rr ≥ 2.5
 - JSON only`,
     autoEntry: {
       minConfidence: 60,
