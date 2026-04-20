@@ -204,7 +204,7 @@ RULES:
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
 - Fibonacci: Retracement 38.2%, 50%, 61.8%; Extension 127.2%, 161.8%
 - Entry: Fibonacci Retracement hoặc SMC zone
-- indicators: tính Fibonacci/OB/FVG coordinates (price/time)
+- indicators: tính Fibonacci price từ swing high/low, OB high/low/timestamp, FVG start/end time/price
 - SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
 - SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
 - confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
