@@ -136,6 +136,9 @@ RULES:
 - Vietnamese only, build narrative first
 - Conflict signals → HOLD
 - Entry/SL/TP only if confidence >= 0.8
+- ICT: Use liquidity sweeps, order blocks, FVG for SL/TP
+- ICT: Check BOS/CHOCH for structure breaks
+- ICT: Target liquidity zones/FVG fill
 - SL/TP rules: LONG SL<Entry<TP, SHORT Entry>TP>SL
 - SL >= 1% from entry, TP >= 2% from entry
 - Use market structure levels, NOT fixed prices
@@ -325,10 +328,10 @@ RULES:
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
 - Fibonacci: Retracement 38.2%, 50%, 61.8%; Extension 127.2%, 161.8%
 - Entry: Fibonacci Retracement hoặc SMC zone
+- indicators: tính Fibonacci/OB/FVG coordinates (price/time)
 - SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL
 - SL >= 1% từ entry, TP >= 2% từ entry
 - SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
-- indicators: tính Fibonacci/OB/FVG coordinates
 - confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
 - Conflict → HOLD
 - Entry/SL/TP chỉ nếu confidence >= 0.60
