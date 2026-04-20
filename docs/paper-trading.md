@@ -625,11 +625,73 @@ TRAIL_DISTANCE_PCT=0.5
 ### Validation Summary
 
 All position openings (manual and auto) now enforce:
-- **Minimum risk distance**: 0.5% of entry price (e.g., $380 minimum on $76k entry)
+- **Minimum risk distance**: 1% of entry price (updated from 0.5% on 20/04/2026) (e.g., $750 minimum on $75k entry)
 - **Maximum positions**: 9 concurrent positions per symbol
 - **Price range validation**: Entry within 10% of current price for limit orders
 - **Direction alignment**: Entry price must align with trade direction
 - **Minimum confidence**: 70% threshold for auto-entry (updated from 80% on 18/04/2026)
+- **AI-provided SL/TP**: Required for auto-entry (no default fallback) (updated 20/04/2026)
+- **SL/TP side validation**: SL must be on correct side of entry based on bias (updated 20/04/2026)
+- **Granular SL/TP**: AI must provide precise price levels with at least 2 decimal places (updated 20/04/2026)
+
+## Production Fixes (20/04/2026)
+
+### Issue 1: Granular SL/TP Values
+- **Problem**: SL/TP values appearing as even numbers (e.g., 74800, 75600)
+- **Root Cause**: AI prompts didn't explicitly request granular price levels
+- **Fix**: Added AI prompt rules requiring precise price levels with at least 2 decimal places
+- **Files Modified**: `backend/src/config/methods.js` (ICT and Kim Nghia prompts)
+- **Impact**: SL/TP now reflect actual market structure (e.g., 74835.52, 74787.06)
+
+### Issue 2: Short Position TP/SL Logic
+- **Problem**: Short positions had TP higher than SL (incorrect - TP should be lower than entry for short)
+- **Root Cause**: Missing validation for SL/TP side alignment with position direction
+- **Fix**: Added validation in `analyzerFactory.js` ensuring:
+  - Long: SL < entry < TP
+  - Short: SL > entry > TP
+- **Files Modified**: `backend/src/analyzers/analyzerFactory.js`
+- **Impact**: Correct SL/TP ordering for short positions
+
+### Issue 3: Prediction Timeline Close Prediction
+- **Problem**: Predictions showed "close" but no positions were actually closed
+- **Root Cause**: `position_decisions` from AI were stored but not processed to execute closures
+- **Fix**: Added processing in `scheduler.js` to:
+  - Read `position_decisions.recommendations` from AI analysis
+  - Execute close action when AI recommends closure
+  - Log which position was closed and reason
+- **Files Modified**: `backend/src/scheduler.js`
+- **Impact**: Positions now close when AI recommends closure
+
+### Issue 4: Stop Loss PnL Positive
+- **Problem**: Positions hit stop loss but showed positive PnL (should be negative)
+- **Root Cause**: When closing position, used current market price instead of stop loss price for PnL calculation
+- **Fix**: Changed `paperTradingEngine.js` to use `position.stop_loss` instead of `currentPrice` when closing due to stop loss
+- **Files Modified**: `backend/src/services/paperTradingEngine.js`
+- **Impact**: Accurate PnL calculation for stop loss events (negative for losses)
+
+### Issue 5: Default SL/TP Fallback
+- **Problem**: System used default percentage-based SL/TP when AI didn't provide values
+- **Root Cause**: `autoEntryLogic.js` had fallback logic:
+  - Entry: fallback to current price
+  - SL: fallback to entry ± 1%
+  - TP: fallback to entry ± 2%
+- **Fix**: Removed all fallback logic and require AI-provided Entry, SL, TP
+- **Files Modified**: `backend/src/services/autoEntryLogic.js`
+- **Impact**: Only trades with proper market structure levels execute; trades rejected if AI doesn't provide clear values
+
+### Issue 6: SL Distance Too Small
+- **Problem**: Entry and SL too close (e.g., $3.33 on $74k price = 0.0044%)
+- **Root Cause**:
+  - Minimum validation was only 0.5%
+  - Default SL calculated from current price instead of entry
+  - When entry close to current price, SL would be very close to entry
+- **Fix**:
+  - Increased minimum SL distance from 0.5% to 1%
+  - Changed default SL calculation from current price to entry price
+  - Updated validation in both `autoEntryLogic.js` and `analyzerFactory.js`
+  - Added prompt rules requiring SL to be at least 1% away from entry
+- **Files Modified**: `backend/src/services/autoEntryLogic.js`, `backend/src/analyzers/analyzerFactory.js`, `backend/src/config/methods.js`
+- **Impact**: Minimum $750 SL distance on $75k entry (1%)
 
 ## Future Enhancements
 
