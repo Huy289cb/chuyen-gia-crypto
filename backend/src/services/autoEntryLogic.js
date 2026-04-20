@@ -325,14 +325,37 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   const bias = analysis.bias;
   const riskAmount = account.current_balance * config.riskPerTrade;
 
-  // Require AI-provided entry, SL, TP - no defaults
+  // Require AI-provided entry, SL, TP - with fallback calculation
   const suggestedEntry = analysis.suggested_entry;
-  const suggestedSL = analysis.suggested_stop_loss;
-  const suggestedTP = analysis.suggested_take_profit;
+  let suggestedSL = analysis.suggested_stop_loss;
+  let suggestedTP = analysis.suggested_take_profit;
 
-  // Reject if AI didn't provide clear entry, SL, TP
-  if (!suggestedEntry || !suggestedSL || !suggestedTP) {
-    console.error('[AutoEntry] AI did not provide clear entry, SL, or TP - rejecting trade');
+  // If AI didn't provide SL/TP, calculate defaults based on bias
+  if (!suggestedSL || suggestedSL === 0) {
+    console.warn('[AutoEntry] AI did not provide SL, calculating default based on bias');
+    if (bias === 'bullish') {
+      // LONG: SL 1% below entry
+      suggestedSL = suggestedEntry * 0.99;
+    } else if (bias === 'bearish') {
+      // SHORT: SL 1% above entry
+      suggestedSL = suggestedEntry * 1.01;
+    }
+  }
+
+  if (!suggestedTP || suggestedTP === 0) {
+    console.warn('[AutoEntry] AI did not provide TP, calculating default based on bias');
+    if (bias === 'bullish') {
+      // LONG: TP 2% above entry (R:R = 2:1)
+      suggestedTP = suggestedEntry * 1.02;
+    } else if (bias === 'bearish') {
+      // SHORT: TP 2% below entry (R:R = 2:1)
+      suggestedTP = suggestedEntry * 0.98;
+    }
+  }
+
+  // Reject if AI didn't provide clear entry
+  if (!suggestedEntry || suggestedEntry === 0) {
+    console.error('[AutoEntry] AI did not provide clear entry - rejecting trade');
     console.error('[AutoEntry] AI analysis result:', JSON.stringify(analysis, null, 2));
     return null;
   }
