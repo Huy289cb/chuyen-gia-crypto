@@ -441,7 +441,12 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId) {
       reason_summary: coinData?.reason_summary ? coinData.reason_summary.substring(0, 200) : null,
       // Position and order management decisions
       position_decisions: coinData?.position_decisions || null,
-      alternative_scenario: coinData?.alternative_scenario || null,
+      alternative_scenario: coinData?.alternative_scenario ? {
+        ...coinData.alternative_scenario,
+        new_entry: validatePriceLevel(coinData.alternative_scenario.new_entry, currentPrice, 'entry', bias),
+        new_sl: validatePriceLevel(coinData.alternative_scenario.new_sl, currentPrice, 'stop_loss', bias, validatePriceLevel(coinData.alternative_scenario.new_entry, currentPrice, 'entry', bias)),
+        new_tp: validatePriceLevel(coinData.alternative_scenario.new_tp, currentPrice, 'take_profit', bias)
+      } : null,
       breakout_retest: coinData?.breakout_retest || null,
       // Method-specific indicators for chart visualization
       indicators: methodId === 'kim_nghia' ? {
