@@ -260,8 +260,12 @@ function safePriceComparison(currentPrice, targetPrice, side) {
 
 /**
  * Check if position hit SL or any TP levels using ICT strategy
+ * Uses candle high/low for accurate detection
+ * @param {Object} position - Position object
+ * @param {number} currentPrice - Current price (close of 1m candle)
+ * @param {Object} candle - Full 1m candle data (open, high, low, close, volume)
  */
-export function checkStopLevels(position, currentPrice) {
+export function checkStopLevels(position, currentPrice, candle) {
   if (position.status !== 'open') {
     return { hitSL: false, hitTPs: [], nextTPLevel: null };
   }
@@ -270,11 +274,13 @@ export function checkStopLevels(position, currentPrice) {
   let hitTPs = [];
   let nextTPLevel = null;
 
-  // Check stop loss
+  // Check stop loss using candle high/low for accurate detection
   if (position.side === 'long') {
-    hitSL = currentPrice <= position.stop_loss;
+    // Long: SL hit if candle low is at or below SL
+    hitSL = (candle && candle.low <= position.stop_loss) || currentPrice <= position.stop_loss;
   } else {
-    hitSL = currentPrice >= position.stop_loss;
+    // Short: SL hit if candle high is at or above SL
+    hitSL = (candle && candle.high >= position.stop_loss) || currentPrice >= position.stop_loss;
   }
 
   // Check TP levels using ICT strategy
@@ -306,8 +312,20 @@ export function checkStopLevels(position, currentPrice) {
     for (let i = tpHitCount; i < tpLevels.length; i++) {
       const tpLevel = tpLevels[i];
       let hitTP = false;
-      
-      hitTP = safePriceComparison(currentPrice, tpLevel, position.side);
+
+      // Use candle high/low for accurate TP detection
+      if (candle) {
+        if (position.side === 'long') {
+          // Long: TP hit if candle high is at or above TP
+          hitTP = candle.high >= tpLevel;
+        } else {
+          // Short: TP hit if candle low is at or below TP
+          hitTP = candle.low <= tpLevel;
+        }
+      } else {
+        // Fallback: use current price
+        hitTP = safePriceComparison(currentPrice, tpLevel, position.side);
+      }
       
       console.log(`[PaperTrading] TP Level ${i + 1} check:`, {
         tp_level_price: tpLevel,
@@ -531,9 +549,14 @@ export async function closePosition(db, position, currentPrice, closeReason) {
 }
 
 /**
- * Update all open positions for a symbol with current price
+ * Update all open positions for a symbol with current price and candle data
+ * Uses candle high/low for accurate SL/TP detection
+ * @param {Object} db - Database instance
+ * @param {string} symbol - Symbol name (BTC, ETH)
+ * @param {number} currentPrice - Current price (close of 1m candle)
+ * @param {Object} candle - Full 1m candle data (open, high, low, close, volume)
  */
-export async function updateOpenPositions(db, symbol, currentPrice) {
+export async function updateOpenPositions(db, symbol, currentPrice, candle) {
   const { getPositions } = await import('../db/database.js');
   const openPositions = await getPositions(db, { symbol, status: 'open' });
 
@@ -554,8 +577,8 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
     }
     
     try {
-      // Check SL and TP levels using ICT strategy
-      const { hitSL, hitTPs, nextTPLevel } = checkStopLevels(position, currentPrice);
+      // Check SL and TP levels using ICT strategy with candle data
+      const { hitSL, hitTPs, nextTPLevel } = checkStopLevels(position, currentPrice, candle);
 
       if (hitSL) {
         // Hit stop loss - close position using stop loss price for accurate PnL

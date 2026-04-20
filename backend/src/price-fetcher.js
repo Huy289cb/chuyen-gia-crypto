@@ -35,11 +35,12 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
 }
 
 /**
- * Fetch real-time prices from Binance for paper trading
+ * Fetch real-time 1-minute candle data from Binance for paper trading
  * Binance has much higher rate limits (1200 requests/minute) than CoinGecko
  * This function should be used for paper trading position updates
+ * Uses 1-minute candle OHLC data for accurate SL/TP detection
  * @param {Object} db - Database instance for fallback (optional)
- * @returns {Promise<Object>} Real-time prices for BTC and ETH
+ * @returns {Promise<Object>} 1-minute candle data for BTC and ETH
  */
 export async function fetchRealTimePrices(db = null) {
   const maxRetries = 3;
@@ -47,32 +48,50 @@ export async function fetchRealTimePrices(db = null) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[PriceFetcher] Fetching real-time prices from Binance (attempt ${attempt}/${maxRetries})...`);
+      console.log(`[PriceFetcher] Fetching 1-minute candles from Binance (attempt ${attempt}/${maxRetries})...`);
 
-      // Fetch current prices from Binance ticker API (no rate limit issues)
-      const btcRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=BTCUSDT`, {}, 10000);
-      const ethRes = await fetchWithTimeout(`${BINANCE_API}/ticker/price?symbol=ETHUSDT`, {}, 10000);
+      // Fetch 1-minute candle data from Binance klines API
+      const btcRes = await fetchWithTimeout(`${BINANCE_API}/klines?symbol=BTCUSDT&interval=1m&limit=1`, {}, 10000);
+      const ethRes = await fetchWithTimeout(`${BINANCE_API}/klines?symbol=ETHUSDT&interval=1m&limit=1`, {}, 10000);
 
       if (!btcRes.ok || !ethRes.ok) {
-        throw new Error(`Binance ticker error: BTC=${btcRes.status}, ETH=${ethRes.status}`);
+        throw new Error(`Binance klines error: BTC=${btcRes.status}, ETH=${ethRes.status}`);
       }
 
-      const btcPrice = await btcRes.json();
-      const ethPrice = await ethRes.json();
+      const btcKline = await btcRes.json();
+      const ethKline = await ethRes.json();
 
-      console.log(`[PriceFetcher] Real-time prices - BTC: $${btcPrice.price}, ETH: $${ethPrice.price}`);
+      // Binance klines format: [time, open, high, low, close, volume, ...]
+      const btcCandle = btcKline[0];
+      const ethCandle = ethKline[0];
+
+      const btcData = {
+        price: parseFloat(btcCandle[4]), // close price
+        open: parseFloat(btcCandle[1]),
+        high: parseFloat(btcCandle[2]),
+        low: parseFloat(btcCandle[3]),
+        volume: parseFloat(btcCandle[5]),
+        time: new Date(btcCandle[0]).toISOString()
+      };
+
+      const ethData = {
+        price: parseFloat(ethCandle[4]), // close price
+        open: parseFloat(ethCandle[1]),
+        high: parseFloat(ethCandle[2]),
+        low: parseFloat(ethCandle[3]),
+        volume: parseFloat(ethCandle[5]),
+        time: new Date(ethCandle[0]).toISOString()
+      };
+
+      console.log(`[PriceFetcher] 1-minute candles - BTC: O:${btcData.open} H:${btcData.high} L:${btcData.low} C:${btcData.price}, ETH: O:${ethData.open} H:${ethData.high} L:${ethData.low} C:${ethData.price}`);
 
       return {
         timestamp: new Date().toISOString(),
-        btc: {
-          price: parseFloat(btcPrice.price)
-        },
-        eth: {
-          price: parseFloat(ethPrice.price)
-        }
+        btc: btcData,
+        eth: ethData
       };
     } catch (error) {
-      console.error(`[PriceFetcher] Real-time price fetch failed (attempt ${attempt}/${maxRetries}):`, error.message);
+      console.error(`[PriceFetcher] 1-minute candle fetch failed (attempt ${attempt}/${maxRetries}):`, error.message);
 
       // If not the last attempt, wait and retry
       if (attempt < maxRetries) {
@@ -94,10 +113,20 @@ export async function fetchRealTimePrices(db = null) {
             return {
               timestamp: new Date().toISOString(),
               btc: {
-                price: parseFloat(btcLatest.price)
+                price: parseFloat(btcLatest.price),
+                open: parseFloat(btcLatest.price),
+                high: parseFloat(btcLatest.price),
+                low: parseFloat(btcLatest.price),
+                volume: 0,
+                time: new Date().toISOString()
               },
               eth: {
-                price: parseFloat(ethLatest.price)
+                price: parseFloat(ethLatest.price),
+                open: parseFloat(ethLatest.price),
+                high: parseFloat(ethLatest.price),
+                low: parseFloat(ethLatest.price),
+                volume: 0,
+                time: new Date().toISOString()
               }
             };
           }
@@ -106,8 +135,7 @@ export async function fetchRealTimePrices(db = null) {
         }
       }
 
-      // All fallbacks failed, throw error
-      throw new Error(`Unable to fetch real-time prices after ${maxRetries} attempts: ${error.message}`);
+      throw error;
     }
   }
 }

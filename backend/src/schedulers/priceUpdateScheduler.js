@@ -1,5 +1,6 @@
-// Price Update Scheduler - Runs every 30 seconds
+// Price Update Scheduler - Runs every 1 minute
 // Updates position PnL, checks SL/TP, closes positions, creates account snapshots
+// Uses 1-minute candle data for accurate SL/TP detection
 
 import cron from 'node-cron';
 
@@ -39,8 +40,8 @@ export async function initPriceUpdateScheduler(database, enabled) {
     console.error('[PriceScheduler] Initial job failed:', err.message);
   });
   
-  // Schedule: every 30 seconds
-  cron.schedule('*/30 * * * * *', () => {
+  // Schedule: every 1 minute
+  cron.schedule('* * * * * *', () => {
     if (!isRunning) {
       runPriceUpdateJob().catch(err => {
         console.error('[PriceScheduler] Scheduled job failed:', err.message);
@@ -78,12 +79,12 @@ async function runPriceUpdateJob() {
     
     // Update BTC positions
     if (prices.btc) {
-      await updateSymbolPositions('BTC', prices.btc);
+      await updateSymbolPositions('BTC', prices.btc.price, prices.btc);
     }
     
     // Update ETH positions
     if (prices.eth) {
-      await updateSymbolPositions('ETH', prices.eth);
+      await updateSymbolPositions('ETH', prices.eth.price, prices.eth);
     }
     
     const duration = Date.now() - startTime;
@@ -142,19 +143,22 @@ async function fetchCurrentPrices() {
 
 /**
  * Update positions for a specific symbol
+ * @param {string} symbol - Symbol name (BTC, ETH)
+ * @param {number} currentPrice - Current price (close of 1m candle)
+ * @param {Object} candle - Full 1m candle data (open, high, low, close, volume)
  */
-async function updateSymbolPositions(symbol, currentPrice) {
+async function updateSymbolPositions(symbol, currentPrice, candle) {
   try {
     const { updateOpenPositions, calculateAccountEquity } = await import('../services/paperTradingEngine.js');
     const { getAllAccounts } = await import('../db/database.js');
-    
-    console.log(`[PriceScheduler] Updating ${symbol} positions at $${currentPrice.toLocaleString()}`);
-    
-    // Check and execute pending orders first
-    await checkAndExecutePendingOrders(symbol, currentPrice);
-    
-    // Update all open positions
-    const result = await updateOpenPositions(db, symbol, currentPrice);
+
+    console.log(`[PriceScheduler] Updating ${symbol} positions at $${currentPrice.toLocaleString()} (candle: O:${candle?.open} H:${candle?.high} L:${candle?.low} C:${candle?.close})`);
+
+    // Check and execute pending orders first with candle data
+    await checkAndExecutePendingOrders(symbol, currentPrice, candle);
+
+    // Update all open positions with candle data for SL/TP detection
+    const result = await updateOpenPositions(db, symbol, currentPrice, candle);
     
     console.log(`[PriceScheduler] ${symbol}: Updated ${result.updated} positions, closed ${result.closed.length}`);
     
@@ -184,39 +188,49 @@ const previousPrices = {
 
 /**
  * Check pending orders and execute when price hits entry level
+ * Uses candle high/low for accurate trigger detection
+ * @param {string} symbol - Symbol name (BTC, ETH)
+ * @param {number} currentPrice - Current price (close of 1m candle)
+ * @param {Object} candle - Full 1m candle data (open, high, low, close, volume)
  */
-async function checkAndExecutePendingOrders(symbol, currentPrice) {
+async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
   try {
     const { getPendingOrders, executePendingOrder, getAccountById } = await import('../db/database.js');
     const { openPosition } = await import('../services/paperTradingEngine.js');
-    
+
     // Get all pending orders for this symbol
     const pendingOrders = await getPendingOrders(db, { symbol, status: 'pending' });
-    
+
     if (pendingOrders.length === 0) return;
-    
-    console.log(`[PriceScheduler] Checking ${pendingOrders.length} pending orders for ${symbol} at $${currentPrice.toLocaleString()}`);
-    
+
+    console.log(`[PriceScheduler] Checking ${pendingOrders.length} pending orders for ${symbol} at $${currentPrice.toLocaleString()} (candle H:${candle?.high} L:${candle?.low})`);
+
     const previousPrice = previousPrices[symbol];
-    
+
     for (const order of pendingOrders) {
       const isLong = order.side === 'long';
       const entryPrice = order.entry_price;
-      
-      // Check if price crossed the entry level
-      // For long: execute when price was ABOVE entry and now is AT or BELOW entry (price dropped to entry)
-      // For short: execute when price was BELOW entry and now is AT or ABOVE entry (price rose to entry)
-      // Also execute if price is already at/beyond entry (e.g., after server restart when previousPrice is null)
+
+      // Check if price crossed the entry level using candle high/low
+      // For long: execute if candle low is at or below entry (price dropped to entry)
+      // For short: execute if candle high is at or above entry (price rose to entry)
+      // Also execute if current price is at/beyond entry (fallback)
       let shouldExecute = false;
-      
+
       if (isLong) {
-        // Long: Execute if price is at or below entry (either crossed from above, or already there)
-        if (currentPrice <= entryPrice) {
+        // Long: Execute if candle low is at or below entry
+        if (candle && candle.low <= entryPrice) {
+          shouldExecute = true;
+        } else if (currentPrice <= entryPrice) {
+          // Fallback: check current price
           shouldExecute = true;
         }
       } else {
-        // Short: Execute if price is at or above entry (either crossed from below, or already there)
-        if (currentPrice >= entryPrice) {
+        // Short: Execute if candle high is at or above entry
+        if (candle && candle.high >= entryPrice) {
+          shouldExecute = true;
+        } else if (currentPrice >= entryPrice) {
+          // Fallback: check current price
           shouldExecute = true;
         }
       }
