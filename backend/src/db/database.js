@@ -58,7 +58,12 @@ export async function initDatabase() {
             method_id TEXT DEFAULT 'ict',
             breakout_retest TEXT,
             position_decisions TEXT,
-            alternative_scenario TEXT
+            alternative_scenario TEXT,
+            suggested_entry REAL,
+            suggested_stop_loss REAL,
+            suggested_take_profit REAL,
+            expected_rr REAL,
+            invalidation_level REAL
           )
         `, (err) => {
           if (err) console.error('[Database] Error creating analysis_history table:', err.message);
@@ -529,7 +534,12 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50, met
         ) as predictions,
         ah.breakout_retest,
         ah.position_decisions,
-        ah.alternative_scenario
+        ah.alternative_scenario,
+        ah.suggested_entry,
+        ah.suggested_stop_loss,
+        ah.suggested_take_profit,
+        ah.expected_rr,
+        ah.invalidation_level
        FROM analysis_history ah
        LEFT JOIN predictions p ON ah.id = p.analysis_id
        WHERE ${conditions.join(' AND ')}
