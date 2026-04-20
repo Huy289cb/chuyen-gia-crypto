@@ -2,8 +2,7 @@
 // Handles API calls with retry logic and error handling
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_MODEL = 'llama-3.1-8b-instant';
-const FALLBACK_MODEL = 'llama3-8b-8192';
+const MODELS = ['llama-3.1-8b-instant', 'llama-4-scout-17b-16e-instruct'];
 
 // Rate limiting protection
 let lastCallTime = 0;
@@ -56,79 +55,98 @@ class GroqClient {
     }
     lastCallTime = Date.now();
 
-    const requestBody = {
-      model: DEFAULT_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature,
-      max_tokens: 1024,
-      response_format: { type: 'json_object' }
-    };
+    // Try each model in sequence, starting with the first one
+    for (let modelIndex = 0; modelIndex < MODELS.length; modelIndex++) {
+      const currentModel = MODELS[modelIndex];
+      console.log(`[GroqClient] Trying model: ${currentModel}`);
 
-    let lastError;
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[GroqClient] Attempt ${attempt + 1}/${maxRetries + 1}`);
-        
-        const response = await fetchWithTimeout(this.baseUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestBody)
-        }, 30000); // 30s timeout for Groq API
+      const requestBody = {
+        model: currentModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature,
+        max_tokens: 1024,
+        response_format: { type: 'json_object' }
+      };
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Groq API error: ${response.status} - ${errorText}`);
-        }
+      let lastError;
 
-        const data = await response.json();
-        const content = data.choices[0]?.message?.content;
-        
-        if (!content) {
-          throw new Error('Empty response from Groq API');
-        }
-
-        // Parse JSON response
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          const parsed = JSON.parse(content);
-          console.log('[GroqClient] Successfully parsed response');
-          return parsed;
-        } catch (parseError) {
-          console.error('[GroqClient] JSON parse error:', parseError.message);
-          console.log('[GroqClient] Raw content:', content.substring(0, 200));
-          throw new Error('Invalid JSON in response');
-        }
+          console.log(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1}/${maxRetries + 1}`);
 
-      } catch (error) {
-        lastError = error;
-        console.error(`[GroqClient] Attempt ${attempt + 1} failed:`, error.message);
-        
-        if (attempt < maxRetries) {
-          let delay;
-          
-          // Check for specific 429 rate limit error
-          if (error.message.includes('429') || error.message.includes('rate limit')) {
-            // For 429 errors, use much longer delays
-            delay = Math.min(60000, Math.pow(2, attempt) * 5000); // Start at 5s, max 60s
-            console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms before retry...`);
-          } else {
-            // For other errors, use normal exponential backoff
-            delay = Math.pow(2, attempt) * 1000;
-            console.log(`[GroqClient] Retrying in ${delay}ms...`);
+          const response = await fetchWithTimeout(this.baseUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+          }, 30000); // 30s timeout for Groq API
+
+          if (!response.ok) {
+            const errorText = await response.text();
+
+            // If 429 error, try next model instead of retrying
+            if (response.status === 429) {
+              console.log(`[GroqClient] Model ${currentModel} hit rate limit (429), switching to next model...`);
+              break; // Break out of retry loop to try next model
+            }
+
+            throw new Error(`Groq API error: ${response.status} - ${errorText}`);
           }
-          
-          await new Promise(resolve => setTimeout(resolve, delay));
+
+          const data = await response.json();
+          const content = data.choices[0]?.message?.content;
+
+          if (!content) {
+            throw new Error('Empty response from Groq API');
+          }
+
+          // Parse JSON response
+          try {
+            const parsed = JSON.parse(content);
+            console.log(`[GroqClient] Successfully parsed response from model ${currentModel}`);
+            return parsed;
+          } catch (parseError) {
+            console.error('[GroqClient] JSON parse error:', parseError.message);
+            console.log('[GroqClient] Raw content:', content.substring(0, 200));
+            throw new Error('Invalid JSON in response');
+          }
+
+        } catch (error) {
+          lastError = error;
+          console.error(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1} failed:`, error.message);
+
+          // If it's a 429 error, break to try next model
+          if (error.message.includes('429') || error.message.includes('rate limit')) {
+            console.log(`[GroqClient] Model ${currentModel} rate limited, will try next model`);
+            break;
+          }
+
+          if (attempt < maxRetries) {
+            let delay;
+
+            // Check for specific 429 rate limit error
+            if (error.message.includes('429') || error.message.includes('rate limit')) {
+              // For 429 errors, use much longer delays
+              delay = Math.min(60000, Math.pow(2, attempt) * 5000); // Start at 5s, max 60s
+              console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms before retry...`);
+            } else {
+              // For other errors, use normal exponential backoff
+              delay = Math.pow(2, attempt) * 1000;
+              console.log(`[GroqClient] Retrying in ${delay}ms...`);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
       }
     }
 
-    throw new Error(`All ${maxRetries + 1} attempts failed: ${lastError.message}`);
+    throw new Error(`All models failed: ${lastError.message}`);
   }
 
   /**
