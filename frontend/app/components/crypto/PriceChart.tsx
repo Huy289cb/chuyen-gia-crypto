@@ -227,6 +227,20 @@ export function PriceChart({
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 12,
+        localization: {
+          timeFormatter: (time: number) => {
+            const date = new Date(time * 1000);
+            // Convert to GMT+7 (Vietnam timezone)
+            const gmt7Offset = 7 * 60 * 60 * 1000; // 7 hours in milliseconds
+            const gmt7Date = new Date(date.getTime() + gmt7Offset);
+            const hours = gmt7Date.getUTCHours().toString().padStart(2, '0');
+            const minutes = gmt7Date.getUTCMinutes().toString().padStart(2, '0');
+            return `${hours}:${minutes}`;
+          },
+          priceFormatter: (price: number) => {
+            return price.toFixed(2);
+          },
+        },
       },
       height,
       autoSize: true,
