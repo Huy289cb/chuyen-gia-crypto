@@ -1097,8 +1097,8 @@ export async function createPosition(db, positionData) {
       `INSERT INTO positions
        (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit,
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id,
-        invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id, entry_time)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         position_id,
         account_id,
@@ -1119,7 +1119,8 @@ export async function createPosition(db, positionData) {
         tp_levels,
         tp_hit_count || 0,
         partial_closed || 0,
-        method_id
+        method_id,
+        new Date().toISOString() // Use current time in local timezone
       ],
       function(err) {
         if (err) {
