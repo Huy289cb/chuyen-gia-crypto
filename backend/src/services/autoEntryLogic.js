@@ -330,6 +330,29 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
     return null;
   }
 
+  // Validate SL/TP placement based on bias
+  if (bias === 'bullish') {
+    // LONG: SL must be below entry, TP must be above entry
+    if (suggestedSL >= suggestedEntry) {
+      console.error(`[AutoEntry] LONG stop loss ${suggestedSL} must be below entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+    if (suggestedTP <= suggestedEntry) {
+      console.error(`[AutoEntry] LONG take profit ${suggestedTP} must be above entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+  } else if (bias === 'bearish') {
+    // SHORT: SL must be above entry, TP must be below entry
+    if (suggestedSL <= suggestedEntry) {
+      console.error(`[AutoEntry] SHORT stop loss ${suggestedSL} must be above entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+    if (suggestedTP >= suggestedEntry) {
+      console.error(`[AutoEntry] SHORT take profit ${suggestedTP} must be below entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+  }
+
   let stopLoss = suggestedSL;
   let takeProfit = suggestedTP;
 
