@@ -191,6 +191,22 @@ Check `tsconfig.json` paths configuration:
 - Enable CORS only for trusted origins
 - Add request validation
 
+### Timezone Configuration
+- **Backend**: Uses UTC timestamps (SQLite `datetime('now')` and `DEFAULT CURRENT_TIMESTAMP`)
+- **Frontend**: Automatically converts all timestamps to GMT+7 (Asia/Ho_Chi_Minh) for display
+- **Server Timezone**: No specific timezone required (UTC is fine)
+- **Frontend Display**: All timestamps use `toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })` or +7 hours offset for Unix timestamps
+- **Chart Data**: Unix timestamps have +7 hours offset added before display
+
+**VPS Deployment**:
+```bash
+cd ~/chuyen-gia-crypto
+git pull origin main
+cd backend
+pm2 restart backend
+```
+No timezone configuration needed on VPS.
+
 ### Monitoring
 - Add health check endpoints
 - Log rotation for cron jobs
