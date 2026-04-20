@@ -61,9 +61,10 @@ export function PriceChartContainer({
         const result = await response.json();
         
         if (result.success && result.data) {
-          // Data already in correct format with Unix timestamps
+          // Convert Unix timestamps to GMT+7 (add 7 hours = 25200 seconds)
+          const gmt7Offset = 7 * 60 * 60; // 7 hours in seconds
           const formattedData = result.data.map((candle: any) => ({
-            time: candle.time,
+            time: candle.time + gmt7Offset,
             open: candle.open,
             high: candle.high,
             low: candle.low,
