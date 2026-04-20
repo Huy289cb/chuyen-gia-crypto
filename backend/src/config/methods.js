@@ -27,125 +27,48 @@ CORE FRAMEWORK:
 
 4. ORDER BLOCKS
    - Last opposing candle before strong impulse move
-   - Mark these as institutional reference levels
+   - Mark as institutional levels
 
-5. FAIR VALUE GAPS (FVG)
-   - Imbalances where price moved quickly, leaving gaps
-   - Price often returns to fill FVG
+5. FVG: Imbalance zones, price often returns to fill
 
-6. NARRATIVE (CRITICAL - in Vietnamese)
-   Tell the story in Vietnamese:
-   - Where is price now relative to structure?
-   - Where is liquidity resting?
-   - What did price just do? (sweep, BOS, CHOCH)
-   - Where is price likely to go next?
+6. NARRATIVE (VIETNAMESE): Price position, liquidity, recent action (sweep/BOS/CHOCH), next target
 
-7. DECISION LOGIC
-   BUY:
-   - Bullish HTF bias (4h/1d)
-   - Price at discount or near support
-   - Liquidity taken below
-   - Bullish BOS/CHOCH confirmed
-   
-   SELL:
-   - Bearish HTF bias
-   - Price at premium or near resistance
-   - Liquidity taken above
-   - Bearish BOS/CHOCH confirmed
-   
-   HOLD:
-   - Conflicting signals across timeframes
-   - No clear liquidity target
-   - Sideways consolidation
+7. DECISION: BUY=HTF bullish+discount+liquidity taken+BOS/CHOCH; SELL=bearish+premium+liquidity taken+BOS/CHOCH; HOLD=conflict
 
-9. PREDICTIONS (Based on ICT analysis)
-   For each timeframe (15m, 1h, 4h, 1d):
-   - Direction: up/down/sideways
-   - Target: next liquidity level or FVG fill zone
-   - Confidence: 0.00-1.00 based on structure clarity
-   
-   Example: "15m": { "direction": "up", "target": 67500, "confidence": 0.7 }
-
-OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
+OUTPUT FORMAT (JSON, VIETNAMESE):
 {
   "btc": {
-    "bias": "bullish | bearish | neutral",
-    "action": "buy | sell | hold",
+    "bias": "bullish|bearish|neutral",
+    "action": "buy|sell|hold",
     "confidence": 0.00-1.00,
-    "narrative": "max 350 characters in Vietnamese - tell the market story with details about structure, liquidity, and price action",
-    "timeframes": {
-      "15m": "structure description in Vietnamese",
-      "1h": "structure description in Vietnamese",
-      "4h": "structure description in Vietnamese", 
-      "1d": "structure description in Vietnamese"
-    },
-    "key_levels": {
-      "liquidity": "where liquidity rests in Vietnamese",
-      "order_blocks": "key institutional levels in Vietnamese",
-      "fvg": "imbalance zones in Vietnamese",
-      "bos": "break of structure levels in Vietnamese",
-      "choch": "change of character levels in Vietnamese"
-    },
-    "predictions": {
-      "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
-      "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
-      "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
-      "1d": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 }
-    },
-    "risk": "volatility warning + invalidation scenario in Vietnamese",
-    "suggested_entry": number (optional - specific entry price if bias is clear),
-    "suggested_stop_loss": number (optional - SL below swing low for long, above swing high for short),
-    "suggested_take_profit": number (optional - TP at liquidity target or FVG fill),
-    "expected_rr": number (optional - risk/reward ratio, minimum 2.0),
-    "invalidation_level": number (optional - price level that invalidates the setup),
-    "reason_summary": "brief reason in Vietnamese for the trading suggestion (max 200 chars)",
-    "position_decisions": {
-      "recommendations": [
-        {
-          "position_id": "string (if available)",
-          "action": "close | hold | adjust_sl | adjust_tp",
-          "confidence": 0.00-1.00,
-          "reason": "reason in Vietnamese (max 200 chars)",
-          "risk_percent": number (current risk % of position),
-          "pnl_percent": number (current PnL % of position)
-        }
-      ],
-      "overall_strategy": "brief position management strategy in Vietnamese (max 300 chars)"
-    },
-    "pending_order_decisions": {
-      "recommendations": [
-        {
-          "order_id": "string (if available)",
-          "action": "keep | cancel | modify",
-          "confidence": 0.00-1.00,
-          "reason": "reason in Vietnamese (max 200 chars)",
-          "price_diff_percent": number (difference from current price),
-          "waiting_hours": number (hours since order creation),
-          "risk_percent": number (order risk %)
-        }
-      ],
-      "overall_strategy": "brief pending order management strategy in Vietnamese (max 300 chars)"
-    }
+    "narrative": "≤350 chars VIETNAMESE: structure, liquidity, price action",
+    "timeframes": { "15m": "VIETNAMESE", "1h": "VIETNAMESE", "4h": "VIETNAMESE", "1d": "VIETNAMESE" },
+    "key_levels": { "liquidity": "VIETNAMESE", "order_blocks": "VIETNAMESE", "fvg": "VIETNAMESE", "bos": "VIETNAMESE", "choch": "VIETNAMESE" },
+    "predictions": { "15m": {"direction":"up|down|sideways","target":number,"confidence":0.00-1.00}, "1h": {...}, "4h": {...}, "1d": {...} },
+    "risk": "VIETNAMESE: volatility+invalidation",
+    "suggested_entry": number (optional),
+    "suggested_stop_loss": number (optional: below swing low long/above swing high short),
+    "suggested_take_profit": number (optional: liquidity/FVG),
+    "expected_rr": number (optional, ≥2.0),
+    "invalidation_level": number (optional),
+    "reason_summary": "≤200 chars VIETNAMESE",
+    "position_decisions": { "recommendations": [{"position_id":"string","action":"close|hold|adjust_sl|adjust_tp","confidence":0.00-1.00,"reason":"≤200 chars","risk_percent":number,"pnl_percent":number}], "overall_strategy":"≤300 chars" },
+    "pending_order_decisions": { "recommendations": [{"order_id":"string","action":"keep|cancel|modify","confidence":0.00-1.00,"reason":"≤200 chars","price_diff_percent":number,"waiting_hours":number,"risk_percent":number}], "overall_strategy":"≤300 chars" }
   },
-  "eth": { ... same structure ... },
-  "marketSentiment": "bullish | bearish | neutral | mixed",
-  "comparison": "brief analysis comparing BTC vs ETH in Vietnamese"
+  "eth": { ...same... },
+  "marketSentiment": "bullish|bearish|neutral|mixed",
+  "comparison": "VIETNAMESE BTC vs ETH"
 }
 
 RULES:
-- Vietnamese only, build narrative first
-- Conflict signals → HOLD
-- Entry/SL/TP only if confidence >= 0.8
-- ICT: Use liquidity sweeps, order blocks, FVG for SL/TP
-- ICT: Check BOS/CHOCH for structure breaks
-- ICT: Target liquidity zones/FVG fill
-- SL/TP rules: LONG SL<Entry<TP, SHORT Entry>TP>SL
-- SL >= 1% from entry, TP >= 2% from entry
-- Use market structure levels, NOT fixed prices
-- SL/TP: 2 decimals (74835.52), NO rounding to even (74800)
-- expected_rr >= 2.0, confidence 2 decimals (0.75)
-- JSON only
-- reasoning ≤ 350 characters in Vietnamese`,
+- Vietnamese, build narrative first, conflict→HOLD
+- Entry/SL/TP only if confidence≥0.8
+- ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
+- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
+- Market structure levels only, NOT fixed prices
+- SL/TP: 2 decimals (74835.52), NO even rounding (74800)
+- expected_rr≥2.0, confidence 2 decimals (0.75)
+- JSON only`,
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
@@ -254,88 +177,39 @@ OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
       "entry_zones": "mức 38.2%, 50%, 61.8% tiếng Việt",
       "tp_zones": "mức 127.2%, 161.8%, 261.8% tiếng Việt"
     },
-    "breakout_retest": {
-      "has_breakout": true | false,
-      "is_fake": true | false,
-      "retest_pending": true | false,
-      "analysis": "mô tả tiếng Việt"
-    },
-    "predictions": {
-      "15m": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
-      "1h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 },
-      "4h": { "direction": "up | down | sideways", "target": number, "confidence": 0.00-1.00 }
-    },
-    "risk": "cảnh báo biến động + kịch bản vô hiệu hóa tiếng Việt",
-    "suggested_entry": number (optional - tại vùng Fibonacci),
-    "suggested_stop_loss": number (optional - dưới swing low cho long, trên swing high cho short),
-    "suggested_take_profit": number (optional - tại vùng Fibonacci extension),
-    "expected_rr": number (optional - tỷ lệ rủi ro/lợi nhuận, tối thiểu 2.5),
-    "invalidation_level": number (optional - mức giá vô hiệu hóa setup),
-    "reason_summary": "lý do ngắn tiếng Việt cho đề xuất giao dịch (max 200 ký tự)",
-    "position_decisions": {
-      "recommendations": [
-        {
-          "position_id": "string (nếu có)",
-          "action": "close | hold | move_sl | partial_tp | scale",
-          "confidence": 0.00-1.00,
-          "reason": "lý do tiếng Việt (max 200 ký tự)",
-          "risk_percent": number,
-          "pnl_percent": number,
-          "pnl_usd": number,
-          "current_entry": number,
-          "current_sl": number,
-          "current_tp": number
-        }
-      ],
-      "overall_strategy": "chiến lược ngắn tiếng Việt (max 300 ký tự)"
-    },
-    "alternative_scenario": {
-      "trigger": "điều gì vô hiệu hóa setup hiện tại tiếng Việt",
-      "new_bias": "bullish | bearish | neutral",
-      "new_entry": number,
-      "new_sl": number,
-      "new_tp": number,
-      "logic": "giải thích dựa trên cấu trúc, price action, volume, Fibonacci, liquidity tiếng Việt"
-    },
+    "breakout_retest": { "has_breakout":bool,"is_fake":bool,"retest_pending":bool,"analysis":"VIETNAMESE" },
+    "predictions": { "15m": {"direction":"up|down|sideways","target":number,"confidence":0.00-1.00}, "1h": {...}, "4h": {...} },
+    "risk": "VIETNAMESE: volatility+invalidation",
+    "suggested_entry": number (optional: Fibonacci zone),
+    "suggested_stop_loss": number (optional: below swing low long/above swing high short),
+    "suggested_take_profit": number (optional: Fibonacci extension),
+    "expected_rr": number (optional, ≥2.5),
+    "invalidation_level": number (optional),
+    "reason_summary": "≤200 chars VIETNAMESE",
+    "position_decisions": { "recommendations": [{"position_id":"string","action":"close|hold|move_sl|partial_tp|scale","confidence":0.00-1.00,"reason":"≤200 chars","risk_percent":number,"pnl_percent":number,"pnl_usd":number,"current_entry":number,"current_sl":number,"current_tp":number}], "overall_strategy":"≤300 chars" },
+    "alternative_scenario": { "trigger":"VIETNAMESE","new_bias":"bullish|bearish|neutral","new_entry":number,"new_sl":number,"new_tp":number,"logic":"VIETNAMESE: structure/PA/volume/Fib/liquidity" },
     "indicators": {
-      "fibonacci": {
-        "retracement": [
-          { "level": 0.382, "price": number, "label": "38.2%" },
-          { "level": 0.50, "price": number, "label": "50%" },
-          { "level": 0.618, "price": number, "label": "61.8%" }
-        ],
-        "extension": [
-          { "level": 1.272, "price": number, "label": "127.2%" },
-          { "level": 1.618, "price": number, "label": "161.8%" }
-        ]
-      },
-      "orderBlocks": [
-        { "high": number, "low": number, "timestamp": number, "type": "bullish|bearish" }
-      ],
-      "fairValueGaps": [
-        { "start": { "time": number, "price": number }, "end": { "time": number, "price": number } }
-      ],
+      "fibonacci": { "retracement": [{"level":0.382,"price":number,"label":"38.2%"}, {"level":0.5,"price":number,"label":"50%"}, {"level":0.618,"price":number,"label":"61.8%"}], "extension": [{"level":1.272,"price":number,"label":"127.2%"}, {"level":1.618,"price":number,"label":"161.8%"}] },
+      "orderBlocks": [{"high":number,"low":number,"timestamp":number,"type":"bullish|bearish"}],
+      "fairValueGaps": [{"start":{"time":number,"price":number},"end":{"time":number,"price":number}}],
       "volume": "high|low|normal"
     }
   },
-  "marketSentiment": "bullish | bearish | neutral | mixed",
-  "comparison": "phân tích ngắn tiếng Việt"
+  "marketSentiment": "bullish|bearish|neutral|mixed",
+  "comparison": "VIETNAMESE BTC vs ETH"
 }
 
 RULES:
-- Tiếng Việt, giải thích logic
-- Xác nhận breakout với volume
+- Tiếng Việt, giải thích logic, breakout với volume
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
 - Fibonacci: Retracement 38.2%, 50%, 61.8%; Extension 127.2%, 161.8%
 - Entry: Fibonacci Retracement hoặc SMC zone
 - indicators: tính Fibonacci/OB/FVG coordinates (price/time)
-- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL
-- SL >= 1% từ entry, TP >= 2% từ entry
+- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
 - SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
 - confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
-- Conflict → HOLD
-- Entry/SL/TP chỉ nếu confidence >= 0.60
-- expected_rr >= 2.5
+- Conflict → HOLD, Entry/SL/TP chỉ nếu confidence≥0.60
+- expected_rr ≥ 2.5
 - JSON only`,
     autoEntry: {
       minConfidence: 60,
