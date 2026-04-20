@@ -484,12 +484,12 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId) {
  * @returns {Object} Fallback analysis
  */
 function generateFallbackAnalysis(priceData, methodId) {
-  consg(`[AnalyzerFactory][${methodId}] Generating fallback analysis`);
+  console.log(`[AnalyzerFactory][${methodId}] Generating fallback analysis`);
 
   const calcChange = (arr) => {
     if (!arr || arr.length < 2) return 0;
     const first = arr[0];
-    const lasole.lot = arr[arr.length - 1];
+    const last = arr[arr.length - 1];
     return ((last - first) / first) * 100;
   };
 
