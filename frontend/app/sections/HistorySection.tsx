@@ -8,6 +8,22 @@ import { Button } from '../components/ui/Button';
 import { cn, formatPrice } from '@/lib/utils';
 import type { Trade } from '../types';
 
+// Helper function to format timestamp to GMT+7
+const formatToGMT7 = (timestamp: string) => {
+  if (!timestamp) return '-';
+  const date = new Date(timestamp);
+  // Add 7 hours offset to convert UTC to GMT+7
+  const gmt7Date = new Date(date.getTime() + 7 * 60 * 60 * 1000);
+  return gmt7Date.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+};
+
 interface HistorySectionProps {
   trades: Trade[];
 }
@@ -96,7 +112,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     ${formatPrice(trade.size_usd)}
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
-                    {trade.entry_time || trade.opened_at ? new Date(trade.entry_time || trade.opened_at!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '-'}
+                    {formatToGMT7(trade.entry_time || trade.opened_at || '')}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-foreground">
                     ${formatPrice(trade.entry_price)}
@@ -120,7 +136,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
                     <ExitReasonBadge reason={trade.close_reason || trade.exit_reason} />
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
-                    {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '-'}
+                    {formatToGMT7(trade.close_time || trade.closed_at || '')}
                   </td>
                 </tr>
               ))}
@@ -197,7 +213,7 @@ function TradeCardMobile({ trade }: { trade: Trade }) {
       <div className="flex items-center justify-between text-xs">
         <ExitReasonBadge reason={trade.close_reason || trade.exit_reason} />
         <span className="text-foreground-tertiary">
-          {trade.close_time || trade.closed_at ? new Date(trade.close_time || trade.closed_at!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '-'}
+          {formatToGMT7(trade.close_time || trade.closed_at || '')}
         </span>
       </div>
     </div>
