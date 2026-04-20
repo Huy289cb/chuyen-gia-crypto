@@ -319,22 +319,19 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   const bias = analysis.bias;
   const riskAmount = account.current_balance * config.riskPerTrade;
 
-  // Use AI suggested entry for limit orders (or fallback to current price)
-  const suggestedEntry = analysis.suggested_entry || currentPrice;
+  // Require AI-provided entry, SL, TP - no defaults
+  const suggestedEntry = analysis.suggested_entry;
   const suggestedSL = analysis.suggested_stop_loss;
   const suggestedTP = analysis.suggested_take_profit;
 
-  let stopLoss, takeProfit;
-
-  if (bias === 'bullish') {
-    // Long position
-    stopLoss = suggestedSL || suggestedEntry * 0.99; // Default 1% below entry
-    takeProfit = suggestedTP || suggestedEntry * 1.02; // Default 2% above entry (1:2 R:R)
-  } else {
-    // Short position
-    stopLoss = suggestedSL || suggestedEntry * 1.01; // Default 1% above entry
-    takeProfit = suggestedTP || suggestedEntry * 0.98; // Default 2% below entry (1:2 R:R)
+  // Reject if AI didn't provide clear entry, SL, TP
+  if (!suggestedEntry || !suggestedSL || !suggestedTP) {
+    console.error('[AutoEntry] AI did not provide clear entry, SL, or TP - rejecting trade');
+    return null;
   }
+
+  let stopLoss = suggestedSL;
+  let takeProfit = suggestedTP;
 
   // Calculate position size based on risk
   const riskDistance = Math.abs(suggestedEntry - stopLoss);
