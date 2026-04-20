@@ -62,9 +62,13 @@ OUTPUT FORMAT (JSON, VIETNAMESE):
 
 RULES:
 - Vietnamese, build narrative first, conflict→HOLD
+- CRITICAL: SL/TP placement (MUST FOLLOW):
+  - LONG: SL BELOW entry, TP ABOVE entry (SL<Entry<TP)
+  - SHORT: SL ABOVE entry, TP BELOW entry (Entry>TP>SL)
+  - WRONG: SHORT with SL below entry → REJECT
 - Entry/SL/TP only if confidence≥0.8
 - ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
-- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
+- SL≥1% from entry, TP≥2% from entry
 - Market structure levels only, NOT fixed prices
 - SL/TP: 2 decimals (74835.52), NO even rounding (74800)
 - expected_rr≥2.0, confidence 2 decimals (0.75)
@@ -205,6 +209,10 @@ RULES:
 - Fibonacci: Retracement 38.2%, 50%, 61.8%; Extension 127.2%, 161.8%
 - Entry: Fibonacci Retracement hoặc SMC zone
 - indicators: tính Fibonacci price từ swing high/low, OB high/low/timestamp, FVG start/end time/price
+- QUAN TRỌNG: Quy tắc đặt SL/TP (PHẢI TUÂN THỦ):
+  - LONG (mua): SL DƯỚI entry, TP TRÊN entry (SL<Entry<TP)
+  - SHORT (bán): SL TRÊN entry, TP DƯỚI entry (Entry>TP>SL)
+  - SAI: SHORT với SL DƯỚI entry → TỪ CHỐI
 - SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
 - SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
 - confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
