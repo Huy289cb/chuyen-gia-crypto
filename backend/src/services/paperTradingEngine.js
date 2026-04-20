@@ -558,8 +558,8 @@ export async function updateOpenPositions(db, symbol, currentPrice) {
       const { hitSL, hitTPs, nextTPLevel } = checkStopLevels(position, currentPrice);
 
       if (hitSL) {
-        // Hit stop loss - close position
-        const result = await closePosition(db, position, currentPrice, 'stop_loss');
+        // Hit stop loss - close position using stop loss price for accurate PnL
+        const result = await closePosition(db, position, position.stop_loss, 'stop_loss');
         results.closed.push(result);
       } else if (hitTPs.length > 0) {
         // Handle TP hits using ICT strategy

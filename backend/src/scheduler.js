@@ -153,6 +153,29 @@ async function runMethodAnalysis(methodId) {
         // Save analysis for BTC with method_id
         const btcResult = await saveAnalysis(db, 'BTC', priceData, analysis, methodId);
         const btcPredictionId = btcResult.predictionIds?.['4h'] || btcResult.predictionIds?.['1d'];
+
+        // Process position decisions from AI analysis
+        if (analysis.btc?.position_decisions?.recommendations) {
+          const { closePosition } = await import('./services/paperTradingEngine.js');
+          const { fetchRealTimePrices } = await import('./price-fetcher.js');
+          const { getPosition } = await import('./db/database.js');
+
+          for (const recommendation of analysis.btc.position_decisions.recommendations) {
+            if (recommendation.action === 'close' && recommendation.position_id) {
+              try {
+                const position = await getPosition(db, recommendation.position_id);
+                if (position && position.status === 'open') {
+                  const priceData = await fetchRealTimePrices();
+                  const currentPrice = priceData['btc']?.price || position.current_price;
+                  await closePosition(db, position, currentPrice, 'ai_recommendation');
+                  console.log(`[Scheduler][${method.name}] Closed position ${recommendation.position_id} based on AI recommendation: ${recommendation.reason}`);
+                }
+              } catch (error) {
+                console.error(`[Scheduler][${method.name}] Failed to close position ${recommendation.position_id}:`, error.message);
+              }
+            }
+          }
+        }
         
         // Cache with method_id
         cache.setMethod(methodId, {

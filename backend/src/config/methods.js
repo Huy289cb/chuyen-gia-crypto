@@ -143,6 +143,8 @@ RULES:
 - For ICT: Use liquidity sweeps, order blocks, and FVG levels for SL/TP placement
 - Calculate SL/TP using actual price levels from ICT structure analysis, NOT fixed percentages
 - NEVER use fixed values like 75000 or 78000 - always use actual ICT market structure levels
+- suggested_entry, suggested_stop_loss, suggested_take_profit should be precise price levels with at least 2 decimal places (e.g., 74835.52, 74787.06, 75612.19)
+- Avoid rounding SL/TP to even numbers (74800, 74800, 75600) - use actual market structure levels
 - expected_rr must be >= 2.0 if suggesting a trade
 - confidence should be a decimal between 0.00 and 1.00 with at least 2 decimal places (e.g., 0.75, 0.82, 0.87)
 - Avoid rounding confidence to even percentages (0.50, 0.60, 0.70, 0.80)
@@ -334,6 +336,8 @@ RULES:
 - Entry: tại vùng Fibonacci Retracement (38.2%, 50%, hoặc 61.8%) hoặc SMC zone
 - SL: dưới swing low (long) hoặc trên swing high (short) dựa trên SMC structure, KHÔNG dùng giá cố định
 - TP: tại vùng Fibonacci Extension (127.2%, 161.8%) hoặc liquidity zone, KHÔNG dùng giá cố định
+- suggested_entry, suggested_stop_loss, suggested_take_profit phải là mức giá chính xác với ít nhất 2 số sau dấu phẩy (ví dụ: 74776.57, 75600.00, 75612.19)
+- Tránh làm tròn SL/TP sang số chẵn (74800, 75600) - dùng mức giá thực tế từ market structure
 - indicators field: Tính toán và trả về coordinates cho Fibonacci, OB, FVG
   - Fibonacci retracement: Tính price tại các mức 38.2%, 50%, 61.8% dựa trên swing high/low
   - Fibonacci extension: Tính price tại các mức 127.2%, 161.8% dựa trên swing point
