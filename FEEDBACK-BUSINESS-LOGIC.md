@@ -1,35 +1,33 @@
 # Business Logic Feedback Report
 
-**Date:** 2026-04-21 (Updated: 16:00 UTC+7)  
-**Review Focus:** Model AI Change Analysis (Kim Nghia Only)  
-**Methods:** Kim Nghia (SMC + Volume) - ICT Disabled  
+**Date:** 2026-04-21 (Updated: 20:50 UTC+7)  
+**Review Focus:** Post-Fix Analysis (Model AI Change + Confidence Fix)  
+**Methods:** ICT Smart Money, Kim Nghia (SMC + Volume)  
 **Supreme Goal:** Maximize Win Rate (Total PNL+)
 
 ---
 
 ## Executive Summary
 
-**Deployment Status:** ✅ Successfully deployed with ICT disabled  
-**Observation Period:** ~60 minutes (15:00 - 16:00 UTC+7)  
-**Active Method:** Kim Nghia only (ICT disabled)  
-**Model AI:** llama-3.3-70b-versatile (NOT changed)  
+**Deployment Status:** ✅ Successfully deployed with new fixes  
+**Observation Period:** 30 minutes (20:16 - 20:50 UTC+7)  
+**Total Analysis Runs:** ~4-6 runs per method  
 **Positions Entered:** 0  
-**Critical Finding:** Model AI change did NOT improve confidence - still 30%
+**Key Finding:** Model AI change successful, confidence improved, but multi-timeframe alignment check blocking position entry
 
 ---
 
-## Configuration Changes
+## Configuration Changes (Latest Commit)
 
-**User Decision:**
-- ICT method: Disabled (enabled: false)
-- Kim Nghia method: Enabled (enabled: true)
-- Model AI change: Attempted but NOT reflected in logs
+**Implemented Changes:**
+1. **Model AI Change:** Changed from llama-3.3-70b-versatile to qwen/qwen3-32b
+2. **Confidence Fix:** Removed fallback logic that overrode AI confidence to 30% when validation failed
+3. **AutoEntry Logic Update:** Modified auto-entry logic to respect AI confidence even when SL/TP validation fails
 
-**Current Configuration:**
-- Kim Nghia minConfidence: 60%
-- Kim Nghia minRRRatio: 2.5
-- Kim Nghia maxPositionsPerSymbol: 6
-- Kim Nghia SL distance: 0.75%
+**Files Modified:**
+- backend/src/groq-client.js
+- backend/src/services/autoEntryLogic.js
+- CHANGELOG.md
 
 ---
 
@@ -38,18 +36,29 @@
 ### ICT Method Status
 
 **Configuration:**
-- Enabled: ❌ No (disabled by user)
+- Enabled: ✅ Yes
+- minConfidence: 70%
+- minRRRatio: 2.0
+- maxPositionsPerSymbol: 6
 
 **Observed Behavior:**
 ```
-ICT method is NOT running
-No ICT analysis logs found
+[GroqClient] Trying model: qwen/qwen3-32b
+[GroqClient] Successfully parsed response from model qwen/qwen3-32b
+[ICT Smart Money] Analysis complete
+  BTC: hold | bias: neutral | confidence: 40%
+  ETH: hold | bias: neutral | confidence: 40%
+[AutoEntry] Check 4: Confidence 40% vs threshold 70%
+[AutoEntry] Check 4 FAILED: Confidence too low (40% < 70%)
 ```
 
 **Analysis:**
-- ICT method successfully disabled
-- No ICT analysis runs in logs
-- System focuses entirely on Kim Nghia method
+- ICT method is running correctly
+- Model AI changed to qwen/qwen3-32b successfully
+- Returns neutral bias with 40% confidence
+- Below 70% threshold, so no positions entered
+- No SQL errors observed
+- Model AI working correctly
 
 ### Kim Nghia Method Status
 
@@ -62,74 +71,38 @@ No ICT analysis logs found
 **Observed Behavior:**
 ```
 [Kim Nghia (SMC + Volume)] Starting analysis...
-[GroqClient] Trying model: llama-3.3-70b-versatile
-[GroqClient] Model llama-3.3-70b-versatile - Attempt 1/3
-[GroqClient] Successfully parsed response from model llama-3.3-70b-versatile
-[AnalyzerFactory] Calculating Fibonacci - BTC bias: up ETH bias: up
+[GroqClient] Trying model: qwen/qwen3-32b
+[GroqClient] Successfully parsed response from model qwen/qwen3-32b
+[Kim Nghia (SMC + Volume)] RAW AI RESPONSE:
+  "bias": "bearish",
+  "confidence": 0.8,
+[AnalyzerFactory] Calculating Fibonacci - BTC bias: down ETH bias: down
 [Kim Nghia (SMC + Volume)] Analysis complete
-  BTC: hold | bias: neutral | confidence: 30%
-  ETH: hold | bias: neutral | confidence: 30%
-[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Confidence too low (30% < 60%)
+  BTC: sell | bias: bearish | confidence: 80%
+  ETH: sell | bias: bearish | confidence: 75%
+[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Multi-timeframe alignment insufficient (0/2 aligned)
+```
+
+**Another run:**
+```
+[Kim Nghia (SMC + Volume)] RAW AI RESPONSE:
+  "bias": "bearish",
+  "confidence": 0.95,
+[Kim Nghia (SMC + Volume)] Analysis complete
+  BTC: sell | bias: bearish | confidence: 95%
+  ETH: hold | bias: neutral | confidence: 40%
+[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Multi-timeframe alignment insufficient (0/2 aligned)
 ```
 
 **Analysis:**
 - Kim Nghia method is running correctly
-- **Model AI is still llama-3.3-70b-versatile (NOT changed)**
-- Consistently returning neutral bias with 30% confidence
-- Below 60% threshold, so no positions entered
-- Fibonacci calculation working correctly (no errors)
-- OHLC data being fetched and included in user prompt
-
----
-
-## Critical Issues
-
-### Issue 1: Model AI Change NOT Applied (CRITICAL)
-
-**Status:** 🔴 CRITICAL - USER DECISION BLOCKER  
-**Impact:** Model AI change attempted but not reflected in system
-
-**Observed Behavior:**
-- User reported: "đã đổi sang model ai khác nhưng không cải thiện"
-- Logs show: Model AI is still `llama-3.3-70b-versatile`
-- Model order in code: `['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant']`
-- No evidence of model change in logs
-
-**Root Cause Analysis:**
-Possible reasons:
-1. Model change was made in `.env` file (not committed to git)
-2. Model change was made but application not restarted
-3. Model change was made incorrectly (wrong syntax)
-4. Model change was made but fallback to default model
-
-**Impact on Supreme Goal:**
-- **Win Rate:** Cannot be measured (0 positions)
-- **Total PNL:** $0 (no trades)
-- **System Effectiveness:** 0% despite model change attempt
-
-### Issue 2: Kim Nghia Still Returns 30% Confidence (CRITICAL)
-
-**Status:** 🔴 CRITICAL - SUPREME GOAL BLOCKER  
-**Impact:** Zero positions can be opened regardless of signal quality
-
-**Observed Behavior:**
-- Kim Nghia: 30% confidence (threshold: 60%)
-- Consistently returning neutral bias
-- No actionable signals generated
-
-**Root Cause Analysis:**
-Despite:
-- v2.2.9 prompt enhancements
-- OHLC data addition
-- Fibonacci calculation fix
-- Model AI change attempt (not applied)
-
-The AI model is still extremely conservative and returns 30% confidence consistently.
-
-**Impact on Supreme Goal:**
-- **Win Rate:** Cannot be measured (0 positions)
-- **Total PNL:** $0 (no trades)
-- **System Effectiveness:** 0% despite all improvements
+- Model AI changed to qwen/qwen3-32b successfully
+- **Confidence improved significantly:** 80%, 95% (vs 30% before)
+- **Bias changed:** bearish with sell action (vs neutral/hold before)
+- **Confidence fix working:** AI confidence is now respected (not overridden to 30%)
+- Fibonacci calculation working correctly
+- **New issue:** Multi-timeframe alignment check failing (0/2 aligned)
+- No positions entered due to multi-timeframe alignment check
 
 ---
 
@@ -141,90 +114,99 @@ The AI model is still extremely conservative and returns 30% confidence consiste
 - No SQL errors in logs
 
 **Analysis History:**
-- Kim Nghia analyses: Running every 15 minutes (at 7, 22, 37, 52 minutes past hour)
-- ICT analyses: Not running (disabled)
-- Kim Nghia method saving analysis data correctly
-- Database locked when querying (application actively writing)
+- ICT analyses: Running every 15 minutes
+- Kim Nghia analyses: Running at 7, 22, 37, 52 minutes past hour
+- Both methods saving analysis data correctly
 
 ---
 
 ## Technical Assessment
 
-### Successful Changes
-✅ **ICT Method Disabled:** Successfully disabled, no ICT analysis runs  
-✅ **Kim Nghia Method Enabled:** Running correctly, no errors  
-✅ **Fibonacci Calculation:** Working correctly, no errors  
+### Successful Fixes (Latest Commit)
+✅ **Model AI Change:** Successfully changed to qwen/qwen3-32b  
+✅ **Confidence Fix:** AI confidence is now respected (80%, 95% instead of 30%)  
+✅ **Bias Change:** Kim Nghia now returns bearish/sell instead of neutral/hold  
 ✅ **SQL Errors:** No SQL errors observed in logs  
-✅ **OHLC Data:** Successfully added and working  
+✅ **Fibonacci Calculation:** Working correctly  
+✅ **Model AI Working:** qwen/qwen3-32b responding correctly  
 
-### Failed Changes
-❌ **Model AI Change:** NOT applied - still using llama-3.3-70b-versatile  
-❌ **Confidence Improvement:** Still 30% despite model change attempt  
-
----
-
-## Recommendations
-
-### Priority 1 (Critical - Supreme Goal)
-
-**Action Required: Verify Model AI Change**
-
-1. **Check .env File:**
-   - Verify model AI configuration in `.env` file
-   - Check if model name is correctly specified
-   - Ensure no syntax errors
-
-2. **Restart Application:**
-   - After model change, application MUST be restarted
-   - Use `./deploy.sh` or `pm2 restart backend`
-
-3. **Verify Model in Logs:**
-   - Check logs for `[GroqClient] Trying model: <model_name>`
-   - Confirm new model is being used
-
-**Option A: Lower Confidence Thresholds**
-- Kim Nghia: Lower from 60% to 30-40%
-- **Rationale:** AI consistently provides 30% confidence, threshold too high
-- **Impact:** Would allow positions to be opened based on current AI behavior
-- **Risk:** May open lower-quality trades, but better than zero trades
-
-**Option B: Try Different AI Model (Properly)**
-- Current: llama-3.3-70b-versatile (conservative)
-- Alternative: Try more decisive model
-- **Rationale:** Current model may be inherently conservative
-- **Impact:** May generate higher confidence predictions
-- **Risk:** Higher cost, different behavior patterns
-
-**Option C: Accept Current Behavior and Pivot**
-- Accept that current AI model is too conservative for trading
-- Focus on different strategy (manual trading, different method)
-- **Rationale:** If AI won't trade, system won't work
-- **Impact:** Major pivot required
-
-### Priority 2 (Medium - Verification)
-
-1. **Verify Model Change:** Check `.env` file for model AI configuration
-2. **Restart Application:** Ensure application restarted after model change
-3. **Monitor Model in Logs:** Confirm new model is being used
-4. **Test Model Behavior:** Test new model for 30-60 minutes
-5. **Compare Results:** Compare confidence levels between old and new models
+### New Issues
+❌ **Multi-timeframe Alignment Check:** Failing (0/2 aligned) - blocking position entry despite high confidence  
+❌ **ICT Confidence:** Still 40% (below 70% threshold)  
+❌ **No Positions:** Zero positions entered due to multi-timeframe alignment check  
 
 ---
 
-## User Decision Required
+## Detailed Findings
 
-**Critical Decision:** How to handle the model AI change failure?
+### Fix 1: Model AI Change
+**Status:** ✅ SUCCESSFUL
 
-**Options:**
-1. **Verify and fix model AI change** - Check .env, restart, verify in logs
-2. **Lower confidence threshold** (Kim Nghia: 40%) - Immediate action
-3. **Keep current configuration** - Accept zero positions indefinitely
-4. **Disable system temporarily** - Revisit after AI model improvements
+**Evidence:**
+```
+[GroqClient] Trying model: qwen/qwen3-32b
+[GroqClient] Successfully parsed response from model qwen/qwen3-32b
+```
 
-**Recommendation:** 
-1. First, verify model AI change was properly applied (check .env, restart, verify in logs)
-2. If model change still doesn't improve confidence, lower threshold to 40% immediately
-3. Monitor performance for 24-48 hours and adjust further based on actual trading results
+**Result:** Model successfully changed from llama-3.3-70b-versatile to qwen/qwen3-32b
+
+### Fix 2: Confidence Fix
+**Status:** ✅ SUCCESSFUL
+
+**Before Fix:**
+- AI returned 55% confidence
+- System overrode to 30% when SL validation failed
+- Result: neutral/hold with 30%
+
+**After Fix:**
+- AI returns 80-95% confidence
+- System respects AI confidence
+- Result: bearish/sell with 80-95%
+
+**Evidence:**
+```
+[Kim Nghia] RAW AI RESPONSE: "confidence": 0.8
+[Kim Nghia] Analysis complete: BTC: sell | bias: bearish | confidence: 80%
+```
+
+### New Issue: Multi-timeframe Alignment Check
+**Status:** ❌ BLOCKING POSITION ENTRY
+
+**Observed Behavior:**
+```
+[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Multi-timeframe alignment insufficient (0/2 aligned)
+```
+
+**Analysis:**
+- AI confidence: 80-95% (exceeds 60% threshold)
+- AI bias: bearish (decisive direction)
+- AI action: sell (decisive action)
+- **BUT:** Multi-timeframe alignment check failing (0/2 aligned)
+- Result: No position entry despite high confidence
+
+**Impact:**
+- High confidence predictions are being blocked
+- System is not entering positions even when AI is confident
+- Supreme goal (maximize win rate, total PNL+) cannot be achieved
+
+---
+
+## Configuration Review
+
+### Current Configuration
+
+**ICT Method:**
+- minConfidence: 70%
+- minRRRatio: 2.0
+- maxPositionsPerSymbol: 6
+- SL distance: 0.75%
+
+**Kim Nghia Method:**
+- minConfidence: 60%
+- minRRRatio: 2.5
+- maxPositionsPerSymbol: 6
+- SL distance: 0.75%
+- Multi-timeframe alignment: Required (0/2 aligned failing)
 
 ---
 
@@ -236,18 +218,19 @@ The AI model is still extremely conservative and returns 30% confidence consiste
 - [ ] Total PNL: $0
 - [ ] SQL errors: 0 ✅
 - [ ] Fibonacci errors: 0 ✅
-- [ ] Model AI change: ❌ NOT APPLIED
+- [ ] Model AI change: ✅ Successful (qwen/qwen3-32b)
+- [ ] Confidence fix: ✅ Successful (80-95% vs 30%)
+- [ ] Multi-timeframe alignment: ❌ Failing (0/2 aligned)
 
-**After Model Change & Threshold Adjustment (Recommended):**
-- [ ] Model AI changed: ✅ Verified in logs
+**After Multi-timeframe Alignment Fix (if implemented):**
 - [ ] Positions entered: >0
 - [ ] Win rate: >50%
 - [ ] Total PNL: >$0
-- [ ] Average confidence: >40%
+- [ ] Multi-timeframe alignment: ✅ Passing (≥1/2 aligned)
 
 ---
 
 **Report Generated By:** Cascade (AI Assistant)  
-**Report Date:** 2026-04-21 16:00 UTC+7  
+**Report Date:** 2026-04-21 20:50 UTC+7  
 **Supreme Goal:** Maximize Win Rate (Total PNL+)  
-**Next Review:** After user decision on model AI verification
+**Next Review:** After user decision on multi-timeframe alignment check
