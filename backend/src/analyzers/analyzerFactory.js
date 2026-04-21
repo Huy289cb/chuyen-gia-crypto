@@ -501,11 +501,12 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
 
     return {
       bias: bias,
-      action: ['buy', 'sell', 'hold'].includes(coinData?.action) 
-        ? coinData.action 
+      action: ['buy', 'sell', 'hold'].includes(coinData?.action)
+        ? coinData.action
         : 'hold',
       confidence: Math.max(0, Math.min(1, parseFloat(coinData?.confidence) || 0.4)),
       narrative: (coinData?.narrative || 'No narrative provided').substring(0, 350),
+      scoring_detail: coinData?.scoring_detail || null,
       timeframes: {
         '15m': coinData?.timeframes?.['15m'] || 'neutral',
         '1h': coinData?.timeframes?.['1h'] || 'neutral',
@@ -543,6 +544,8 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
         new_tp: validatePriceLevel(coinData.alternative_scenario.new_tp, currentPrice, 'take_profit', bias)
       } : null,
       breakout_retest: coinData?.breakout_retest || null,
+      volume_analysis: coinData?.volume_analysis || null,
+      structure: coinData?.structure || null,
       // Method-specific indicators for chart visualization
       indicators: methodId === 'kim_nghia' ? {
         fibonacci: kimNghiaFibonacci?.[coin] || {
@@ -558,7 +561,7 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
         },
         orderBlocks: coinData?.indicators?.orderBlocks || [],
         fairValueGaps: coinData?.indicators?.fairValueGaps || [],
-        volume: coinData?.indicators?.volume || 'normal'
+        volume: coinData?.indicators?.volume || coinData?.volume_analysis || 'normal'
       } : null
     };
   };
