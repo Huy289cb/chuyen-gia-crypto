@@ -1,98 +1,162 @@
 # Business Logic Feedback Report
 
-**Date:** 2026-04-21  
+**Date:** 2026-04-21 (Updated: 08:20 UTC+7)  
 **Review Focus:** Trading Logic & Position Entry  
 **Methods:** ICT Smart Money, Kim Nghia (SMC + Volume)  
+**Data Source:** Overnight logs (1 night of operation)
+
+---
+
+## Executive Summary
+
+After 1 night of operation:
+- **Total analysis runs:** 77 (37 ICT, 40 Kim Nghia)
+- **Positions entered:** 0
+- **Pending orders:** 0
+- **Root cause:** SQL column mismatch preventing position insertion even when entry criteria are met
 
 ---
 
 ## Critical Issues Identified
 
-### Issue 1: Both Methods Not Entering Any Positions
+### Issue 1: SQL Column Mismatch - CRITICAL BLOCKER
 
-**Status:** 🔴 CRITICAL  
-**Impact:** System has been deployed for extended period but NO positions have been entered
-
-#### ICT Method Analysis
+**Status:** 🔴 CRITICAL (NEW)  
+**Impact:** Positions cannot be saved to database even when entry criteria are met
 
 **Observed Behavior:**
-- Logs: `BTC: buy | bias: bullish | confidence: 85%`
-- Auto-entry decision: `no_trade - Failed to calculate position parameters (invalid risk distance or position too small)`
-- API Response: `suggested_stop_loss: null`
+```
+[Scheduler][ICT Smart Money] Auto-entry decision: enter_short - All criteria met: 85% confidence, 2/2 timeframes aligned, R:R 2.5
+[Scheduler][ICT Smart Money] BTC order: type=market, side=short, entry=75912, current_price=75912, SL=76659, TP=75800
+[Scheduler][ICT Smart Money] Failed to process BTC order: SQLITE_ERROR: 22 values for 23 columns
+```
 
 **Root Cause:**
-AI is NOT providing `suggested_stop_loss` value, causing fallback calculation to fail validation.
+The `positions` table has 30 columns (from migrations), but the INSERT statement in `database.js` only provides 22 columns.
 
-**Code Location:** `backend/src/analyzers/analyzerFactory.js` (formatAnalysisResponse)
+**Table Schema (30 columns):**
+```
+0|id|INTEGER
+1|position_id|TEXT
+2|account_id|INTEGER
+3|symbol|TEXT
+4|side|TEXT
+5|entry_price|REAL
+6|current_price|REAL
+7|stop_loss|REAL
+8|take_profit|REAL
+9|entry_time|DATETIME
+10|status|TEXT
+11|size_usd|REAL
+12|size_qty|REAL
+13|risk_usd|REAL
+14|risk_percent|REAL
+15|expected_rr|REAL
+16|realized_pnl|REAL
+17|unrealized_pnl|REAL
+18|close_price|REAL
+19|close_time|DATETIME
+20|close_reason|TEXT
+21|linked_prediction_id|INTEGER
+22|invalidation_level|REAL
+23|tp1_hit|INTEGER
+24|ict_strategy|TEXT
+25|tp_levels|TEXT
+26|tp_hit_count|INTEGER
+27|partial_closed|REAL
+28|method_id|TEXT
+29|r_multiple|REAL
+```
 
-**Validation Logic:** `backend/src/services/autoEntryLogic.js` lines 388-396
+**INSERT Statement (22 columns):**
 ```javascript
-const minRiskDistance = suggestedEntry * 0.01; // 1% minimum
-if (riskDistance < minRiskDistance) {
-  console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 1% of entry)`);
-  return null;
-}
+// database.js lines 1145-1170
+INSERT INTO positions
+ (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit,
+  entry_time, size_usd, size_qty, risk_usd, risk_percent, expected_rr, linked_prediction_id,
+  invalidation_level, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ```
 
-**Prompt Issue:** ICT prompt (line 70) states:
-```
-- Entry/SL/TP only if confidence≥0.8
-```
+**Missing Columns in INSERT:**
+- `status` (defaults to 'open' in table schema but not provided)
+- `realized_pnl` (defaults to 0 in table schema but not provided)
+- `unrealized_pnl` (defaults to 0 in table schema but not provided)
+- `close_price` (nullable but not provided)
+- `close_time` (nullable but not provided)
+- `close_reason` (nullable but not provided)
+- `tp1_hit` (defaults to 0 in table schema but not provided)
+- `r_multiple` (defaults to 0 in table schema but not provided)
 
-**Problem:** AI may be interpreting this as "don't provide SL/TP if confidence < 0.8", even when confidence is 0.85.
+**Code Location:** `backend/src/db/database.js` lines 1145-1170
 
 **Recommendation:**
-1. Modify ICT prompt to ALWAYS provide Entry/SL/TP when action is buy/sell, regardless of confidence
-2. Add explicit instruction: "suggested_stop_loss and suggested_take_profit MUST be provided (non-zero) when action=buy or action=sell"
-3. Remove confidence threshold from Entry/SL/TP requirement in prompt
+1. Update INSERT statement to include all 30 columns
+2. Provide explicit values for all columns, including defaults
+3. Add missing columns to the VALUES clause:
+   ```javascript
+   INSERT INTO positions
+    (position_id, account_id, symbol, side, entry_price, current_price, stop_loss, take_profit,
+     entry_time, status, size_usd, size_qty, risk_usd, risk_percent, expected_rr, realized_pnl,
+     unrealized_pnl, close_price, close_time, close_reason, linked_prediction_id, invalidation_level,
+     tp1_hit, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id, r_multiple)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'open', ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, ?, ?, ?, 0, ?, ?, ?, 0, ?, 0)
+   ```
 
 ---
 
-#### Kim Nghia Method Analysis
+### Issue 2: ICT Method - Sometimes Meets Entry Criteria But Fails SQL Insert
 
-**Observed Behavior:**
-- Logs: `Stop loss 75500 too close to entry 76200 (distance 700.00 < minimum 762.00), rejecting`
-- Logs: `Auto-entry decision: no_trade - Confidence too low (30% < 60%)`
-- Action: always returning `hold`/`neutral`
+**Status:** 🔴 CRITICAL (Updated with new finding)  
+**Impact:** ICT method occasionally meets entry criteria but cannot save position due to SQL error
 
-**Root Cause 1: SL Distance Too Small**
-- AI provides SL at 75500, Entry at 76200
-- Distance: 700 (0.92% of entry)
-- Minimum required: 1% of entry (762.00)
-- Result: Rejected by validation
-
-**Root Cause 2: Confidence Too Low**
-- AI confidence: 30%
-- Kim Nghia minConfidence: 60% (methods.js line 213)
-- Result: Rejected by confidence threshold
-
-**Code Location:** `backend/src/services/autoEntryLogic.js` lines 172-174
-```javascript
-const confidenceScore = analysis.confidence * 100;
-if (confidenceScore < config.minConfidence) {
-  decision.reason = `Confidence too low (${confidenceScore.toFixed(0)}% < ${config.minConfidence}%)`;
-  return decision;
-}
+**Observed Behavior (07:30:00):**
+```
+[ICT Smart Money] Analysis complete
+  BTC: sell | bias: bearish | confidence: 85%
+  ETH: sell | bias: bearish | confidence: 80%
+[Scheduler][ICT Smart Money] Auto-entry decision: enter_short - All criteria met: 85% confidence, 2/2 timeframes aligned, R:R 2.5
+[Scheduler][ICT Smart Money] BTC order: type=market, side=short, entry=75912, current_price=75912, SL=76659, TP=75800
+[Scheduler][ICT Smart Money] Failed to process BTC order: SQLITE_ERROR: 22 values for 23 columns
 ```
 
-**Prompt Issue:** Kim Nghia prompt (line 209) states:
-```
--- Conflict → HOLD, Entry/SL/TP chỉ nếu confidence≥0.60
-```
+**Root Cause:** See Issue 1 (SQL column mismatch)
 
-**Problem:** AI may be interpreting this as "if confidence < 0.60, return hold with null SL/TP", but it's returning confidence=0.30 which is below threshold.
+**Additional Issues:**
+- AI sometimes provides `suggested_stop_loss: null`, triggering fallback calculation
+- Fallback calculation sometimes fails validation: "Risk distance too small: 762.75 (minimum 762.75, 1% of entry)"
+- SHORT TP validation error: "SHORT take profit 76000 must be below entry 75800 - rejecting trade"
 
 **Recommendation:**
-1. Modify Kim Nghia prompt to be more explicit about when to provide Entry/SL/TP
-2. Add examples showing proper SL distance (≥1% from entry)
-3. Consider reducing minConfidence threshold if AI consistently provides low confidence
-4. Add prompt instruction: "If confidence < 0.60, set action=hold and set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0"
+1. Fix SQL column mismatch (Issue 1) - this is the primary blocker
+2. Modify ICT prompt to ALWAYS provide Entry/SL/TP when action=buy/sell
+3. Fix SHORT TP validation logic (currently rejecting valid trades)
 
 ---
 
-### Issue 2: Fibonacci Calculation Error
+### Issue 3: Kim Nghia Method - Still Not Meeting Entry Criteria
 
-**Status:** 🟡 MEDIUM  
+**Status:** 🔴 CRITICAL (No change)  
+**Impact:** Kim Nghia method consistently fails to meet entry criteria
+
+**Observed Behavior (Overnight):**
+```
+[AnalyzerFactory][kim_nghia] Stop loss 75840.97 too close to entry 76235.17 (distance 394.20 < minimum 762.35), rejecting
+[Kim Nghia (SMC + Volume)] Analysis complete
+  BTC: hold | bias: neutral | confidence: 30%
+  ETH: hold | bias: neutral | confidence: 30%
+[Scheduler][Kim Nghia (SMC + Volume)] Auto-entry decision: no_trade - Confidence too low (30% < 60%)
+```
+
+**Root Cause:** Same as before - SL distance too small and confidence too low
+
+**Recommendation:** Same as before - modify prompt and consider lowering thresholds
+
+---
+
+### Issue 4: Fibonacci Calculation Error (Still Present)
+
+**Status:** 🟡 MEDIUM (No change)  
 **Impact:** Kim Nghia method may not calculate Fibonacci levels correctly
 
 **Observed Error:**
@@ -112,12 +176,32 @@ The `getOHLCCandles` function may be returning undefined or incorrect data struc
 
 ---
 
+### Issue 5: SHORT TP Validation Error
+
+**Status:** 🟡 MEDIUM (NEW)  
+**Impact:** Valid SHORT trades are being rejected
+
+**Observed Error:**
+```
+[AutoEntry] SHORT take profit 76000 must be below entry 75800 - rejecting trade
+```
+
+**Root Cause:**
+The TP validation logic in `autoEntryLogic.js` has a bug - it's rejecting when TP should be valid.
+
+**Code Location:** `backend/src/services/autoEntryLogic.js` lines 375-378
+
+**Recommendation:**
+Review and fix the SHORT TP validation logic to ensure it correctly validates TP placement.
+
+---
+
 ## Configuration Issues
 
-### Issue 3: Confidence Thresholds Too High
+### Issue 6: Confidence Thresholds
 
 **Status:** 🟡 MEDIUM  
-**Impact:** Both methods may be too conservative
+**Impact:** Kim Nghia method may not calculate Fibonacci levels correctly
 
 **Current Thresholds:**
 - ICT minConfidence: 70% (methods.js line 78)
@@ -134,7 +218,7 @@ The `getOHLCCandles` function may be returning undefined or incorrect data struc
 
 ---
 
-### Issue 4: Risk Distance Validation
+### Issue 7: Risk Distance Validation
 
 **Status:** 🟡 MEDIUM  
 **Impact:** May be rejecting valid trades
@@ -176,7 +260,16 @@ The `getOHLCCandles` function may be returning undefined or incorrect data struc
 
 ## Code Improvements Needed
 
-### 1. Better Error Handling in analyzerFactory.js
+### 1. Fix SQL INSERT Statement (CRITICAL)
+
+**Location:** `backend/src/db/database.js` lines 1145-1170
+
+**Current Issue:** INSERT statement missing 8 columns
+
+**Recommendation:**
+Update INSERT to include all 30 columns as shown in Issue 1.
+
+### 2. Better Error Handling in analyzerFactory.js
 
 **Location:** Lines 276-289
 
@@ -195,7 +288,16 @@ if (btcOhlc && btcOhlc.length > 0) {
 }
 ```
 
-### 2. Debug Logging for SL/TP Calculation
+### 3. Fix SHORT TP Validation
+
+**Location:** `backend/src/services/autoEntryLogic.js` lines 375-378
+
+**Current Issue:** Rejecting valid SHORT trades
+
+**Recommendation:**
+Review and fix the TP validation logic for SHORT positions.
+
+### 4. Debug Logging for SL/TP Calculation
 
 **Location:** `backend/src/services/autoEntryLogic.js` lines 334-345
 
@@ -208,30 +310,27 @@ Add detailed debug logging showing:
 - Validation results
 - Why position was rejected
 
-### 3. Confidence Threshold Configuration
-
-**Location:** `backend/src/config/methods.js` lines 78, 213
-
-**Recommendation:**
-Make confidence thresholds more configurable or lower them based on actual AI performance data.
-
 ---
 
 ## Testing Recommendations
 
-1. **Test AI Response Structure:**
+1. **Test SQL INSERT:**
+   - Verify INSERT statement matches table schema
+   - Test position creation with all 30 columns
+
+2. **Test AI Response Structure:**
    - Verify AI is providing non-zero Entry/SL/TP when action=buy/sell
    - Check if confidence thresholds are realistic
 
-2. **Test SL/TP Validation:**
+3. **Test SL/TP Validation:**
    - Verify 1% minimum distance is appropriate
    - Test with various entry prices to ensure validation works correctly
 
-3. **Test Fibonacci Calculation:**
+4. **Test Fibonacci Calculation:**
    - Verify getOHLCCandles returns correct data structure
    - Test with real data to ensure Fibonacci calculation works
 
-4. **Monitor AI Behavior:**
+5. **Monitor AI Behavior:**
    - Log AI confidence scores over time
    - Track how often AI provides valid Entry/SL/TP
    - Identify patterns in when AI fails to provide required fields
@@ -240,24 +339,25 @@ Make confidence thresholds more configurable or lower them based on actual AI pe
 
 ## Immediate Action Items
 
-**Priority 1 (Critical):**
-1. Modify ICT prompt to ALWAYS provide Entry/SL/TP when action=buy/sell
-2. Modify Kim Nghia prompt to ALWAYS provide Entry/SL/TP when action=buy/sell
-3. Add explicit examples in prompts showing proper SL distance (≥1%)
-4. Test prompt changes with AI to verify compliance
+**Priority 1 (Critical - Blocker):**
+1. **FIX SQL COLUMN MISMATCH** - Update INSERT statement in database.js to include all 30 columns
+2. Test position creation after SQL fix
+3. Verify positions can be saved to database
 
 **Priority 2 (High):**
-1. Fix Fibonacci calculation error handling
-2. Add debug logging for SL/TP calculation
-3. Consider reducing confidence thresholds based on AI performance
+1. Modify ICT prompt to ALWAYS provide Entry/SL/TP when action=buy/sell
+2. Modify Kim Nghia prompt to ALWAYS provide Entry/SL/TP when action=buy/sell
+3. Fix SHORT TP validation logic
+4. Fix Fibonacci calculation error handling
 
 **Priority 3 (Medium):**
-1. Review and adjust risk distance validation (1% minimum)
-2. Monitor AI confidence distribution
-3. Implement better error handling throughout
+1. Add debug logging for SL/TP calculation
+2. Consider reducing confidence thresholds based on AI performance
+3. Review and adjust risk distance validation (1% minimum)
+4. Monitor AI confidence distribution
 
 ---
 
 **Report Generated By:** Cascade (AI Assistant)  
-**Report Date:** 2026-04-21 01:00 UTC+7  
-**Next Review:** After prompt changes are implemented
+**Report Date:** 2026-04-21 08:20 UTC+7  
+**Next Review:** After SQL fix is implemented
