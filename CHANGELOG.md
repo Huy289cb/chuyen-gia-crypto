@@ -2,6 +2,31 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.5 - AI Prompt Optimization & Debug Logging
+
+### AI Prompt Improvements
+
+**Issue 1: Kim Nghia Method Always Returns Neutral**
+- **Problem**: Kim Nghia method consistently returns neutral bias with 30% confidence, preventing any position entries
+- **Fix**: Optimized Kim Nghia prompt to be more decisive instead of overly cautious
+  - Added instruction: "Hãy PHÂN TÍCH QUYẾT ĐOÁN hơn là thận trọng"
+  - Lowered HOLD threshold from 60% to 40% confidence
+  - Encouraged BUY/SELL actions even with 40-50% confidence if signals are clear
+  - Added explicit guidelines for when to use HOLD (no clear signals, sideways market, severe conflict)
+- **Impact**: AI should now provide more actionable signals instead of defaulting to neutral
+- **Files**: `backend/src/config/methods.js`
+
+### Debug Logging
+
+**Issue 2: ICT Method with >80% Confidence Not Opening Positions**
+- **Problem**: ICT predictions with >80% confidence are not opening positions, root cause unclear
+- **Fix**: Added comprehensive debug logging to auto-entry logic
+  - Logs all 8 auto-entry checks with PASSED/FAILED status
+  - Logs confidence scores, timeframe alignment details, AI action, R:R ratio
+  - Will help diagnose which check is failing (bias, timeframe alignment, action, etc.)
+- **Impact**: Can now identify why high-confidence predictions aren't resulting in positions
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
 ## [21/04/2026] - v2.2.4 - Configuration Improvements
 
 ### Configuration Changes
