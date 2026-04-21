@@ -78,7 +78,8 @@ export async function validateAllSchemas(db) {
         'stop_loss', 'take_profit', 'entry_time', 'status', 'size_usd', 'size_qty',
         'risk_usd', 'risk_percent', 'expected_rr', 'realized_pnl', 'unrealized_pnl',
         'close_price', 'close_time', 'close_reason', 'linked_prediction_id',
-        'invalidation_level', 'tp1_hit'
+        'invalidation_level', 'tp1_hit', 'ict_strategy', 'tp_levels', 'tp_hit_count',
+        'partial_closed', 'method_id', 'r_multiple'
       ]
     },
     {
