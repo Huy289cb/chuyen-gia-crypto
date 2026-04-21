@@ -2,7 +2,7 @@
 // Handles API calls with retry logic and error handling
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODELS = ['llama-3.1-8b-instant', 'llama-4-scout-17b-16e-instruct'];
+const MODELS = ['llama-4-scout-17b-16e-instruct', 'llama-3.1-8b-instant'];
 
 // Rate limiting protection
 let lastCallTime = 0;
