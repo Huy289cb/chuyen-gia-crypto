@@ -407,10 +407,10 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
         return null;
       }
       
-      // Additional validation: ensure stop loss is at least 1% away from entry
+      // Additional validation: ensure stop loss is at least 0.75% away from entry
       if (type === 'stop_loss' && suggestedEntry) {
         const distance = Math.abs(p - suggestedEntry);
-        const minDistance = suggestedEntry * 0.01; // 1% minimum
+        const minDistance = suggestedEntry * 0.0075; // 0.75% minimum (matches prompt)
         if (distance < minDistance) {
           console.log(`[AnalyzerFactory][${methodId}] Stop loss ${p} too close to entry ${suggestedEntry} (distance ${distance.toFixed(2)} < minimum ${minDistance.toFixed(2)}), rejecting`);
           return null;
