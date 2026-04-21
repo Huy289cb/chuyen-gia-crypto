@@ -93,7 +93,7 @@ QUY TẮC EXIT:
 
 QUY TẮC CỨNG (HỆ THỐNG SẼ REJECT NẾU SAI):
 - LONG: SL < Entry < TP. SHORT: SL > Entry > TP.
-- SL >= 0.75% từ Entry để tránh nhiễu (noise). 
+- SL >= 0.5% từ Entry để tránh nhiễu (noise). 
 - Expected RR >= 2.5.
 - Giá trị số (Entry, SL, TP) lấy 2 chữ số thập phân, KHÔNG làm tròn số chẵn.
 
