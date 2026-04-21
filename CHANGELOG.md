@@ -58,8 +58,12 @@ All notable changes to the project will be documented in this file.
 
 **Issue 5: Model Priority**
 - **Problem**: Default model order prioritized llama-3.1-8b-instant
-- **Fix**: Swapped model order to prioritize llama-4-scout-17b-16e-instruct
-- **Impact**: Better model for analysis tasks is tried first
+- **Initial Fix Attempt**: Swapped to prioritize llama-4-scout-17b-16e-instruct (failed - model not found)
+- **Final Fix**: Updated to use 70b models for better analysis capabilities
+  - Primary: llama-3.3-70b-versatile
+  - Secondary: llama-3.1-70b-versatile
+  - Fallback: llama-3.1-8b-instant
+- **Impact**: 70b models better for complex analysis tasks like SMC + Volume + Fibonacci
 - **Files**: `backend/src/groq-client.js`
 
 ## [21/04/2026] - v2.2.8 - SL Distance Adjustment

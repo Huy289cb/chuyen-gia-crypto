@@ -109,8 +109,8 @@ Hệ thống sử dụng phương pháp phân tích **Inner Circle Trader (ICT)*
 - **CORS**: Whitelist-based configuration via ALLOWED_ORIGINS
 
 ### ICT Analysis Engine (Groq API)
-- **Model**: llama-3.1-8b-instant (free tier, fast)
-- **Input**: Current price + multi-timeframe price history
+- **Model**: llama-3.3-70b-versatile (primary), llama-3.1-70b-versatile (secondary), llama-3.1-8b-instant (fallback)
+- **Input**: Current price + multi-timeframe price history + OHLC candle data (for Kim Nghia method)
 - **Output**: Structured JSON với (all text in Vietnamese):
   ```json
   {

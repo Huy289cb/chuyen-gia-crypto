@@ -124,7 +124,7 @@ Check 4 FAILED: Confidence too low (30% < 60%)
 ```
 
 **Root Cause Analysis:**
-- AI model (llama-3.1-8b-instant) may be inherently conservative
+- AI model (llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant fallback) may be inherently conservative
 - Prompt optimization may not overcome model's tendency to be cautious
 - Kim Nghia method may not be suitable for current AI model
 - Market conditions may not align with Kim Nghia strategy
