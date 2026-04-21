@@ -165,7 +165,7 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   console.log(`[AutoEntry] Check 3 PASSED: Open positions ${openPositions.length}/${config.maxPositionsPerSymbol}`);
 
   // Check 4: Confidence threshold
-  const confidenceScore = analysis.confidence * 100;
+  const confidenceScore = (analysis.confidence || 0) * 100;
   console.log(`[AutoEntry] Check 4: Confidence ${confidenceScore.toFixed(0)}% vs threshold ${config.minConfidence}%`);
   if (confidenceScore < config.minConfidence) {
     console.log(`[AutoEntry] Check 4 FAILED: Confidence too low (${confidenceScore.toFixed(0)}% < ${config.minConfidence}%)`);
@@ -347,11 +347,19 @@ function checkTimeframeAlignment(analysis, requiredTimeframes) {
  */
 function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFIG) {
   const currentPrice = analysis.current_price || 0;
+  if (!currentPrice || currentPrice <= 0) {
+    console.error('[AutoEntry] Invalid current price:', currentPrice);
+    return null;
+  }
   const bias = analysis.bias;
   const riskAmount = account.current_balance * config.riskPerTrade;
 
   // Require AI-provided entry, SL, TP - with fallback calculation
   const suggestedEntry = analysis.suggested_entry || currentPrice;
+  if (!suggestedEntry || suggestedEntry <= 0) {
+    console.error('[AutoEntry] Invalid suggested entry:', suggestedEntry);
+    return null;
+  }
   let suggestedSL = analysis.suggested_stop_loss;
   let suggestedTP = analysis.suggested_take_profit;
 
