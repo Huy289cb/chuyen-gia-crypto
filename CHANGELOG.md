@@ -2,6 +2,20 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.6 - Prompt Documentation Update
+
+### Documentation Updates
+
+**Rule: No Specific Price Values in AI Prompts**
+- **Problem**: Including specific price examples (e.g., 74835.52, 74800) in prompts can confuse the AI and cause it to misunderstand instructions
+- **Fix**: 
+  - Removed specific price examples from ICT prompt
+  - Removed specific price examples from Kim Nghia prompt
+  - Added documentation comment in methods.js explaining the rule
+  - Changed to use generic examples with "e.g." notation
+- **Impact**: AI will no longer be confused by specific price values in examples
+- **Files**: `backend/src/config/methods.js`
+
 ## [21/04/2026] - v2.2.5 - AI Prompt Optimization & Debug Logging
 
 ### AI Prompt Improvements
