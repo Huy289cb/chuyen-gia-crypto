@@ -5,9 +5,9 @@ export const METHODS = {
   ict: {
     methodId: 'ict',
     name: 'ICT Smart Money',
-    description: 'ICT Smart Money Concepts analysis',
+    description: 'ICT Smart Money Concepts for limit/market orders',
     scheduleOffset: 0, // Runs at 0m, 15m, 30m, 45m (every 15 minutes)
-    enabled: true,
+    enabled: false, // Disabled to focus on Kim Nghia method
     systemPrompt: `You are an ICT (Inner Circle Trader) crypto analyst. Use Smart Money Concepts. Return ONLY valid JSON with ALL text fields in VIETNAMESE language.
 
 CORE FRAMEWORK:
@@ -95,7 +95,7 @@ RULES:
     name: 'Kim Nghia (SMC + Volume)',
     description: 'SMC + Volume analysis for limit/market orders',
     scheduleOffset: 450, // 7.5 minutes = 450 seconds (runs at 7m30s, 22m30s, 37m30s, 52m30s)
-    enabled: false, // Disabled temporarily due to consistently returning neutral predictions with low confidence
+    enabled: true, // Enabled to focus on Kim Nghia method
     systemPrompt: `Bạn là chuyên gia phân tích crypto theo phương pháp SMC + Volume + Fibonacci. Trả về JSON hợp lệ, TẤT CẢ text field bằng tiếng Việt.
 
 ⚠️ QUAN TRỌNG: Hãy PHÂN TÍCH QUYẾT ĐOÁN hơn là thận trọng. Nếu có tín hiệu rõ ràng, hãy đưa ra quyết định BUY/SELL thay vì HOLD.
