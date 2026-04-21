@@ -115,7 +115,8 @@ function isWithinAllowedSessions(config = AUTO_ENTRY_CONFIG) {
  */
 export async function evaluateAutoEntry(analysis, account, openPositions = [], methodConfig = null, db = null) {
   // Use method-specific config if provided, otherwise use default
-  const config = methodConfig || AUTO_ENTRY_CONFIG;
+  // methodConfig can be either the full method object or just autoEntry config
+  const config = methodConfig?.autoEntry || methodConfig || AUTO_ENTRY_CONFIG;
   
   const decision = {
     shouldEnter: false,
