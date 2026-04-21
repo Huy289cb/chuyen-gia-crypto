@@ -95,10 +95,26 @@ export async function validateAllSchemas(db) {
     {
       table: 'accounts',
       columns: [
-        'symbol', 'method_id', 'starting_balance', 'current_balance', 'equity',
-        'unrealized_pnl', 'realized_pnl', 'total_trades', 'winning_trades',
-        'losing_trades', 'max_drawdown', 'consecutive_losses', 'last_trade_time',
-        'cooldown_until', 'created_at', 'updated_at'
+        'symbol', 'method_id', 'starting_balance', 'current_balance', 'equity'
+      ]
+    },
+    {
+      table: 'analysis_history',
+      columns: [
+        'coin', 'current_price', 'bias', 'action', 'confidence', 'narrative',
+        'comparison', 'market_sentiment', 'disclaimer', 'method_id',
+        'breakout_retest', 'position_decisions', 'alternative_scenario',
+        'suggested_entry', 'suggested_stop_loss', 'suggested_take_profit',
+        'expected_rr', 'invalidation_level'
+      ]
+    },
+    {
+      table: 'predictions',
+      columns: [
+        'analysis_id', 'coin', 'timeframe', 'direction', 'target_price',
+        'confidence', 'predicted_at', 'expires_at', 'suggested_entry',
+        'suggested_stop_loss', 'suggested_take_profit', 'expected_rr',
+        'invalidation_level', 'reason_summary', 'model_version', 'method_id'
       ]
     }
   ];
