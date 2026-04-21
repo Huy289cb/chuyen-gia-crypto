@@ -2,6 +2,49 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.4.1 - Database Schema Validation & Column Mismatch Fixes
+
+### Database Fixes
+
+**Issue 1: Positions INSERT Statement Column Mismatch**
+- **Problem**: SQLITE_ERROR: 22 values for 23 columns when inserting position
+- **Root cause**: INSERT statement included 29 columns but table schema has only 23 columns
+  - Table schema: 23 columns from initial CREATE TABLE
+  - INSERT statement: included 6 extra columns from ALTER TABLE migrations (ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id, r_multiple)
+- **Fix**: Remove extra columns from INSERT statement to match actual table schema
+- **Impact**: Positions can now be saved to database without column mismatch error
+- **Files**: `backend/src/db/database.js`
+
+**Issue 2: Pending Orders INSERT Statement Missing Column**
+- **Problem**: Column mismatch in pending_orders INSERT statement
+- **Root cause**: INSERT statement was missing created_at column (exists in table schema)
+- **Fix**: Add created_at column to INSERT statement with datetime('now')
+- **Impact**: Pending orders can now be saved to database without column mismatch error
+- **Files**: `backend/src/db/database.js`
+
+### New Features
+
+**Issue 3: Schema Validation to Prevent Future Column Mismatches**
+- **Problem**: Column mismatch errors occur at runtime, causing deployment failures
+- **Solution**: Created schemaValidator.js with validation functions
+  - getTableSchema(): Retrieves actual table schema from database
+  - validateInsertSchema(): Compares INSERT columns with table schema
+  - validateAllSchemas(): Validates critical tables (positions, pending_orders, accounts)
+  - runSchemaValidationOnStartup(): Runs validation on startup with non-blocking error handling
+- **Integration**:
+  - Added to init.js: Runs after migrations during database initialization
+  - Added to index.js: Runs after account initialization on application startup
+- **Impact**: Column mismatches detected early with detailed error logging, preventing runtime errors
+- **Files**: `backend/src/db/schemaValidator.js` (new), `backend/src/db/init.js`, `backend/src/index.js`
+
+### Documentation
+
+**Issue 4: Update Documentation**
+- **Problem**: No documentation on how to fix schema mismatches
+- **Fix**: Added documentation for schema validation feature
+- **Impact**: Developers can now understand and fix schema mismatches quickly
+- **Files**: `CHANGELOG.md`
+
 ## [21/04/2026] - v2.4.0 - Kim Nghia Auto-Entry Fixes & JSON Parsing Improvements
 
 ### Bug Fixes
