@@ -2,6 +2,30 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.8 - SL Distance Adjustment
+
+### Configuration Changes
+
+**Issue: SL Distance Minimum Adjustment**
+- **Problem**: 0.25% SL distance was too close to entry, not standard for risk management
+- **User Decision**: Increase to 0.75% for better risk management
+- **Fix**: Increased minimum SL distance from 0.25% to 0.75%
+  - Updated autoEntryLogic.js: minRiskDistance from 0.0025 to 0.0075
+  - Updated ICT prompt: SL≥0.25% to SL≥0.75% from entry
+  - Updated Kim Nghia prompt: SL≥0.25% to SL≥0.75% entry
+- **Impact**: More conservative risk management, reduces chance of being stopped out by market noise
+- **Files**: `backend/src/services/autoEntryLogic.js`, `backend/src/config/methods.js`
+
+### Method Switch
+
+**Issue: Method Priority Change**
+- **Problem**: User requested to disable ICT and focus on Kim Nghia method
+- **Fix**: 
+  - Disabled ICT method (enabled: false)
+  - Enabled Kim Nghia method (enabled: true)
+- **Impact**: System will now only run Kim Nghia analysis
+- **Files**: `backend/src/config/methods.js`
+
 ## [21/04/2026] - v2.2.7 - Critical Feedback Fixes
 
 ### Bug Fixes
