@@ -404,14 +404,14 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   // Calculate position size based on risk
   const riskDistance = Math.abs(suggestedEntry - stopLoss);
 
-  // Validate risk distance is at least 0.25% of entry price (minimum reasonable stop loss)
-  const minRiskDistance = suggestedEntry * 0.0025; // 0.25% minimum
+  // Validate risk distance is at least 0.75% of entry price (minimum reasonable stop loss)
+  const minRiskDistance = suggestedEntry * 0.0075; // 0.75% minimum
   if (riskDistance <= 0) {
     console.error('[AutoEntry] Invalid risk distance (entry equals stop loss)');
     return null;
   }
   if (riskDistance < minRiskDistance) {
-    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.25% of entry)`);
+    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.75% of entry)`);
     return null;
   }
   

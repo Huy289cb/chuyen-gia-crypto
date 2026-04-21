@@ -70,7 +70,7 @@ RULES:
 - Set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0 ONLY when action=hold
 - Vietnamese, build narrative first, conflict→HOLD
 - ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
-- SL≥0.25% from entry, TP≥2% from entry
+- SL≥0.75% from entry, TP≥2% from entry
 - Market structure levels only, NOT fixed prices
 - SL/TP: 2 decimal places (e.g., 74835.52), NO even rounding (e.g., 74800)
 - expected_rr≥2.0, confidence 2 decimals (e.g., 0.75)
@@ -213,7 +213,7 @@ RULES:
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
 - Entry: Fibonacci Retracement hoặc SMC zone hoặc vùng thanh khoản
 -- indicators: OB high/low/timestamp, FVG start/end time/price
---- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥0.25% entry, TP≥2% entry
+--- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥0.75% entry, TP≥2% entry
 -- SL/TP: 2 decimal places, KHÔNG chẵn
 -- confidence: 2 decimals, KHÔNG chẵn
 -- Conflict → HOLD, nếu confidence < 0.50 thì set action=hold và tất cả Entry/SL/TP=0
