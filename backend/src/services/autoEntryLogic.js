@@ -5,7 +5,7 @@ const AUTO_ENTRY_CONFIG = {
   minConfidence: 70,           // Minimum confidence score (0-100) - Updated 18/04/2026
   minRRRatio: 2.0,             // Minimum risk/reward ratio
   riskPerTrade: 0.01,          // 1% of account balance
-  maxPositionsPerSymbol: 9,    // Max concurrent positions per symbol (BTC only) - Updated 20/04/2026
+  maxPositionsPerSymbol: 6,    // Max concurrent positions per symbol - Updated 21/04/2026
   maxConsecutiveLosses: 8,     // Trigger cooldown
   cooldownHours: 4,            // Cooldown duration in hours
   requiredTimeframes: ['1h', '4h'],  // Check these for alignment - Updated 17/04/2026 (1h primary)
