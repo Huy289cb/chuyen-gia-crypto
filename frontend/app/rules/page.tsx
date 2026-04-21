@@ -82,8 +82,8 @@ const translations = {
       },
       positionLimit: {
         title: '7. Giới Hạn Vị Thế',
-        description: 'Tối đa 8 vị thế BTC đồng thởi',
-        details: 'MAX_POSITIONS_PER_SYMBOL: 8 - Từ chối vị thế mới nếu đạt giới hạn'
+        description: 'Tối đa 6 vị thế đồng thởi mỗi ký hiệu',
+        details: 'MAX_POSITIONS_PER_SYMBOL: 6 - Từ chối vị thế mới nếu đạt giới hạn'
       },
       tradingSessions: {
         title: '8. Phiên Giao Dịch',
@@ -215,7 +215,7 @@ const translations = {
       riskPerTrade: '10%',
       minConfidence: '70%',
       minRR: '2.0',
-      maxPositions: '9 BTC',
+      maxPositions: '6 mỗi ký hiệu',
       enabledSymbols: 'Chỉ BTC',
       timeframes: '1h chính, 4h phụ'
     },
@@ -299,8 +299,8 @@ const translations = {
       },
       positionLimit: {
         title: '7. Position Limit',
-        description: 'Maximum 8 concurrent BTC positions',
-        details: 'MAX_POSITIONS_PER_SYMBOL: 8 - New positions rejected if limit reached'
+        description: 'Maximum 6 concurrent positions per symbol',
+        details: 'MAX_POSITIONS_PER_SYMBOL: 6 - New positions rejected if limit reached'
       },
       tradingSessions: {
         title: '8. Trading Sessions',
@@ -432,7 +432,7 @@ const translations = {
       riskPerTrade: '10%',
       minConfidence: '70%',
       minRR: '2.0',
-      maxPositions: '9 BTC',
+      maxPositions: '6 per symbol',
       enabledSymbols: 'BTC only',
       timeframes: '1h primary, 4h secondary'
     },
@@ -478,14 +478,14 @@ function RulesPageContentWrapper({ method }: { method: Method }) {
   const methodConfig = method === 'ict' ? {
     minConfidence: '70%',
     minRR: '2.0',
-    maxPositions: '9 BTC',
+    maxPositions: '6 mỗi ký hiệu',
     timeframes: '1h primary, 4h secondary',
     schedule: '0m, 15m, 30m, 45m',
     riskPerTrade: '10%'
   } : {
     minConfidence: '60%',
     minRR: '2.5',
-    maxPositions: '9 BTC',
+    maxPositions: '6 mỗi ký hiệu',
     timeframes: 'H4 primary, H1 secondary',
     schedule: '7m30s, 22m30s, 37m30s, 52m30s',
     riskPerTrade: '10%'

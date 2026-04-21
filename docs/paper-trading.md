@@ -52,7 +52,7 @@ The Crypto Trend Analyzer includes a comprehensive paper trading system for simu
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
 - **Account Management**: 100U BTC account (ETH trading temporarily disabled)
 - **Cooldown System**: 4-hour cooldown after 3 consecutive losses
-- **Position Limits**: Maximum 9 concurrent BTC positions
+- **Position Limits**: Maximum 6 concurrent positions per symbol
 - **Trade History Pagination**: Paginated viewing of trade history (10 trades per page)
 - **Limit Order Management**: Automatic execution when price hits entry, manual cancellation available
 
@@ -86,7 +86,7 @@ A position is suggested when ALL of the following conditions are met:
 4. **Multi-Timeframe Alignment**: Majority of 1h and 4h timeframes must align with bias (1h primary)
 5. **Risk/Reward >= 2.0**: Expected R:R ratio must be at least 1:2
 6. **No Cooldown**: Account must not be in cooldown period
-7. **Position Limit**: Less than 9 concurrent BTC positions open
+7. **Position Limit**: Less than 6 concurrent positions per symbol open
 
 ## Order Types
 
@@ -336,8 +336,8 @@ Positions can have the following statuses:
 - **Frontend**: ETH trading information hidden, price charts and predictions preserved
 
 #### 2. Position Management
-- **Position Limit**: Maximum 9 concurrent BTC positions (increased from 5)
-- **Entry Logic**: Each new prediction (>80% confidence) can open 1 position if total <9
+- **Position Limit**: Maximum 6 concurrent positions per symbol
+- **Entry Logic**: Each new prediction (>80% confidence) can open 1 position if total <6
 - **Validation**: Symbol enablement check at entry level
 - **Timeframe Priority**: 1h primary, 4h secondary (changed from 4h+1d)
 
@@ -370,7 +370,7 @@ Positions can have the following statuses:
 
 ### Expected Outcomes
 - **ETH Losses**: Eliminated to zero
-- **Position Management**: Better risk control with 9-position limit and 1h timeframe focus
+- **Position Management**: Better risk control with 6-position limit per symbol and 1h timeframe focus
 - **Early Loss Cutting**: Reduced losses through AI-driven position analysis and prediction reversal
 - **Limit Order Intelligence**: AI-powered limit order management to keep only valid setups
 - **Focus**: Improved BTC trading skills before multi-symbol expansion
@@ -606,8 +606,8 @@ TRAIL_DISTANCE_PCT=0.5
    - **Impact**: Limit orders now execute correctly even after server restart
 
 2. **Manual Position Limit Consistency**
-   - **Issue**: Manual opening rejected if ANY position existed, but auto-entry allows up to 9
-   - **Fix**: Manual opening now respects `maxPositionsPerSymbol` limit (9 positions)
+   - **Issue**: Manual opening rejected if ANY position existed, but auto-entry allows up to 6
+   - **Fix**: Manual opening now respects `maxPositionsPerSymbol` limit (6 positions per symbol)
    - **Impact**: Consistent position limits across manual and auto-entry
 
 3. **Minimum Risk Distance Validation**
@@ -629,7 +629,7 @@ TRAIL_DISTANCE_PCT=0.5
 
 All position openings (manual and auto) now enforce:
 - **Minimum risk distance**: 1% of entry price (updated from 0.5% on 20/04/2026) (e.g., $750 minimum on $75k entry)
-- **Maximum positions**: 9 concurrent positions per symbol
+- **Maximum positions**: 6 concurrent positions per symbol
 - **Price range validation**: Entry within 10% of current price for limit orders
 - **Direction alignment**: Entry price must align with trade direction
 - **Minimum confidence**: 70% threshold for auto-entry (updated from 80% on 18/04/2026)

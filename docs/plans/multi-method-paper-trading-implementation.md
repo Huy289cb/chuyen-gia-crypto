@@ -361,7 +361,7 @@ export const METHODS = {
       minConfidence: 70,
       minRRRatio: 2.0,
       riskPerTrade: 0.10,
-      maxPositionsPerSymbol: 9,
+      maxPositionsPerSymbol: 6,
       // ... other settings
     }
   },
@@ -371,7 +371,7 @@ export const METHODS = {
       minConfidence: 60, // Different threshold
       minRRRatio: 2.5, // Different R:R
       riskPerTrade: 0.10, // 10% risk per trade
-      maxPositionsPerSymbol: 9,
+      maxPositionsPerSymbol: 6,
       // ... other settings
     }
   }
