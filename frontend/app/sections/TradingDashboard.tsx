@@ -86,8 +86,8 @@ export function TradingDashboard({ accounts, loading, onReset, method = 'ict' }:
         {/* Position Limit */}
         <StatCard
           title="Max Positions"
-          value="8"
-          subtitle="BTC concurrent limit"
+          value="6"
+          subtitle="Per symbol concurrent limit"
           subtitleColor="text-foreground-tertiary"
           icon={<DollarSign className="w-4 h-4 text-info" />}
         />
