@@ -142,63 +142,85 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
 
   // Check 0: Symbol enablement (ETH trading disabled)
   if (!config.enabledSymbols.includes(symbol)) {
+    console.log(`[AutoEntry] Check 0 FAILED: Trading disabled for ${symbol}. Only ${config.enabledSymbols.join(', ')} enabled`);
     decision.reason = `Trading disabled for ${symbol}. Only ${config.enabledSymbols.join(', ')} enabled`;
     return decision;
   }
+  console.log(`[AutoEntry] Check 0 PASSED: Symbol ${symbol} enabled`);
 
   // Check 1: Account cooldown
   if (account.cooldown_until) {
     const cooldownEnd = new Date(account.cooldown_until);
     if (new Date() < cooldownEnd) {
+      console.log(`[AutoEntry] Check 1 FAILED: Account in cooldown until ${formatVietnamTime(cooldownEnd)} (after ${account.consecutive_losses} consecutive losses)`);
       decision.reason = `Account in cooldown until ${formatVietnamTime(cooldownEnd)} (after ${account.consecutive_losses} consecutive losses)`;
       return decision;
     }
   }
+  console.log(`[AutoEntry] Check 1 PASSED: No account cooldown`);
 
   // Check 2: Trading session timing
   if (!isWithinAllowedSessions(config)) {
+    console.log(`[AutoEntry] Check 2 FAILED: Outside allowed trading sessions`);
     decision.reason = 'Outside allowed trading sessions';
     return decision;
   }
+  console.log(`[AutoEntry] Check 2 PASSED: Within allowed trading sessions`);
 
   // Check 3: Max positions per symbol
   if (openPositions.length >= config.maxPositionsPerSymbol) {
+    console.log(`[AutoEntry] Check 3 FAILED: Maximum positions (${config.maxPositionsPerSymbol}) already open for ${symbol}`);
     decision.reason = `Maximum positions (${config.maxPositionsPerSymbol}) already open for ${symbol}`;
     return decision;
   }
+  console.log(`[AutoEntry] Check 3 PASSED: Open positions ${openPositions.length}/${config.maxPositionsPerSymbol}`);
 
   // Check 4: Confidence threshold
   const confidenceScore = analysis.confidence * 100;
+  console.log(`[AutoEntry] Check 4: Confidence ${confidenceScore.toFixed(0)}% vs threshold ${config.minConfidence}%`);
   if (confidenceScore < config.minConfidence) {
+    console.log(`[AutoEntry] Check 4 FAILED: Confidence too low (${confidenceScore.toFixed(0)}% < ${config.minConfidence}%)`);
     decision.reason = `Confidence too low (${confidenceScore.toFixed(0)}% < ${config.minConfidence}%)`;
     return decision;
   }
+  console.log(`[AutoEntry] Check 4 PASSED: Confidence ${confidenceScore.toFixed(0)}% >= ${config.minConfidence}%`);
 
   // Check 5: Bias must be bullish or bearish
   if (!['bullish', 'bearish'].includes(analysis.bias)) {
+    console.log(`[AutoEntry] Check 5 FAILED: Bias is neutral (${analysis.bias}), no clear direction`);
     decision.reason = `Bias is neutral, no clear direction`;
     return decision;
   }
+  console.log(`[AutoEntry] Check 5 PASSED: Bias is ${analysis.bias}`);
 
   // Check 6: Multi-timeframe alignment (4h and 1d only for ICT, H4 and H1 for KimNghia)
   const alignment = checkTimeframeAlignment(analysis, config.requiredTimeframes);
+  console.log(`[AutoEntry] Check 6: Timeframe alignment - Required: ${config.requiredTimeframes.join(', ')}, Aligned: ${alignment.alignedCount}/${config.requiredTimeframes.length}, Details:`, alignment.details);
   if (alignment.alignedCount < config.requiredTimeframes.length * config.minAlignment) {
     decision.reason = `Multi-timeframe alignment insufficient (${alignment.alignedCount}/${config.requiredTimeframes.length} aligned)`;
+    console.log(`[AutoEntry] Check 6 FAILED: ${decision.reason}`);
     return decision;
   }
+  console.log(`[AutoEntry] Check 6 PASSED: Timeframe alignment sufficient`);
 
   // Check 7: AI action must be buy or sell (not hold)
+  console.log(`[AutoEntry] Check 7: AI action is '${analysis.action}'`);
   if (analysis.action !== 'buy' && analysis.action !== 'sell') {
+    console.log(`[AutoEntry] Check 7 FAILED: AI action is '${analysis.action}' (not buy/sell)`);
     decision.reason = `AI action is '${analysis.action}' (not buy/sell)`;
     return decision;
   }
+  console.log(`[AutoEntry] Check 7 PASSED: AI action is ${analysis.action}`);
 
   // Check 8: Expected R:R ratio from analysis
   const expectedRR = analysis.expected_rr || 2.0;
+  console.log(`[AutoEntry] Check 8: Expected R:R ${expectedRR.toFixed(1)} vs threshold ${config.minRRRatio}`);
   if (expectedRR < config.minRRRatio) {
+    console.log(`[AutoEntry] Check 8 FAILED: Risk/Reward ratio too low (${expectedRR.toFixed(1)} < ${config.minRRRatio})`);
     decision.reason = `Risk/Reward ratio too low (${expectedRR.toFixed(1)} < ${config.minRRRatio})`;
     return decision;
   }
+  console.log(`[AutoEntry] Check 8 PASSED: R:R ${expectedRR.toFixed(1)} >= ${config.minRRRatio}`);
 
   // All checks passed - suggest entry
   decision.shouldEnter = true;
