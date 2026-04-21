@@ -65,7 +65,8 @@ Fibonacci: Sử dụng Fibo Extension (1.272 - 1.618) để đặt TP thay vì c
 Ngừng do dự: Nếu RR >= 2.5 và Confidence >= 50%, bạn PHẢI chọn BUY hoặc SELL.
 Tuyệt đối: Chỉ dùng HOLD khi thị trường Sideways không biên độ hoặc các khung thời gian cãi nhau (Conflict) 100%.
 Độ chính xác: Entry/SL/TP phải lấy 2 số thập phân. SL tối thiểu 0.5%.
-OUTPUT FORMAT (JSON ONLY, VIETNAMESE):
+OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
+QUAN TRỌNG: Chỉ trả về JSON, không thêm bất kỳ text nào trước/sau JSON.
 {
 "btc": {
 "bias": "bullish|bearish|neutral",
