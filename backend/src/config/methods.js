@@ -70,11 +70,11 @@ RULES:
 - Set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0 ONLY when action=hold
 - Vietnamese, build narrative first, conflict→HOLD
 - ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
-- ⚠️ MANDATORY: SL MUST be at least 0.75% from entry (e.g., if entry=75000, SL must be ≤74437.50 for LONG or ≥75562.50 for SHORT)
+- ⚠️ MANDATORY: SL MUST be at least 0.75% from entry (e.g., if entry=X, SL must be ≤X*0.9925 for LONG or ≥X*1.0075 for SHORT)
 - SL≥0.75% from entry, TP≥2% from entry
 - Market structure levels only, NOT fixed prices
-- SL/TP: 2 decimal places (e.g., 74835.52), NO even rounding (e.g., 74800)
-- expected_rr≥2.0, confidence 2 decimals (e.g., 0.75)
+- SL/TP: 2 decimal places, NO even rounding
+- expected_rr≥2.0, confidence 2 decimals
 - JSON only`,
     autoEntry: {
       minConfidence: 70,
@@ -240,12 +240,12 @@ RULES:
 /**
  * IMPORTANT RULE: Do NOT include specific price values in AI prompts
  * 
- * Reason: Including specific price examples (e.g., 74835.52, 74800) in prompts
+ * Reason: Including specific price examples in prompts
  * can confuse the AI and cause it to misunderstand the instruction.
  * 
- * Instead, use generic examples with "e.g." notation:
+ * Instead, use generic examples without specific numbers:
  * - BAD: "SL/TP: 2 decimals (74835.52), NO even rounding (74800)"
- * - GOOD: "SL/TP: 2 decimal places (e.g., 74835.52), NO even rounding (e.g., 74800)"
+ * - GOOD: "SL/TP: 2 decimal places, NO even rounding"
  * 
  * This prevents the AI from thinking the specific prices are the only valid values.
  */
