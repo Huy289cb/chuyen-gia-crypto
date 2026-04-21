@@ -26,7 +26,7 @@ RULES:
       minConfidence: 70,
       minRRRatio: 2.0,
       riskPerTrade: 0.10, // 10% để trading nhanh
-      maxPositionsPerSymbol: 3,
+      maxPositionsPerSymbol: 6,
       cooldownAfterLosses: 3,
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,
@@ -86,7 +86,7 @@ OUTPUT FORMAT (JSON ONLY, VIETNAMESE):
       minConfidence: 60,
       minRRRatio: 2.5,
       riskPerTrade: 0.10, // 10% để trading nhanh
-      maxPositionsPerSymbol: 5,
+      maxPositionsPerSymbol: 6,
       cooldownAfterLosses: 3,
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,
