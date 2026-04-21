@@ -27,20 +27,6 @@ const AUTO_ENTRY_CONFIG = {
 };
 
 /**
- * Format date to Vietnam timezone (GMT+7)
- */
-function formatVietnamTime(date) {
-  return new Date(date).toLocaleString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-/**
  * Check for duplicate positions before opening new position
  * @param {Object} db - Database instance
  * @param {string} symbol - Trading symbol (BTC, ETH)
