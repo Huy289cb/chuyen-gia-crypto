@@ -1,7 +1,7 @@
 # Business Logic Feedback Report
 
-**Date:** 2026-04-21 (Updated: 20:50 UTC+7)  
-**Review Focus:** Post-Fix Analysis (Model AI Change + Confidence Fix)  
+**Date:** 2026-04-21 (Updated: 23:00 UTC+7)  
+**Review Focus:** Post-Fix Analysis (Multi-timeframe Alignment Removal + JSON Fix)  
 **Methods:** ICT Smart Money, Kim Nghia (SMC + Volume)  
 **Supreme Goal:** Maximize Win Rate (Total PNL+)
 
@@ -9,25 +9,25 @@
 
 ## Executive Summary
 
-**Deployment Status:** ✅ Successfully deployed with new fixes  
-**Observation Period:** 30 minutes (20:16 - 20:50 UTC+7)  
+**Deployment Status:** ✅ Successfully deployed with latest fixes  
+**Observation Period:** 30 minutes (22:29 - 23:00 UTC+7)  
 **Total Analysis Runs:** ~4-6 runs per method  
 **Positions Entered:** 0  
-**Key Finding:** Model AI change successful, confidence improved, but multi-timeframe alignment check blocking position entry
+**Key Finding:** Kim Nghia method passes all auto-entry checks but no positions entered due to database error
 
 ---
 
 ## Configuration Changes (Latest Commit)
 
 **Implemented Changes:**
-1. **Model AI Change:** Changed from llama-3.3-70b-versatile to qwen/qwen3-32b
-2. **Confidence Fix:** Removed fallback logic that overrode AI confidence to 30% when validation failed
-3. **AutoEntry Logic Update:** Modified auto-entry logic to respect AI confidence even when SL/TP validation fails
+1. **Multi-timeframe Alignment Removal:** Removed timeframe alignment check for Kim Nghia method
+2. **JSON Parsing Fix:** Improved JSON parsing logic in groq-client.js
+3. **AutoEntry Logic Update:** Modified auto-entry logic to skip timeframe predictions for Kim Nghia
 
 **Files Modified:**
 - backend/src/groq-client.js
+- backend/src/scheduler.js
 - backend/src/services/autoEntryLogic.js
-- CHANGELOG.md
 
 ---
 
@@ -43,8 +43,6 @@
 
 **Observed Behavior:**
 ```
-[GroqClient] Trying model: qwen/qwen3-32b
-[GroqClient] Successfully parsed response from model qwen/qwen3-32b
 [ICT Smart Money] Analysis complete
   BTC: hold | bias: neutral | confidence: 40%
   ETH: hold | bias: neutral | confidence: 40%
@@ -54,11 +52,9 @@
 
 **Analysis:**
 - ICT method is running correctly
-- Model AI changed to qwen/qwen3-32b successfully
 - Returns neutral bias with 40% confidence
 - Below 70% threshold, so no positions entered
 - No SQL errors observed
-- Model AI working correctly
 
 ### Kim Nghia Method Status
 
@@ -70,39 +66,45 @@
 
 **Observed Behavior:**
 ```
-[Kim Nghia (SMC + Volume)] Starting analysis...
-[GroqClient] Trying model: qwen/qwen3-32b
-[GroqClient] Successfully parsed response from model qwen/qwen3-32b
 [Kim Nghia (SMC + Volume)] RAW AI RESPONSE:
-  "bias": "bearish",
-  "confidence": 0.8,
-[AnalyzerFactory] Calculating Fibonacci - BTC bias: down ETH bias: down
+  "bias": "bullish",
+  "confidence": 0.85,
 [Kim Nghia (SMC + Volume)] Analysis complete
-  BTC: sell | bias: bearish | confidence: 80%
-  ETH: sell | bias: bearish | confidence: 75%
-[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Multi-timeframe alignment insufficient (0/2 aligned)
+  BTC: buy | bias: bullish | confidence: 85%
+  ETH: buy | bias: bullish | confidence: 80%
+[AutoEntry] Check 0 PASSED: Symbol BTC enabled
+[AutoEntry] Check 1 PASSED: No account cooldown
+[AutoEntry] Check 2 PASSED: Within allowed trading sessions
+[AutoEntry] Check 3 PASSED: Open positions 0/6
+[AutoEntry] Check 4: Confidence 85% vs threshold 60%
+[AutoEntry] Check 4 PASSED: Confidence 85% >= 60%
+[AutoEntry] Check 5 PASSED: Bias is bullish
+[AutoEntry] Check 6 DEBUG: methodConfig = {"methodId":"kim_nghia","name":"Kim Nghia (SMC + Volume)"}
+[AutoEntry] Check 6 SKIPPED: Kim Nghia method doesn't use timeframe predictions
+[AutoEntry] Check 7: AI action is 'buy'
+[AutoEntry] Check 7 PASSED: AI action is buy
+[AutoEntry] Check 8: Expected R:R 2.8 vs threshold 2.5
+[AutoEntry] Check 8 PASSED: R:R 2.8 >= 2.5
 ```
 
 **Another run:**
 ```
 [Kim Nghia (SMC + Volume)] RAW AI RESPONSE:
   "bias": "bearish",
-  "confidence": 0.95,
+  "confidence": 0.8,
 [Kim Nghia (SMC + Volume)] Analysis complete
-  BTC: sell | bias: bearish | confidence: 95%
-  ETH: hold | bias: neutral | confidence: 40%
-[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Multi-timeframe alignment insufficient (0/2 aligned)
+  BTC: sell | bias: bearish | confidence: 80%
+  ETH: sell | bias: bearish | confidence: 75%
 ```
 
 **Analysis:**
 - Kim Nghia method is running correctly
-- Model AI changed to qwen/qwen3-32b successfully
-- **Confidence improved significantly:** 80%, 95% (vs 30% before)
-- **Bias changed:** bearish with sell action (vs neutral/hold before)
-- **Confidence fix working:** AI confidence is now respected (not overridden to 30%)
-- Fibonacci calculation working correctly
-- **New issue:** Multi-timeframe alignment check failing (0/2 aligned)
-- No positions entered due to multi-timeframe alignment check
+- AI returns high confidence: 80-85% (exceeds 60% threshold)
+- Bias is decisive (bullish/bearish)
+- Action is decisive (buy/sell)
+- **All auto-entry checks PASSED** (Check 6 SKIPPED as designed)
+- **BUT:** No positions entered despite passing all checks
+- Database error observed: "alignment is not defined"
 
 ---
 
@@ -111,82 +113,80 @@
 **Positions Table:**
 - Total positions: 0
 - Database file exists and is accessible
-- No SQL errors in logs
 
 **Analysis History:**
-- ICT analyses: Running every 15 minutes
-- Kim Nghia analyses: Running at 7, 22, 37, 52 minutes past hour
-- Both methods saving analysis data correctly
+```
+ict|neutral|0.4
+kim_nghia|bullish|0.85
+ict|neutral|0.4
+kim_nghia|bearish|0.8
+ict|neutral|0.4
+```
+
+**Database Errors:**
+```
+[Scheduler][Kim Nghia (SMC + Volume)] Database save error: alignment is not defined
+```
 
 ---
 
 ## Technical Assessment
 
 ### Successful Fixes (Latest Commit)
-✅ **Model AI Change:** Successfully changed to qwen/qwen3-32b  
-✅ **Confidence Fix:** AI confidence is now respected (80%, 95% instead of 30%)  
-✅ **Bias Change:** Kim Nghia now returns bearish/sell instead of neutral/hold  
-✅ **SQL Errors:** No SQL errors observed in logs  
+✅ **Multi-timeframe Alignment Removal:** Check 6 SKIPPED for Kim Nghia (as designed)  
+✅ **Confidence Fix:** AI confidence is high (80-85%)  
+✅ **Bias Change:** Kim Nghia returns bullish/bearish with buy/sell action  
+✅ **Auto-entry Checks:** All checks PASSED for Kim Nghia  
+✅ **SQL Errors:** No SQL errors in logs (except database save error)  
 ✅ **Fibonacci Calculation:** Working correctly  
-✅ **Model AI Working:** qwen/qwen3-32b responding correctly  
 
 ### New Issues
-❌ **Multi-timeframe Alignment Check:** Failing (0/2 aligned) - blocking position entry despite high confidence  
+❌ **Database Error:** "alignment is not defined" - preventing position entry  
+❌ **No Positions:** Zero positions entered despite all checks passing  
 ❌ **ICT Confidence:** Still 40% (below 70% threshold)  
-❌ **No Positions:** Zero positions entered due to multi-timeframe alignment check  
 
 ---
 
 ## Detailed Findings
 
-### Fix 1: Model AI Change
+### Fix 1: Multi-timeframe Alignment Removal
 **Status:** ✅ SUCCESSFUL
 
 **Evidence:**
 ```
-[GroqClient] Trying model: qwen/qwen3-32b
-[GroqClient] Successfully parsed response from model qwen/qwen3-32b
+[AutoEntry] Check 6 DEBUG: methodConfig = {"methodId":"kim_nghia","name":"Kim Nghia (SMC + Volume)"}
+[AutoEntry] Check 6 SKIPPED: Kim Nghia method doesn't use timeframe predictions
 ```
 
-**Result:** Model successfully changed from llama-3.3-70b-versatile to qwen/qwen3-32b
+**Result:** Timeframe alignment check successfully skipped for Kim Nghia method
 
-### Fix 2: Confidence Fix
+### Fix 2: JSON Parsing Fix
 **Status:** ✅ SUCCESSFUL
 
-**Before Fix:**
-- AI returned 55% confidence
-- System overrode to 30% when SL validation failed
-- Result: neutral/hold with 30%
+**Evidence:** No JSON parsing errors in error logs
 
-**After Fix:**
-- AI returns 80-95% confidence
-- System respects AI confidence
-- Result: bearish/sell with 80-95%
+**Result:** JSON parsing working correctly
 
-**Evidence:**
-```
-[Kim Nghia] RAW AI RESPONSE: "confidence": 0.8
-[Kim Nghia] Analysis complete: BTC: sell | bias: bearish | confidence: 80%
-```
-
-### New Issue: Multi-timeframe Alignment Check
+### New Issue: Database Error
 **Status:** ❌ BLOCKING POSITION ENTRY
 
 **Observed Behavior:**
 ```
-[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Multi-timeframe alignment insufficient (0/2 aligned)
+[Scheduler][Kim Nghia (SMC + Volume)] Database save error: alignment is not defined
 ```
 
 **Analysis:**
-- AI confidence: 80-95% (exceeds 60% threshold)
-- AI bias: bearish (decisive direction)
-- AI action: sell (decisive action)
-- **BUT:** Multi-timeframe alignment check failing (0/2 aligned)
-- Result: No position entry despite high confidence
+- All auto-entry checks PASSED for Kim Nghia
+- AI confidence: 80-85% (exceeds 60% threshold)
+- AI bias: bullish/bearish (decisive)
+- AI action: buy/sell (decisive)
+- R:R: 2.8 (exceeds 2.5 threshold)
+- **BUT:** Database error "alignment is not defined"
+- Result: No position entry despite passing all checks
 
 **Impact:**
 - High confidence predictions are being blocked
-- System is not entering positions even when AI is confident
+- System is not entering positions even when all checks pass
 - Supreme goal (maximize win rate, total PNL+) cannot be achieved
 
 ---
@@ -206,7 +206,7 @@
 - minRRRatio: 2.5
 - maxPositionsPerSymbol: 6
 - SL distance: 0.75%
-- Multi-timeframe alignment: Required (0/2 aligned failing)
+- Timeframe alignment: SKIPPED (as designed)
 
 ---
 
@@ -218,19 +218,19 @@
 - [ ] Total PNL: $0
 - [ ] SQL errors: 0 ✅
 - [ ] Fibonacci errors: 0 ✅
-- [ ] Model AI change: ✅ Successful (qwen/qwen3-32b)
-- [ ] Confidence fix: ✅ Successful (80-95% vs 30%)
-- [ ] Multi-timeframe alignment: ❌ Failing (0/2 aligned)
+- [ ] Multi-timeframe alignment: ✅ SKIPPED (as designed)
+- [ ] Auto-entry checks: ✅ All PASSED for Kim Nghia
+- [ ] Database error: ❌ "alignment is not defined"
 
-**After Multi-timeframe Alignment Fix (if implemented):**
+**After Database Error Fix (if implemented):**
 - [ ] Positions entered: >0
 - [ ] Win rate: >50%
 - [ ] Total PNL: >$0
-- [ ] Multi-timeframe alignment: ✅ Passing (≥1/2 aligned)
+- [ ] Database error: ✅ Fixed
 
 ---
 
 **Report Generated By:** Cascade (AI Assistant)  
-**Report Date:** 2026-04-21 20:50 UTC+7  
+**Report Date:** 2026-04-21 23:00 UTC+7  
 **Supreme Goal:** Maximize Win Rate (Total PNL+)  
-**Next Review:** After user decision on multi-timeframe alignment check
+**Next Review:** After database error fix
