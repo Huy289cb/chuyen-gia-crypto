@@ -183,6 +183,7 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
 
   // Check 6: Multi-timeframe alignment (4h and 1d only for ICT, H4 and H1 for KimNghia)
   // Skip for Kim Nghia method since it doesn't use timeframe predictions
+  console.log(`[AutoEntry] Check 6 DEBUG: methodConfig = ${methodConfig ? JSON.stringify({methodId: methodConfig.methodId, name: methodConfig.name}) : 'null'}`);
   if (methodConfig && methodConfig.methodId === 'kim_nghia') {
     console.log(`[AutoEntry] Check 6 SKIPPED: Kim Nghia method doesn't use timeframe predictions`);
   } else {
@@ -397,14 +398,14 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   // Calculate position size based on risk
   const riskDistance = Math.abs(suggestedEntry - stopLoss);
 
-  // Validate risk distance is at least 0.5% of entry price (minimum reasonable stop loss)
-  const minRiskDistance = suggestedEntry * 0.005; // 0.5% minimum
+  // Validate risk distance is at least 0.3% of entry price (minimum reasonable stop loss)
+  const minRiskDistance = suggestedEntry * 0.003; // 0.3% minimum
   if (riskDistance <= 0) {
     console.error('[AutoEntry] Invalid risk distance (entry equals stop loss)');
     return null;
   }
   if (riskDistance < minRiskDistance) {
-    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.5% of entry)`);
+    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.3% of entry)`);
     return null;
   }
   

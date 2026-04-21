@@ -17,9 +17,16 @@ function cleanJSONResponse(rawResponse) {
     if (start === -1 || end === -1) throw new Error("Không tìm thấy JSON");
     
     const jsonString = rawResponse.substring(start, end + 1);
-    return JSON.parse(jsonString);
+    console.log('[GroqClient] Cleaned JSON string length:', jsonString.length);
+    console.log('[GroqClient] Cleaned JSON preview:', jsonString.substring(0, 200));
+    
+    // Try to parse the cleaned JSON
+    const parsed = JSON.parse(jsonString);
+    return parsed;
   } catch (e) {
-    console.error("Lỗi parse JSON thủ công:", e);
+    console.error("Lỗi parse JSON thủ công:", e.message);
+    console.log('[GroqClient] Raw response length:', rawResponse.length);
+    console.log('[GroqClient] Raw response preview:', rawResponse.substring(0, 300));
     return null;
   }
 }
