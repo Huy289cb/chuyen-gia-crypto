@@ -22,11 +22,35 @@ export function createAnalyzer(methodConfig) {
      */
     analyze: async (priceData, db = null) => {
       const client = createGroqClient(process.env.GROQ_API_KEY);
-      
-      // If no Groq API key, use fallback immediately
+
+      // If no Groq API key, return error immediately
       if (!client) {
-        console.log(`[${methodConfig.name}] No API key, using fallback analysis`);
-        return generateFallbackAnalysis(priceData, methodConfig.methodId);
+        console.log(`[${methodConfig.name}] No API key - analysis unavailable`);
+        return {
+          btc: {
+            bias: 'neutral',
+            action: 'hold',
+            confidence: 0,
+            narrative: 'AI analysis unavailable - no API key',
+            current_price: priceData.btc?.price || 0,
+            suggested_entry: null,
+            suggested_stop_loss: null,
+            suggested_take_profit: null,
+            expected_rr: null
+          },
+          eth: {
+            bias: 'neutral',
+            action: 'hold',
+            confidence: 0,
+            narrative: 'AI analysis unavailable - no API key',
+            current_price: priceData.eth?.price || 0,
+            suggested_entry: null,
+            suggested_stop_loss: null,
+            suggested_take_profit: null,
+            expected_rr: null
+          },
+          error: 'No API key'
+        };
       }
 
       console.log(`[${methodConfig.name}] Starting analysis...`);
@@ -57,8 +81,32 @@ export function createAnalyzer(methodConfig) {
         return formatted;
       } catch (error) {
         console.error(`[${methodConfig.name}] Error:`, error.message);
-        console.log(`[${methodConfig.name}] Falling back to rule-based analysis`);
-        return generateFallbackAnalysis(priceData, methodConfig.methodId);
+        // Return simple error message instead of fallback analysis
+        return {
+          btc: {
+            bias: 'neutral',
+            action: 'hold',
+            confidence: 0,
+            narrative: 'AI analysis failed - no data available',
+            current_price: priceData.btc?.price || 0,
+            suggested_entry: null,
+            suggested_stop_loss: null,
+            suggested_take_profit: null,
+            expected_rr: null
+          },
+          eth: {
+            bias: 'neutral',
+            action: 'hold',
+            confidence: 0,
+            narrative: 'AI analysis failed - no data available',
+            current_price: priceData.eth?.price || 0,
+            suggested_entry: null,
+            suggested_stop_loss: null,
+            suggested_take_profit: null,
+            expected_rr: null
+          },
+          error: error.message
+        };
       }
     }
   };
@@ -523,82 +571,3 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
   };
 }
 
-/**
- * Generate fallback analysis when Groq fails
- * @param {Object} priceData - Price data
- * @param {string} methodId - Method ID
- * @returns {Object} Fallback analysis
- */
-function generateFallbackAnalysis(priceData, methodId) {
-  console.log(`[AnalyzerFactory][${methodId}] Generating fallback analysis`);
-
-  const calcChange = (arr) => {
-    if (!arr || arr.length < 2) return 0;
-    const first = arr[0];
-    const last = arr[arr.length - 1];
-    return ((last - first) / first) * 100;
-  };
-
-  const analyzeCoin = (coinData) => {
-    const change15m = calcChange(coinData.sparkline7d?.slice(-2));
-    const change1h = calcChange(coinData.prices1h);
-    const change4h = calcChange(coinData.prices4h);
-    const change1d = calcChange(coinData.prices1d);
-    const change24h = coinData.change24h || 0;
-
-    // Determine bias based on 4h trend
-    let bias = 'neutral';
-    let action = 'hold';
-    let confidence = 0.4;
-
-    if (change4h > 1) {
-      bias = 'bullish';
-      action = change1h > 0 ? 'buy' : 'hold';
-      confidence = 0.55;
-    } else if (change4h < -1) {
-      bias = 'bearish';
-      action = change1h < 0 ? 'sell' : 'hold';
-      confidence = 0.55;
-    }
-
-    const trendText = change24h >= 0 ? 'tăng' : 'giảm';
-    const biasText = bias === 'bullish' ? 'tăng' : bias === 'bearish' ? 'giảm' : 'đi ngang';
-    const resistance = (coinData.price * 1.02).toFixed(0);
-    const support = (coinData.price * 0.98).toFixed(0);
-    const narrative = `Giá ${trendText} ${Math.abs(change24h).toFixed(2)}% trong 24h. Khung 4h: ${change4h.toFixed(2)}%. Xu hướng ${biasText}, chờ breakout. Kháng cự gần nhất: $${resistance}, Hỗ trợ: $${support}.`;
-
-    return {
-      bias,
-      action,
-      confidence,
-      narrative: narrative.substring(0, 350),
-      timeframes: {
-        '15m': change15m > 0.2 ? 'tăng' : change15m < -0.2 ? 'giảm' : 'đi ngang',
-        '1h': change1h > 0.5 ? 'tăng' : change1h < -0.5 ? 'giảm' : 'đi ngang',
-        '4h': change4h > 1 ? 'tăng' : change4h < -1 ? 'giảm' : 'đi ngang',
-        '1d': change1d > 2 ? 'tăng' : change1d < -2 ? 'giảm' : 'đi ngang'
-      },
-      key_levels: {
-        liquidity: 'Chưa xác định - cần phân tích chi tiết',
-        order_blocks: 'Chưa xác định',
-        fvg: 'Chưa xác định',
-        bos: 'Chưa xác định - cần quan sát breakout',
-        choch: 'Chưa xác định - cần quan sát sự thay đổi xu hướng'
-      },
-      predictions: {
-        '15m': { direction: bias === 'bullish' ? 'up' : bias === 'bearish' ? 'down' : 'sideways', target: null, confidence: confidence * 0.8 },
-        '1h': { direction: bias === 'bullish' ? 'up' : bias === 'bearish' ? 'down' : 'sideways', target: null, confidence: confidence * 0.9 },
-        '4h': { direction: bias === 'bullish' ? 'up' : bias === 'bearish' ? 'down' : 'sideways', target: null, confidence: confidence },
-        '1d': { direction: bias === 'bullish' ? 'up' : bias === 'bearish' ? 'down' : 'sideways', target: null, confidence: confidence * 0.7 }
-      },
-      risk: 'Phân tích dự phòng - độ chính xác hạn chế. Luôn quản lý rủi ro.'
-    };
-  };
-
-  return {
-    btc: analyzeCoin(priceData.btc),
-    eth: analyzeCoin(priceData.eth),
-    comparison: 'Fallback analysis requires full data',
-    marketSentiment: 'neutral',
-  };
-}

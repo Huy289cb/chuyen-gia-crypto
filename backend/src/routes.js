@@ -283,16 +283,19 @@ router.get('/health', (req, res) => {
 router.post('/analysis/run', async (req, res) => {
   try {
     const { fetchPrices } = await import('./price-fetcher.js');
-    const { analyzeWithGroq } = await import('./groqAnalyzer.js');
+    const { createAnalyzer } = await import('./analyzers/analyzerFactory.js');
+    const { getMethodConfig } = await import('./config/methods.js');
     const { cache } = await import('./cache.js');
-    
+
     console.log('[Routes] Manual analysis trigger requested');
-    
+
     // Fetch prices
     const priceData = await fetchPrices(db);
-    
-    // Run analysis
-    const analysis = await analyzeWithGroq(priceData, db);
+
+    // Run analysis (defaults to ICT method)
+    const methodConfig = getMethodConfig('ict');
+    const analyzer = createAnalyzer(methodConfig);
+    const analysis = await analyzer.analyze(priceData, db);
     
     // Cache results
     const cachedData = {

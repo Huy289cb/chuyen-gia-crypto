@@ -1,27 +1,12 @@
 import cron from 'node-cron';
 import { fetchPrices } from './price-fetcher.js';
-import { analyzeWithGroq } from './groqAnalyzer.js';
 import { cache } from './cache.js';
 import { METHODS } from './config/methods.js';
 import { createAnalyzer } from './analyzers/analyzerFactory.js';
+import { formatVietnamTime } from './utils/dateHelpers.js';
 
 let db = null;
 let dbEnabled = false;
-
-/**
- * Format date to Vietnam timezone (GMT+7)
- */
-function formatVietnamTime(date) {
-  return new Date(date).toLocaleString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-}
 
 // Initialize database on startup (optional)
 async function initDb() {

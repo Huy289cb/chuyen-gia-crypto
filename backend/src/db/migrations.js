@@ -1,20 +1,11 @@
 // Database migrations for paper trading features
 import sqlite3 from 'sqlite3';
+import { promiseAllWithTimeout } from '../utils/asyncHelpers.js';
 
 /**
  * Run all migrations to add paper trading tables
  */
 export async function runMigrations(db) {
-  // Helper for Promise.all with timeout
-  const promiseAllWithTimeout = (promises, timeoutMs = 30000) => {
-    return Promise.race([
-      Promise.all(promises),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Promise.all timeout after ${timeoutMs}ms`)), timeoutMs)
-      )
-    ]);
-  };
-
   return new Promise((resolve, reject) => {
     db.serialize(() => {
       // Migration 1: Create accounts table

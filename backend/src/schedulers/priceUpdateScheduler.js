@@ -3,25 +3,11 @@
 // Uses 1-minute candle data for accurate SL/TP detection
 
 import cron from 'node-cron';
+import { formatVietnamTime } from '../utils/dateHelpers.js';
 
 let db = null;
 let dbEnabled = false;
 let isRunning = false;
-
-/**
- * Format date to Vietnam timezone (GMT+7)
- */
-function formatVietnamTime(date) {
-  return new Date(date).toLocaleString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-}
 
 /**
  * Initialize the price update scheduler

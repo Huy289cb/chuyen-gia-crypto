@@ -1,6 +1,8 @@
 // Auto-Entry Logic for Paper Trading
 // Determines when to suggest opening positions based on ICT analysis
 
+import { formatVietnamTime } from '../utils/dateHelpers.js';
+
 const AUTO_ENTRY_CONFIG = {
   minConfidence: 70,           // Minimum confidence score (0-100) - Updated 18/04/2026
   minRRRatio: 2.0,             // Minimum risk/reward ratio
