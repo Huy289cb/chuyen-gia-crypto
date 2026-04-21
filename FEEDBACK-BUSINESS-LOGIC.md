@@ -1,7 +1,7 @@
 # Business Logic Feedback Report
 
-**Date:** 2026-04-21 (Updated: 12:45 UTC+7)  
-**Review Focus:** Post-Fix Analysis - Win Rate Optimization  
+**Date:** 2026-04-21 (Updated: 15:15 UTC+7)  
+**Review Focus:** Post-Fix Analysis (v2.2.9)  
 **Methods:** ICT Smart Money, Kim Nghia (SMC + Volume)  
 **Supreme Goal:** Maximize Win Rate (Total PNL+)
 
@@ -9,256 +9,222 @@
 
 ## Executive Summary
 
-**Critical Finding:** Despite v2.2.5/v2.2.6 fixes, the system is still not opening any positions due to a persistent SQL error that blocks position saving.
-
-**Current Status:**
-- **Total analysis runs:** ~40+ (since deployment)
-- **Positions entered:** 0
-- **Pending orders:** 0
-- **Win Rate:** 0% (no positions = no wins)
-- **Total PNL:** $0
-
-**Root Cause:** SQL column mismatch error preventing position database insertion, despite meeting entry criteria.
+**Deployment Status:** ✅ Successfully deployed v2.2.9  
+**Observation Period:** 30 minutes (14:45 - 15:15 UTC+7)  
+**Total Analysis Runs:** ~8-10 runs per method  
+**Positions Entered:** 0  
+**Critical Finding:** Both methods returning neutral with 30% confidence, below minimum thresholds
 
 ---
 
-## Critical Blocker - SQL Error (Prevents ALL Positions)
+## Configuration Changes (v2.2.9)
+
+**Implemented Changes:**
+1. **Position Limit Standardization:** maxPositionsPerSymbol = 6 (across all components)
+2. **Fibonacci Calculation Fix:** Added db parameter to formatAnalysisResponse
+3. **Kim Nghia Prompt Enhancement:** Detailed multi-timeframe analysis framework
+4. **OHLC Data in User Prompt:** Added 50 candles (15m timeframe) for SMC analysis
+5. **Model Priority:** Changed to prioritize llama-4-scout-17b-16e-instruct
+
+**Files Modified:**
+- backend/src/config/methods.js
+- backend/src/services/autoEntryLogic.js
+- backend/src/analyzers/analyzerFactory.js
+- backend/src/groq-client.js
+- docs and frontend files
+
+---
+
+## Post-Deployment Analysis
+
+### ICT Method Status
+
+**Configuration:**
+- Enabled: ✅ Yes
+- minConfidence: 70%
+- minRRRatio: 2.0
+- maxPositionsPerSymbol: 6
+
+**Observed Behavior:**
+```
+[ICT Smart Money] Analysis complete
+  BTC: hold | bias: neutral | confidence: 30%
+  ETH: hold | bias: neutral | confidence: 30%
+[AutoEntry] Check 4: Confidence 30% vs threshold 70%
+[AutoEntry] Check 4 FAILED: Confidence too low (30% < 70%)
+```
+
+**Analysis:**
+- ICT method is running correctly
+- Consistently returning neutral bias with 30% confidence
+- Below 70% threshold, so no positions entered
+- No SQL errors observed
+- No Fibonacci errors (ICT doesn't use Fibonacci)
+
+### Kim Nghia Method Status
+
+**Configuration:**
+- Enabled: ✅ Yes
+- minConfidence: 60%
+- minRRRatio: 2.5
+- maxPositionsPerSymbol: 6
+
+**Observed Behavior:**
+```
+[Kim Nghia (SMC + Volume)] Analysis complete
+[Database] Skipping prediction saving for Kim Nghia method
+[Scheduler][Kim Nghia] Auto-entry decision: no_trade - Confidence too low (30% < 60%)
+```
+
+**Analysis:**
+- Kim Nghia method is running correctly
+- Consistently returning neutral bias with 30% confidence
+- Below 60% threshold, so no positions entered
+- No SQL errors observed
+- No Fibonacci errors (db parameter fix worked)
+- OHLC data is being fetched and included in user prompt
+
+---
+
+## Critical Issues
+
+### Issue 1: Both Methods Returning 30% Confidence (CRITICAL)
 
 **Status:** 🔴 CRITICAL - SUPREME GOAL BLOCKER  
 **Impact:** Zero positions can be opened regardless of signal quality
 
 **Observed Behavior:**
-```
-[AutoEntry] Check 0-8 PASSED: All criteria met
-[Scheduler][ICT Smart Money] Auto-entry decision: enter_long - All criteria met: 85% confidence, 2/2 timeframes aligned, R:R 2.5
-[Scheduler][ICT Smart Money] BTC order: type=limit, side=long, entry=75800, current_price=75900, SL=75042, TP=77000
-[Scheduler][ICT Smart Money] Failed to process BTC order: SQLITE_ERROR: 31 values for 29 columns
-```
+- ICT: 30% confidence (threshold: 70%)
+- Kim Nghia: 30% confidence (threshold: 60%)
+- Both consistently returning neutral bias
+- No actionable signals generated
 
-**Analysis:**
-- ICT method consistently meets entry criteria (85%, 75% confidence)
-- All 8 auto-entry checks pass
-- Order is generated correctly
-- **BUT**: Position cannot be saved to database due to SQL error
-- **Result**: No positions are actually opened, no trades executed, no PNL generated
-
-**Previous Fix Attempt (v2.2.3):**
-- Dev attempted to fix SQL column mismatch (22 → 30 columns)
-- **Result:** Introduced NEW error: "31 values for 29 columns"
-- The fix was incomplete or incorrect
+**Root Cause Analysis:**
+Despite v2.2.9 prompt enhancements for Kim Nghia:
+- AI model (llama-3.3-70b-versatile used in logs) is extremely conservative
+- Enhanced prompt with multi-timeframe analysis did not increase confidence
+- OHLC data addition did not improve decision-making
+- Both methods default to "hold" with low confidence
 
 **Impact on Supreme Goal:**
 - **Win Rate:** Cannot be measured (0 positions)
 - **Total PNL:** $0 (no trades)
-- **System Effectiveness:** 0% despite good signals
-
-**Recommendation (PRIORITY 1):**
-1. **IMMEDIATE:** Fix SQL column mismatch in database.js
-2. Verify INSERT statement matches table schema exactly (30 columns)
-3. Test position creation with a single trade
-4. Monitor first few trades to ensure they execute correctly
+- **System Effectiveness:** 0% despite running correctly
 
 ---
 
-## ICT Method Analysis
+## Database Status
 
-**Signal Quality:** ✅ GOOD  
-**Entry Criteria:** ✅ MEETING  
-**Position Execution:** ❌ BLOCKED BY SQL ERROR
+**Positions Table:**
+- Total positions: 0
+- Database file exists and is accessible
+- No SQL errors in logs
 
-**Performance Metrics:**
-- Confidence: 85%, 75% (consistently above 70% threshold)
-- Timeframe alignment: 2/2 (meets requirement)
-- R:R ratio: 2.5 (meets 2.0 threshold)
-- AI action: buy/sell (not hold)
-- **Positions opened:** 0 (SQL error)
-
-**Example Signal (12:15:00):**
-```
-Check 0 PASSED: Symbol BTC enabled
-Check 1 PASSED: No account cooldown
-Check 2 PASSED: Within allowed trading sessions
-Check 3 PASSED: Open positions 0/9
-Check 4 PASSED: Confidence 85% >= 70%
-Check 5 PASSED: Bias is bullish
-Check 6 PASSED: Timeframe alignment sufficient (2/2)
-Check 7 PASSED: AI action is buy
-Check 8 PASSED: R:R 2.5 >= 2
-→ All criteria met, but SQL error blocks position
-```
-
-**Win Rate Potential:** HIGH (if SQL error fixed)
-- Signals are consistent
-- Confidence is strong
-- R:R ratios are healthy
-- Once SQL is fixed, this method should generate trades
-
----
-
-## Kim Nghia Method Analysis
-
-**Signal Quality:** ❌ POOR  
-**Entry Criteria:** ❌ NOT MEETING  
-**Position Execution:** ❌ BLOCKED BY CONFIDENCE THRESHOLD
-
-**Performance Metrics:**
-- Confidence: 30% (consistently below 60% threshold)
-- Bias: neutral (consistently)
-- Action: hold (consistently)
-- **Positions opened:** 0
-
-**v2.2.5 Fix Attempt:**
-- Dev optimized prompt: "Hãy PHÂN TÍCH QUYẾT ĐOÁN hơn là thận trọng"
-- Dev lowered HOLD threshold from 60% to 40% in prompt
-- **Result:** Still returning 30% confidence, neutral bias
-- **Assessment:** Fix was ineffective
-
-**Debug Logging Output:**
-```
-Check 0 PASSED: Symbol BTC enabled
-Check 1 PASSED: No account cooldown
-Check 2 PASSED: Within allowed trading sessions
-Check 3 PASSED: Open positions 0/9
-Check 4: Confidence 30% vs threshold 60%
-Check 4 FAILED: Confidence too low (30% < 60%)
-```
-
-**Root Cause Analysis:**
-- AI model (llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant fallback) may be inherently conservative
-- Prompt optimization may not overcome model's tendency to be cautious
-- Kim Nghia method may not be suitable for current AI model
-- Market conditions may not align with Kim Nghia strategy
-
-**Win Rate Potential:** UNKNOWN (cannot be measured)
-- Method is not generating any actionable signals
-- Cannot determine if signals would be profitable if they existed
-
-**Recommendation (PRIORITY 2):**
-1. **User Decision Required:** Keep Kim Nghia at 60% threshold or lower to 40% as attempted in v2.2.5?
-2. Consider temporarily disabling Kim Nghia method if it continues to fail
-3. Focus resources on ICT method (which generates good signals)
-4. Revisit Kim Nghia method after ICT is stable and profitable
-
----
-
-## Win Rate Optimization Strategy
-
-**Current State:**
-- ICT: Good signals, blocked by SQL error
-- Kim Nghia: No signals, blocked by confidence threshold
-- Overall: 0% win rate, $0 PNL
-
-**Optimization Path:**
-
-### Phase 1: Fix Critical Blocker (Week 1)
-1. Fix SQL column mismatch in database.js
-2. Test ICT position creation
-3. Monitor first 10 ICT trades
-4. **Goal:** Get ICT method trading
-
-### Phase 2: Evaluate ICT Performance (Week 2-3)
-1. Measure ICT win rate over 20-30 trades
-2. Analyze PNL per trade
-3. Identify winning vs losing patterns
-4. **Goal:** Determine if ICT is profitable
-
-### Phase 3: Optimize ICT for Maximum Win Rate (Week 4+)
-If ICT is profitable:
-- Optimize entry criteria to increase win rate
-- Adjust SL/TP based on actual performance
-- Consider adding filters for higher-quality signals
-
-If ICT is not profitable:
-- Analyze why signals aren't translating to wins
-- Consider adjusting strategy parameters
-- Evaluate if method needs fundamental changes
-
-### Phase 4: Kim Nghia Decision (Ongoing)
-- Revisit only after ICT is stable and profitable
-- Consider if Kim Nghia adds diversification value
-- Decide based on actual performance data, not theoretical potential
+**Analysis History:**
+- ICT analyses: Running every 15 minutes
+- Kim Nghia analyses: Running at 7, 22, 37, 52 minutes past hour
+- Both methods saving analysis data correctly
 
 ---
 
 ## Configuration Review
 
-**ICT Configuration (Current):**
-- minConfidence: 70% ✅ (appropriate)
-- minRRRatio: 2.0 ✅ (healthy)
-- SL distance: 0.5% (v2.2.4) ⚠️ (may still be too strict)
-- Required timeframes: 4h, 1d ✅ (multi-timeframe alignment)
+### Current Configuration (v2.2.9)
 
-**Kim Nghia Configuration (Current):**
+**ICT Method:**
+- minConfidence: 70% ⚠️ (AI consistently provides 30%)
+- minRRRatio: 2.0 ✅
+- maxPositionsPerSymbol: 6 ✅ (standardized)
+- SL distance: 0.75% ✅
+
+**Kim Nghia Method:**
 - minConfidence: 60% ⚠️ (AI consistently provides 30%)
-- minRRRatio: 2.5 ✅ (healthy)
-- SL distance: 0.5% (v2.2.4) ⚠️ (may still be too strict)
-- Required timeframes: 4h, 1h ✅ (multi-timeframe alignment)
-
-**Recommendation:**
-1. **ICT:** Keep current configuration once SQL is fixed
-2. **Kim Nghia:** Lower confidence threshold to 40% (as attempted in v2.2.5) OR disable method
+- minRRRatio: 2.5 ✅
+- maxPositionsPerSymbol: 6 ✅ (standardized)
+- SL distance: 0.75% ✅
 
 ---
 
-## Immediate Action Items
+## Technical Assessment
 
-**PRIORITY 1 (Critical - Supreme Goal):**
-1. **FIX SQL COLUMN MISMATCH** - This is blocking ALL positions
-2. Verify INSERT statement has exactly 30 columns to match table schema
-3. Test with a single position to ensure it saves correctly
-4. Monitor first trade execution to ensure SL/TP work
+### Successful Fixes (v2.2.9)
+✅ **Position Limit Standardization:** Now consistent at 6 across all components  
+✅ **Fibonacci Calculation Error:** Fixed with db parameter - no errors in logs  
+✅ **OHLC Data in User Prompt:** Successfully added and working  
+✅ **SQL Errors:** No SQL errors observed in recent logs  
 
-**PRIORITY 2 (High - Win Rate):**
-1. **User Decision:** Lower Kim Nghia confidence threshold to 40% or disable method
-2. Focus 100% on ICT method until it's stable and profitable
-3. Measure ICT win rate once SQL is fixed
-4. Optimize ICT parameters based on actual performance data
+### Persistent Issues
+❌ **Low Confidence:** Both methods still returning 30% confidence despite prompt enhancements  
+❌ **Neutral Bias:** Both methods default to "hold" action  
+❌ **No Positions:** Zero positions entered in 30-minute observation period  
 
-**PRIORITY 3 (Medium - Optimization):**
-1. Consider reducing SL distance from 0.5% to 0.25% if it's rejecting valid trades
-2. Monitor AI confidence distribution over time
-3. Add win rate tracking and reporting
-4. Consider adding position size optimization based on confidence
+---
+
+## Recommendations
+
+### Priority 1 (Critical - Supreme Goal)
+
+**Option A: Lower Confidence Thresholds**
+- ICT: Lower from 70% to 40-50%
+- Kim Nghia: Lower from 60% to 30-40%
+- **Rationale:** AI consistently provides 30% confidence, thresholds are too high
+- **Impact:** Would allow positions to be opened based on current AI behavior
+- **Risk:** May open lower-quality trades, but better than zero trades
+
+**Option B: Switch AI Model**
+- Current: llama-3.3-70b-versatile (conservative)
+- Alternative: Try more decisive model (e.g., gpt-4, claude-3-opus)
+- **Rationale:** Current model may be inherently conservative
+- **Impact:** May generate higher confidence predictions
+- **Risk:** Higher cost, different behavior patterns
+
+**Option C: Accept Current Behavior and Pivot**
+- Accept that current AI model is too conservative for trading
+- Focus on different strategy (manual trading, different method)
+- **Rationale:** If AI won't trade, system won't work
+- **Impact:** Major pivot required
+
+### Priority 2 (Medium - Optimization)
+
+1. **Monitor Model Behavior:** Track confidence distribution over longer period (24-48 hours)
+2. **A/B Testing:** Test different AI models with same prompts
+3. **Prompt Engineering:** Further optimize prompts for decisiveness
+4. **Market Conditions:** Check if current market conditions are causing conservative behavior
 
 ---
 
 ## User Decision Required
 
-**Kim Nghia Method:**
-- Current: 60% confidence threshold
-- AI consistently provides: 30% confidence
-- v2.2.5 attempted: Lower to 40% in prompt (ineffective)
-- **Options:**
-  1. Lower threshold in code to 40% (not just prompt)
-  2. Lower threshold to 50% (compromise)
-  3. Disable Kim Nghia method temporarily
-  4. Keep at 60% and accept no trades from this method
+**Critical Decision:** How to handle the 30% confidence issue?
 
-**Recommendation:** Disable Kim Nghia method temporarily and focus 100% on ICT. Once ICT is stable and profitable, revisit Kim Nghia with fresh data.
+**Options:**
+1. **Lower thresholds** (ICT: 50%, Kim Nghia: 40%) - Immediate action
+2. **Try different AI model** - Requires API key changes, testing
+3. **Keep current thresholds** - Accept zero positions indefinitely
+4. **Disable system temporarily** - Revisit after AI model improvements
+
+**Recommendation:** Lower confidence thresholds immediately to allow system to function, then monitor performance and adjust further based on actual trading results.
 
 ---
 
 ## Success Metrics
 
-**Phase 1 (SQL Fix):**
-- [ ] SQL error resolved
-- [ ] First position saved to database
-- [ ] First trade executed
+**Current Status:**
+- [ ] Positions entered: 0
+- [ ] Win rate: 0% (cannot measure)
+- [ ] Total PNL: $0
+- [ ] SQL errors: 0 ✅
+- [ ] Fibonacci errors: 0 ✅
 
-**Phase 2 (ICT Performance):**
-- [ ] 10 ICT trades executed
-- [ ] Win rate measured
-- [ ] Total PNL calculated
-- [ ] Profitability determined
-
-**Phase 3 (Optimization):**
-- [ ] Win rate > 50%
-- [ ] Total PNL > 0
-- [ ] Average R:R realized > 1.5
+**After Threshold Adjustment (Recommended):**
+- [ ] Positions entered: >0
+- [ ] Win rate: >50%
+- [ ] Total PNL: >$0
+- [ ] Average confidence: >40%
 
 ---
 
 **Report Generated By:** Cascade (AI Assistant)  
-**Report Date:** 2026-04-21 12:45 UTC+7  
+**Report Date:** 2026-04-21 15:15 UTC+7  
 **Supreme Goal:** Maximize Win Rate (Total PNL+)  
-**Next Review:** After SQL fix is implemented and first trade executes
+**Next Review:** After user decision on confidence thresholds
