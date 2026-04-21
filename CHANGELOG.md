@@ -2,6 +2,29 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.3 - Production Feedback Fixes
+
+### Bug Fixes
+
+**Issue 1: SQL Column Mismatch - CRITICAL BLOCKER**
+- **Problem**: positions table has 30 columns but INSERT statement only provided 22 columns
+- **Impact**: Positions could not be saved to database even when entry criteria were met (0 positions entered overnight)
+- **Fix**: Updated INSERT statement to include all 30 columns with explicit values
+- **Missing columns added**: status, realized_pnl, unrealized_pnl, close_price, close_time, close_reason, tp1_hit, r_multiple
+- **Files**: `backend/src/db/database.js`
+
+**Issue 2: Fibonacci Calculation Error**
+- **Problem**: getOHLCCandles may return undefined or incorrect data structure, causing "Cannot read properties of undefined (reading 'all')" error
+- **Fix**: Added null/undefined checks before calling getFibonacciFromOHLC
+- **Impact**: Kim Nghia method Fibonacci calculation now handles missing data gracefully
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 3: AI Not Providing Entry/SL/TP Consistently**
+- **Problem**: AI sometimes provided suggested_stop_loss: null or 0, triggering fallback calculation that could fail validation
+- **Fix**: Updated ICT and Kim Nghia prompts to ALWAYS provide Entry/SL/TP when action=buy/sell, regardless of confidence
+- **Impact**: AI will now consistently provide valid Entry/SL/TP for trade signals
+- **Files**: `backend/src/config/methods.js`
+
 ## [20/04/2026] - v2.2.2 - Bug Fixes
 
 ### Bug Fixes
