@@ -42,11 +42,17 @@ export function createAnalyzer(methodConfig) {
           maxRetries: 2
         });
 
+        // Log raw AI response for debugging
+        console.log(`[${methodConfig.name}] RAW AI RESPONSE:`);
+        console.log(JSON.stringify(response, null, 2));
+
         // Format response with method_id tagging
         const formatted = await formatAnalysisResponse(response, priceData, methodConfig.methodId, db);
         console.log(`[${methodConfig.name}] Analysis complete`);
         console.log(`  BTC: ${formatted.btc.action} | bias: ${formatted.btc.bias} | confidence: ${(formatted.btc.confidence * 100).toFixed(0)}%`);
+        console.log(`  BTC narrative: ${formatted.btc.narrative}`);
         console.log(`  ETH: ${formatted.eth.action} | bias: ${formatted.eth.bias} | confidence: ${(formatted.eth.confidence * 100).toFixed(0)}%`);
+        console.log(`  ETH narrative: ${formatted.eth.narrative}`);
 
         return formatted;
       } catch (error) {
