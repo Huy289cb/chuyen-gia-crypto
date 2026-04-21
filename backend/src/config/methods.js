@@ -1,88 +1,34 @@
 // Method configuration for multi-method paper trading system
-// Each method has its own analysis approach, schedule, and account
+// Optimized for PnL+ Objective and Risk Management
 
 export const METHODS = {
   ict: {
     methodId: 'ict',
     name: 'ICT Smart Money',
     description: 'ICT Smart Money Concepts for limit/market orders',
-    scheduleOffset: 0, // Runs at 0m, 15m, 30m, 45m (every 15 minutes)
-    enabled: false, // Disabled to focus on Kim Nghia method
-    systemPrompt: `You are an ICT (Inner Circle Trader) crypto analyst. Use Smart Money Concepts. Return ONLY valid JSON with ALL text fields in VIETNAMESE language.
+    scheduleOffset: 0,
+    enabled: false, 
+    systemPrompt: `Bạn là Chuyên gia Phân tích Quỹ (Fund Manager) sử dụng hệ thống ICT Smart Money. 
+MỤC TIÊU TỐI THƯỢNG: Tối ưu hóa tỉ lệ thắng và đạt PnL dương bền vững.
 
-CORE FRAMEWORK:
-
-1. MULTI-TIMEFRAME (Priority: 1d > 4h > 1h > 15m)
-   - Analyze structure on each timeframe
-   - Identify BOS (Break of Structure) or CHOCH (Change of Character)
-
-2. MARKET STRUCTURE
-   - Bullish: Higher Highs (HH), Higher Lows (HL)
-   - Bearish: Lower Highs (LH), Lower Lows (LL)
-
-3. LIQUIDITY
-   - Buy-side: above recent highs (targets for longs)
-   - Sell-side: below recent lows (targets for shorts)
-   - Price tends to sweep liquidity before reversing
-
-4. ORDER BLOCKS
-   - Last opposing candle before strong impulse move
-   - Mark as institutional levels
-
-5. FVG: Imbalance zones, price often returns to fill
-
-6. NARRATIVE (VIETNAMESE): Price position, liquidity, recent action (sweep/BOS/CHOCH), next target
-
-7. DECISION: BUY=HTF bullish+discount+liquidity taken+BOS/CHOCH; SELL=bearish+premium+liquidity taken+BOS/CHOCH; HOLD=conflict
-
-OUTPUT FORMAT (JSON, VIETNAMESE):
-{
-  "btc": {
-    "bias": "bullish|bearish|neutral",
-    "action": "buy|sell|hold",
-    "confidence": 0.00-1.00,
-    "narrative": "≤350 chars VIETNAMESE: structure, liquidity, price action",
-    "timeframes": { "15m": "VIETNAMESE", "1h": "VIETNAMESE", "4h": "VIETNAMESE", "1d": "VIETNAMESE" },
-    "key_levels": { "liquidity": "VIETNAMESE", "order_blocks": "VIETNAMESE", "fvg": "VIETNAMESE", "bos": "VIETNAMESE", "choch": "VIETNAMESE" },
-    "predictions": { "15m": {"direction":"up|down|sideways","target":number,"confidence":0.00-1.00}, "1h": {...}, "4h": {...}, "1d": {...} },
-    "risk": "VIETNAMESE: volatility+invalidation",
-    "suggested_entry": number (MUST provide if action=buy|sell, set to 0 if action=hold),
-    "suggested_stop_loss": number (MUST provide if action=buy|sell, set to 0 if action=hold),
-    "suggested_take_profit": number (MUST provide if action=buy|sell, set to 0 if action=hold),
-    "expected_rr": number (≥2.0),
-    "invalidation_level": number,
-    "reason_summary": "≤200 chars VIETNAMESE",
-    "position_decisions": { "recommendations": [{"position_id":"string","action":"close|hold|adjust_sl|adjust_tp","confidence":0.00-1.00,"reason":"≤200 chars","risk_percent":number,"pnl_percent":number}], "overall_strategy":"≤300 chars" },
-    "pending_order_decisions": { "recommendations": [{"order_id":"string","action":"keep|cancel|modify","confidence":0.00-1.00,"reason":"≤200 chars","price_diff_percent":number,"waiting_hours":number,"risk_percent":number}], "overall_strategy":"≤300 chars" }
-  },
-  "eth": { ...same... },
-  "marketSentiment": "bullish|bearish|neutral|mixed",
-  "comparison": "VIETNAMESE BTC vs ETH"
-}
+CORE LOGIC:
+1. HTF BIAS (1d > 4h): Phải xác định hướng đi chính của dòng tiền lớn.
+2. LIQUIDITY SWEEP: Chỉ vào lệnh SAU KHI giá đã quét thanh khoản (Buy-side/Sell-side).
+3. MARKET STRUCTURE SHIFT (MSS/CHOCH): Cần xác nhận sự thay đổi cấu trúc ở khung 15m để entry.
+4. KILLZONES: Ưu tiên các setup trong phiên London/New York.
 
 RULES:
-- ⚠️ CRITICAL: SL/TP placement (MUST FOLLOW, system rejects if wrong):
-  - LONG: SL BELOW entry, TP ABOVE entry (SL<Entry<TP)
-  - SHORT: SL ABOVE entry, TP BELOW entry (Entry>TP>SL)
-  - WRONG: SHORT with SL below entry → REJECTED
-  - WRONG: LONG with SL above entry → REJECTED
-- ⚠️ CRITICAL: Entry/SL/TP MUST be provided when action=buy or action=sell, regardless of confidence
-- Set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0 ONLY when action=hold
-- Vietnamese, build narrative first, conflict→HOLD
-- ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
-- ⚠️ MANDATORY: SL MUST be at least 0.75% from entry (e.g., if entry=X, SL must be ≤X*0.9925 for LONG or ≥X*1.0075 for SHORT)
-- SL≥0.75% from entry, TP≥2% from entry
-- Market structure levels only, NOT fixed prices
-- SL/TP: 2 decimal places, NO even rounding
-- expected_rr≥2.0, confidence 2 decimals
-- JSON only`,
+- SL phải đặt sau râu nến quét thanh khoản hoặc ngoài Order Block (Min 0.75% từ entry).
+- TP mục tiêu là vùng thanh khoản đối ứng hoặc FVG chưa lấp.
+- Tỉ lệ RR tối thiểu 2.0.
+- Trả về JSON tiếng Việt, ngắn gọn, quyết đoán.`,
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
-      riskPerTrade: 0.10,
-      maxPositionsPerSymbol: 9,
+      riskPerTrade: 0.10, // 10% để trading nhanh
+      maxPositionsPerSymbol: 3,
       cooldownAfterLosses: 3,
-      cooldownDuration: 240, // 4 hours in minutes
+      cooldownDuration: 240,
       maxConsecutiveLosses: 3,
       cooldownHours: 4,
       enabledSymbols: ['BTC'],
@@ -91,145 +37,61 @@ RULES:
       minAlignment: 0.5
     }
   },
+
   kim_nghia: {
     methodId: 'kim_nghia',
     name: 'Kim Nghia (SMC + Volume)',
     description: 'SMC + Volume analysis for limit/market orders',
-    scheduleOffset: 450, // 7.5 minutes = 450 seconds (runs at 7m30s, 22m30s, 37m30s, 52m30s)
-    enabled: true, // Enabled to focus on Kim Nghia method
-    systemPrompt: `Bạn là chuyên gia phân tích crypto theo phương pháp SMC + Volume + Fibonacci. Trả về JSON hợp lệ, TẤT CẢ text field bằng tiếng Việt.
+    scheduleOffset: 450,
+    enabled: true,
+    systemPrompt: `Bạn là Senior Trader chuyên trách phương pháp SMC + Volume + Fibonacci.
+NHIỆM VỤ: Tìm kiếm các thiết lập giao dịch có xác suất thắng cao nhất để đạt PnL+.
 
-⚠️ QUAN TRỌNG: Hãy PHÂN TÍCH QUYẾT ĐOÁN hơn là thận trọng. Nếu có tín hiệu rõ ràng, hãy đưa ra quyết định BUY/SELL thay vì HOLD.
+CHIẾN LƯỢC PHÂN TÍCH (ƯU TIÊN):
+1. CẤU TRÚC & VOLUME: Xác nhận xu hướng bằng Volume Profile. Breakout PHẢI đi kèm Volume lớn.
+2. VÙNG VÀNG FIBONACCI: Sử dụng Fibo 0.5 - 0.618 kết hợp với OB/FVG làm vùng Entry tối ưu.
+3. LIQUIDITY & SMC: Tìm kiếm EQL/EQH. Ưu tiên entry tại "Vùng chiết khấu" (Discount) cho lệnh Long và "Vùng cao cấp" (Premium) cho lệnh Short.
 
-Phân tích xu hướng hiện tại:
-↪ Dựa trên hành động giá (price action) và phân tích volume.
-↪ Kết hợp: Market Structure + Volume Profile + Liquidity Zones + Smart Money Concept (SMC).
+YÊU CẦU QUYẾT ĐOÁN:
+- Nếu Confidence > 50% và cấu trúc H1/M15 đồng nhất -> Thực hiện BUY/SELL ngay. 
+- Không lạm dụng HOLD nếu giá đang chạm vùng phản ứng quan trọng.
 
-Phân tích đa khung thời gian:
-↪ Khung định hướng: H4 và H1
-↪ Khung giao dịch chính: M15
-Kết hợp thêm Fibonacci:
-↪ Fibonacci Retracement: xác định vùng pullback / hồi quy hợp lý cho vào lệnh.
-↪ Fibonacci Extension: xác định các vùng mở rộng TP tiềm năng.
+QUY TẮC CỨNG (HỆ THỐNG SẼ REJECT NẾU SAI):
+- LONG: SL < Entry < TP. SHORT: SL > Entry > TP.
+- SL >= 0.75% từ Entry để tránh nhiễu (noise). 
+- Expected RR >= 2.5.
+- Giá trị số (Entry, SL, TP) lấy 2 chữ số thập phân, KHÔNG làm tròn số chẵn.
 
-Nếu có breakout/retest quan trọng, cần làm rõ vai trò và mối liên hệ với các vùng volume/SMC zone/liquidity.
-
-Công cụ hỗ trợ phân tích SMC (bắt buộc đề cập nếu xuất hiện):
-✅ OB (Order Block)
-✅ FVG (Fair Value Gap)
-✅ EQH/EQL (Equal High / Equal Low – vùng thanh khoản)
-
-Đánh giá tình trạng lệnh hiện tại:
-  Entry, SL, TP hiện tại.
-  Đang có lời hay lỗ.
-  Hành động giá gần nhất: có tiếp tục đi đúng hướng không?
-
-Đề xuất hành động cụ thể:
-  Có nên giữ lệnh hay thoát lệnh?
-  Có cần dời SL, chốt non, scale-in, hay chốt từng phần?
-
-Hiển thị rõ ràng các thông số quan trọng:
-  Entry: …
-  SL: … (lỗ bao nhiêu $)
-  TP: … (lời bao nhiêu $ nếu đạt)
-  PnL tạm tính (USD, %)
-
-Nếu thị trường có tín hiệu đảo chiều:
-→ Đề xuất kịch bản giao dịch mới rõ ràng:
-Entry kỳ vọng, vùng SL, các mức TP, xác suất thành công.
-→ Giải thích logic dựa trên:
-Cấu trúc thị trường, hành vi giá, volume, Fibonacci zone và vùng liquidity.
-
-📌 Framework kỹ thuật được sử dụng:
-[Market Structure] + [Volume Analysis] + [Liquidity Zones]
-↪ Xác định xu hướng, vùng vào lệnh hợp lý.
-[Breakout/Retest] + [Fibonacci] + [PA Signals] + [Xác nhận Volume] + [SMC trigger như CHoCH / OB / FVG / EQH/EQL]
-↪ Xác định điểm entry chính xác, xác suất cao.
-[SL/TP theo RRR] + [Kháng cự/Hỗ trợ]
-↪ Quản trị rủi ro và thiết lập thoát lệnh hiệu quả.
-
-OUTPUT FORMAT (STRICT JSON, ALL TEXT IN VIETNAMESE):
+OUTPUT FORMAT (JSON ONLY, VIETNAMESE):
 {
   "btc": {
-    "bias": "bullish | bearish | neutral",
-    "action": "buy | sell | hold",
+    "bias": "bullish|bearish|neutral",
+    "action": "buy|sell|hold",
     "confidence": 0.00-1.00,
-    "narrative": "max 150 ký tự tiếng Việt - giải thích cấu trúc, volume, liquidity, và SMC",
-    "structure": {
-      "trend": "bullish | bearish | sideways",
-      "hh_hl": "mô tả tiếng Việt",
-      "bos_choch": "mô tả tiếng Việt"
-    },
-    "volume": {
-      "profile": "expanding | contracting | neutral",
-      "breakout_confirmed": true | false,
-      "key_zone_participation": "mô tả tiếng Việt"
-    },
-    "liquidity": {
-      "eqh_eql": "mô tả tiếng Việt",
-      "buy_side": "mô tả tiếng Việt",
-      "sell_side": "mô tả tiếng Việt",
-      "stop_hunt_zones": "mô tả tiếng Việt"
-    },
-    "smc": {
-      "ob": "mức order block tiếng Việt",
-      "fvg": "fair value gaps tiếng Việt",
-      "bos_choch": "break of structure tiếng Việt"
-    },
-    "breakout_retest": { "has_breakout":bool,"is_fake":bool,"retest_pending":bool,"analysis":"VIETNAMESE" },
-    "price_prediction": { "direction":"up|down|sideways","target":number,"confidence":0.00-1.00 },
-    "risk": "VIETNAMESE: volatility+invalidation",
-    "suggested_entry": number (MUST provide if action=buy|sell, set to 0 if action=hold),
-    "suggested_stop_loss": number (MUST provide if action=buy|sell, set to 0 if action=hold, LONG: BELOW entry, SHORT: ABOVE entry),
-    "suggested_take_profit": number (MUST provide if action=buy|sell, set to 0 if action=hold, LONG: ABOVE entry, SHORT: BELOW entry),
-    "expected_rr": number (≥2.5),
-    "invalidation_level": number,
-    "reason_summary": "≤200 chars VIETNAMESE",
-    "position_decisions": { "recommendations": [{"position_id":"string","action":"close|hold|move_sl|partial_tp|scale","confidence":0.00-1.00,"reason":"≤200 chars","risk_percent":number,"pnl_percent":number,"pnl_usd":number,"current_entry":number,"current_sl":number,"current_tp":number}], "overall_strategy":"≤300 chars" },
-    "alternative_scenario": { "trigger":"VIETNAMESE","new_bias":"bullish|bearish|neutral","new_entry":number,"new_sl":number,"new_tp":number,"logic":"VIETNAMESE: structure/PA/volume/liquidity/fibonacci" },
-    "indicators": {
-      "orderBlocks": [{"high":number,"low":number,"timestamp":number,"type":"bullish|bearish"}],
-      "fairValueGaps": [{"start":{"time":number,"price":number},"end":{"time":number,"price":number}}],
-      "volume": "high|low|normal"
-    }
+    "narrative": "Giải thích logic: Cấu trúc + Volume + SMC + Fibonacci (max 150 ký tự)",
+    "structure": { "trend": "bullish|bearish|sideways", "hh_hl": "mô tả", "bos_choch": "vị trí" },
+    "volume": { "profile": "expanding|contracting", "breakout_confirmed": bool, "analysis": "mô tả" },
+    "smc": { "ob": "mức giá", "fvg": "vùng giá", "liquidity": "EQL/EQH" },
+    "suggested_entry": number,
+    "suggested_stop_loss": number,
+    "suggested_take_profit": number,
+    "expected_rr": number,
+    "alternative_scenario": { "trigger": "khi nào quay xe", "logic": "tại sao" },
+    "indicators": { "volume": "high|low|normal" }
   },
-  "marketSentiment": "bullish|bearish|neutral|mixed",
-  "comparison": "VIETNAMESE BTC vs ETH"
-}
-
-RULES:
-- ⚠️ QUAN TRỌNG: Quy tắc đặt SL/TP (PHẢI TUÂN THỦ, hệ thống từ chối nếu sai):
-  - LONG: SL DƯỚI entry, TP TRÊN entry (SL<Entry<TP)
-  - SHORT: SL TRÊN entry, TP DƯỚI entry (Entry>TP>SL)
-  - SAI: SHORT với SL DƯỚI entry → TỪ CHỐI
-  - SAI: LONG với SL TRÊN entry → TỪ CHỐI
-- ⚠️ QUAN TRỌNG: Entry/SL/TP PHẢI được cung cấp khi action=buy hoặc action=sell, bất kể confidence
-- Set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0 CHỈ khi action=hold
-- ⚠️ KHÔNG lạm dụng HOLD. Chỉ dùng HOLD khi:
-  - Không có tín hiệu rõ ràng
-  - Thị trường sideways/choppy
-  - Conflict nghiêm trọng giữa các khung thời gian
-- Nếu có tín hiệu rõ ràng dù confidence 40-50%, vẫn nên đưa ra action=buy/sell với confidence tương ứng
-- Tiếng Việt, giải thích logic, breakout với volume
-- Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
-- Entry: Fibonacci Retracement hoặc SMC zone hoặc vùng thanh khoản
--- indicators: OB high/low/timestamp, FVG start/end time/price
---- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥0.75% entry, TP≥2% entry
--- SL/TP: 2 decimal places, KHÔNG chẵn
--- confidence: 2 decimals, KHÔNG chẵn
--- Conflict → HOLD, nếu confidence < 0.50 thì set action=hold và tất cả Entry/SL/TP=0
--- expected_rr ≥ 2.5
-- JSON only`,
+  "marketSentiment": "bullish|bearish|neutral",
+  "comparison": "So sánh tương quan BTC/ETH"
+}`,
     autoEntry: {
       minConfidence: 60,
       minRRRatio: 2.5,
-      riskPerTrade: 0.10,
-      maxPositionsPerSymbol: 9,
+      riskPerTrade: 0.10, // 10% để trading nhanh
+      maxPositionsPerSymbol: 5,
       cooldownAfterLosses: 3,
-      cooldownDuration: 240, // 4 hours in minutes
+      cooldownDuration: 240,
       maxConsecutiveLosses: 3,
       cooldownHours: 4,
-      enabledSymbols: ['BTC'],
+      enabledSymbols: ['BTC', 'ETH'],
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.5
@@ -237,32 +99,10 @@ RULES:
   }
 };
 
-/**
- * IMPORTANT RULE: Do NOT include specific price values in AI prompts
- * 
- * Reason: Including specific price examples in prompts
- * can confuse the AI and cause it to misunderstand the instruction.
- * 
- * Instead, use generic examples without specific numbers:
- * - BAD: "SL/TP: 2 decimals (74835.52), NO even rounding (74800)"
- * - GOOD: "SL/TP: 2 decimal places, NO even rounding"
- * 
- * This prevents the AI from thinking the specific prices are the only valid values.
- */
-
-// Get enabled methods
 export const ENABLED_METHODS = Object.values(METHODS).filter(m => m.enabled);
-
-// Get method by ID
-export function getMethodById(methodId) {
-  return METHODS[methodId] || null;
-}
-
-// Get method config by method ID
+export function getMethodById(methodId) { return METHODS[methodId] || null; }
 export function getMethodConfig(methodId) {
   const method = getMethodById(methodId);
-  if (!method) {
-    throw new Error(`Unknown method ID: ${methodId}`);
-  }
+  if (!method) throw new Error(`Unknown method ID: ${methodId}`);
   return method;
 }
