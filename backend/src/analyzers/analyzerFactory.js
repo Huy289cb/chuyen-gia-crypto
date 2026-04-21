@@ -447,19 +447,17 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
     };
     
     // Determine bias first for direction-aware validation
-    const bias = hasValidPredictions && ['bullish', 'bearish', 'neutral'].includes(coinData?.bias) 
+    const bias = ['bullish', 'bearish', 'neutral'].includes(coinData?.bias) 
       ? coinData.bias 
       : 'neutral';
-    
+
     return {
       bias: bias,
-      action: hasValidPredictions && ['buy', 'sell', 'hold'].includes(coinData?.action) 
+      action: ['buy', 'sell', 'hold'].includes(coinData?.action) 
         ? coinData.action 
         : 'hold',
-      confidence: hasValidPredictions ? Math.max(0, Math.min(1, parseFloat(coinData?.confidence) || 0.4)) : 0.3,
-      narrative: hasValidPredictions 
-        ? (coinData?.narrative || 'No narrative provided').substring(0, 350)
-        : 'Không có dự báo cụ thể - cần phân tích thêm dữ liệu',
+      confidence: Math.max(0, Math.min(1, parseFloat(coinData?.confidence) || 0.4)),
+      narrative: (coinData?.narrative || 'No narrative provided').substring(0, 350),
       timeframes: {
         '15m': coinData?.timeframes?.['15m'] || 'neutral',
         '1h': coinData?.timeframes?.['1h'] || 'neutral',
