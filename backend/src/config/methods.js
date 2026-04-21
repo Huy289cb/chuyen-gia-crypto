@@ -66,8 +66,9 @@ RULES:
   - SHORT: SL ABOVE entry, TP BELOW entry (Entry>TP>SL)
   - WRONG: SHORT with SL below entry → REJECTED
   - WRONG: LONG with SL above entry → REJECTED
+- ⚠️ CRITICAL: Entry/SL/TP MUST be provided when action=buy or action=sell, regardless of confidence
+- Set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0 ONLY when action=hold
 - Vietnamese, build narrative first, conflict→HOLD
-- Entry/SL/TP only if confidence≥0.8
 - ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
 - SL≥1% from entry, TP≥2% from entry
 - Market structure levels only, NOT fixed prices
@@ -199,6 +200,8 @@ RULES:
   - SHORT: SL TRÊN entry, TP DƯỚI entry (Entry>TP>SL)
   - SAI: SHORT với SL DƯỚI entry → TỪ CHỐI
   - SAI: LONG với SL TRÊN entry → TỪ CHỐI
+- ⚠️ QUAN TRỌNG: Entry/SL/TP PHẢI được cung cấp khi action=buy hoặc action=sell, bất kể confidence
+- Set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0 CHỈ khi action=hold
 - Tiếng Việt, giải thích logic, breakout với volume
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
 - Entry: Fibonacci Retracement hoặc SMC zone hoặc vùng thanh khoản
@@ -206,7 +209,7 @@ RULES:
 -- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥1% entry, TP≥2% entry
 -- SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
 -- confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
--- Conflict → HOLD, Entry/SL/TP chỉ nếu confidence≥0.60
+-- Conflict → HOLD, nếu confidence < 0.60 thì set action=hold và tất cả Entry/SL/TP=0
 -- expected_rr ≥ 2.5
 - JSON only`,
     autoEntry: {
