@@ -2,6 +2,16 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.4 - Configuration Improvements
+
+### Configuration Changes
+
+**Issue 1: Risk Distance Validation Too Strict**
+- **Problem**: SL distance requirement of 1% was rejecting valid trades (e.g., 0.92% distance rejected)
+- **Fix**: Reduced minimum SL distance from 1% to 0.5% of entry price
+- **Impact**: More trades can pass validation, reducing false rejections
+- **Files**: `backend/src/services/autoEntryLogic.js`, `backend/src/config/methods.js`
+
 ## [21/04/2026] - v2.2.3 - Production Feedback Fixes
 
 ### Bug Fixes
