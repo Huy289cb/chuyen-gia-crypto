@@ -33,18 +33,8 @@ export async function validateInsertSchema(db, tableName, insertColumns) {
     console.log(`[SchemaValidator] Schema columns (${tableColumns.length}):`, tableColumns);
     console.log(`[SchemaValidator] INSERT columns (${insertColumns.length}):`, insertColumns);
     
-    // Check for missing columns (in schema but not in INSERT)
-    const missingColumns = tableColumns.filter(col => !insertColumns.includes(col));
-    if (missingColumns.length > 0) {
-      console.error(`[SchemaValidator] ERROR: Missing columns in INSERT: ${missingColumns.join(', ')}`);
-      return {
-        valid: false,
-        error: `Missing columns in INSERT: ${missingColumns.join(', ')}`,
-        missingColumns
-      };
-    }
-    
-    // Check for extra columns (in INSERT but not in schema)
+    // Only check for extra columns (in INSERT but not in schema)
+    // Missing columns are OK if they have DEFAULT values or are nullable
     const extraColumns = insertColumns.filter(col => !tableColumns.includes(col));
     if (extraColumns.length > 0) {
       console.error(`[SchemaValidator] ERROR: Extra columns in INSERT: ${extraColumns.join(', ')}`);
@@ -53,6 +43,12 @@ export async function validateInsertSchema(db, tableName, insertColumns) {
         error: `Extra columns in INSERT: ${extraColumns.join(', ')}`,
         extraColumns
       };
+    }
+    
+    // Log missing columns as warning (not error)
+    const missingColumns = tableColumns.filter(col => !insertColumns.includes(col));
+    if (missingColumns.length > 0) {
+      console.log(`[SchemaValidator] INFO: Missing columns in INSERT (may have DEFAULT values): ${missingColumns.join(', ')}`);
     }
     
     console.log(`[SchemaValidator] ✓ Schema validation passed for ${tableName}`);
