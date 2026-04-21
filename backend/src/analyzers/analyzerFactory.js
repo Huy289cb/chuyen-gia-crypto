@@ -38,7 +38,7 @@ export function createAnalyzer(methodConfig) {
         const response = await client.analyze({
           systemPrompt: methodConfig.systemPrompt,
           userPrompt,
-          temperature: 0.3,
+          temperature: 0.6,
           maxRetries: 2
         });
 
