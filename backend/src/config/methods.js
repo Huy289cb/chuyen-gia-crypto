@@ -72,8 +72,8 @@ RULES:
 - ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
 - SL≥0.5% from entry, TP≥2% from entry
 - Market structure levels only, NOT fixed prices
-- SL/TP: 2 decimals (74835.52), NO even rounding (74800)
-- expected_rr≥2.0, confidence 2 decimals (0.75)
+- SL/TP: 2 decimal places (e.g., 74835.52), NO even rounding (e.g., 74800)
+- expected_rr≥2.0, confidence 2 decimals (e.g., 0.75)
 - JSON only`,
     autoEntry: {
       minConfidence: 70,
@@ -214,8 +214,8 @@ RULES:
 - Entry: Fibonacci Retracement hoặc SMC zone hoặc vùng thanh khoản
 - indicators: OB high/low/timestamp, FVG start/end time/price
 -- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥0.5% entry, TP≥2% entry
--- SL/TP: 2 decimals (74776.57), KHÔNG chẵn (74800)
--- confidence: 2 decimals (0.75), KHÔNG chẵn (0.50)
+-- SL/TP: 2 decimal places, KHÔNG chẵn
+-- confidence: 2 decimals, KHÔNG chẵn
 -- Conflict → HOLD, nếu confidence < 0.50 thì set action=hold và tất cả Entry/SL/TP=0
 -- expected_rr ≥ 2.5
 - JSON only`,
@@ -235,6 +235,19 @@ RULES:
     }
   }
 };
+
+/**
+ * IMPORTANT RULE: Do NOT include specific price values in AI prompts
+ * 
+ * Reason: Including specific price examples (e.g., 74835.52, 74800) in prompts
+ * can confuse the AI and cause it to misunderstand the instruction.
+ * 
+ * Instead, use generic examples with "e.g." notation:
+ * - BAD: "SL/TP: 2 decimals (74835.52), NO even rounding (74800)"
+ * - GOOD: "SL/TP: 2 decimal places (e.g., 74835.52), NO even rounding (e.g., 74800)"
+ * 
+ * This prevents the AI from thinking the specific prices are the only valid values.
+ */
 
 // Get enabled methods
 export const ENABLED_METHODS = Object.values(METHODS).filter(m => m.enabled);
