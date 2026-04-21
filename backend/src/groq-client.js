@@ -2,7 +2,7 @@
 // Handles API calls with retry logic and error handling
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODELS = ['qwen/qwen3-32b', 'openai/gpt-oss-120b', 'meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+const MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'openai/gpt-oss-120b'];
 
 // Rate limiting protection
 let lastCallTime = 0;
@@ -16,9 +16,12 @@ function cleanJSONResponse(rawResponse) {
     const end = rawResponse.lastIndexOf('}');
     if (start === -1 || end === -1) throw new Error("Không tìm thấy JSON");
     
-    const jsonString = rawResponse.substring(start, end + 1);
+    let jsonString = rawResponse.substring(start, end + 1);
     console.log('[GroqClient] Cleaned JSON string length:', jsonString.length);
     console.log('[GroqClient] Cleaned JSON preview:', jsonString.substring(0, 200));
+    
+    // Fix common JSON syntax errors
+    jsonString = fixJSONSyntax(jsonString);
     
     // Try to parse the cleaned JSON
     const parsed = JSON.parse(jsonString);
@@ -26,8 +29,30 @@ function cleanJSONResponse(rawResponse) {
   } catch (e) {
     console.error("Lỗi parse JSON thủ công:", e.message);
     console.log('[GroqClient] Raw response length:', rawResponse.length);
-    console.log('[GroqClient] Raw response preview:', rawResponse.substring(0, 300));
+    console.log('[GroqClient] Raw response preview:', rawResponse.substring(0, 500));
     return null;
+  }
+}
+
+// Fix common JSON syntax errors
+function fixJSONSyntax(jsonString) {
+  try {
+    // Remove trailing commas before closing brackets/braces
+    jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
+    
+    // Add missing commas between key-value pairs (common error)
+    jsonString = jsonString.replace(/"(\w+)"\s*:/g, (match) => {
+      return match;
+    });
+    
+    // Fix double commas
+    jsonString = jsonString.replace(/,,/g, ',');
+    
+    console.log('[GroqClient] Applied JSON syntax fixes');
+    return jsonString;
+  } catch (e) {
+    console.error('[GroqClient] Error fixing JSON syntax:', e.message);
+    return jsonString;
   }
 }
 
