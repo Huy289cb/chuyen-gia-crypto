@@ -66,7 +66,12 @@ Ngừng do dự: Nếu RR >= 2.5 và Confidence >= 50%, bạn PHẢI chọn BUY 
 Tuyệt đối: Chỉ dùng HOLD khi thị trường Sideways không biên độ hoặc các khung thời gian cãi nhau (Conflict) 100%.
 Độ chính xác: Entry/SL/TP phải lấy 2 số thập phân. SL tối thiểu 0.5%.
 OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
-QUAN TRỌNG: Chỉ trả về JSON, không thêm bất kỳ text nào trước/sau JSON.
+⚠️ CẢNH BÁO HỆ THỐNG:
+- CHỈ trả về duy nhất mã JSON thuần túy.
+- KHÔNG có văn bản dẫn nhập, KHÔNG có markdown (không dùng \`\`\`json), KHÔNG có lời kết.
+- Bắt đầu bằng dấu { và kết thúc bằng dấu }.
+- Đảm bảo tất cả các ngoặc kép và phẩy đúng cú pháp JSON.
+- Nếu vi phạm, hệ thống sẽ crash.
 {
 "btc": {
 "bias": "bullish|bearish|neutral",

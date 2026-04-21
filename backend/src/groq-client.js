@@ -8,6 +8,22 @@ const MODELS = ['qwen/qwen3-32b', 'openai/gpt-oss-120b', 'meta-llama/llama-4-sco
 let lastCallTime = 0;
 const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
 
+// Function to clean JSON response from models that add extra text
+function cleanJSONResponse(rawResponse) {
+  try {
+    // Find the first { and last }
+    const start = rawResponse.indexOf('{');
+    const end = rawResponse.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error("Không tìm thấy JSON");
+    
+    const jsonString = rawResponse.substring(start, end + 1);
+    return JSON.parse(jsonString);
+  } catch (e) {
+    console.error("Lỗi parse JSON thủ công:", e);
+    return null;
+  }
+}
+
 // Fetch with timeout to prevent hanging in production
 async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   const controller = new AbortController();
@@ -67,8 +83,9 @@ class GroqClient {
           { role: 'user', content: userPrompt }
         ],
         temperature,
-        max_tokens: 1024,
-        response_format: { type: 'json_object' }
+        max_tokens: 1024
+        // Disable response_format json_object to allow manual JSON cleaning
+        // response_format: { type: 'json_object' }
       };
 
       let lastError;
@@ -105,16 +122,16 @@ class GroqClient {
             throw new Error('Empty response from Groq API');
           }
 
-          // Parse JSON response
-          try {
-            const parsed = JSON.parse(content);
-            console.log(`[GroqClient] Successfully parsed response from model ${currentModel}`);
-            return parsed;
-          } catch (parseError) {
-            console.error('[GroqClient] JSON parse error:', parseError.message);
+          // Parse JSON response using cleanJSONResponse to handle extra text
+          const parsed = cleanJSONResponse(content);
+          if (parsed === null) {
+            console.error('[GroqClient] Failed to clean JSON from response');
             console.log('[GroqClient] Raw content:', content.substring(0, 200));
-            throw new Error('Invalid JSON in response');
+            throw new Error('Invalid JSON in response after cleaning');
           }
+
+          console.log(`[GroqClient] Successfully parsed response from model ${currentModel}`);
+          return parsed;
 
         } catch (error) {
           lastError = error;
