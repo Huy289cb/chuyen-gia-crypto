@@ -2,6 +2,66 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.9 - Position Limit & Kim Nghia Improvements
+
+### Configuration Changes
+
+**Issue 1: Position Limit Adjustment**
+- **Problem**: maxPositionsPerSymbol was inconsistent across codebase (8, 9, various values)
+- **Fix**: Standardized to 6 positions per symbol across all components
+  - Updated backend/src/config/methods.js: ICT & Kim Nghia maxPositionsPerSymbol 9 → 6
+  - Updated backend/src/services/autoEntryLogic.js: AUTO_ENTRY_CONFIG maxPositionsPerSymbol 9 → 6
+  - Updated docs/paper-trading.md: Position limit 9 → 6 (5 places)
+  - Updated docs/plans/multi-method-paper-trading-implementation.md: maxPositionsPerSymbol 9 → 6
+  - Updated frontend/app/rules/page.tsx: Position limit 8/9 → 6 (Vietnamese & English)
+  - Updated frontend/app/sections/TradingDashboard.tsx: Max Positions 8 → 6
+- **Impact**: Consistent position limits across backend, docs, and frontend
+- **Files**: `backend/src/config/methods.js`, `backend/src/services/autoEntryLogic.js`, `docs/paper-trading.md`, `docs/plans/multi-method-paper-trading-implementation.md`, `frontend/app/rules/page.tsx`, `frontend/app/sections/TradingDashboard.tsx`
+
+### Bug Fixes
+
+**Issue 2: Fibonacci Calculation Error - db Parameter Missing**
+- **Problem**: formatAnalysisResponse called getOHLCCandles with priceData.btc?.db which was undefined
+- **Error**: "Cannot read properties of undefined (reading 'all')" at database.js:685
+- **Fix**: 
+  - Added db parameter to formatAnalysisResponse function signature
+  - Use db parameter instead of priceData.btc?.db for getOHLCCandles calls
+  - Add db check before attempting Fibonacci calculation
+  - Update formatAnalysisResponse call to pass db parameter
+- **Impact**: Fibonacci calculation now works correctly for Kim Nghia method
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+### Improvements
+
+**Issue 3: Kim Nghia Prompt Too Concise - Low Confidence Predictions**
+- **Problem**: Simplified Kim Nghia prompt resulted in all predictions returning neutral with 30% confidence
+- **Fix**: Enhanced Kim Nghia prompt with detailed multi-timeframe analysis framework
+  - Added detailed multi-timeframe analysis (4h > 1h > 15m priority)
+  - Added comprehensive volume analysis instructions
+  - Added Fibonacci levels and liquidity concepts
+  - Added entry/exit rules with SMC zones (OB, FVG, EQL/EQH)
+  - Added partial TP and trailing SL rules
+  - Increased narrative max length from 150 to 200 chars
+  - Added explicit MUST provide Entry/SL/TP instructions
+- **Impact**: AI now has better context to make confident predictions
+- **Files**: `backend/src/config/methods.js`
+
+**Issue 4: Missing OHLC Data in User Prompt**
+- **Problem**: User prompt lacked OHLC candle data needed for SMC analysis
+- **Fix**: Added OHLC candle data to user prompt for Kim Nghia method
+  - Fetch 50 candles (15m timeframe) for BTC and ETH
+  - Include last 10 OHLC candles in user prompt
+  - Format: [HH:MM] O:price H:price L:price C:price V:volume
+  - Only applied for Kim Nghia method
+- **Impact**: AI now has price action context for SMC analysis
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 5: Model Priority**
+- **Problem**: Default model order prioritized llama-3.1-8b-instant
+- **Fix**: Swapped model order to prioritize llama-4-scout-17b-16e-instruct
+- **Impact**: Better model for analysis tasks is tried first
+- **Files**: `backend/src/groq-client.js`
+
 ## [21/04/2026] - v2.2.8 - SL Distance Adjustment
 
 ### Configuration Changes
