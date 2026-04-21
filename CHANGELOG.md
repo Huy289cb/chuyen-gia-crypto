@@ -2,6 +2,38 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.7 - Critical Feedback Fixes
+
+### Bug Fixes
+
+**Issue 1: SQL Column Mismatch - CRITICAL BLOCKER**
+- **Problem**: INSERT statement had 29 columns but only 28 values (missing r_multiple)
+- **Error**: "SQLITE_ERROR: 31 values for 29 columns"
+- **Fix**: Added r_multiple = 0 to VALUES clause in INSERT statement
+- **Impact**: Positions can now be saved to database when entry criteria are met
+- **Files**: `backend/src/db/database.js`
+
+**Issue 2: ICT Method - SL Distance Validation Too Strict**
+- **Problem**: SL distance of 0.26% was being rejected (below 0.5% threshold)
+- **Fix**: Reduced minimum SL distance from 0.5% to 0.25%
+- **Impact**: More trades can pass validation, including those with tighter stops
+- **Files**: `backend/src/services/autoEntryLogic.js`, `backend/src/config/methods.js`
+
+**Issue 3: Kim Nghia Method - Disabled Temporarily**
+- **Problem**: AI consistently returns neutral with 30% confidence (below 60% threshold)
+- **Fix**: Disabled Kim Nghia method to focus 100% on ICT method
+- **Impact**: System will only run ICT analysis until Kim Nghia is revisited
+- **Files**: `backend/src/config/methods.js`
+
+### Debug Logging
+
+**Issue 4: Fibonacci Calculation Error (Still Present)**
+- **Problem**: "Cannot read properties of undefined (reading 'all')" error persists
+- **Fix**: Added detailed logging to identify exact error location
+  - Logs OHLC data fetch, candle counts, bias, and error stack
+- **Impact**: Can now identify exact line causing the error for proper fix
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
 ## [21/04/2026] - v2.2.6 - Prompt Documentation Update
 
 ### Documentation Updates
