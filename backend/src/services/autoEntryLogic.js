@@ -182,14 +182,19 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   console.log(`[AutoEntry] Check 5 PASSED: Bias is ${analysis.bias}`);
 
   // Check 6: Multi-timeframe alignment (4h and 1d only for ICT, H4 and H1 for KimNghia)
-  const alignment = checkTimeframeAlignment(analysis, config.requiredTimeframes);
-  console.log(`[AutoEntry] Check 6: Timeframe alignment - Required: ${config.requiredTimeframes.join(', ')}, Aligned: ${alignment.alignedCount}/${config.requiredTimeframes.length}, Details:`, alignment.details);
-  if (alignment.alignedCount < config.requiredTimeframes.length * config.minAlignment) {
-    decision.reason = `Multi-timeframe alignment insufficient (${alignment.alignedCount}/${config.requiredTimeframes.length} aligned)`;
-    console.log(`[AutoEntry] Check 6 FAILED: ${decision.reason}`);
-    return decision;
+  // Skip for Kim Nghia method since it doesn't use timeframe predictions
+  if (methodConfig && methodConfig.methodId === 'kim_nghia') {
+    console.log(`[AutoEntry] Check 6 SKIPPED: Kim Nghia method doesn't use timeframe predictions`);
+  } else {
+    const alignment = checkTimeframeAlignment(analysis, config.requiredTimeframes);
+    console.log(`[AutoEntry] Check 6: Timeframe alignment - Required: ${config.requiredTimeframes.join(', ')}, Aligned: ${alignment.alignedCount}/${config.requiredTimeframes.length}, Details:`, alignment.details);
+    if (alignment.alignedCount < config.requiredTimeframes.length * config.minAlignment) {
+      decision.reason = `Multi-timeframe alignment insufficient (${alignment.alignedCount}/${config.requiredTimeframes.length} aligned)`;
+      console.log(`[AutoEntry] Check 6 FAILED: ${decision.reason}`);
+      return decision;
+    }
+    console.log(`[AutoEntry] Check 6 PASSED: Timeframe alignment sufficient`);
   }
-  console.log(`[AutoEntry] Check 6 PASSED: Timeframe alignment sufficient`);
 
   // Check 7: AI action must be buy or sell (not hold)
   console.log(`[AutoEntry] Check 7: AI action is '${analysis.action}'`);
