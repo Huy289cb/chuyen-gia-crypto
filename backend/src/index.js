@@ -37,6 +37,15 @@ try {
       await getOrCreateAccount(db, 'BTC', 'ict', 100);
       await getOrCreateAccount(db, 'BTC', 'kim_nghia', 100);
       console.log('[Index] Paper trading accounts initialized (BTC-ICT: 100U, BTC-KimNghia: 100U)');
+      
+      // Run schema validation on startup to prevent column mismatch errors
+      try {
+        const { runSchemaValidationOnStartup } = await import('./db/schemaValidator.js');
+        await runSchemaValidationOnStartup(db);
+      } catch (schemaError) {
+        console.warn('[Index] Schema validation failed:', schemaError.message);
+        console.warn('[Index] System starting despite schema validation errors. Manual intervention may be required.');
+      }
     } catch (accountError) {
       console.log('[Index] Account initialization failed:', accountError.message);
     }
