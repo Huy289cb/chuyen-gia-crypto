@@ -185,10 +185,12 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   // Check 6: Multi-timeframe alignment (4h and 1d only for ICT, H4 and H1 for KimNghia)
   // Skip for Kim Nghia method since it doesn't use timeframe predictions
   console.log(`[AutoEntry] Check 6 DEBUG: methodConfig = ${methodConfig ? JSON.stringify({methodId: methodConfig.methodId, name: methodConfig.name}) : 'null'}`);
+  let alignment = null;
   if (methodConfig && methodConfig.methodId === 'kim_nghia') {
     console.log(`[AutoEntry] Check 6 SKIPPED: Kim Nghia method doesn't use timeframe predictions`);
+    alignment = { alignedCount: 0, details: {} }; // Set default for Kim Nghia
   } else {
-    const alignment = checkTimeframeAlignment(analysis, config.requiredTimeframes);
+    alignment = checkTimeframeAlignment(analysis, config.requiredTimeframes);
     console.log(`[AutoEntry] Check 6: Timeframe alignment - Required: ${config.requiredTimeframes.join(', ')}, Aligned: ${alignment.alignedCount}/${config.requiredTimeframes.length}, Details:`, alignment.details);
     if (alignment.alignedCount < config.requiredTimeframes.length * config.minAlignment) {
       decision.reason = `Multi-timeframe alignment insufficient (${alignment.alignedCount}/${config.requiredTimeframes.length} aligned)`;
@@ -221,7 +223,13 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   decision.shouldEnter = true;
   decision.action = analysis.bias === 'bullish' ? 'enter_long' : 'enter_short';
   decision.confidence = confidenceScore;
-  decision.reason = `All criteria met: ${confidenceScore.toFixed(0)}% confidence, ${alignment.alignedCount}/${config.requiredTimeframes.length} timeframes aligned, R:R ${expectedRR.toFixed(1)}`;
+  
+  // Build reason string (include alignment info only if check was performed)
+  if (methodConfig && methodConfig.methodId === 'kim_nghia') {
+    decision.reason = `All criteria met: ${confidenceScore.toFixed(0)}% confidence, R:R ${expectedRR.toFixed(1)}`;
+  } else {
+    decision.reason = `All criteria met: ${confidenceScore.toFixed(0)}% confidence, ${alignment.alignedCount}/${config.requiredTimeframes.length} timeframes aligned, R:R ${expectedRR.toFixed(1)}`;
+  }
 
   // Calculate suggested position parameters
   decision.suggestedPosition = calculateSuggestedPosition(analysis, account, config);
