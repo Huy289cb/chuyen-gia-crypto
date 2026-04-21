@@ -43,7 +43,7 @@ export function createAnalyzer(methodConfig) {
         });
 
         // Format response with method_id tagging
-        const formatted = await formatAnalysisResponse(response, priceData, methodConfig.methodId);
+        const formatted = await formatAnalysisResponse(response, priceData, methodConfig.methodId, db);
         console.log(`[${methodConfig.name}] Analysis complete`);
         console.log(`  BTC: ${formatted.btc.action} | bias: ${formatted.btc.bias} | confidence: ${(formatted.btc.confidence * 100).toFixed(0)}%`);
         console.log(`  ETH: ${formatted.eth.action} | bias: ${formatted.eth.bias} | confidence: ${(formatted.eth.confidence * 100).toFixed(0)}%`);
@@ -266,18 +266,19 @@ Return ONLY valid JSON following the system format.`;
  * @param {Object} rawResponse - Raw response from analyzer
  * @param {Object} priceData - Price data
  * @param {string} methodId - Method ID
+ * @param {Object} db - Database connection
  * @returns {Promise<Object>} Formatted response
  */
-async function formatAnalysisResponse(rawResponse, priceData, methodId) {
+async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
   // Calculate Fibonacci for Kim Nghia method before formatting
   let kimNghiaFibonacci = null;
-  if (methodId === 'kim_nghia') {
+  if (methodId === 'kim_nghia' && db) {
     try {
       const { getFibonacciFromOHLC } = await import('../utils/fibonacci.js');
       const { getOHLCCandles } = await import('../db/database.js');
       console.log('[AnalyzerFactory] Fetching OHLC data for Fibonacci calculation...');
-      const btcOhlc = await getOHLCCandles(priceData.btc?.db, 'BTC', 50, '15m');
-      const ethOhlc = await getOHLCCandles(priceData.eth?.db, 'ETH', 50, '15m');
+      const btcOhlc = await getOHLCCandles(db, 'BTC', 50, '15m');
+      const ethOhlc = await getOHLCCandles(db, 'ETH', 50, '15m');
       console.log('[AnalyzerFactory] OHLC data fetched - BTC:', btcOhlc?.length, 'candles, ETH:', ethOhlc?.length, 'candles');
 
       // Check if OHLC data is available before calculating Fibonacci
