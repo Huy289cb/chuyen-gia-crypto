@@ -224,6 +224,35 @@ async function buildUserPrompt(priceData, db, methodId) {
   const methodConfig = getMethodConfig(methodId);
   const methodName = methodConfig.name;
 
+  // Fetch OHLC candle data for Kim Nghia method
+  let ohlcContext = '';
+  if (methodId === 'kim_nghia' && db) {
+    try {
+      const { getOHLCCandles } = await import('../db/database.js');
+      console.log(`[AnalyzerFactory][${methodId}] Fetching OHLC data for analysis...`);
+      const btcOhlc = await getOHLCCandles(db, 'BTC', 50, '15m');
+      const ethOhlc = await getOHLCCandles(db, 'ETH', 50, '15m');
+      
+      if (btcOhlc && btcOhlc.length > 0) {
+        const btcRecent = btcOhlc.slice(-10).map(c => 
+          `[${new Date(c.timestamp).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}] O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)} V:${c.volume || 'N/A'}`
+        ).join('\n');
+        ohlcContext += `\nBTC OHLC CANDLES (15m, last 10):\n${btcRecent}\n`;
+      }
+      
+      if (ethOhlc && ethOhlc.length > 0) {
+        const ethRecent = ethOhlc.slice(-10).map(c => 
+          `[${new Date(c.timestamp).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}] O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)} V:${c.volume || 'N/A'}`
+        ).join('\n');
+        ohlcContext += `\nETH OHLC CANDLES (15m, last 10):\n${ethRecent}\n`;
+      }
+      
+      console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles, ETH: ${ethOhlc?.length || 0} candles`);
+    } catch (error) {
+      console.log(`[AnalyzerFactory][${methodId}] Failed to fetch OHLC data:`, error.message);
+    }
+  }
+
   return `Analyze BTC and ETH using ${methodName} methodology.
 
 BTC DATA:
@@ -239,6 +268,7 @@ ETH DATA:
 - 7d Change: ${priceData.eth.change7d?.toFixed(2)}%
 - Timeframe Changes: 15m=${ethChanges['15m']?.toFixed(3)}%, 1h=${ethChanges['1h']?.toFixed(3)}%, 4h=${ethChanges['4h']?.toFixed(3)}%, 1d=${ethChanges['1d']?.toFixed(3)}%
 - Recent Prices (last points): ${JSON.stringify(priceData.eth.prices1d?.slice(-6) || [])}
+${ohlcContext}
 ${historicalContext}
 ${openPositionsContext}
 ${pendingOrdersContext}
