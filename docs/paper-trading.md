@@ -632,6 +632,8 @@ All position openings (manual and auto) now enforce:
 - **Maximum positions**: 6 concurrent positions per symbol
 - **Price range validation**: Entry within 10% of current price for limit orders
 - **Direction alignment**: Entry price must align with trade direction
+
+> **Note**: groqAnalyzer.js has been removed. All analysis now uses analyzerFactory.js directly. Shared utilities extracted to utils/dateHelpers.js and utils/asyncHelpers.js.
 - **Minimum confidence**: ICT 70%, Kim Nghia 60% threshold for auto-entry
 - **AI-provided SL/TP**: Required for auto-entry (no default fallback)
 - **SL/TP side validation**: SL must be on correct side of entry based on bias

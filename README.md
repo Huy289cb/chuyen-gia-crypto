@@ -74,11 +74,15 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 crypto-analyzer/
 ├── backend/              # Node.js + Express + Groq API
 │   ├── src/
-│   │   ├── index.js         # Entry point
-│   │   ├── groqAnalyzer.js  # ICT analysis engine
-│   │   ├── price-fetcher.js # CoinGecko integration
-│   │   ├── groq-client.js   # Groq API wrapper
-│   │   ├── scheduler.js     # 15-min cron job + price updates
+│   │   ├── index.js                # Entry point
+│   │   ├── analyzers/
+│   │   │   └── analyzerFactory.js  # Multi-method analysis engine
+│   │   ├── price-fetcher.js        # CoinGecko integration
+│   │   ├── groq-client.js          # Groq API wrapper
+│   │   ├── scheduler.js            # 15-min cron job + price updates
+│   │   ├── utils/
+│   │   │   ├── dateHelpers.js      # Date formatting utilities
+│   │   │   └── asyncHelpers.js     # Async utilities
 │   │   ├── cache.js         # In-memory cache
 │   │   ├── routes.js        # Main API endpoints
 │   │   ├── routes/          # API route modules

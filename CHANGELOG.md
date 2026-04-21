@@ -2,6 +2,82 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.3.0 - Refactoring, Model Updates & Risk Distance Fix
+
+### Code Refactoring
+
+**Issue 1: Remove Hardcoded Confidence & Fallback Analysis**
+- **Problem**: AI confidence values were hardcoded to 55% (Kim Nghia) and 40% (ICT) in fallback logic
+- **Root Cause**: `generateFallbackAnalysis` function in both groqAnalyzer.js and analyzerFactory.js had hardcoded confidence values
+- **Fix**:
+  - Removed `generateFallbackAnalysis` function from both files
+  - Changed error handling to return simple error message when AI fails instead of fallback analysis
+  - All confidence now comes from AI responses without fallback overrides
+- **Impact**: AI raw output displayed correctly without hardcoded fallback values
+- **Files**: `backend/src/groqAnalyzer.js` (deleted), `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 2: Duplicate Code Consolidation**
+- **Problem**: groqAnalyzer.js was just a wrapper around analyzerFactory.js, creating code duplication
+- **Fix**:
+  - Deleted groqAnalyzer.js file
+  - Updated scheduler.js to use analyzerFactory directly
+  - Updated routes.js to use analyzerFactory directly
+- **Impact**: Cleaner codebase, single source of truth for analysis logic
+- **Files**: `backend/src/groqAnalyzer.js` (deleted), `backend/src/scheduler.js`, `backend/src/routes.js`
+
+**Issue 3: Extract Shared Utilities**
+- **Problem**: Helper functions duplicated across multiple files
+- **Fix**:
+  - Created `backend/src/utils/dateHelpers.js` with `formatVietnamTime` function
+  - Created `backend/src/utils/asyncHelpers.js` with `promiseAllWithTimeout` function
+  - Updated scheduler.js, priceUpdateScheduler.js, autoEntryLogic.js to import from dateHelpers
+  - Updated database.js, migrations.js to import from asyncHelpers
+- **Impact**: Duplicated code consolidated into reusable utilities
+- **Files**: `backend/src/utils/dateHelpers.js`, `backend/src/utils/asyncHelpers.js`, `backend/src/scheduler.js`, `backend/src/schedulers/priceUpdateScheduler.js`, `backend/src/services/autoEntryLogic.js`, `backend/src/db/database.js`, `backend/src/db/migrations.js`
+
+**Issue 4: Duplicate formatVietnamTime Declaration**
+- **Problem**: autoEntryLogic.js imported formatVietnamTime but also had local function declaration
+- **Error**: "Identifier 'formatVietnamTime' has already been declared" at runtime
+- **Fix**: Removed local function declaration, kept only import from dateHelpers.js
+- **Impact**: Fixed runtime error
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+### AI Prompt Updates
+
+**Issue 5: Kim Nghia Scoring-Based Confidence System**
+- **Problem**: Previous prompt lacked structured confidence scoring
+- **Fix**:
+  - Added scoring system: HTF Alignment (30%), Liquidity & Structure (30%), SMC & Fibo Confluence (20%), Volume Confirmation (20%)
+  - Added action thresholds: 90-100% (perfect), 70-89% (strong), 50-69% (average), <50% (hold)
+  - Added `scoring_detail` field to output format
+  - Changed structure format to use `key_event` instead of `hh_hl`/`bos_choch`
+  - Changed `volume_analysis` to string instead of volume object
+  - Removed `smc` and `indicators` objects from output
+- **Impact**: AI provides more structured confidence scores and detailed analysis
+- **Files**: `backend/src/config/methods.js`, `backend/src/analyzers/analyzerFactory.js`
+
+### Groq Model Updates
+
+**Issue 6: Deprecated Model Removal**
+- **Problem**: llama-3.1-70b-versatile model was decommissioned by Groq (404 error)
+- **Fix**:
+  - Removed llama-3.1-70b-versatile from model list
+  - Added qwen/qwen3-32b: Best for reasoning, math, JSON handling (60 RPM, 6000 TPM)
+  - Added openai/gpt-oss-120b: GPT-4o equivalent, best for narrative understanding (30 RPM, 8000 TPM)
+  - Added meta-llama/llama-4-scout-17b-16e-instruct: Fastest speed, 30,000 TPM for scalping
+  - Kept llama-3.3-70b-versatile and llama-3.1-8b-instant as fallbacks
+- **Impact**: System uses latest supported Groq models with better capabilities
+- **Files**: `backend/src/groq-client.js`
+
+### Bug Fixes
+
+**Issue 7: Risk Distance Too Strict for Kim Nghia**
+- **Problem**: 70% confidence analysis rejected due to risk distance 0.74% < 0.75%
+- **Root Cause**: Min risk distance hardcoded at 0.75% in autoEntryLogic.js
+- **Fix**: Reduced minRiskDistance from 0.75% to 0.5% to match Kim Nghia config
+- **Impact**: Positions with 0.5%+ risk distance now accepted for Kim Nghia method
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
 ## [21/04/2026] - v2.2.10 - AI Conservatism Fixes & SL Distance Adjustments
 
 ### AI Improvements

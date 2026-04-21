@@ -147,7 +147,7 @@ export const METHODS = {
     name: 'ICT Smart Money',
     description: 'ICT Smart Money Concepts analysis',
     scheduleOffset: 0, // Runs at 0m, 15m, 30m, 45m
-    systemPrompt: '...', // Existing ICT prompt from groqAnalyzer.js
+    systemPrompt: '...', // ICT prompt in config/methods.js
     enabled: true
   },
   kim_nghia: {
@@ -204,16 +204,6 @@ function formatAnalysisResponse(rawResponse, priceData, methodId) {
   return formatted;
 }
 ```
-
-### 2.3 Refactor Existing Groq Analyzer
-
-**File to modify:** `backend/src/groqAnalyzer.js`
-
-**Changes:**
-- Extract system prompt to `METHODS.ict.systemPrompt` in config file
-- Extract user prompt building logic to reusable function
-- Keep `analyzeWithGroq()` as wrapper for backward compatibility
-- Add method_id parameter (default 'ict')
 
 ## Phase 3: Backend - Staggered Scheduler
 
