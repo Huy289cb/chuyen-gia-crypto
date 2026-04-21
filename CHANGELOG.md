@@ -2,6 +2,63 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.2.10 - AI Conservatism Fixes & SL Distance Adjustments
+
+### AI Improvements
+
+**Issue 1: AI Too Conservative - Returns 30% Confidence Consistently**
+- **Problem**: AI consistently returning 30% confidence with neutral bias despite having valid trading signals
+- **Root Cause Analysis**:
+  - Temperature too low (0.3) made AI extremely conservative
+  - Prompt emphasized "xác suất thắng cao nhất" (highest win probability) causing AI to only trade when 100% confident
+  - Database query showed AI providing entry/TP but no SL, defaulting to hold with 30% confidence
+- **Fix**:
+  - Increased temperature from 0.3 to 0.6 in analyzerFactory.js
+  - Rewrote Kim Nghia prompt to be less conservative:
+    - Removed emphasis on "xác suất thắng cao nhất"
+    - Added instruction: "Trade với confidence 50-60% TỐT HƠN không trade"
+    - Added instruction: "Nếu có entry + TP + RR >= 2.5 → set action = buy/sell, KHÔNG hold"
+    - Removed strict multi-timeframe alignment requirement
+    - Added: "Confidence 0.3 chỉ khi KHÔNG có setup nào khả thi"
+- **Impact**: AI now returns 55% confidence with buy/sell actions instead of 30% hold
+- **Files**: `backend/src/analyzers/analyzerFactory.js`, `backend/src/config/methods.js`
+
+**Issue 2: SL Distance Validation Mismatch**
+- **Problem**: Code validated SL distance at 1% (0.01) but prompt specified 0.75% (0.0075)
+- **Root Cause**: Code and prompt were out of sync, causing valid AI suggestions to be rejected
+- **Example**: AI provided SL with 0.235% distance, rejected by code (required 1%), even though prompt said 0.75%
+- **Fix**: Updated SL validation in analyzerFactory.js and groqAnalyzer.js from 1% to 0.75% to match prompt
+- **Impact**: Code validation now matches prompt requirements
+- **Files**: `backend/src/analyzers/analyzerFactory.js`, `backend/src/groqAnalyzer.js`
+
+### Configuration Changes
+
+**Issue 3: Kim Nghia SL Distance Adjustment**
+- **Problem**: 0.75% SL distance too strict for Kim Nghia method
+- **User Decision**: Reduce to 0.5% for Kim Nghia method
+- **Fix**: 
+  - Updated Kim Nghia prompt SL distance from 0.75% to 0.5%
+  - Updated SL validation from 0.75% (0.0075) to 0.5% (0.005) in analyzerFactory.js
+  - Updated SL validation from 0.75% (0.0075) to 0.5% (0.005) in groqAnalyzer.js
+- **Impact**: Kim Nghia method can use tighter stop losses (0.5% vs 0.75%), ICT remains at 0.75%
+- **Files**: `backend/src/config/methods.js`, `backend/src/analyzers/analyzerFactory.js`, `backend/src/groqAnalyzer.js`
+
+### Debugging Improvements
+
+**Issue 4: Added AI Response Logging**
+- **Problem**: Could not see raw AI response to understand why confidence was low
+- **Fix**: Added detailed logging to show raw AI response and narratives
+- **Impact**: Can now see complete AI response including structure, volume, smc fields for debugging
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+### Documentation Updates
+
+**Issue 5: Documentation Outdated**
+- **Problem**: Documentation mentioned old SL distances (0.5%, 1%) not matching current state
+- **Fix**: Updated paper-trading.md to reflect current SL distances (ICT: 0.75%, Kim Nghia: 0.5%)
+- **Impact**: Documentation now matches actual code configuration
+- **Files**: `docs/paper-trading.md`
+
 ## [21/04/2026] - v2.2.9 - Position Limit & Kim Nghia Improvements
 
 ### Configuration Changes

@@ -628,14 +628,14 @@ TRAIL_DISTANCE_PCT=0.5
 ### Validation Summary
 
 All position openings (manual and auto) now enforce:
-- **Minimum risk distance**: 1% of entry price (updated from 0.5% on 20/04/2026) (e.g., $750 minimum on $75k entry)
+- **Minimum risk distance**: ICT method 0.75%, Kim Nghia method 0.5% of entry price (updated on 21/04/2026)
 - **Maximum positions**: 6 concurrent positions per symbol
 - **Price range validation**: Entry within 10% of current price for limit orders
 - **Direction alignment**: Entry price must align with trade direction
-- **Minimum confidence**: 70% threshold for auto-entry (updated from 80% on 18/04/2026)
-- **AI-provided SL/TP**: Required for auto-entry (no default fallback) (updated 20/04/2026)
-- **SL/TP side validation**: SL must be on correct side of entry based on bias (updated 20/04/2026)
-- **Granular SL/TP**: AI must provide precise price levels with at least 2 decimal places (updated 20/04/2026)
+- **Minimum confidence**: ICT 70%, Kim Nghia 60% threshold for auto-entry
+- **AI-provided SL/TP**: Required for auto-entry (no default fallback)
+- **SL/TP side validation**: SL must be on correct side of entry based on bias
+- **Granular SL/TP**: AI must provide precise price levels with at least 2 decimal places
 
 ## Production Fixes (20/04/2026)
 
