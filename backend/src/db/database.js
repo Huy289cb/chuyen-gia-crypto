@@ -6,16 +6,6 @@ import { promiseAllWithTimeout } from '../utils/asyncHelpers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Helper for Promise.all with timeout to prevent hanging
-// const promiseAllWithTimeout = (promises, timeoutMs = 30000) => {
-//   return Promise.race([
-//     Promise.all(promises),
-//     new Promise((_, reject) =>
-//       setTimeout(() => reject(new Error(`Promise.all timeout after ${timeoutMs}ms`)), timeoutMs)
-//     )
-//   ]);
-// };
-
 // Use absolute path and ensure directory exists
 const DATA_DIR = join(__dirname, '../../data');
 const DB_PATH = join(DATA_DIR, 'predictions.db');
