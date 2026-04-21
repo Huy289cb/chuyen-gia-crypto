@@ -149,7 +149,7 @@ Hệ thống sử dụng phương pháp phân tích **Inner Circle Trader (ICT)*
   ```js
   {
     prices: { btc, eth },
-    analysis: { btc, eth, comparison, marketSentiment, disclaimer },
+    analysis: { btc, eth, comparison, marketSentiment },
     lastUpdated: ISO timestamp
   }
   ```

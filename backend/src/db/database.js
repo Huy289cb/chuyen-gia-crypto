@@ -224,7 +224,7 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
         coinData.narrative,
         analysis.comparison,
         analysis.marketSentiment,
-        analysis.disclaimer,
+        analysis?.disclaimer,
         methodId,
         coinData.breakout_retest ? JSON.stringify(coinData.breakout_retest) : null,
         coinData.position_decisions ? JSON.stringify(coinData.position_decisions) : null,

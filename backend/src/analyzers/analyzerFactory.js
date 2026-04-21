@@ -516,7 +516,6 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
     eth: formatCoin(rawResponse?.eth, priceData.eth?.price || 0, 'eth'),
     comparison: rawResponse?.comparison || '',
     marketSentiment: rawResponse?.marketSentiment || 'neutral',
-    disclaimer: rawResponse?.disclaimer || 'This is NOT financial advice. Crypto is high risk. Only invest what you can afford to lose completely.'
   };
 }
 
@@ -597,6 +596,5 @@ function generateFallbackAnalysis(priceData, methodId) {
     eth: analyzeCoin(priceData.eth),
     comparison: 'Fallback analysis requires full data',
     marketSentiment: 'neutral',
-    disclaimer: 'FALLBACK ANALYSIS: This is NOT financial advice. Crypto is extremely volatile. Never invest more than you can afford to lose.'
   };
 }

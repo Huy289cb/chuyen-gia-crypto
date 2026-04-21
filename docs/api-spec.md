@@ -88,7 +88,6 @@ Returns current cached ICT Smart Money analysis for BTC and ETH.
       },
       "comparison": "ETH thể hiện cấu trúc mạnh hơn BTC. ETH đã quét thanh khoản và đảo chiều; BTC vẫn đang tích lũy.",
       "marketSentiment": "cautiously_bullish",
-      "disclaimer": "Đây KHÔNG phải là lời khuyên tài chính. Phân tích ICT Smart Money yêu cầu phân tích biểu đồ đúng cách. Crypto cực kỳ biến động."
     },
     "lastUpdated": "2026-04-05T17:03:52.514Z"
   },

@@ -226,7 +226,6 @@ function formatAnalysisResponse(rawResponse, priceData) {
     eth: formatCoin(rawResponse?.eth, priceData.eth?.price || 0),
     comparison: rawResponse?.comparison || '',
     marketSentiment: rawResponse?.marketSentiment || 'neutral',
-    disclaimer: rawResponse?.disclaimer || 'This is NOT financial advice. Crypto is high risk. Only invest what you can afford to lose completely.'
   };
 }
 
@@ -304,6 +303,5 @@ function generateFallbackAnalysis(priceData) {
     eth: analyzeCoin(priceData.eth),
     comparison: 'ICT analysis requires full data',
     marketSentiment: 'neutral',
-    disclaimer: 'FALLBACK ANALYSIS: This is NOT financial advice. Smart Money Concepts require proper chart analysis. Crypto is extremely volatile. Never invest more than you can afford to lose.'
   };
 }
