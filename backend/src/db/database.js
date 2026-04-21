@@ -1147,7 +1147,7 @@ export async function createPosition(db, positionData) {
         entry_time, status, size_usd, size_qty, risk_usd, risk_percent, expected_rr, realized_pnl,
         unrealized_pnl, close_price, close_time, close_reason, linked_prediction_id, invalidation_level,
         tp1_hit, ict_strategy, tp_levels, tp_hit_count, partial_closed, method_id, r_multiple)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'open', ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, ?, ?, ?, 0, ?, ?, ?, 0, ?, 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'open', ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0)`,
       [
         position_id,
         account_id,
@@ -1168,7 +1168,8 @@ export async function createPosition(db, positionData) {
         tp_levels,
         tp_hit_count || 0,
         partial_closed || 0,
-        method_id
+        method_id,
+        0 // r_multiple
       ],
       function(err) {
         if (err) {

@@ -275,23 +275,28 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId) {
     try {
       const { getFibonacciFromOHLC } = await import('../utils/fibonacci.js');
       const { getOHLCCandles } = await import('../db/database.js');
+      console.log('[AnalyzerFactory] Fetching OHLC data for Fibonacci calculation...');
       const btcOhlc = await getOHLCCandles(priceData.btc?.db, 'BTC', 50, '15m');
       const ethOhlc = await getOHLCCandles(priceData.eth?.db, 'ETH', 50, '15m');
+      console.log('[AnalyzerFactory] OHLC data fetched - BTC:', btcOhlc?.length, 'candles, ETH:', ethOhlc?.length, 'candles');
 
       // Check if OHLC data is available before calculating Fibonacci
       if (btcOhlc && btcOhlc.length > 0 && ethOhlc && ethOhlc.length > 0) {
         const btcBias = rawResponse?.btc?.bias === 'bullish' ? 'up' : 'down';
         const ethBias = rawResponse?.eth?.bias === 'bullish' ? 'up' : 'down';
+        console.log('[AnalyzerFactory] Calculating Fibonacci - BTC bias:', btcBias, 'ETH bias:', ethBias);
         kimNghiaFibonacci = {
           btc: getFibonacciFromOHLC(btcOhlc, btcBias, 20),
           eth: getFibonacciFromOHLC(ethOhlc, ethBias, 20)
         };
+        console.log('[AnalyzerFactory] Fibonacci calculation successful');
       } else {
         console.warn('[AnalyzerFactory] No OHLC data available for Fibonacci calculation');
         kimNghiaFibonacci = null;
       }
     } catch (error) {
       console.error('[AnalyzerFactory] Error calculating Fibonacci:', error.message);
+      console.error('[AnalyzerFactory] Error stack:', error.stack);
       kimNghiaFibonacci = null;
     }
   }

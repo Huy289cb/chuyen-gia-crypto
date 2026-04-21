@@ -70,7 +70,7 @@ RULES:
 - Set suggested_entry=0, suggested_stop_loss=0, suggested_take_profit=0 ONLY when action=hold
 - Vietnamese, build narrative first, conflict→HOLD
 - ICT: liquidity sweeps/OB/FVG for SL/TP, check BOS/CHOCH, target liquidity/FVG
-- SL≥0.5% from entry, TP≥2% from entry
+- SL≥0.25% from entry, TP≥2% from entry
 - Market structure levels only, NOT fixed prices
 - SL/TP: 2 decimal places (e.g., 74835.52), NO even rounding (e.g., 74800)
 - expected_rr≥2.0, confidence 2 decimals (e.g., 0.75)
@@ -95,7 +95,7 @@ RULES:
     name: 'Kim Nghia (SMC + Volume)',
     description: 'SMC + Volume analysis for limit/market orders',
     scheduleOffset: 450, // 7.5 minutes = 450 seconds (runs at 7m30s, 22m30s, 37m30s, 52m30s)
-    enabled: true,
+    enabled: false, // Disabled temporarily due to consistently returning neutral predictions with low confidence
     systemPrompt: `Bạn là chuyên gia phân tích crypto theo phương pháp SMC + Volume + Fibonacci. Trả về JSON hợp lệ, TẤT CẢ text field bằng tiếng Việt.
 
 ⚠️ QUAN TRỌNG: Hãy PHÂN TÍCH QUYẾT ĐOÁN hơn là thận trọng. Nếu có tín hiệu rõ ràng, hãy đưa ra quyết định BUY/SELL thay vì HOLD.
@@ -212,8 +212,8 @@ RULES:
 - Tiếng Việt, giải thích logic, breakout với volume
 - Bao gồm SMC (OB, FVG, EQH/EQL) nếu có
 - Entry: Fibonacci Retracement hoặc SMC zone hoặc vùng thanh khoản
-- indicators: OB high/low/timestamp, FVG start/end time/price
--- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥0.5% entry, TP≥2% entry
+-- indicators: OB high/low/timestamp, FVG start/end time/price
+--- SL/TP: LONG SL<Entry<TP, SHORT Entry>TP>SL, SL≥0.25% entry, TP≥2% entry
 -- SL/TP: 2 decimal places, KHÔNG chẵn
 -- confidence: 2 decimals, KHÔNG chẵn
 -- Conflict → HOLD, nếu confidence < 0.50 thì set action=hold và tất cả Entry/SL/TP=0
