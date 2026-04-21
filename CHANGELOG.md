@@ -2,6 +2,68 @@
 
 All notable changes to the project will be documented in this file.
 
+## [21/04/2026] - v2.4.0 - Kim Nghia Auto-Entry Fixes & JSON Parsing Improvements
+
+### Bug Fixes
+
+**Issue 1: Kim Nghia Multi-Timeframe Alignment Blocking Position Entry**
+- **Problem**: Kim Nghia method blocked by "Multi-timeframe alignment insufficient (0/2 aligned)" despite high confidence (80-85%)
+- **Root Cause**: 
+  - Kim Nghia method doesn't save timeframe predictions to database (by design - uses price_prediction instead)
+  - Auto-entry logic required timeframe predictions for alignment check
+  - Scheduler passed method.autoEntry (config only) instead of full method object
+- **Fix**:
+  - Skip multi-timeframe alignment check for Kim Nghia method (doesn't use timeframe predictions)
+  - Changed scheduler to pass full method object instead of method.autoEntry
+  - Updated evaluateAutoEntry to handle both full method object and autoEntry config
+- **Impact**: Kim Nghia can now open positions based on AI confidence without timeframe alignment requirement
+- **Files**: `backend/src/services/autoEntryLogic.js`, `backend/src/scheduler.js`
+
+**Issue 2: "alignment is not defined" Error**
+- **Problem**: Database error "alignment is not defined" when Kim Nghia passed all auto-entry checks
+- **Root Cause**: Line 224 referenced alignment.alignedCount but alignment variable was never defined when check was skipped for Kim Nghia
+- **Fix**:
+  - Declare let alignment = null before the check
+  - Set default alignment = { alignedCount: 0, details: {} } when skipped for Kim Nghia
+  - Conditionally build reason string to include alignment info only when check was performed
+- **Impact**: Kim Nghia can successfully enter positions when all checks pass
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Issue 3: JSON Validation Errors from Groq API**
+- **Problem**: qwen/qwen3-32b and openai/gpt-oss-120b returning invalid JSON causing 400 errors
+- **Root Cause**: Models add extra text/markdown around JSON, Groq json_object mode rejects non-pure JSON
+- **Fix**:
+  - Added cleanJSONResponse function to extract JSON from raw response
+  - Disabled response_format json_object mode
+  - Added fixJSONSyntax function to handle trailing commas and double commas
+  - Reordered models to prioritize working meta-llama/llama-4-scout-17b-16e-instruct
+  - Added strong technical warning to Kim Nghia prompt (no extra text/markdown)
+- **Impact**: System can now handle malformed JSON from models, meta-llama prioritized as most reliable
+- **Files**: `backend/src/groq-client.js`, `backend/src/config/methods.js`
+
+**Issue 4: SL Distance Validation Too Strict**
+- **Problem**: AI suggested SL distance 0.39% rejected (below 0.5% minimum)
+- **Fix**: Reduced minimum SL distance from 0.5% to 0.3% to match AI behavior
+- **Impact**: Positions with 0.3%+ risk distance now accepted
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Issue 5: Undefined Variable Errors**
+- **Problem**: Potential errors when analysis.confidence, currentPrice, or suggestedEntry are undefined
+- **Fix**:
+  - Added fallback for confidenceScore: (analysis.confidence || 0) * 100
+  - Added validation for currentPrice: if (!currentPrice || currentPrice <= 0)
+  - Added validation for suggestedEntry: if (!suggestedEntry || suggestedEntry <= 0)
+- **Impact**: Prevents NaN/toFixed errors and division by zero errors
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+### Documentation Updates
+
+**Issue 6: Documentation Outdated**
+- **Problem**: Documentation didn't reflect Kim Nghia method differences and recent fixes
+- **Fix**: Updated README.md, CHANGELOG.md, and architecture documentation
+- **Impact**: Documentation now matches actual code configuration
+- **Files**: `README.md`, `CHANGELOG.md`
+
 ## [21/04/2026] - v2.3.0 - Refactoring, Model Updates & Risk Distance Fix
 
 ### Code Refactoring

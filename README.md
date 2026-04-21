@@ -1,6 +1,6 @@
-# Crypto Trend Analyzer - ICT Edition
+# Crypto Trend Analyzer - Multi-Method Edition (v2.4.0)
 
-MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concepts** với AI và **Paper Trading**.
+MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concepts** và **Kim Nghia (SMC + Volume + Fibonacci)** với AI và **Paper Trading**.
 
 ## Tính năng nổi bật
 
@@ -11,15 +11,26 @@ MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concep
 - **Fair Value Gaps**: Phát hiện imbalance zones
 - **Narrative Building**: Xây dựng câu chuyện thị trường dựa trên Smart Money Concepts (Tiếng Việt)
 
+### Kim Nghia (SMC + Volume + Fibonacci) Analysis
+- **SMC Concepts**: Smart Money Concepts với Order Blocks, FVG, Liquidity sweeps
+- **Volume Analysis**: Volume Profile để xác nhận breakout/impulse
+- **Fibonacci Levels**: Golden Pocket (0.5-0.618) và Extension (1.272-1.618)
+- **Scoring System**: HTF Alignment (30%), Liquidity & Structure (30%), Confluence (20%), Volume (20%)
+- **No Timeframe Predictions**: Sử dụng price_prediction thay vì timeframe predictions (không cần multi-timeframe alignment)
+
 ### Multi-Timeframe Analysis
 Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 
 ### Paper Trading System
-- **Auto-Entry ICT-Based**: Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
+- **Multi-Method Support**: ICT Smart Money và Kim Nghia (SMC + Volume + Fibonacci)
+- **ICT Auto-Entry**: Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
+- **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 60%, R:R >= 2.5
+- **Risk Management**: 
+  - ICT: 1% risk per trade, SL distance minimum 0.75%
+  - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
 - **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
-- **Risk Management**: 1% risk per trade, position sizing dựa trên SL distance
-- **Separate Accounts**: 100U demo account riêng cho BTC và ETH
+- **Separate Accounts**: 100U demo account riêng cho BTC và ETH (mỗi method có account riêng)
 - **Real-time PnL**: Cập nhật PnL mỗi 30 giây, auto-close khi hit SL/TP
 - **Cooldown System**: 4h cooldown sau 3 consecutive losses
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown, average R multiple
@@ -31,12 +42,17 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 
 ### Real-time Data
 - Giá BTC/ETH cập nhật real-time từ **Binance API** (primary), CoinGecko (fallback)
-- Phân tích tự động mỗi 15 phút
+- Phân tích tự động mỗi 15 phút (ICT) và mỗi 7.5 phút (Kim Nghia)
 - Cache 20 phút để đảm bảo performance
 - Lưu trữ OHLCV candles trong SQLite database
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
 - Không còn lỗi 429 rate limit (Binance: 1200 req/min vs CoinGecko: ~10-50 req/min)
 - **1-minute Candle Data**: Sử dụng nến 1 phút (OHLC) để detect chính xác SL/TP (v2.2.0)
+- **Groq AI Models**: 
+  - Primary: meta-llama/llama-4-scout-17b-16e-instruct (30,000 TPM, most reliable)
+  - Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
+  - Fallback: qwen/qwen3-32b, openai/gpt-oss-120b
+  - JSON parsing: cleanJSONResponse function handles malformed JSON from models
 
 ### Testing (New - v2.2.0)
 - **Vitest Framework**: Unit và integration tests với Vitest
@@ -76,30 +92,32 @@ crypto-analyzer/
 │   ├── src/
 │   │   ├── index.js                # Entry point
 │   │   ├── analyzers/
-│   │   │   └── analyzerFactory.js  # Multi-method analysis engine
-│   │   ├── price-fetcher.js        # CoinGecko integration
-│   │   ├── groq-client.js          # Groq API wrapper
-│   │   ├── scheduler.js            # 15-min cron job + price updates
+│   │   │   └── analyzerFactory.js  # Multi-method analysis engine (ICT, Kim Nghia)
+│   │   ├── price-fetcher.js        # Binance API integration
+│   │   ├── groq-client.js          # Groq API wrapper with JSON cleaning
+│   │   ├── scheduler.js            # Multi-method scheduler (ICT 15m, Kim Nghia 7.5m)
 │   │   ├── utils/
 │   │   │   ├── dateHelpers.js      # Date formatting utilities
-│   │   │   └── asyncHelpers.js     # Async utilities
-│   │   ├── cache.js         # In-memory cache
-│   │   ├── routes.js        # Main API endpoints
-│   │   ├── routes/          # API route modules
-│   │   │   ├── positions.js # Position management API
-│   │   │   ├── accounts.js  # Account management API
-│   │   │   └── performance.js # Performance metrics API
-│   │   ├── schedulers/      # Scheduler modules
+│   │   │   ├── asyncHelpers.js     # Async utilities
+│   │   │   └── fibonacci.js       # Fibonacci calculation utilities
+│   │   ├── cache.js               # In-memory cache
+│   │   ├── routes.js              # Main API endpoints
+│   │   ├── routes/                # API route modules
+│   │   │   ├── positions.js       # Position management API
+│   │   │   ├── accounts.js        # Account management API
+│   │   │   └── performance.js     # Performance metrics API
+│   │   ├── schedulers/            # Scheduler modules
 │   │   │   └── priceUpdateScheduler.js # 30s price updates
-│   │   ├── services/        # Business logic
-│   │   │   ├── autoEntryLogic.js # Auto-entry decision engine
+│   │   ├── services/              # Business logic
+│   │   │   ├── autoEntryLogic.js  # Auto-entry decision engine (multi-method support)
 │   │   │   └── paperTradingEngine.js # Position management
-│   │   ├── config/          # Configuration
-│   │   │   └── cors.js      # CORS middleware
-│   │   └── db/              # Database layer
-│   │       ├── database.js  # SQLite operations
-│   │       ├── init.js      # DB initialization
-│   │       └── migrations.js # Paper trading migrations
+│   │   ├── config/                # Configuration
+│   │   │   ├── methods.js         # Method configurations (ICT, Kim Nghia)
+│   │   │   └── cors.js            # CORS middleware
+│   │   └── db/                    # Database layer
+│   │       ├── database.js        # SQLite operations
+│   │       ├── init.js            # DB initialization
+│   │       └── migrations.js      # Paper trading migrations
 │   ├── data/               # SQLite database storage
 │   ├── scripts/
 │   │   └── ensure-data-dir.js
