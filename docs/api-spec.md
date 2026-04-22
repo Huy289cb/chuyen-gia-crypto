@@ -156,6 +156,64 @@ Get OHLCV candle data for charting.
 }
 ```
 
+### GET /api/predictions/:coin
+Get prediction history for a coin with pagination and raw AI data.
+
+#### Query Parameters
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 5)
+- `method`: Method filter (ict, kim_nghia) - default: null (all methods)
+
+#### Response Schema
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 123,
+      "coin": "BTC",
+      "timestamp": "2026-04-22T10:00:00.000Z",
+      "current_price": 67000,
+      "bias": "bullish",
+      "action": "buy",
+      "confidence": 0.75,
+      "narrative": "Giá đã quét thanh khoản sell-side và đảo chiều...",
+      "raw_question": "SYSTEM PROMPT:\n...\n\nUSER PROMPT:\n...",
+      "raw_answer": "{\n  \"btc\": {\n    \"bias\": \"bullish\",\n    ...\n  }\n}",
+      "predictions": [
+        {
+          "timeframe": "1h",
+          "direction": "up",
+          "target": 67500,
+          "confidence": 0.75
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "total": 100,
+    "page": 1,
+    "limit": 5,
+    "totalPages": 20
+  },
+  "meta": {
+    "coin": "BTC",
+    "limit": 5,
+    "page": 1,
+    "method": "kim_nghia"
+  }
+}
+```
+
+#### Field Definitions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| raw_question | string | Full AI request (system prompt + user prompt) |
+| raw_answer | string | Raw JSON response from Groq AI before parsing |
+
+
 ## Field Definitions
 
 ### Price Object

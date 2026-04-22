@@ -49,7 +49,9 @@ export function createAnalyzer(methodConfig) {
             suggested_take_profit: null,
             expected_rr: null
           },
-          error: 'No API key'
+          error: 'No API key',
+          raw_question: null,
+          raw_answer: null
         };
       }
 
@@ -57,6 +59,9 @@ export function createAnalyzer(methodConfig) {
 
       // Build user prompt with historical context
       const userPrompt = await buildUserPrompt(priceData, db, methodConfig.methodId);
+
+      // Capture full request (system prompt + user prompt)
+      const fullRequest = `SYSTEM PROMPT:\n${methodConfig.systemPrompt}\n\nUSER PROMPT:\n${userPrompt}`;
 
       try {
         const response = await client.analyze({
@@ -66,9 +71,12 @@ export function createAnalyzer(methodConfig) {
           maxRetries: 2
         });
 
+        // Capture raw response as JSON string
+        const rawResponse = JSON.stringify(response, null, 2);
+
         // Log raw AI response for debugging
         console.log(`[${methodConfig.name}] RAW AI RESPONSE:`);
-        console.log(JSON.stringify(response, null, 2));
+        console.log(rawResponse);
 
         // Format response with method_id tagging
         const formatted = await formatAnalysisResponse(response, priceData, methodConfig.methodId, db);
@@ -78,7 +86,12 @@ export function createAnalyzer(methodConfig) {
         console.log(`  ETH: ${formatted.eth.action} | bias: ${formatted.eth.bias} | confidence: ${(formatted.eth.confidence * 100).toFixed(0)}%`);
         console.log(`  ETH narrative: ${formatted.eth.narrative}`);
 
-        return formatted;
+        // Return formatted analysis with raw question and answer
+        return {
+          ...formatted,
+          raw_question: fullRequest,
+          raw_answer: rawResponse
+        };
       } catch (error) {
         console.error(`[${methodConfig.name}] Error:`, error.message);
         // Return simple error message instead of fallback analysis
@@ -105,7 +118,9 @@ export function createAnalyzer(methodConfig) {
             suggested_take_profit: null,
             expected_rr: null
           },
-          error: error.message
+          error: error.message,
+          raw_question: fullRequest,
+          raw_answer: null
         };
       }
     }

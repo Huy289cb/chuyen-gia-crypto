@@ -90,17 +90,6 @@ export async function startScheduler() {
     }
   });
 
-  // Clean up old raw response logs daily at 4 AM
-  cron.schedule('0 4 * * *', async () => {
-    try {
-      console.log('[Scheduler] Cleaning up old raw response logs...');
-      const { cleanupOldLogs } = await import('./utils/rawResponseLogger.js');
-      await cleanupOldLogs(7); // Keep logs for 7 days
-    } catch (err) {
-      console.error('[Scheduler] Raw response log cleanup error:', err.message);
-    }
-  });
-
   // Start price update scheduler (30-second intervals)
   if (dbEnabled && db) {
     (async () => {
@@ -147,8 +136,8 @@ async function runMethodAnalysis(methodId) {
         const { evaluateAutoEntry } = await import('./services/autoEntryLogic.js');
         const { openPosition } = await import('./services/paperTradingEngine.js');
         
-        // Save analysis for BTC with method_id
-        const btcResult = await saveAnalysis(db, 'BTC', priceData, analysis, methodId);
+        // Save analysis for BTC with method_id and raw data
+        const btcResult = await saveAnalysis(db, 'BTC', priceData, analysis, methodId, analysis.raw_question, analysis.raw_answer);
         const btcPredictionId = btcResult.predictionIds?.['4h'] || btcResult.predictionIds?.['1d'];
 
         // Process position decisions from AI analysis

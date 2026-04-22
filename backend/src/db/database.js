@@ -190,22 +190,22 @@ export async function initDatabase() {
 }
 
 // Save analysis and predictions
-export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ict') {
+export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ict', rawQuestion = null, rawAnswer = null) {
   return new Promise((resolve, reject) => {
     const coinData = analysis[coin.toLowerCase()];
     if (!coinData) {
       reject(new Error(`No analysis data for ${coin}`));
       return;
     }
-    
+
     const currentPrice = priceData[coin.toLowerCase()]?.price || 0;
-    
+
     console.log(`[Database] Saving analysis for ${coin} (method: ${methodId}): currentPrice=${currentPrice}, bias=${coinData.bias}, confidence=${coinData.confidence}`);
-    
+
     db.run(
       `INSERT INTO analysis_history
-       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer, method_id, breakout_retest, position_decisions, alternative_scenario, suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr, invalidation_level)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (coin, current_price, bias, action, confidence, narrative, comparison, market_sentiment, disclaimer, method_id, breakout_retest, position_decisions, alternative_scenario, suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr, invalidation_level, raw_question, raw_answer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         coin.toUpperCase(),
         currentPrice,
@@ -224,7 +224,9 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
         coinData.suggested_stop_loss || null,
         coinData.suggested_take_profit || null,
         coinData.expected_rr || null,
-        coinData.invalidation_level || null
+        coinData.invalidation_level || null,
+        rawQuestion || null,
+        rawAnswer || null
       ],
       function(err) {
         if (err) {
@@ -488,100 +490,129 @@ async function getPriceAtTime(db, coin, timestamp) {
   });
 }
 
-// Get recent analysis with predictions for chart overlay
-export async function getRecentAnalysisWithPredictions(db, coin, limit = 50, methodId = null) {
+// Get recent analysis with predictions for chart overlay with pagination
+export async function getRecentAnalysisWithPredictions(db, coin, limit = 50, methodId = null, page = 1) {
   return new Promise((resolve, reject) => {
     const conditions = ['ah.coin = ?'];
     const values = [coin.toUpperCase()];
-    
+
     if (methodId) {
       conditions.push('ah.method_id = ?');
       values.push(methodId);
     }
-    
+
     // Exclude predictions with null method_id to prevent old data from showing in both methods
     conditions.push('ah.method_id IS NOT NULL');
-    
-    values.push(limit);
-    
-    db.all(
-      `SELECT 
-        ah.*,
-        json_group_array(
-          json_object(
-            'timeframe', p.timeframe,
-            'direction', p.direction,
-            'target', p.target_price,
-            'confidence', p.confidence,
-            'actual', p.actual_price,
-            'is_correct', p.is_correct,
-            'id', p.id,
-            'expires_at', p.expires_at,
-            'linked_position_id', p.linked_position_id,
-            'suggested_entry', p.suggested_entry,
-            'suggested_stop_loss', p.suggested_stop_loss,
-            'suggested_take_profit', p.suggested_take_profit,
-            'expected_rr', p.expected_rr,
-            'invalidation_level', p.invalidation_level,
-            'reason_summary', p.reason_summary,
-            'outcome', p.outcome,
-            'pnl', p.pnl
-          )
-        ) as predictions,
-        ah.breakout_retest,
-        ah.position_decisions,
-        ah.alternative_scenario,
-        ah.suggested_entry,
-        ah.suggested_stop_loss,
-        ah.suggested_take_profit,
-        ah.expected_rr,
-        ah.invalidation_level
+
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
+    // First, get total count
+    db.get(
+      `SELECT COUNT(DISTINCT ah.id) as total
        FROM analysis_history ah
-       LEFT JOIN predictions p ON ah.id = p.analysis_id
-       WHERE ${conditions.join(' AND ')}
-       GROUP BY ah.id
-       ORDER BY ah.timestamp DESC
-       LIMIT ?`,
-      values,
-      async (err, rows) => {
-        if (err) {
-          reject(err);
+       WHERE ${conditions.join(' AND ')}`,
+      values.slice(0, values.length - (methodId ? 2 : 1)), // Remove limit value for count query
+      async (countErr, countRow) => {
+        if (countErr) {
+          reject(countErr);
           return;
         }
-        
-        const now = new Date().toISOString();
-        const promises = [];
-        
-        const results = rows.map(row => {
-          let predictions = JSON.parse(row.predictions || '[]').filter(p => p.timeframe);
-          
-          // Auto-validate expired predictions that haven't been validated yet
-          predictions.forEach(pred => {
-            if (pred.expires_at && pred.expires_at <= now && pred.is_correct === null) {
-              // Trigger validation for this prediction
-              promises.push(
-                validateSinglePrediction(db, pred.id, row.coin, row.current_price, pred.direction)
-                  .then(updated => {
-                    if (updated) {
-                      pred.actual = updated.actual_price;
-                      pred.is_correct = updated.is_correct;
-                    }
-                  })
-                  .catch(err => console.error('[Database] Auto-validate error:', err.message))
-              );
+
+        const total = countRow.total;
+
+        // Add limit and offset to values
+        values.push(limit);
+        values.push(offset);
+
+        db.all(
+          `SELECT
+            ah.*,
+            json_group_array(
+              json_object(
+                'timeframe', p.timeframe,
+                'direction', p.direction,
+                'target', p.target_price,
+                'confidence', p.confidence,
+                'actual', p.actual_price,
+                'is_correct', p.is_correct,
+                'id', p.id,
+                'expires_at', p.expires_at,
+                'linked_position_id', p.linked_position_id,
+                'suggested_entry', p.suggested_entry,
+                'suggested_stop_loss', p.suggested_stop_loss,
+                'suggested_take_profit', p.suggested_take_profit,
+                'expected_rr', p.expected_rr,
+                'invalidation_level', p.invalidation_level,
+                'reason_summary', p.reason_summary,
+                'outcome', p.outcome,
+                'pnl', p.pnl
+              )
+            ) as predictions,
+            ah.breakout_retest,
+            ah.position_decisions,
+            ah.alternative_scenario,
+            ah.suggested_entry,
+            ah.suggested_stop_loss,
+            ah.suggested_take_profit,
+            ah.expected_rr,
+            ah.invalidation_level
+           FROM analysis_history ah
+           LEFT JOIN predictions p ON ah.id = p.analysis_id
+           WHERE ${conditions.join(' AND ')}
+           GROUP BY ah.id
+           ORDER BY ah.timestamp DESC
+           LIMIT ? OFFSET ?`,
+          values,
+          async (err, rows) => {
+            if (err) {
+              reject(err);
+              return;
             }
-          });
-          
-          return {
-            ...row,
-            predictions
-          };
-        });
-        
-        // Wait for all validations to complete with timeout
-        await promiseAllWithTimeout(promises, 60000); // 60s timeout for validations
-        
-        resolve(results);
+
+            const now = new Date().toISOString();
+            const promises = [];
+
+            const results = rows.map(row => {
+              let predictions = JSON.parse(row.predictions || '[]').filter(p => p.timeframe);
+
+              // Auto-validate expired predictions that haven't been validated yet
+              predictions.forEach(pred => {
+                if (pred.expires_at && pred.expires_at <= now && pred.is_correct === null) {
+                  // Trigger validation for this prediction
+                  promises.push(
+                    validateSinglePrediction(db, pred.id, row.coin, row.current_price, pred.direction)
+                      .then(updated => {
+                        if (updated) {
+                          pred.actual = updated.actual_price;
+                          pred.is_correct = updated.is_correct;
+                        }
+                      })
+                      .catch(err => console.error('[Database] Auto-validate error:', err.message))
+                  );
+                }
+              });
+
+              return {
+                ...row,
+                predictions
+              };
+            });
+
+            // Wait for all validations to complete with timeout
+            await promiseAllWithTimeout(promises, 60000); // 60s timeout for validations
+
+            resolve({
+              data: results,
+              pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+              }
+            });
+          }
+        );
       }
     );
   });

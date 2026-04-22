@@ -45,10 +45,6 @@ function cleanJSONResponse(rawResponse) {
     console.log('[GroqClient] Raw response length:', rawResponse.length);
     console.log('[GroqClient] Raw response preview:', rawResponse.substring(0, 500));
 
-    // Log full raw response to file for debugging using utility
-    const { logRawResponse } = require('./utils/rawResponseLogger.js');
-    logRawResponse(rawResponse, 'raw-response');
-
     return null;
   }
 }

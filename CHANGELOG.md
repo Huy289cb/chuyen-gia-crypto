@@ -2,6 +2,59 @@
 
 All notable changes to the project will be documented in this file.
 
+## [22/04/2026] - v2.6.0 - Prediction Timeline Enhancement: Raw Data Display & Pagination
+
+### New Features
+
+**Issue 1: Raw AI Request/Response Display in Prediction Timeline**
+- **Problem**: Raw AI responses were logged to txt files on server, inefficient and not accessible from frontend
+- **Solution**: Moved raw data storage from txt files to database, added frontend display
+- **Implementation**:
+  - Added `raw_question` and `raw_answer` TEXT columns to analysis_history table
+  - Modified analyzerFactory to capture full request (system + user prompt) and raw response
+  - Updated saveAnalysis to accept and store raw data
+  - Updated scheduler to pass raw data to saveAnalysis
+  - Added expandable sections in PredictionsSection to display raw question/answer
+  - Removed txt file logging (rawResponseLogger.js deleted, cleanup job removed)
+- **Impact**: Users can now view raw AI input/output directly in frontend Prediction Timeline
+- **Files**: `backend/src/db/migrations.js`, `backend/src/db/database.js`, `backend/src/analyzers/analyzerFactory.js`, `backend/src/scheduler.js`, `backend/src/groq-client.js`, `frontend/app/sections/PredictionsSection.tsx`
+
+**Issue 2: Server-Side Pagination for Prediction Timeline**
+- **Problem**: Prediction Timeline loaded all data at once, inefficient for large datasets
+- **Solution**: Implemented server-side pagination with default 5 items per page
+- **Implementation**:
+  - Updated getRecentAnalysisWithPredictions to accept page parameter and calculate OFFSET
+  - Added total count query for pagination metadata
+  - Updated /api/predictions/:coin endpoint to accept page and limit parameters
+  - Added pagination UI controls (Previous/Next buttons, page indicator) in PredictionsSection
+  - Default limit changed from 20 to 5 items per page
+- **Impact**: Prediction Timeline now loads data efficiently with pagination
+- **Files**: `backend/src/db/database.js`, `backend/src/routes.js`, `frontend/app/sections/PredictionsSection.tsx`
+
+### Documentation Updates
+
+**Issue 3: API Documentation Updated**
+- **Changes**:
+  - Added /api/predictions/:coin endpoint documentation with pagination parameters
+  - Documented raw_question and raw_answer fields
+  - Added field definitions for new raw data fields
+- **Impact**: API spec now reflects new pagination and raw data features
+- **Files**: `docs/api-spec.md`
+
+**Issue 4: README Updated**
+- **Changes**:
+  - Updated Prediction Timeline description to mention pagination (5 items per page)
+  - No changes needed for txt logging (was not documented in README)
+- **Impact**: README reflects new pagination feature
+- **Files**: `README.md`
+
+### Version Update
+
+**Issue 5: Version Bump to 2.6.0**
+- **Change**: Updated APP_VERSION from '2.5.0' to '2.6.0'
+- **Impact**: Frontend reflects new version
+- **Files**: `frontend/lib/version.ts`
+
 ## [22/04/2026] - v2.5.0 - ICT Method Disablement & KimNghia Scheduler Update
 
 ### Configuration Changes

@@ -89,7 +89,7 @@ router.get('/analysis', (req, res) => {
   });
 });
 
-// GET /api/predictions/:coin - Get prediction history for a coin
+// GET /api/predictions/:coin - Get prediction history for a coin with pagination
 router.get('/predictions/:coin', async (req, res) => {
   if (!dbEnabled || !db) {
     return res.status(503).json({
@@ -98,17 +98,18 @@ router.get('/predictions/:coin', async (req, res) => {
       message: 'Please install sqlite3: npm install sqlite3'
     });
   }
-  
+
   const { coin } = req.params;
-  const { limit = 50, method } = req.query;
-  
+  const { limit = 5, page = 1, method } = req.query;
+
   try {
     const { getRecentAnalysisWithPredictions } = await import('./db/database.js');
-    const history = await getRecentAnalysisWithPredictions(db, coin, parseInt(limit), method || null);
+    const result = await getRecentAnalysisWithPredictions(db, coin, parseInt(limit), method || null, parseInt(page));
     res.json({
       success: true,
-      data: history,
-      meta: { coin, limit: parseInt(limit), method: method || 'ict' }
+      data: result.data,
+      pagination: result.pagination,
+      meta: { coin, limit: parseInt(limit), page: parseInt(page), method: method || 'ict' }
     });
   } catch (error) {
     res.status(500).json({
@@ -308,8 +309,8 @@ router.post('/analysis/run', async (req, res) => {
     // Save to database if enabled
     if (dbEnabled && db) {
       const { saveAnalysis } = await import('./db/database.js');
-      await saveAnalysis(db, 'BTC', priceData, analysis);
-      await saveAnalysis(db, 'ETH', priceData, analysis);
+      await saveAnalysis(db, 'BTC', priceData, analysis, 'kim_nghia', analysis.raw_question, analysis.raw_answer);
+      await saveAnalysis(db, 'ETH', priceData, analysis, 'kim_nghia', analysis.raw_question, analysis.raw_answer);
     }
     
     res.json({

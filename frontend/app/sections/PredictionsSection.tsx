@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Brain, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, Minus, Clock, ChevronDown, ChevronUp, Code, MessageSquare } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { cn, formatPrice } from '@/lib/utils';
 import type { PredictionHistory, ApiResponse, Analysis } from '../types';
@@ -33,6 +33,8 @@ interface PredictionWithAnalysis extends PredictionHistory {
   suggested_entry?: number;
   suggested_stop_loss?: number;
   suggested_take_profit?: number;
+  raw_question?: string;
+  raw_answer?: string;
   breakout_retest?: {
     has_breakout?: boolean;
     is_fake?: boolean;
@@ -67,14 +69,17 @@ interface PredictionWithAnalysis extends PredictionHistory {
 export function PredictionsSection({ symbol, method = 'kim_nghia' }: PredictionsSectionProps) {
   const [predictions, setPredictions] = useState<PredictionWithAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(5);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 0, page: 1, limit: 5 });
 
   useEffect(() => {
     const fetchPredictions = async () => {
       try {
-        const API_BASE = process.env.NODE_ENV === 'development' 
-          ? 'http://localhost:3000/api' 
+        const API_BASE = process.env.NODE_ENV === 'development'
+          ? 'http://localhost:3000/api'
           : '/api';
-        const response = await fetch(`${API_BASE}/predictions/${symbol}?limit=20&method=${method}`);
+        const response = await fetch(`${API_BASE}/predictions/${symbol}?limit=${itemsPerPage}&page=${currentPage}&method=${method}`);
         const data = await response.json();
         if (data.success && data.data) {
           // Flatten predictions from all analyses like old frontend
@@ -87,15 +92,17 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
               bias: analysis.bias,
               confidence_score: analysis.confidence,
               narrative_vi: analysis.narrative,
+              raw_question: analysis.raw_question,
+              raw_answer: analysis.raw_answer,
               breakout_retest: analysis.breakout_retest ? JSON.parse(analysis.breakout_retest) : undefined,
               position_decisions: analysis.position_decisions ? JSON.parse(analysis.position_decisions) : undefined,
               alternative_scenario: analysis.alternative_scenario ? JSON.parse(analysis.alternative_scenario) : undefined
             };
-            
+
             if (!analysis.predictions || analysis.predictions.length === 0) {
               return [analysisData as PredictionWithAnalysis];
             }
-            
+
             // Only show 1h timeframe predictions
             return analysis.predictions
               .filter((p: any) => p.timeframe === '1h')
@@ -107,9 +114,10 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
                 reasoning: pred.reason_summary || analysis.narrative
               } as PredictionWithAnalysis));
           });
-          
+
           console.log('[PredictionTimeline] Flattened:', flattened.length);
           setPredictions(flattened);
+          setPagination(data.pagination);
         }
       } catch (err) {
         console.error('Error fetching predictions:', err);
@@ -119,13 +127,19 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
     };
 
     fetchPredictions();
-  }, [symbol, method]);
+  }, [symbol, method, currentPage, itemsPerPage]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
 
   if (loading) {
     return (
       <section className="mb-8">
-        <CardHeader 
-          title="Prediction Timeline" 
+        <CardHeader
+          title="Prediction Timeline"
           subtitle="Loading..."
           icon={<Brain className="w-5 h-5" />}
         />
@@ -143,8 +157,8 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
   if (predictions.length === 0) {
     return (
       <section className="mb-8">
-        <CardHeader 
-          title="Prediction Timeline" 
+        <CardHeader
+          title="Prediction Timeline"
           subtitle="1H timeframe predictions"
           icon={<Brain className="w-5 h-5" />}
         />
@@ -159,37 +173,64 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
 
   return (
     <section className="mb-8">
-      <CardHeader 
+      <CardHeader
         title="Prediction Timeline"
         subtitle={`${symbol} 1H timeframe predictions & outcomes`}
         icon={<Brain className="w-5 h-5" />}
       />
-      
+
       <Card className="mt-4" padding="none">
         <div className="space-y-3 p-4">
           {predictions.map((prediction, index) => (
-            <PredictionItem 
-              key={prediction.id} 
+            <PredictionItem
+              key={prediction.id}
               prediction={prediction}
               index={index}
               total={predictions.length}
             />
           ))}
         </div>
+
+        {/* Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm rounded bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === pagination.totalPages}
+                className="px-3 py-1 text-sm rounded bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
     </section>
   );
 }
 
-function PredictionItem({ 
+function PredictionItem({
   prediction,
   index,
   total
-}: { 
+}: {
   prediction: PredictionWithAnalysis;
   index: number;
   total: number;
 }) {
+  const [showRawQuestion, setShowRawQuestion] = useState(false);
+  const [showRawAnswer, setShowRawAnswer] = useState(false);
   // Use bias from analysis (bullish/bearish/neutral)
   const bias = prediction.bias || 'neutral';
   
@@ -456,6 +497,44 @@ function PredictionItem({
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Raw Question Expandable Section */}
+        {prediction.raw_question && (
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <button
+              onClick={() => setShowRawQuestion(!showRawQuestion)}
+              className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+            >
+              <MessageSquare size={14} />
+              <span>Raw Question (Input)</span>
+              {showRawQuestion ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {showRawQuestion && (
+              <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-96 overflow-y-auto">
+                {prediction.raw_question}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Raw Answer Expandable Section */}
+        {prediction.raw_answer && (
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <button
+              onClick={() => setShowRawAnswer(!showRawAnswer)}
+              className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+            >
+              <Code size={14} />
+              <span>Raw Answer (AI Response)</span>
+              {showRawAnswer ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {showRawAnswer && (
+              <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-96 overflow-y-auto">
+                {prediction.raw_answer}
+              </div>
+            )}
           </div>
         )}
       </div>

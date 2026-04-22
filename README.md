@@ -74,7 +74,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - Candlestick charts chuyên nghiệp với lightweight-charts
 - Dự báo multi-timeframe overlay trên biểu đồ
 - Timeframe selector (15m, 1h, 4h, 1d)
-- **Prediction Timeline**: Timeline lịch sử dự báo với filter theo timeframe và bias
+- **Prediction Timeline**: Timeline lịch sử dự báo với pagination (5 items per page), filter theo timeframe và bias, hiển thị raw AI request/response
 - **Performance Charts**: Equity curve, trade stats (win/loss ratio, profit per trade), trade history table
 - **Advanced Metrics**: Accuracy by timeframe (bar chart), accuracy by bias (pie chart), average hold time
 - **Data Freshness Indicators**: Hiển thị trạng thái freshness với color-coded indicators (green/yellow/red)
