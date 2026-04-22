@@ -1277,7 +1277,11 @@ export async function updatePosition(db, positionId, updates) {
       fields.push('close_reason = ?');
       values.push(updates.close_reason);
     }
-    
+    if (updates.r_multiple !== undefined) {
+      fields.push('r_multiple = ?');
+      values.push(updates.r_multiple);
+    }
+
     if (fields.length === 0) {
       resolve(0);
       return;
