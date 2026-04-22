@@ -6,6 +6,7 @@ import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { cn, formatPrice } from '@/lib/utils';
+import { formatToGMT7 } from '@/lib/dateHelpers';
 import type { PendingOrder, ApiResponse } from '../types';
 
 interface PendingOrdersSectionProps {
@@ -171,18 +172,7 @@ export function PendingOrdersSection({ symbol, method = 'ict' }: PendingOrdersSe
                     {order.expected_rr.toFixed(1)}R
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-secondary">
-                    {(() => {
-                      const date = new Date(order.created_at);
-                      const gmt7Date = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-                      return gmt7Date.toLocaleString('vi-VN', { 
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: '2-digit',
-                        hour: '2-digit', 
-                        minute: '2-digit',
-                        hour12: false
-                      });
-                    })()}
+                    {formatToGMT7(order.created_at, order.executed_at)}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Button
@@ -241,18 +231,7 @@ function OrderCardMobile({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-foreground-tertiary">
-            {(() => {
-              const date = new Date(order.created_at);
-              const gmt7Date = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-              return gmt7Date.toLocaleString('vi-VN', { 
-                day: '2-digit',
-                month: '2-digit',
-                year: '2-digit',
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: false
-              });
-            })()}
+            {formatToGMT7(order.created_at, order.executed_at)}
           </span>
           <Button
             variant="ghost"
