@@ -2,6 +2,43 @@
 
 All notable changes to the project will be documented in this file.
 
+## [22/04/2026] - v2.4.2 - Datetime Standardization & R-Multiple Display Fix
+
+### Bug Fixes
+
+**Issue 1: R-Multiple Column Displaying +0.00R Despite Positive PnL**
+- **Problem**: Trade History R-Multiple column showed "+0.00R" even when PnL was "+$6.23"
+- **Root Cause**: `updatePosition` function missing case to handle `r_multiple` field updates
+- **Fix**: Added `r_multiple` field handling to `updatePosition` function
+- **Impact**: R-Multiple now correctly displays as PnL / risk_usd (e.g., "+0.62R" for $6.23 PnL with $10 risk)
+- **Files**: `backend/src/db/database.js`
+
+**Issue 2: Pending Orders Created Column Format Inconsistent**
+- **Problem**: Pending Orders "Created" column displayed "HH:MM DD/MM/YY" (e.g., "04:07 23/04/26") while Trade History showed "HH:MM:SS DD/MM/YYYY" (e.g., "20:22:21 22/04/2026")
+- **Root Cause**: `formatToGMT7` function used `year: '2-digit'` and missing `second` parameter
+- **Fix**: 
+  - Changed `year: '2-digit'` to `year: 'numeric'` for 4-digit year display
+  - Added `second: '2-digit'` to show seconds
+- **Impact**: All datetime columns now display consistently as "HH:MM:SS DD/MM/YYYY" across Pending Orders and Trade History
+- **Files**: `frontend/lib/dateHelpers.ts`
+
+**Issue 3: Database Datetime Fields Using Inconsistent Formats**
+- **Problem**: Some database datetime fields used `new Date().toISOString()` (JS format) while others used `datetime('now')` (SQLite format)
+- **Root Cause**: Mixed approaches across codebase caused potential format inconsistencies
+- **Fix**: Standardized all database datetime default fields to use SQLite `datetime('now')`:
+  - `pending_orders.created_at`: Changed from `new Date().toISOString()` to `datetime('now')`
+  - `predictions.predicted_at`: Changed from `new Date().toISOString()` to `datetime('now')`
+  - `accounts.last_trade_time`: Auto-set to `datetime('now')` when updating trading-related fields (equity, realized_pnl, total_trades)
+  - Removed manual `last_trade_time` setting from `paperTradingEngine.js`
+- **Impact**: All database timestamps now use consistent SQLite datetime format ("YYYY-MM-DD HH:MM:SS")
+- **Files**: `backend/src/db/database.js`, `backend/src/services/paperTradingEngine.js`
+
+### Documentation Updates
+
+**Issue 4: Version Bump**
+- Updated frontend version from 2.4.1 to 2.4.2
+- Files: `frontend/lib/version.ts`
+
 ## [21/04/2026] - v2.4.1 - Database Schema Validation & Column Mismatch Fixes
 
 ### Database Fixes
