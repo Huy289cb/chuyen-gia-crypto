@@ -75,7 +75,7 @@ export async function startScheduler() {
       }
     }
   });
-  
+
   // Run data retention daily at 3 AM (only if db enabled)
   cron.schedule('0 3 * * *', async () => {
     if (dbEnabled && db) {
@@ -88,7 +88,18 @@ export async function startScheduler() {
       }
     }
   });
-  
+
+  // Clean up old raw response logs daily at 4 AM
+  cron.schedule('0 4 * * *', async () => {
+    try {
+      console.log('[Scheduler] Cleaning up old raw response logs...');
+      const { cleanupOldLogs } = await import('./utils/rawResponseLogger.js');
+      await cleanupOldLogs(7); // Keep logs for 7 days
+    } catch (err) {
+      console.error('[Scheduler] Raw response log cleanup error:', err.message);
+    }
+  });
+
   // Start price update scheduler (30-second intervals)
   if (dbEnabled && db) {
     (async () => {

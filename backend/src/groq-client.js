@@ -45,17 +45,9 @@ function cleanJSONResponse(rawResponse) {
     console.log('[GroqClient] Raw response length:', rawResponse.length);
     console.log('[GroqClient] Raw response preview:', rawResponse.substring(0, 500));
 
-    // Log full raw response to file for debugging
-    const fs = require('fs');
-    const path = require('path');
-    const logDir = path.join(process.cwd(), 'logs');
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const logFile = path.join(logDir, `raw-response-${timestamp}.txt`);
-    fs.writeFileSync(logFile, rawResponse, 'utf8');
-    console.log(`[GroqClient] Full raw response logged to: ${logFile}`);
+    // Log full raw response to file for debugging using utility
+    const { logRawResponse } = require('./utils/rawResponseLogger.js');
+    logRawResponse(rawResponse, 'raw-response');
 
     return null;
   }
