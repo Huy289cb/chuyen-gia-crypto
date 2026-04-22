@@ -294,7 +294,7 @@ export function checkStopLevels(position, currentPrice, candle) {
       return { hitSL, hitTPs: [], nextTPLevel: null };
     }
     const tpHitCount = position.tp_hit_count || 0;
-    
+
     console.log(`[PaperTrading] Checking TP levels for position ${position.position_id}:`, {
       side: position.side,
       entry_price: position.entry_price,
@@ -309,7 +309,7 @@ export function checkStopLevels(position, currentPrice, candle) {
         price_difference: (currentPrice && tpLevels[2]) ? parseFloat((currentPrice - tpLevels[2]).toFixed(8)) : 'N/A'
       }
     });
-    
+
     for (let i = tpHitCount; i < tpLevels.length; i++) {
       const tpLevel = tpLevels[i];
       let hitTP = false;
@@ -327,7 +327,7 @@ export function checkStopLevels(position, currentPrice, candle) {
         // Fallback: use current price
         hitTP = safePriceComparison(currentPrice, tpLevel, position.side);
       }
-      
+
       console.log(`[PaperTrading] TP Level ${i + 1} check:`, {
         tp_level_price: tpLevel,
         current_price: currentPrice,
@@ -336,17 +336,38 @@ export function checkStopLevels(position, currentPrice, candle) {
         comparison: position.side === 'long' ? `${currentPrice} >= ${tpLevel}` : `${currentPrice} <= ${tpLevel}`,
         position_id: position.position_id
       });
-      
+
       if (hitTP) {
         hitTPs.push({ level: i + 1, price: tpLevel });
         console.log(`[PaperTrading] TP Level ${i + 1} HIT at price ${tpLevel} for position ${position.position_id}`);
-        
+
         // Force immediate TP hit logging for debugging
         console.log(`[PaperTrading] IMMEDIATE ACTION: Position ${position.position_id} hit TP${i + 1}, should trigger partial close`);
       } else {
         nextTPLevel = { level: i + 1, price: tpLevel };
         console.log(`[PaperTrading] TP Level ${i + 1} NOT HIT, next target: ${tpLevel} for position ${position.position_id}`);
         break; // Found next unhit TP level
+      }
+    }
+  }
+
+  // Fallback: Check simple take_profit for non-ICT methods (e.g., Kim Nghia)
+  if (!position.tp_levels || position.tp_levels === '0') {
+    if (position.take_profit) {
+      let hitTP = false;
+      if (candle) {
+        if (position.side === 'long') {
+          hitTP = candle.high >= position.take_profit;
+        } else {
+          hitTP = candle.low <= position.take_profit;
+        }
+      } else {
+        hitTP = safePriceComparison(currentPrice, position.take_profit, position.side);
+      }
+
+      if (hitTP) {
+        hitTPs.push({ level: 1, price: position.take_profit });
+        console.log(`[PaperTrading] Simple take_profit HIT at ${position.take_profit} for position ${position.position_id}`);
       }
     }
   }
