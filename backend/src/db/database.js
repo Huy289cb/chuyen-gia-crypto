@@ -1708,7 +1708,7 @@ export async function createPendingOrder(db, orderData) {
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
         linked_prediction_id, invalidation_level, status, created_at, executed_at, 
         executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
