@@ -68,8 +68,8 @@ export function usePaperTrading(method: string = 'ict') {
 
   useEffect(() => {
     fetchData();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
+    // Refresh every 1 minute (with 1-minute candle data)
+    const interval = setInterval(fetchData, 60000);
     return () => clearInterval(interval);
   }, [fetchData]);
 

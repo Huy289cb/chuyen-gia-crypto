@@ -106,7 +106,7 @@ const translations = {
       },
       limitExecution: {
         title: 'Thực Thi Lệnh Chờ',
-        condition: 'Giá chạm mức vào lệnh trong cập nhật 30 giây',
+        condition: 'Giá chạm mức vào lệnh trong cập nhật 1 phút với 1-minute candle data',
         action: 'Chuyển thành vị thế thị trường với SL/TP gốc',
         example: 'BTC giảm xuống $67,000 -> Lệnh chờ thực thi như vị thế dài'
       }
@@ -114,7 +114,7 @@ const translations = {
     positionManagement: {
       stopLoss: {
         title: 'Stop Loss & Take Profit',
-        description: 'Theo dõi tự động mỗi 30 giây',
+        description: 'Theo dõi tự động mỗi 1 phút với 1-minute candle data',
         details: 'Vị thế đóng khi chạm mức SL hoặc TP'
       },
       earlyClosure: {
@@ -139,7 +139,7 @@ const translations = {
     limitOrderManagement: {
       priceMonitoring: {
         title: 'Theo Dõi Giá',
-        description: 'Lệnh chờ được kiểm tra mỗi 30 giây',
+        description: 'Lệnh chờ được kiểm tra mỗi 1 phút với 1-minute candle data',
         status: 'active',
         details: 'Hệ thống theo dõi nếu giá chạm mức vào lệnh để thực thi'
       },
@@ -203,7 +203,7 @@ const translations = {
       },
       dataFreshness: {
         title: 'Tính Mới Dữ Liệu',
-        description: 'Cập nhật giá mỗi 30 giây để theo dõi vị thế.'
+        description: 'Cập nhật giá mỗi 1 phút với 1-minute candle data để theo dõi vị thế.'
       },
       ethDisabled: {
         title: 'Giao Dịch ETH Bị Vô Hiệu Hóa',
@@ -221,7 +221,7 @@ const translations = {
     },
     systemSettings: {
       title: 'Thiết Lập Hệ Thống',
-      priceUpdates: '30 giây',
+      priceUpdates: '1 phút với 1-minute candle data',
       aiAnalysis: '15 phút',
       cooldownDuration: '4 giờ',
       maxConsecutiveLosses: '8',
@@ -331,7 +331,7 @@ const translations = {
     positionManagement: {
       stopLoss: {
         title: 'Stop Loss & Take Profit',
-        description: 'Automatic monitoring every 30 seconds',
+        description: 'Automatic monitoring every 1 minute with 1-minute candle data',
         details: 'Positions closed when SL or TP levels are hit'
       },
       earlyClosure: {
@@ -356,7 +356,7 @@ const translations = {
     limitOrderManagement: {
       priceMonitoring: {
         title: 'Price Monitoring',
-        description: 'Pending orders checked every 30 seconds',
+        description: 'Pending orders checked every 1 minute with 1-minute candle data',
         status: 'active',
         details: 'System monitors if price hits entry level for execution'
       },
@@ -420,7 +420,7 @@ const translations = {
       },
       dataFreshness: {
         title: 'Data Freshness',
-        description: 'Price updates every 30 seconds for position monitoring.'
+        description: 'Price updates every 1 minute with 1-minute candle data for position monitoring.'
       },
       ethDisabled: {
         title: 'ETH Trading Disabled',
@@ -438,7 +438,7 @@ const translations = {
     },
     systemSettings: {
       title: 'System Settings',
-      priceUpdates: '30 seconds',
+      priceUpdates: '1 minute with 1-minute candle data',
       aiAnalysis: '15 minutes',
       cooldownDuration: '4 hours',
       maxConsecutiveLosses: '8',

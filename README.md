@@ -31,10 +31,10 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
 - **Separate Accounts**: 100U demo account riêng cho BTC và ETH (mỗi method có account riêng)
-- **Real-time PnL**: Cập nhật PnL mỗi 30 giây, auto-close khi hit SL/TP
+- **Real-time PnL**: Cập nhật PnL mỗi 1 phút với 1-minute candle data, auto-close khi hit SL/TP
 - **Cooldown System**: 4h cooldown sau 3 consecutive losses
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown, average R multiple
-- **Price Updates**: Cập nhật giá và PnL mỗi 30 giây từ Binance API
+- **Price Updates**: Cập nhật giá và PnL mỗi 1 phút với 1-minute candle OHLC data từ Binance API
 - **Prediction Timeline**: Hiển thị lịch sử dự báo theo thời gian với filter
 - **Performance Charts**: Equity curve, trade stats, trade history trong 1 component
 - **Advanced Metrics**: Accuracy by timeframe, accuracy by bias, average hold time
@@ -107,7 +107,7 @@ crypto-analyzer/
 │   │   │   ├── accounts.js        # Account management API
 │   │   │   └── performance.js     # Performance metrics API
 │   │   ├── schedulers/            # Scheduler modules
-│   │   │   └── priceUpdateScheduler.js # 30s price updates
+│   │   │   └── priceUpdateScheduler.js # 1m price updates with 1-minute candle data
 │   │   ├── services/              # Business logic
 │   │   │   ├── autoEntryLogic.js  # Auto-entry decision engine (multi-method support)
 │   │   │   └── paperTradingEngine.js # Position management
@@ -248,7 +248,7 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 - **Fallback**: CoinGecko API (rate-limited, only if Binance fails)
 - **Price Consistency**: 100% Binance (no exchange discrepancies)
 - **OHLC Data**: 15m candles from Binance for ICT analysis
-- **Update Frequency**: 30s (paper trading), 15m (analysis)
+- **Update Frequency**: 1m (paper trading with 1-minute candle data), 15m (analysis)
 
 ## API Response Example
 

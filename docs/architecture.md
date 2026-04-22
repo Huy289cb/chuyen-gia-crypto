@@ -150,7 +150,7 @@ Hệ thống hỗ trợ 2 phương pháp phân tích:
 - **Schedulers**:
   - ICT: Chạy mỗi 15 phút (`*/15 * * * *`)
   - Kim Nghia: Chạy mỗi 7.5 phút (`7,22,37,52 * * * *`)
-  - Price Update: Chạy mỗi 30 giây để update PnL và check SL/TP
+  - Price Update: Chạy mỗi 1 phút với 1-minute candle data để update PnL và check SL/TP
 - **Groq AI Models**:
   - Primary: meta-llama/llama-4-scout-17b-16e-instruct (most reliable)
   - Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
