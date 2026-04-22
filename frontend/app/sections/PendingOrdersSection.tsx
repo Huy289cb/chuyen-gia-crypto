@@ -126,6 +126,7 @@ export function PendingOrdersSection({ symbol, method = 'ict' }: PendingOrdersSe
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Size</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Risk</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">R:R</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-foreground-secondary">Created</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-foreground-secondary">Action</th>
               </tr>
             </thead>
@@ -168,6 +169,13 @@ export function PendingOrdersSection({ symbol, method = 'ict' }: PendingOrdersSe
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-foreground">
                     {order.expected_rr.toFixed(1)}R
+                  </td>
+                  <td className="px-4 py-3 text-right text-xs text-foreground-secondary">
+                    {new Date(order.created_at).toLocaleTimeString('en-US', { 
+                      hour: '2-digit', 
+                      minute: '2-digit',
+                      hour12: false 
+                    })}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Button
@@ -224,15 +232,24 @@ function OrderCardMobile({
             {order.side.toUpperCase()}
           </Badge>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onCancel}
-          disabled={isCancelling}
-          className="text-danger hover:text-danger hover:bg-danger-dim p-1"
-        >
-          <X size={16} />
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-foreground-tertiary">
+            {new Date(order.created_at).toLocaleTimeString('en-US', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              hour12: false 
+            })}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            disabled={isCancelling}
+            className="text-danger hover:text-danger hover:bg-danger-dim p-1"
+          >
+            <X size={16} />
+          </Button>
+        </div>
       </div>
 
       {/* Price levels */}
