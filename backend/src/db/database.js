@@ -1158,6 +1158,7 @@ export async function createPosition(db, positionData) {
         invalidation_level,
         ict_strategy || null,
         tp_levels || null,
+        tp_hit_count || 0,
         partial_closed || 0,
         method_id,
         r_multiple || 0
@@ -1707,7 +1708,7 @@ export async function createPendingOrder(db, orderData) {
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
         linked_prediction_id, invalidation_level, status, created_at, executed_at, 
         executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
@@ -1723,7 +1724,6 @@ export async function createPendingOrder(db, orderData) {
         expected_rr,
         linked_prediction_id,
         invalidation_level,
-        'pending',
         null, // executed_at
         null, // executed_price
         null, // executed_size_qty
