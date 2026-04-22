@@ -1096,12 +1096,12 @@ export async function createPosition(db, positionData) {
       risk_usd,
       risk_percent,
       expected_rr,
-      linked_prediction_id,
-      invalidation_level,
-      ict_strategy,
-      tp_levels,
-      tp_hit_count,
-      partial_closed,
+      linked_prediction_id = null,
+      invalidation_level = null,
+      ict_strategy = null,
+      tp_levels = null,
+      tp_hit_count = 0,
+      partial_closed = 0,
       method_id = 'ict',
       r_multiple = 0
     } = positionData;
@@ -1697,8 +1697,8 @@ export async function createPendingOrder(db, orderData) {
       risk_usd,
       risk_percent,
       expected_rr,
-      linked_prediction_id,
-      invalidation_level,
+      linked_prediction_id = null,
+      invalidation_level = null,
       method_id = 'ict'
     } = orderData;
     
