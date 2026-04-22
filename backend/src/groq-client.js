@@ -14,29 +14,29 @@ function cleanJSONResponse(rawResponse) {
     // Find the first { and match braces to get complete JSON object
     const start = rawResponse.indexOf('{');
     if (start === -1) throw new Error("Không tìm thấy JSON");
-    
+
     // Count braces to find matching closing brace
     let braceCount = 0;
     let end = -1;
     for (let i = start; i < rawResponse.length; i++) {
       if (rawResponse[i] === '{') braceCount++;
       else if (rawResponse[i] === '}') braceCount--;
-      
+
       if (braceCount === 0) {
         end = i;
         break;
       }
     }
-    
+
     if (end === -1) throw new Error("Không tìm thấy dấu đóng ngoặc phù hợp");
-    
+
     let jsonString = rawResponse.substring(start, end + 1);
     console.log('[GroqClient] Cleaned JSON string length:', jsonString.length);
     console.log('[GroqClient] Cleaned JSON preview:', jsonString.substring(0, 200));
-    
+
     // Fix common JSON syntax errors
     jsonString = fixJSONSyntax(jsonString);
-    
+
     // Try to parse the cleaned JSON
     const parsed = JSON.parse(jsonString);
     return parsed;
@@ -44,6 +44,19 @@ function cleanJSONResponse(rawResponse) {
     console.error("Lỗi parse JSON thủ công:", e.message);
     console.log('[GroqClient] Raw response length:', rawResponse.length);
     console.log('[GroqClient] Raw response preview:', rawResponse.substring(0, 500));
+
+    // Log full raw response to file for debugging
+    const fs = require('fs');
+    const path = require('path');
+    const logDir = path.join(process.cwd(), 'logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logFile = path.join(logDir, `raw-response-${timestamp}.txt`);
+    fs.writeFileSync(logFile, rawResponse, 'utf8');
+    console.log(`[GroqClient] Full raw response logged to: ${logFile}`);
+
     return null;
   }
 }
