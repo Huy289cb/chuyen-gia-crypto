@@ -15,7 +15,7 @@ interface HeroSectionProps {
   method?: string;
 }
 
-export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis, showEthTrading = false, method = 'ict' }: HeroSectionProps) {
+export function HeroSection({ btcData, ethData, btcAnalysis, ethAnalysis, showEthTrading = false, method = 'kim_nghia' }: HeroSectionProps) {
   return (
     <section className="mb-8 space-y-6">
       {/* Crypto Cards - Overview */}

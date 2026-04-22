@@ -39,7 +39,7 @@ export default function Home() {
 }
 
 function HomeContentWithSelector() {
-  const [selectedMethod, setSelectedMethod] = useState('ict');
+  const [selectedMethod, setSelectedMethod] = useState('kim_nghia');
   const handleMethodChange = (newMethod: string) => setSelectedMethod(newMethod);
   
   return (

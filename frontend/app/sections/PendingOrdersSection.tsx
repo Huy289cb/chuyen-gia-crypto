@@ -14,7 +14,7 @@ interface PendingOrdersSectionProps {
   method?: string;
 }
 
-export function PendingOrdersSection({ symbol, method = 'ict' }: PendingOrdersSectionProps) {
+export function PendingOrdersSection({ symbol, method = 'kim_nghia' }: PendingOrdersSectionProps) {
   const [orders, setOrders] = useState<PendingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);

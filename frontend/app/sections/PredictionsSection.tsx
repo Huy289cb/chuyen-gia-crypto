@@ -64,7 +64,7 @@ interface PredictionWithAnalysis extends PredictionHistory {
   };
 }
 
-export function PredictionsSection({ symbol, method = 'ict' }: PredictionsSectionProps) {
+export function PredictionsSection({ symbol, method = 'kim_nghia' }: PredictionsSectionProps) {
   const [predictions, setPredictions] = useState<PredictionWithAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
 

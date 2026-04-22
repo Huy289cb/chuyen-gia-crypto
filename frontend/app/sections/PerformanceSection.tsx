@@ -12,7 +12,7 @@ interface PerformanceSectionProps {
   method?: string;
 }
 
-export function PerformanceSection({ symbol, method = 'ict' }: PerformanceSectionProps) {
+export function PerformanceSection({ symbol, method = 'kim_nghia' }: PerformanceSectionProps) {
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 

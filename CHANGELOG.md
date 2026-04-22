@@ -2,6 +2,63 @@
 
 All notable changes to the project will be documented in this file.
 
+## [22/04/2026] - v2.5.0 - ICT Method Disablement & KimNghia Scheduler Update
+
+### Configuration Changes
+
+**Issue 1: ICT Method Temporarily Disabled**
+- **Decision**: ICT Smart Money method temporarily disabled to focus on KimNghia method
+- **Implementation**:
+  - Commented out ICT cron schedule in scheduler.js (code preserved for future multi-method support)
+  - Commented out ICT account initialization in index.js (code preserved for future multi-method support)
+  - ICT configuration remains in methods.js with `enabled: false`
+- **Impact**: System now runs only KimNghia method, ICT code preserved for future re-enablement
+- **Files**: `backend/src/scheduler.js`, `backend/src/index.js`
+
+**Issue 2: KimNghia Scheduler Updated to 10-Minute Intervals**
+- **Change**: Updated KimNghia cron schedule from 7,22,37,52 to 0,10,20,30,40,50
+- **Impact**: KimNghia analysis now runs every 10 minutes at :00, :10, :20, :30, :40, :50
+- **Files**: `backend/src/scheduler.js`
+
+### Frontend Changes
+
+**Issue 3: Frontend Defaults to KimNghia Method**
+- **Changes**:
+  - Updated default selectedMethod from 'ict' to 'kim_nghia' in page.tsx
+  - Updated default selectedMethod from 'ict' to 'kim_nghia' in Header.tsx
+  - Updated default method parameter from 'ict' to 'kim_nghia' in useTrends.ts
+  - Updated default method parameter from 'ict' to 'kim_nghia' in usePaperTrading.ts
+  - Updated default method prop from 'ict' to 'kim_nghia' in all section components
+  - Updated default method from 'ict' to 'kim_nghia' in rules page
+- **Note**: Method selector UI preserved for future multi-method support
+- **Impact**: Frontend defaults to kim_nghia method but UI switcher remains available
+- **Files**: `frontend/app/page.tsx`, `frontend/app/layout/Header.tsx`, `frontend/app/hooks/useTrends.ts`, `frontend/app/hooks/usePaperTrading.ts`, `frontend/app/sections/*.tsx`, `frontend/app/rules/page.tsx`
+
+### Documentation Updates
+
+**Issue 4: README Updated with Disablement Notes**
+- **Changes**:
+  - Updated title to v2.5.0
+  - Added note: "ICT Smart Money method is temporarily disabled (code preserved for future multi-method support)"
+  - Added disablement note to ICT Smart Money Analysis section
+  - Updated scheduler description: "KimNghia: 10 minutes, ICT: disabled"
+  - Updated architecture section to reflect ICT disabled status
+  - Added disablement note to ICT Methodology section
+- **Impact**: Documentation clearly reflects current state with preservation notes
+- **Files**: `README.md`
+
+**Issue 5: Multi-Method Architecture Preservation Documentation**
+- **Changes**: Added documentation notes explaining that ICT code is preserved for future multi-method support
+- **Impact**: Developers understand preservation strategy for future multi-method re-enablement
+- **Files**: Documentation updates (pending in docs/architecture.md and docs/paper-trading.md)
+
+### Version Update
+
+**Issue 6: Version Bump to 2.5.0**
+- **Change**: Updated APP_VERSION from '2.4.2' to '2.5.0'
+- **Impact**: Frontend reflects new version
+- **Files**: `frontend/lib/version.ts`
+
 ## [22/04/2026] - v2.4.2 - Datetime Standardization & R-Multiple Display Fix
 
 ### Bug Fixes

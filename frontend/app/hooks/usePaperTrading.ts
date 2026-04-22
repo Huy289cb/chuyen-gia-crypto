@@ -7,7 +7,7 @@ const API_BASE = process.env.NODE_ENV === 'development'
   ? 'http://localhost:3000/api'
   : '/api';
 
-export function usePaperTrading(method: string = 'ict') {
+export function usePaperTrading(method: string = 'kim_nghia') {
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);

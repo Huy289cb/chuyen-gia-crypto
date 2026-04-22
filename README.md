@@ -1,10 +1,13 @@
-# Crypto Trend Analyzer - Multi-Method Edition (v2.4.0)
+# Crypto Trend Analyzer (v2.5.0)
 
-MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concepts** và **Kim Nghia (SMC + Volume + Fibonacci)** với AI và **Paper Trading**.
+MVP web app phân tích xu hướng BTC/ETH sử dụng **Kim Nghia (SMC + Volume + Fibonacci)** với AI và **Paper Trading**.
+
+**Note:** ICT Smart Money method is temporarily disabled (code preserved for future multi-method support). System currently runs KimNghia method only.
 
 ## Tính năng nổi bật
 
-### ICT Smart Money Analysis
+### ICT Smart Money Analysis (Temporarily Disabled)
+**Note:** ICT method is temporarily disabled. Code is preserved for future multi-method support.
 - **Market Structure**: Phát hiện BOS (Break of Structure) và CHOCH (Change of Character)
 - **Liquidity Model**: Xác định buy-side/sell-side liquidity
 - **Order Blocks**: Mark institutional reference levels
@@ -22,11 +25,11 @@ MVP web app phân tích xu hướng BTC/ETH sử dụng **ICT Smart Money Concep
 Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 
 ### Paper Trading System
-- **Multi-Method Support**: ICT Smart Money và Kim Nghia (SMC + Volume + Fibonacci)
-- **ICT Auto-Entry**: Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
+- **Multi-Method Support**: ICT Smart Money (temporarily disabled) và Kim Nghia (SMC + Volume + Fibonacci) - code preserved for future multi-method support
+- **ICT Auto-Entry** (Temporarily Disabled): Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
 - **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 60%, R:R >= 2.5
-- **Risk Management**: 
-  - ICT: 1% risk per trade, SL distance minimum 0.75%
+- **Risk Management**:
+  - ICT: 1% risk per trade, SL distance minimum 0.75% (disabled)
   - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
 - **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
@@ -42,7 +45,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 
 ### Real-time Data
 - Giá BTC/ETH cập nhật real-time từ **Binance API** (primary), CoinGecko (fallback)
-- Phân tích tự động mỗi 15 phút (ICT) và mỗi 7.5 phút (Kim Nghia)
+- Phân tích tự động mỗi 10 phút (KimNghia: 0,10,20,30,40,50), ICT: disabled
 - Cache 20 phút để đảm bảo performance
 - Lưu trữ OHLCV candles trong SQLite database
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
@@ -92,10 +95,10 @@ crypto-analyzer/
 │   ├── src/
 │   │   ├── index.js                # Entry point
 │   │   ├── analyzers/
-│   │   │   └── analyzerFactory.js  # Multi-method analysis engine (ICT, Kim Nghia)
+│   │   │   └── analyzerFactory.js  # Multi-method analysis engine (ICT disabled, Kim Nghia active)
 │   │   ├── price-fetcher.js        # Binance API integration
 │   │   ├── groq-client.js          # Groq API wrapper with JSON cleaning
-│   │   ├── scheduler.js            # Multi-method scheduler (ICT 15m, Kim Nghia 7.5m)
+│   │   ├── scheduler.js            # Multi-method scheduler (KimNghia 10m, ICT disabled)
 │   │   ├── utils/
 │   │   │   ├── dateHelpers.js      # Date formatting utilities
 │   │   │   ├── asyncHelpers.js     # Async utilities
@@ -213,7 +216,9 @@ Frontend chạy tại http://localhost:3000 (Next.js App Router)
 - **Responsive**: Mobile-first design với glassmorphism effects
 - **Type Safety**: Full TypeScript coverage
 
-## ICT Methodology
+## ICT Methodology (Temporarily Disabled)
+
+**Note:** ICT method is temporarily disabled. Code is preserved for future multi-method support.
 
 Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 

@@ -34,9 +34,10 @@ try {
   if (dbEnabled && db) {
     try {
       const { getOrCreateAccount } = await import('./db/database.js');
-      await getOrCreateAccount(db, 'BTC', 'ict', 100);
+      // TEMPORARILY DISABLED - ICT account initialization paused, code preserved for future multi-method support
+      // await getOrCreateAccount(db, 'BTC', 'ict', 100);
       await getOrCreateAccount(db, 'BTC', 'kim_nghia', 100);
-      console.log('[Index] Paper trading accounts initialized (BTC-ICT: 100U, BTC-KimNghia: 100U)');
+      console.log('[Index] Paper trading accounts initialized (BTC-KimNghia: 100U, ICT: disabled)');
       
       // Run schema validation on startup to prevent column mismatch errors
       try {

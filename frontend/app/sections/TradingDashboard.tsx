@@ -14,7 +14,7 @@ interface TradingDashboardProps {
   method?: string;
 }
 
-export function TradingDashboard({ accounts, loading, onReset, method = 'ict' }: TradingDashboardProps) {
+export function TradingDashboard({ accounts, loading, onReset, method = 'kim_nghia' }: TradingDashboardProps) {
   const methodName = method === 'ict' ? 'ICT Method' : 'Kim Nghia Method';
   const btcAccount = accounts.find(a => a.symbol === 'BTC' && a.method_id === method);
   

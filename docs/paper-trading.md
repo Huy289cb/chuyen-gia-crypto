@@ -4,8 +4,28 @@
 
 The Crypto Trend Analyzer includes a comprehensive paper trading system for simulating trades on BTC and ETH without real money. This system supports **multiple trading methods** for parallel analysis and comparison:
 
-- **ICT Smart Money**: ICT concepts with 1h/4h timeframe analysis
+- **ICT Smart Money**: ICT concepts with 1h/4h timeframe analysis (temporarily disabled as of v2.5.0)
 - **Kim Nghia Method**: SMC + Volume + Fibonacci with H4/H1 timeframe analysis
+
+### Multi-Method Architecture Preservation (v2.5.0)
+
+**Note:** ICT Smart Money method is temporarily disabled as of v2.5.0. All ICT code is preserved in the codebase for future multi-method support.
+
+**Current Status:**
+- ICT method: Disabled (scheduler commented out, account initialization commented out)
+- Kim Nghia method: Active (10-minute schedule: 0,10,20,30,40,50)
+- Frontend: Defaults to kim_nghia, method selector UI preserved
+- Backend: ICT configuration preserved in methods.js with `enabled: false`
+
+**Re-enabling ICT Method:**
+To re-enable ICT method in the future:
+1. Uncomment ICT cron schedule in `backend/src/scheduler.js`
+2. Uncomment ICT account initialization in `backend/src/index.js`
+3. Change `enabled: false` to `enabled: true` in `backend/src/config/methods.js`
+4. Frontend method selector already supports switching between methods
+
+**Design Philosophy:**
+The system is designed to support multiple trading methods running in parallel. All code for ICT method remains intact to allow easy re-enablement without code restoration.
 
 > **IMPORTANT UPDATE (17/04/2026)**: Due to poor performance metrics (1/9 win rate), ETH trading has been **temporarily disabled** to focus on improving core BTC trading skills and achieving profitability before re-enabling multi-symbol trading.
 >

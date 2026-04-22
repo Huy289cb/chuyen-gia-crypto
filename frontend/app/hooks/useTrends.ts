@@ -7,7 +7,7 @@ const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:3000/api' 
   : '/api';
 
-export function useTrends(method: string = 'ict') {
+export function useTrends(method: string = 'kim_nghia') {
   const [data, setData] = useState<TrendsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

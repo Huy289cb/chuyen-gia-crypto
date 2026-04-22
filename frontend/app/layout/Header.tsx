@@ -16,7 +16,7 @@ interface HeaderProps {
   onMethodChange?: (method: string) => void;
 }
 
-export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpdate, selectedMethod = 'ict', onMethodChange }: HeaderProps) {
+export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpdate, selectedMethod = 'kim_nghia', onMethodChange }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const priceFreshness = getTimeSince(lastPriceUpdate);
   const analysisFreshness = getTimeSince(lastAnalysisUpdate);

@@ -449,7 +449,7 @@ const translations = {
 
 function MethodSelector({ onMethodChange }: { onMethodChange: (method: Method) => void }) {
   const searchParams = useSearchParams();
-  const method = (searchParams.get('method') as Method) || 'ict';
+  const method = (searchParams.get('method') as Method) || 'kim_nghia';
 
   useEffect(() => {
     onMethodChange(method);
@@ -459,7 +459,7 @@ function MethodSelector({ onMethodChange }: { onMethodChange: (method: Method) =
 }
 
 export default function RulesPage() {
-  const [method, setMethod] = useState<Method>('ict');
+  const [method, setMethod] = useState<Method>('kim_nghia');
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-bg-primary flex items-center justify-center">Loading...</div>}>

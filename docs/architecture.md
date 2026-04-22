@@ -45,6 +45,26 @@ Crypto Trend Analyzer là hệ thống phân tích crypto sử dụng **ICT Smar
 
 Hệ thống hỗ trợ 2 phương pháp phân tích:
 
+### Multi-Method Architecture Preservation (v2.5.0)
+
+**Note:** ICT Smart Money method is temporarily disabled as of v2.5.0. All ICT code is preserved in the codebase for future multi-method support.
+
+**Current Status:**
+- ICT method: Disabled (scheduler commented out, account initialization commented out)
+- Kim Nghia method: Active (10-minute schedule: 0,10,20,30,40,50)
+- Frontend: Defaults to kim_nghia, method selector UI preserved
+- Backend: ICT configuration preserved in methods.js with `enabled: false`
+
+**Re-enabling ICT Method:**
+To re-enable ICT method in the future:
+1. Uncomment ICT cron schedule in `backend/src/scheduler.js`
+2. Uncomment ICT account initialization in `backend/src/index.js`
+3. Change `enabled: false` to `enabled: true` in `backend/src/config/methods.js`
+4. Frontend method selector already supports switching between methods
+
+**Design Philosophy:**
+The system is designed to support multiple trading methods running in parallel. All code for ICT method remains intact to allow easy re-enablement without code restoration.
+
 ### 1. ICT Smart Money Concepts
 - **Market Structure** - Xác định BOS (Break of Structure) và CHOCH (Change of Character)
 - **Liquidity** - Phát hiện buy-side/sell-side liquidity
