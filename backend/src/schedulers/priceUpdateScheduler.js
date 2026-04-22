@@ -248,7 +248,8 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
             ict_strategy: null,
             tp_levels: null,
             tp_hit_count: 0,
-            partial_closed: 0
+            partial_closed: 0,
+            r_multiple: order.expected_rr || 0
           };
           
           await openPosition(db, account, positionData, order.linked_prediction_id);

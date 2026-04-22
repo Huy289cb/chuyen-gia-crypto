@@ -158,7 +158,8 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
     ict_strategy: JSON.stringify(ictStrategy),
     tp_levels: JSON.stringify(tpLevels),
     tp_hit_count: 0,
-    partial_closed: 0
+    partial_closed: 0,
+    r_multiple: 0
   };
 
   const { createPosition, updateAccount, updatePrediction } = await import('../db/database.js');

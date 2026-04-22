@@ -450,7 +450,8 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
     risk_usd: riskAmount,
     risk_percent: config.riskPerTrade * 100,
     expected_rr: actualRR,
-    invalidation_level: analysis.invalidation_level || stopLoss
+    invalidation_level: analysis.invalidation_level || stopLoss,
+    r_multiple: actualRR
   };
 }
 

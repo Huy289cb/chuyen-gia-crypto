@@ -155,7 +155,8 @@ router.post('/open', async (req, res) => {
       size_qty: sizeQty,
       risk_usd: riskAmount,
       risk_percent: 1,
-      expected_rr: expectedRR
+      expected_rr: expectedRR,
+      r_multiple: expectedRR
     };
     
     const position = await openPosition(db, account, suggestion);
