@@ -116,6 +116,7 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
           });
 
           console.log('[PredictionTimeline] Flattened:', flattened.length);
+          console.log('[PredictionTimeline] Pagination data:', data.pagination);
           setPredictions(flattened);
           setPagination(data.pagination);
         }
@@ -130,6 +131,7 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
   }, [symbol, method, currentPage, itemsPerPage]);
 
   const handlePageChange = (newPage: number) => {
+    console.log('[Pagination] handlePageChange called:', { currentPage, newPage, totalPages: pagination.totalPages });
     if (newPage >= 1 && newPage <= pagination.totalPages) {
       setCurrentPage(newPage);
     }
@@ -192,7 +194,7 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
         </div>
 
         {/* Pagination Controls */}
-        {pagination.totalPages > 1 && (
+        {pagination.total > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
