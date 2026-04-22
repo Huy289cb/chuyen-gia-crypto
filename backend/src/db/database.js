@@ -1724,7 +1724,6 @@ export async function createPendingOrder(db, orderData) {
         expected_rr,
         linked_prediction_id,
         invalidation_level,
-        null, // extra placeholder for status column
         null, // executed_at
         null, // executed_price
         null, // executed_size_qty
