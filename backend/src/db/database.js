@@ -512,7 +512,7 @@ export async function getRecentAnalysisWithPredictions(db, coin, limit = 50, met
       `SELECT COUNT(DISTINCT ah.id) as total
        FROM analysis_history ah
        WHERE ${conditions.join(' AND ')}`,
-      values.slice(0, values.length - (methodId ? 2 : 1)), // Remove limit value for count query
+      values, // Use values directly (no limit/offset yet)
       async (countErr, countRow) => {
         if (countErr) {
           reject(countErr);
