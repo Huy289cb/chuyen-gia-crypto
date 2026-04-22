@@ -1,0 +1,198 @@
+# Crypto Trend Analyzer - Multi-Method Edition (v2.4.0)
+
+## 1. Tổng Quan Dự Án
+
+**Tên dự án:** Hệ thống phân tích và giao dịch Crypto tự động với Multi-Method Analysis.
+
+**Mô tả:** Hệ thống Fullstack tích hợp AI (Groq) để phân tích thị trường theo 2 phương pháp:
+- **ICT Smart Money Concepts** - Market Structure, Liquidity, Order Blocks, FVG, BOS, CHOCH
+- **Kim Nghia (SMC + Volume + Fibonacci)** - SMC Concepts, Volume Profile, Fibonacci Levels, Scoring System
+
+**Mục tiêu:** Tự động quét các thiết lập giao dịch có xác suất cao (High Probability) và quản lý lệnh real-time trên Dashboard với Paper Trading System.
+
+**Tính năng chính:**
+- Multi-Method Analysis (ICT + Kim Nghia)
+- Paper Trading System với risk management
+- Real-time price updates (30s)
+- Auto-entry logic với confidence thresholds
+- Multi-timeframe analysis (15m, 1h, 4h, 1d)
+- Performance tracking (equity curve, win rate, profit factor)
+
+## 2. Tech Stack
+
+**Frontend:**
+- Next.js 15 (App Router, Server Components)
+- TypeScript (Full type safety)
+- Tailwind CSS (Mobile-first design)
+- Lightweight-charts (Candlestick charts)
+- Lucide Icons
+- SWR/React Query cho data fetching
+
+**Backend:**
+- Node.js (Express)
+- Non-blocking async operations
+- node-cron (Multi-method scheduler)
+- PM2 (Process management)
+
+**Database:**
+- SQLite (WAL Mode bắt buộc)
+- Tables: analysis_history, predictions, key_levels, ohlcv_candles, accounts, positions, account_snapshots, trade_events, pending_orders
+- Data retention: 30 days cho 15m candles
+
+**AI Engine:**
+- Groq API (Primary: meta-llama/llama-4-scout-17b-16e-instruct)
+- Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
+- Fallback: qwen/qwen3-32b, openai/gpt-oss-120b
+- JSON parsing: cleanJSONResponse function
+
+**Price Data:**
+- Primary: Binance API (real-time, no rate limit)
+- Fallback: CoinGecko API
+- 1-minute candle data cho SL/TP detection
+
+**Testing:**
+- Vitest Framework
+- Unit và integration tests
+- Test coverage: 53 tests
+
+**Deployment:**
+- PM2 trên VPS 1GB RAM
+- Environment variables cho API keys
+
+## 3. Quy Tắc Thiết Kế
+
+**Giao diện (Frontend):**
+- Mobile-first design để theo dõi lệnh mọi lúc mọi nơi
+- Server Components để tối ưu RAM Client
+- SWR/React Query để đồng bộ dữ liệu mà không cần tải lại trang
+- Glassmorphism effects với dark/light mode toggle
+- Modular architecture (sections, UI components, hooks)
+
+**Hệ thống (Backend):**
+- Modular Architecture: Chia nhỏ logic ICT, Kim Nghia và quản lý lệnh vào các file riêng biệt
+- Memory Guard: Tuyệt đối không nạp dữ liệu nến thô quá lớn vào RAM; sử dụng limit/offset hoặc stream dữ liệu từ SQLite
+- Non-blocking async operations để tránh blocking event loop
+- Truyền tải: Định dạng JSON thống nhất 100% giữa Frontend và Backend
+- Schema validation để prevent column mismatch errors
+- Error handling với fallback mechanisms
+
+**Database:**
+- WAL Mode bắt buộc để xử lý ghi giá 30 giây/lần mà không gây nghẽn
+- Migrations system để manage schema changes
+- Indexes cho performance optimization
+- Data retention policies để prevent database bloat
+
+**Multi-Method Architecture:**
+- ICT Method: 15m schedule, confidence threshold 70%, multi-timeframe alignment required
+- Kim Nghia Method: 7.5m schedule, confidence threshold 60%, không cần multi-timeframe alignment
+- Separate accounts cho mỗi method (100U demo account)
+- Method-specific auto-entry logic
+
+## 4. Quy Tắc Bắt Buộc (Mandatory Rules)
+
+**Kỷ luật Trading - ICT Method:**
+- Risk Management: Rủi ro tối đa 1% tài khoản mỗi lệnh
+- RR Ratio: Tỷ lệ Reward/Risk phải đạt tối thiểu 2.0 mới được phép vào lệnh
+- Confidence Score: Chỉ thực hiện buy/sell khi confidence >= 70%
+- Multi-timeframe Alignment: Bắt buộc alignment giữa 4h và 1d timeframes
+- SL Distance: Khoảng cách SL tối thiểu 0.75% từ Entry
+- Trading Sessions: Chỉ trade trong London/NY killzone sessions
+- Partial Take Profits: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R)
+- Trailing Stop: Move SL to breakeven sau hit TP1
+
+**Kỷ luật Trading - Kim Nghia Method:**
+- Risk Management: Rủi ro tối đa 10% tài khoản mỗi lệnh
+- RR Ratio: Tỷ lệ Reward/Risk phải đạt tối thiểu 2.5 mới được phép vào lệnh
+- Confidence Score: Chỉ thực hiện buy/sell khi confidence >= 60%
+- No Multi-timeframe Alignment: Không cần alignment, trade trong all timeframes
+- SL Distance: Khoảng cách SL tối thiểu 0.3% từ Entry
+- Scoring System: HTF Alignment (30%), Liquidity & Structure (30%), Confluence (20%), Volume (20%)
+
+**Thông số lệnh:**
+- SL/TP phải có chính xác 2 chữ số thập phân
+- Entry prices phải được validate để realistic
+- Position sizing dựa trên risk percent và account balance
+
+**Giao tiếp AI:**
+- Mọi Prompt gửi lên Groq phải yêu cầu Raw JSON only
+- Không markdown, không lời dẫn, không dấu phẩy thừa cuối object để tránh lỗi 400
+- Output phải là tiếng Việt cho narrative
+- Use cleanJSONResponse function để handle malformed JSON
+
+**Error Handling:**
+- Fallback mechanisms cho API failures
+- Schema validation on startup
+- Non-blocking error handling để system vẫn hoạt động khi có lỗi
+- Logging chi tiết để debug
+
+## 5. Workflow
+
+**Data Fetching:**
+1. Scheduler triggers (ICT: 15m, Kim Nghia: 7.5m)
+2. Fetch BTC/ETH prices từ Binance API (primary), CoinGecko (fallback)
+3. Fetch 1-minute OHLC candles cho SL/TP detection
+4. Cache prices in-memory (TTL: 20 minutes)
+
+**Analysis:**
+1. Khi nến đóng, Backend gửi context (price data + OHLC candles) cho Groq API
+2. Context bao gồm: recent analysis, open positions, pending orders (filtered by method_id)
+3. Groq analyzes sử dụng method-specific concepts (ICT hoặc Kim Nghia)
+4. AI trả về structured JSON với bias, action, confidence, narrative, key_levels, suggested entry/SL/TP
+
+**Database Operations:**
+1. Save analysis to SQLite database:
+   - analysis_history table (with method_id)
+   - predictions table (ICT only)
+   - key_levels table (ICT only)
+2. Data retention: 15m candles kept for 30 days (auto-cleanup)
+3. Schema validation on startup để prevent column mismatches
+
+**Auto-Entry Evaluation:**
+1. ICT: Check confidence >= 70%, multi-timeframe alignment (4h, 1d), R:R >= 2.0
+2. Kim Nghia: Check confidence >= 60%, R:R >= 2.5 (skip multi-timeframe alignment)
+3. Nếu entry criteria met, create position trong paper trading system
+4. Nếu entry price > 0.5% away from current price, create pending order
+
+**Position Management:**
+1. Price update scheduler chạy mỗi 30 giây
+2. Update PnL cho tất cả open positions
+3. Check SL/TP triggers với 1-minute candle data
+4. Auto-close positions khi hit SL/TP
+5. Update account equity và metrics
+6. Cooldown system: 4h cooldown sau 3 consecutive losses
+
+**Pending Order Execution:**
+1. Check pending orders mỗi 30 giây
+2. Nếu price hits entry level, execute order
+3. Convert pending order to actual position
+4. Update executed_at timestamp
+
+**Frontend Display:**
+1. Frontend fetches từ /api/analysis
+2. Display với candlestick charts (lightweight-charts)
+3. Method-specific indicator overlays (ICT: BOS, CHOCH, OB, FVG, Liquidity)
+4. Multi-timeframe prediction lines (ICT only)
+5. Vietnamese narrative
+6. Paper trading positions và performance metrics
+7. Pending orders với created_at timestamp
+8. Performance charts (equity curve, trade stats)
+
+## 6. Mục Tiêu Tối Thượng
+
+**PnL+:**
+- Duy trì lợi nhuận ổn định bền vững thông qua sự kết hợp giữa ICT Smart Money Concepts và Kim Nghia method
+- Track performance metrics: win rate, profit factor, max drawdown, average R multiple
+- Optimize entry criteria dựa trên historical accuracy
+
+**Sự ổn định:**
+- Hệ thống phải chạy liên tục trên VPS 1GB RAM mà không bị treo Database hay tràn bộ nhớ
+- WAL Mode cho SQLite để handle concurrent writes
+- Memory guard để prevent RAM overflow
+- Error handling với fallback mechanisms
+- Schema validation để prevent runtime errors
+
+**Mastery:**
+- Trở thành chuyên gia sử dụng Cascade để lập trình và tối ưu hóa các chiến lược Trading phức tạp nhất
+- Modular architecture để dễ bảo trì và extend
+- Comprehensive testing để ensure reliability
+- Documentation để maintain knowledge base
