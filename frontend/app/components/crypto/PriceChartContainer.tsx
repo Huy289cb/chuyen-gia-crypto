@@ -32,8 +32,8 @@ const TIMEFRAMES: { label: string; value: TimeFrame }[] = [
   { label: '1D', value: '1d' },
 ];
 
-export function PriceChartContainer({ 
-  symbol, 
+export function PriceChartContainer({
+  symbol,
   predictions,
   analysis,
   color,
@@ -42,7 +42,7 @@ export function PriceChartContainer({
   const [data, setData] = useState<OHLCData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<TimeFrame>('1h');
+  const [timeframe, setTimeframe] = useState<TimeFrame>(method === 'kim_nghia' ? '15m' : '1h');
 
   useEffect(() => {
     const fetchOHLC = async () => {
