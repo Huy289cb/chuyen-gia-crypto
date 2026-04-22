@@ -15,7 +15,7 @@ interface TradingDashboardProps {
 }
 
 export function TradingDashboard({ accounts, loading, onReset, method = 'kim_nghia' }: TradingDashboardProps) {
-  const methodName = method === 'ict' ? 'ICT Method' : 'Kim Nghia Method';
+  const methodName = 'Kim Nghia Method';
   const btcAccount = accounts.find(a => a.symbol === 'BTC' && a.method_id === method);
   
   // Focus on BTC-only metrics since ETH trading is disabled

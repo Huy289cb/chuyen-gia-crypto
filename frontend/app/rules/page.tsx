@@ -8,7 +8,6 @@ import { useSearchParams } from 'next/navigation';
 import { KimNghiaRules } from './kim-nghia-rules';
 
 type Language = 'vi' | 'en';
-type Method = 'ict' | 'kim_nghia';
 
 const translations = {
   vi: {
@@ -447,47 +446,26 @@ const translations = {
   }
 };
 
-function MethodSelector({ onMethodChange }: { onMethodChange: (method: Method) => void }) {
-  const searchParams = useSearchParams();
-  const method = (searchParams.get('method') as Method) || 'kim_nghia';
-
-  useEffect(() => {
-    onMethodChange(method);
-  }, [method, onMethodChange]);
-
-  return null;
-}
-
 export default function RulesPage() {
-  const [method, setMethod] = useState<Method>('kim_nghia');
-
   return (
     <Suspense fallback={<div className="min-h-screen bg-bg-primary flex items-center justify-center">Loading...</div>}>
-      <MethodSelector onMethodChange={setMethod} />
-      <RulesPageContentWrapper method={method} />
+      <RulesPageContentWrapper />
     </Suspense>
   );
 }
 
-function RulesPageContentWrapper({ method }: { method: Method }) {
+function RulesPageContentWrapper() {
   const [language, setLanguage] = useState<Language>('vi');
   const t = translations[language];
-  const methodName = method === 'ict' ? 'ICT Smart Money' : 'Kim Nghia (SMC + Volume + Fib)';
-  const methodBadge = method === 'ict' ? 'ICT Methodology' : 'Kim Nghia Methodology';
+  const methodName = 'Kim Nghia (SMC + Volume + Fib)';
+  const methodBadge = 'Kim Nghia Methodology';
 
-  const methodConfig = method === 'ict' ? {
-    minConfidence: '70%',
-    minRR: '2.0',
-    maxPositions: '6 mỗi ký hiệu',
-    timeframes: '1h primary, 4h secondary',
-    schedule: '0m, 15m, 30m, 45m',
-    riskPerTrade: '10%'
-  } : {
+  const methodConfig = {
     minConfidence: '60%',
     minRR: '2.5',
     maxPositions: '6 mỗi ký hiệu',
     timeframes: 'H4 primary, H1 secondary',
-    schedule: '7m30s, 22m30s, 37m30s, 52m30s',
+    schedule: '0m, 10m, 20m, 30m, 40m, 50m',
     riskPerTrade: '10%'
   };
 
@@ -509,225 +487,20 @@ function RulesPageContentWrapper({ method }: { method: Method }) {
             <Badge variant="warning" size="sm">{t.badges.aiPowered}</Badge>
             <Badge variant="default" size="sm">{methodName}</Badge>
           </div>
-          
-          {/* Method Toggle */}
-          <div className="mt-6 flex items-center justify-center gap-2">
-            <button
-              onClick={() => {
-                const url = new URL(window.location.href);
-                url.searchParams.set('method', 'ict');
-                window.location.href = url.toString();
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                method === 'ict' 
-                  ? 'bg-accent-primary text-bg-primary' 
-                  : 'bg-surface-1 text-foreground hover:bg-surface-2'
-              }`}
-            >
-              ICT Smart Money
-            </button>
-            <button
-              onClick={() => {
-                const url = new URL(window.location.href);
-                url.searchParams.set('method', 'kim_nghia');
-                window.location.href = url.toString();
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                method === 'kim_nghia' 
-                  ? 'bg-accent-primary text-bg-primary' 
-                  : 'bg-surface-1 text-foreground hover:bg-surface-2'
-              }`}
-            >
-              Kim Nghia
-            </button>
-          </div>
-          
-          {/* Language Toggle */}
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <Globe className="w-4 h-4 text-foreground-secondary" />
-            <button
-              onClick={() => setLanguage(language === 'vi' ? 'en' : 'vi')}
-              className="text-sm text-foreground-secondary hover:text-foreground transition-colors"
-            >
-              {language === 'vi' ? 'English' : 'Tiếng Việt'}
-            </button>
-          </div>
+        </div>
+        {/* Language Toggle */}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Globe className="w-4 h-4 text-foreground-secondary" />
+          <button
+            onClick={() => setLanguage(language === 'vi' ? 'en' : 'vi')}
+            className="text-sm text-foreground-secondary hover:text-foreground transition-colors"
+          >
+            {language === 'vi' ? 'English' : 'Tiếng Việt'}
+          </button>
         </div>
 
-        {/* Method-specific content */}
-        {method === 'kim_nghia' ? (
-          <KimNghiaRules language={language} />
-        ) : (
-          <>
-            {/* Auto Entry Rules */}
-            <section className="mb-12">
-              <CardHeader 
-                title={t.sections.autoEntry.title} 
-                subtitle={t.sections.autoEntry.subtitle}
-                icon={<Target className="w-6 h-6" />}
-              />
-              <Card className="mt-4">
-                <div className="space-y-6">
-                  <RuleCard
-                    title={t.rules.confidenceThreshold.title}
-                    description={t.rules.confidenceThreshold.description}
-                    status="active"
-                    details={t.rules.confidenceThreshold.details}
-                  />
-                  <RuleCard
-                    title={t.rules.multiTimeframe.title}
-                    description={t.rules.multiTimeframe.description}
-                    status="active"
-                    details={t.rules.multiTimeframe.details}
-                  />
-                  <RuleCard
-                    title={t.rules.riskReward.title}
-                    description={t.rules.riskReward.description}
-                    status="active"
-                    details={t.rules.riskReward.details}
-                  />
-                  <RuleCard
-                    title={t.rules.positionLimit.title}
-                    description={t.rules.positionLimit.description}
-                    status="active"
-                    details={t.rules.positionLimit.details}
-                  />
-                  <RuleCard
-                    title={t.rules.tradingSessions.title}
-                    description={t.rules.tradingSessions.description}
-                    status="active"
-                    details={t.rules.tradingSessions.details}
-                  />
-                </div>
-              </Card>
-            </section>
-
-            {/* Order Types */}
-            <section className="mb-12">
-              <CardHeader 
-                title={t.sections.orderTypes.title} 
-                subtitle={t.sections.orderTypes.subtitle}
-                icon={<Settings className="w-6 h-6" />}
-              />
-              <Card className="mt-4">
-                <div className="space-y-6">
-                  <OrderTypeCard
-                    type={t.orderTypes.marketOrders.title}
-                    condition={t.orderTypes.marketOrders.condition}
-                    action={t.orderTypes.marketOrders.action}
-                    example={t.orderTypes.marketOrders.example}
-                  />
-                  <OrderTypeCard
-                    type={t.orderTypes.limitOrders.title}
-                    condition={t.orderTypes.limitOrders.condition}
-                    action={t.orderTypes.limitOrders.action}
-                    example={t.orderTypes.limitOrders.example}
-                  />
-                </div>
-              </Card>
-            </section>
-
-            {/* Position Management */}
-            <section className="mb-12">
-              <CardHeader 
-                title={t.sections.positionManagement.title} 
-                subtitle={t.sections.positionManagement.subtitle}
-                icon={<Shield className="w-6 h-6" />}
-              />
-              <Card className="mt-4">
-                <div className="space-y-6">
-                  <RuleCard
-                    title={t.positionManagement.stopLoss.title}
-                    description={t.positionManagement.stopLoss.description}
-                    status="active"
-                    details={t.positionManagement.stopLoss.details}
-                  />
-                  <RuleCard
-                    title={t.positionManagement.earlyClosure.title}
-                    description={t.positionManagement.earlyClosure.description}
-                    status={(t.positionManagement.earlyClosure.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
-                    details={t.positionManagement.earlyClosure.details}
-                  />
-                  <RuleCard
-                    title={t.positionManagement.aiAnalysis.title}
-                    description={t.positionManagement.aiAnalysis.description}
-                    status={(t.positionManagement.aiAnalysis.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
-                    details={t.positionManagement.aiAnalysis.details}
-                  />
-                  <RuleCard
-                    title={t.positionManagement.riskManagement.title}
-                    description={t.positionManagement.riskManagement.description}
-                    status={(t.positionManagement.riskManagement.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
-                    details={t.positionManagement.riskManagement.details}
-                  />
-                </div>
-              </Card>
-            </section>
-
-            {/* Risk Management */}
-            <section className="mb-12">
-              <CardHeader 
-                title={t.sections.performanceRisk.title} 
-                subtitle={t.sections.performanceRisk.subtitle}
-                icon={<AlertTriangle className="w-6 h-6" />}
-              />
-              <Card className="mt-4">
-                <div className="space-y-6">
-                  <RuleCard
-                    title={t.performanceRisk.consecutiveLosses.title}
-                    description={t.performanceRisk.consecutiveLosses.description}
-                    status={(t.performanceRisk.consecutiveLosses.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
-                    details={t.performanceRisk.consecutiveLosses.details}
-                  />
-                  <RuleCard
-                    title={t.performanceRisk.performanceTracking.title}
-                    description={t.performanceRisk.performanceTracking.description}
-                    status={(t.performanceRisk.performanceTracking.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
-                    details={t.performanceRisk.performanceTracking.details}
-                  />
-                  <RuleCard
-                    title={t.performanceRisk.accountSeparation.title}
-                    description={t.performanceRisk.accountSeparation.description}
-                    status={(t.performanceRisk.accountSeparation.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
-                    details={t.performanceRisk.accountSeparation.details}
-                  />
-                  <RuleCard
-                    title={t.performanceRisk.tradeHistory.title}
-                    description={t.performanceRisk.tradeHistory.description}
-                    status={(t.performanceRisk.tradeHistory.status || 'active') as 'active' | 'inactive' | 'conditional' | 'monitoring'}
-                    details={t.performanceRisk.tradeHistory.details}
-                  />
-                </div>
-              </Card>
-            </section>
-
-            {/* System Configuration */}
-            <section className="mb-12">
-              <CardHeader 
-                title={t.sections.configuration.title} 
-                subtitle={t.sections.configuration.subtitle}
-                icon={<Clock className="w-6 h-6" />}
-              />
-              <Card className="mt-4">
-                <ConfigSection title={t.tradingSettings.title}>
-                  <ConfigItem label="Method" value={methodName} />
-                  <ConfigItem label="Risk Per Trade" value={methodConfig.riskPerTrade} />
-                  <ConfigItem label="Min Confidence" value={methodConfig.minConfidence} />
-                  <ConfigItem label="Min R:R Ratio" value={methodConfig.minRR} />
-                  <ConfigItem label="Max Positions" value={methodConfig.maxPositions} />
-                  <ConfigItem label="Enabled Symbols" value={t.tradingSettings.enabledSymbols} />
-                  <ConfigItem label="Timeframes" value={methodConfig.timeframes} />
-                </ConfigSection>
-                <ConfigSection title={t.systemSettings.title}>
-                  <ConfigItem label="Analysis Schedule" value={methodConfig.schedule} />
-                  <ConfigItem label="Price Updates" value={t.systemSettings.priceUpdates} />
-                  <ConfigItem label="Cooldown Duration" value={t.systemSettings.cooldownDuration} />
-                  <ConfigItem label="Max Consecutive Losses" value={t.systemSettings.maxConsecutiveLosses} />
-                </ConfigSection>
-              </Card>
-            </section>
-          </>
-        )}
+        {/* Kim Nghia Rules */}
+        <KimNghiaRules language={language} />
       </div>
     </div>
   );

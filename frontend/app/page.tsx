@@ -3,7 +3,6 @@
 // Cache-bust: v{APP_VERSION}
 import { useState, useEffect, Suspense } from 'react';
 import { APP_VERSION } from '@/lib/version';
-import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
 import { HeroSection } from './sections/HeroSection';
@@ -17,43 +16,17 @@ import { useTrends } from './hooks/useTrends';
 import { usePaperTrading } from './hooks/usePaperTrading';
 import { Loader2, AlertCircle } from 'lucide-react';
 
-function MethodSelector({ onMethodChange, selectedMethod }: { onMethodChange: (method: string) => void, selectedMethod: string }) {
-  const searchParams = useSearchParams();
-  const methodParam = searchParams.get('method') as string;
-
-  useEffect(() => {
-    if (methodParam && methodParam !== selectedMethod) {
-      onMethodChange(methodParam);
-    }
-  }, [methodParam, selectedMethod, onMethodChange]);
-
-  return null;
-}
-
 export default function Home() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-bg-primary flex items-center justify-center"><Loader2 className="w-12 h-12 text-accent-primary animate-spin" /></div>}>
-      <HomeContentWithSelector />
+      <HomeContent />
     </Suspense>
   );
 }
 
-function HomeContentWithSelector() {
-  const [selectedMethod, setSelectedMethod] = useState('kim_nghia');
-  const handleMethodChange = (newMethod: string) => setSelectedMethod(newMethod);
-  
-  return (
-    <>
-      <MethodSelector onMethodChange={handleMethodChange} selectedMethod={selectedMethod} />
-      <HomeContentWrapper selectedMethod={selectedMethod} handleMethodChange={handleMethodChange} />
-    </>
-  );
-}
-
-function HomeContentWrapper({ selectedMethod, handleMethodChange }: { selectedMethod: string, handleMethodChange: (method: string) => void }) {
-  const router = useRouter();
-  const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends(selectedMethod);
-  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading(selectedMethod);
+function HomeContent() {
+  const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends('kim_nghia');
+  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading('kim_nghia');
 
   const prices = data?.prices;
   const analysis = data?.analysis;
@@ -95,67 +68,58 @@ function HomeContentWrapper({ selectedMethod, handleMethodChange }: { selectedMe
     );
   }
 
-  const handleMethodChangeWithRouter = (newMethod: string) => {
-    handleMethodChange(newMethod);
-    const url = new URL(window.location.href);
-    url.searchParams.set('method', newMethod);
-    router.push(`?${url.searchParams.toString()}`, { scroll: false });
-  };
-
   return (
     <div className="min-h-screen bg-bg-primary">
-      <Header 
-        onRefresh={handleRefresh} 
+      <Header
+        onRefresh={handleRefresh}
         isLoading={trendsLoading}
         lastPriceUpdate={lastPriceUpdate}
         lastAnalysisUpdate={lastAnalysisUpdate}
-        selectedMethod={selectedMethod}
-        onMethodChange={handleMethodChangeWithRouter}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Hero Section - Crypto Cards with Charts */}
-        <HeroSection 
+        <HeroSection
           btcData={data?.prices.btc}
           ethData={data?.prices.eth}
           btcAnalysis={data?.analysis.btc}
           ethAnalysis={data?.analysis.eth}
           showEthTrading={false}
-          method={selectedMethod}
+          method="kim_nghia"
         />
 
         {/* Paper Trading Dashboard */}
-        <TradingDashboard 
+        <TradingDashboard
           accounts={accounts}
           loading={ptLoading}
           onReset={resetAccount}
-          method={selectedMethod}
+          method="kim_nghia"
         />
 
         {/* Open Positions */}
-        <PositionsSection 
+        <PositionsSection
           positions={positions}
           onClosePosition={closePosition}
         />
 
         {/* Pending Orders */}
-        <PendingOrdersSection method={selectedMethod} />
+        <PendingOrdersSection method="kim_nghia" />
 
         {/* Trade History */}
-        <HistorySection 
+        <HistorySection
           trades={tradeHistory}
         />
 
         {/* Prediction Timeline */}
-        <PredictionsSection 
+        <PredictionsSection
           symbol="BTC"
-          method={selectedMethod}
+          method="kim_nghia"
         />
 
         {/* Performance Charts & Metrics */}
-        <PerformanceSection 
+        <PerformanceSection
           symbol="BTC"
-          method={selectedMethod}
+          method="kim_nghia"
         />
       </main>
 

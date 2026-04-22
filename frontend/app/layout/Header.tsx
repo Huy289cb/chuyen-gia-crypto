@@ -12,19 +12,12 @@ interface HeaderProps {
   isLoading: boolean;
   lastPriceUpdate?: string;
   lastAnalysisUpdate?: string;
-  selectedMethod?: string;
-  onMethodChange?: (method: string) => void;
 }
 
-export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpdate, selectedMethod = 'kim_nghia', onMethodChange }: HeaderProps) {
+export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpdate }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const priceFreshness = getTimeSince(lastPriceUpdate);
   const analysisFreshness = getTimeSince(lastAnalysisUpdate);
-
-  const methods = [
-    { id: 'ict', name: 'ICT', label: 'ICT Smart Money' },
-    { id: 'kim_nghia', name: 'Kim Nghia', label: 'Kim Nghia (SMC+Vol+Fib)' }
-  ];
 
   const getFreshnessIcon = (status: string) => {
     switch (status) {
@@ -78,26 +71,6 @@ export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpda
               <BookOpen className="w-4 h-4" />
               <span className="text-sm font-medium">Rules</span>
             </a>
-          </div>
-
-          {/* Method Tab Switcher */}
-          <div className="flex items-center gap-2">
-            {methods.map((method) => (
-              <button
-                key={method.id}
-                onClick={() => onMethodChange?.(method.id)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium',
-                  'border',
-                  selectedMethod === method.id
-                    ? 'bg-accent-primary text-bg-primary border-accent-primary'
-                    : 'bg-surface-1 hover:bg-surface-2 border-border-default hover:border-border-strong text-foreground-secondary hover:text-foreground'
-                )}
-                title={method.label}
-              >
-                {method.name}
-              </button>
-            ))}
           </div>
 
           {/* Data Freshness + Refresh */}
