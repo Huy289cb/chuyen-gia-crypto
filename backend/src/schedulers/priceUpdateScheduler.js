@@ -242,7 +242,13 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
             risk_usd: order.risk_usd,
             risk_percent: order.risk_percent,
             expected_rr: order.expected_rr,
-            invalidation_level: order.invalidation_level
+            invalidation_level: order.invalidation_level,
+            method_id: order.method_id || 'ict',
+            // ICT strategy tracking (required for schema)
+            ict_strategy: null,
+            tp_levels: null,
+            tp_hit_count: 0,
+            partial_closed: 0
           };
           
           await openPosition(db, account, positionData, order.linked_prediction_id);
