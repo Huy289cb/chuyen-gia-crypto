@@ -1102,7 +1102,8 @@ export async function createPosition(db, positionData) {
       tp_levels,
       tp_hit_count,
       partial_closed,
-      method_id = 'ict'
+      method_id = 'ict',
+      r_multiple = 0
     } = positionData;
     
     // Final validation: SL/TP placement based on side
