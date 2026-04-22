@@ -10,19 +10,19 @@ export function formatToGMT7(
 ): string {
   const ts = timestamp || fallbackTimestamp;
   if (!ts) return 'N/A';
-  
+
   try {
     const date = new Date(ts);
-    // Add 7 hours offset to convert UTC to GMT+7
-    const gmt7Date = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-    return gmt7Date.toLocaleString('vi-VN', {
+    // Use timeZone option to convert UTC to GMT+7 (Asia/Ho_Chi_Minh)
+    return date.toLocaleString('vi-VN', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: false
+      hour12: false,
+      timeZone: 'Asia/Ho_Chi_Minh'
     });
   } catch (error) {
     console.error('Error formatting timestamp:', error);
