@@ -609,48 +609,60 @@ export async function updateOpenPositions(db, symbol, currentPrice, candle) {
       } else if (hitTPs.length > 0) {
         // Handle TP hits using ICT strategy
         let ictStrategy = null;
+        let isSimpleTP = false;
+
         if (position.ict_strategy) {
           try {
             ictStrategy = JSON.parse(position.ict_strategy);
+            // Check if it's a simple array (Kim Nghia) or ICT strategy object
+            if (Array.isArray(ictStrategy)) {
+              isSimpleTP = true;
+            }
           } catch (error) {
             console.error('[PaperTrading] Error parsing ict_strategy:', error.message);
             continue; // Skip to next position
           }
         }
-        
-        if (ictStrategy) {
+
+        // Simple TP (Kim Nghia method) - close entire position
+        if (isSimpleTP || !ictStrategy || !ictStrategy.ratios) {
+          console.log(`[PaperTrading] Simple TP hit, closing entire position ${position.position_id}`);
+          const result = await closePosition(db, position, currentPrice, 'take_profit');
+          results.closed.push(result);
+        } else {
+          // ICT strategy with partial closes
           for (const tpHit of hitTPs) {
             const strategyIndex = tpHit.level - 1;
-            
+
             // Bounds checking for strategy arrays
             if (strategyIndex >= ictStrategy.ratios.length || strategyIndex >= ictStrategy.slMoves.length) {
               console.error(`[PaperTrading] Strategy index ${strategyIndex} out of bounds for TP level ${tpHit.level}`);
               continue;
             }
-            
+
             const closeRatio = ictStrategy.ratios[strategyIndex];
             const slMoveIndex = ictStrategy.slMoves[strategyIndex];
-            
+
             // Calculate position size to close
             const remainingSize = position.size_qty * (1 - (position.partial_closed || 0));
             const closeSize = remainingSize * closeRatio;
-            
+
             // Validate position size calculations
             if (remainingSize <= 0) {
               console.error(`[PaperTrading] Invalid remaining size: ${remainingSize} for position ${position.position_id}`);
               continue;
             }
-            
+
             if (closeSize <= 0 || closeSize > remainingSize) {
               console.error(`[PaperTrading] Invalid close size: ${closeSize} (remaining: ${remainingSize}) for position ${position.position_id}`);
               continue;
             }
-            
+
             if (closeSize > 0) {
               // Partial close
               const result = await closePartialPosition(db, position, currentPrice, closeSize, `tp${tpHit.level}`);
               results.closed.push(result);
-              
+
               // Update position with new size and SL if needed
               const { updatePosition } = await import('../db/database.js');
               const newSize = position.size_qty - closeSize;
