@@ -502,6 +502,23 @@ function addKimNghiaColumns(db, resolve, reject) {
     }
   });
 
+  // Recalculate r_multiple for existing closed positions
+  db.run(`
+    UPDATE positions
+    SET r_multiple = CASE
+      WHEN risk_usd > 0 AND realized_pnl IS NOT NULL THEN realized_pnl / risk_usd
+      ELSE 0
+    END
+    WHERE status IN ('closed', 'stopped', 'taken_profit', 'closed_manual', 'prediction_reversal')
+    AND r_multiple = 0
+  `, (err) => {
+    if (err) {
+      console.error('[Migration] Error recalculating r_multiple:', err.message);
+    } else {
+      console.log('[Migration] Recalculated r_multiple for existing closed positions');
+    }
+  });
+
   let completed = 0;
   const allColumns = [...columns, ...sltpColumns];
   allColumns.forEach((column) => {
@@ -519,6 +536,38 @@ function addKimNghiaColumns(db, resolve, reject) {
 
       if (completed === allColumns.length) {
         console.log('[Migration] Kim Nghia columns migration completed');
+        // Continue with raw data columns migration
+        addRawDataColumns(db, resolve, reject);
+      }
+    });
+  });
+}
+
+/**
+ * Add raw_question and raw_answer columns to analysis_history table
+ */
+function addRawDataColumns(db, resolve, reject) {
+  const rawColumns = [
+    'raw_question TEXT',
+    'raw_answer TEXT'
+  ];
+
+  let completed = 0;
+  rawColumns.forEach((column) => {
+    db.run(`ALTER TABLE analysis_history ADD COLUMN ${column}`, (err) => {
+      if (err) {
+        if (err.message.includes('duplicate column name')) {
+          console.log(`[Migration] Column ${column} already exists in analysis_history`);
+        } else {
+          console.error(`[Migration] Error adding ${column} to analysis_history:`, err.message);
+        }
+      } else {
+        console.log(`[Migration] Added ${column} to analysis_history`);
+      }
+      completed++;
+
+      if (completed === rawColumns.length) {
+        console.log('[Migration] Raw data columns migration completed');
         resolve();
       }
     });
