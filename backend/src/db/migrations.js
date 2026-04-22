@@ -519,28 +519,10 @@ function addKimNghiaColumns(db, resolve, reject) {
 
       if (completed === allColumns.length) {
         console.log('[Migration] Kim Nghia columns migration completed');
-        // Fix data inconsistency: set executed_at to null for pending orders
-        fixPendingOrderDataInconsistency(db, resolve, reject);
+        resolve();
       }
     });
   });
-}
-
-/**
- * Fix data inconsistency: set executed_at to null for pending orders
- */
-function fixPendingOrderDataInconsistency(db, resolve, reject) {
-  db.run(
-    `UPDATE pending_orders SET executed_at = NULL WHERE status = 'pending' AND executed_at IS NOT NULL`,
-    function(err) {
-      if (err) {
-        console.error('[Migration] Error fixing pending order data inconsistency:', err.message);
-      } else {
-        console.log(`[Migration] Fixed ${this.changes} pending orders with executed_at inconsistency`);
-      }
-      resolve();
-    }
-  );
 }
 
 /**
