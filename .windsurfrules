@@ -119,6 +119,12 @@
 - Output phải là tiếng Việt cho narrative
 - Use cleanJSONResponse function để handle malformed JSON
 
+**Timezone Handling:**
+- Backend sử dụng UTC time cho tất cả timestamps (database lưu UTC)
+- Frontend convert UTC sang Vietnam time (GMT+7 / Asia/Ho_Chi_Minh) khi hiển thị
+- Sử dụng `timeZone: 'Asia/Ho_Chi_Minh'` trong toLocaleString() để convert
+- Thêm 'Z' suffix vào timestamp string để JavaScript hiểu là UTC
+
 **Error Handling:**
 - Fallback mechanisms cho API failures
 - Schema validation on startup

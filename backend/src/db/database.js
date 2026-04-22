@@ -1778,22 +1778,11 @@ export async function getPendingOrders(db, filters = {}) {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     
     db.all(
-      `SELECT *, 
-        datetime(created_at, 'localtime') as created_at_local,
-        datetime(executed_at, 'localtime') as executed_at_local
-       FROM pending_orders ${whereClause} ORDER BY created_at DESC`,
+      `SELECT * FROM pending_orders ${whereClause} ORDER BY created_at DESC`,
       values,
       (err, rows) => {
         if (err) reject(err);
-        else {
-          // Replace UTC timestamps with local time for frontend display
-          const rowsWithLocalTime = rows.map(row => ({
-            ...row,
-            created_at: row.created_at_local || row.created_at,
-            executed_at: row.executed_at_local || row.executed_at
-          }));
-          resolve(rowsWithLocalTime);
-        }
+        else resolve(rows);
       }
     );
   });

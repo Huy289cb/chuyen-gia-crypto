@@ -171,13 +171,14 @@ export function PendingOrdersSection({ symbol, method = 'ict' }: PendingOrdersSe
                     {order.expected_rr.toFixed(1)}R
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-secondary">
-                    {new Date(order.created_at).toLocaleString('vi-VN', { 
+                    {new Date(order.created_at + 'Z').toLocaleString('vi-VN', { 
                       day: '2-digit',
                       month: '2-digit',
                       year: '2-digit',
                       hour: '2-digit', 
                       minute: '2-digit',
-                      hour12: false 
+                      hour12: false,
+                      timeZone: 'Asia/Ho_Chi_Minh'
                     })}
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -237,13 +238,14 @@ function OrderCardMobile({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-foreground-tertiary">
-            {new Date(order.created_at).toLocaleString('vi-VN', { 
+            {new Date(order.created_at + 'Z').toLocaleString('vi-VN', { 
               day: '2-digit',
               month: '2-digit',
               year: '2-digit',
               hour: '2-digit', 
               minute: '2-digit',
-              hour12: false 
+              hour12: false,
+              timeZone: 'Asia/Ho_Chi_Minh'
             })}
           </span>
           <Button
