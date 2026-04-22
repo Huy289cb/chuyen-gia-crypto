@@ -11,10 +11,24 @@ const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
 // Function to clean JSON response from models that add extra text
 function cleanJSONResponse(rawResponse) {
   try {
-    // Find the first { and last }
+    // Find the first { and match braces to get complete JSON object
     const start = rawResponse.indexOf('{');
-    const end = rawResponse.lastIndexOf('}');
-    if (start === -1 || end === -1) throw new Error("Không tìm thấy JSON");
+    if (start === -1) throw new Error("Không tìm thấy JSON");
+    
+    // Count braces to find matching closing brace
+    let braceCount = 0;
+    let end = -1;
+    for (let i = start; i < rawResponse.length; i++) {
+      if (rawResponse[i] === '{') braceCount++;
+      else if (rawResponse[i] === '}') braceCount--;
+      
+      if (braceCount === 0) {
+        end = i;
+        break;
+      }
+    }
+    
+    if (end === -1) throw new Error("Không tìm thấy dấu đóng ngoặc phù hợp");
     
     let jsonString = rawResponse.substring(start, end + 1);
     console.log('[GroqClient] Cleaned JSON string length:', jsonString.length);
