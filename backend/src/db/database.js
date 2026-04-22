@@ -262,7 +262,7 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
                    (analysis_id, coin, timeframe, direction, target_price, confidence, predicted_at, expires_at,
                     suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr,
                     invalidation_level, reason_summary, model_version, method_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                   [
                     analysisId,
                     coin.toUpperCase(),
@@ -270,7 +270,6 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
                     pred.direction || 'neutral',
                     pred.target || 0,
                     pred.confidence || 0,
-                    new Date().toISOString(),
                     expiresAt.toISOString(),
                     coinData.suggested_entry || null,
                     coinData.suggested_stop_loss || null,
@@ -944,6 +943,11 @@ export async function updateAccount(db, accountId, updates) {
     if (updates.cooldown_until !== undefined) {
       fields.push('cooldown_until = ?');
       values.push(updates.cooldown_until);
+    }
+    
+    // Auto-set last_trade_time when updating trading-related fields
+    if (updates.equity !== undefined || updates.realized_pnl !== undefined || updates.total_trades !== undefined) {
+      fields.push('last_trade_time = datetime("now")');
     }
     
     fields.push('updated_at = datetime("now")');
@@ -1712,7 +1716,7 @@ export async function createPendingOrder(db, orderData) {
         size_usd, size_qty, risk_usd, risk_percent, expected_rr, 
         linked_prediction_id, invalidation_level, status, created_at, executed_at, 
         executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
@@ -1729,7 +1733,6 @@ export async function createPendingOrder(db, orderData) {
         linked_prediction_id,
         invalidation_level,
         'pending', // status
-        new Date().toISOString(), // created_at
         null, // executed_at
         null, // executed_price
         null, // executed_size_qty

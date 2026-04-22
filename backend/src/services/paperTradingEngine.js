@@ -182,7 +182,8 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
   // Update account - in paper trading, balance stays the same, equity = balance + unrealized_pnl
   // We don't deduct from balance because the position is just allocated, not spent
   await updateAccount(db, account.id, {
-    last_trade_time: new Date().toISOString()
+    equity: account.equity + (position.size_usd * 0), // equity unchanged in paper trading
+    unrealized_pnl: account.unrealized_pnl
   });
 
   console.log(`[PaperTrading] Opened ${suggestion.side} position for ${account.symbol}:`, {
