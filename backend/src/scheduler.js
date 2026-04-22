@@ -143,9 +143,10 @@ async function runMethodAnalysis(methodId) {
         if (analysis.btc?.position_decisions?.recommendations) {
           const { closePosition } = await import('./services/paperTradingEngine.js');
           const { fetchRealTimePrices } = await import('./price-fetcher.js');
-          const { getPosition } = await import('./db/database.js');
+          const { getPosition, getPendingOrders, cancelPendingOrder } = await import('./db/database.js');
 
           for (const recommendation of analysis.btc.position_decisions.recommendations) {
+            // Handle position closing
             if (recommendation.action === 'close' && recommendation.position_id) {
               try {
                 const position = await getPosition(db, recommendation.position_id);
@@ -157,6 +158,20 @@ async function runMethodAnalysis(methodId) {
                 }
               } catch (error) {
                 console.error(`[Scheduler][${method.name}] Failed to close position ${recommendation.position_id}:`, error.message);
+              }
+            }
+            
+            // Handle pending order cancellation
+            if (recommendation.action === 'cancel' && recommendation.order_id) {
+              try {
+                const pendingOrders = await getPendingOrders(db, { order_id: recommendation.order_id });
+                const order = pendingOrders[0];
+                if (order && order.status === 'pending') {
+                  await cancelPendingOrder(db, order.id, 'ai_recommendation');
+                  console.log(`[Scheduler][${method.name}] Cancelled pending order ${recommendation.order_id} based on AI recommendation: ${recommendation.reason}`);
+                }
+              } catch (error) {
+                console.error(`[Scheduler][${method.name}] Failed to cancel pending order ${recommendation.order_id}:`, error.message);
               }
             }
           }

@@ -173,6 +173,13 @@
 3. Convert pending order to actual position
 4. Update executed_at timestamp
 
+**Pending Order Cancellation:**
+1. AI có thể recommend cancel pending orders trong position_decisions
+2. Nếu confidence > 80%, AI sẽ đánh giá xem nên KEEP hay CANCEL
+3. Scheduler process AI recommendations với action = 'cancel' và order_id
+4. Pending order được cancel với reason = 'ai_recommendation'
+5. Điều kiện cancel: market conditions thay đổi, price đi xa entry, setup không còn valid
+
 **Frontend Display:**
 1. Frontend fetches từ /api/analysis
 2. Display với candlestick charts (lightweight-charts)
