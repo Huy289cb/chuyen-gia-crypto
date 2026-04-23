@@ -71,7 +71,8 @@ The system is designed to support multiple trading methods running in parallel. 
 - **AI Limit Order Analysis**: AI evaluates pending limit orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
 - **Account Management**: 100U BTC account (ETH trading temporarily disabled)
-- **Cooldown System**: 4-hour cooldown after 3 consecutive losses
+- **Volume Limit**: Max 2k USD total position volume per account (updated 23/04/2026)
+- **Cooldown**: 4h cooldown after 3 consecutive losses (updated from 8, 23/04/2026)
 - **Position Limits**: Maximum 6 concurrent positions per symbol
 - **Trade History Pagination**: Paginated viewing of trade history (10 trades per page)
 - **Limit Order Management**: Automatic execution when price hits entry, manual cancellation available
@@ -654,7 +655,7 @@ All position openings (manual and auto) now enforce:
 - **Direction alignment**: Entry price must align with trade direction
 
 > **Note**: groqAnalyzer.js has been removed. All analysis now uses analyzerFactory.js directly. Shared utilities extracted to utils/dateHelpers.js and utils/asyncHelpers.js.
-- **Minimum confidence**: ICT 70%, Kim Nghia 60% threshold for auto-entry
+- **Minimum confidence**: ICT 70%, Kim Nghia 75% threshold for auto-entry
 - **AI-provided SL/TP**: Required for auto-entry (no default fallback)
 - **SL/TP side validation**: SL must be on correct side of entry based on bias
 - **Granular SL/TP**: AI must provide precise price levels with at least 2 decimal places

@@ -1235,7 +1235,7 @@ export async function getPosition(db, positionId) {
 }
 
 // Get positions by symbol and/or status and/or method_id
-export async function getPositions(db, filters = {}) {
+export async function getPositions(db, filters = {}, pagination = {}) {
   return new Promise((resolve, reject) => {
     const conditions = [];
     const values = [];
@@ -1267,14 +1267,56 @@ export async function getPositions(db, filters = {}) {
     
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     
-    db.all(
-      `SELECT * FROM positions ${whereClause} ORDER BY entry_time DESC`,
-      values,
-      (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      }
-    );
+    // Check if pagination is requested (has limit or offset)
+    const usePagination = pagination.limit !== undefined || pagination.offset !== undefined;
+    
+    if (usePagination) {
+      // Handle pagination
+      const limit = pagination.limit || 50;
+      const offset = pagination.offset || 0;
+      
+      // For pagination, we need to get total count first
+      const countQuery = `SELECT COUNT(*) as total FROM positions ${whereClause}`;
+      
+      db.get(countQuery, values, (err, countResult) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        const total = countResult.total;
+        
+        // Then get paginated results
+        const query = `SELECT * FROM positions ${whereClause} ORDER BY entry_time DESC LIMIT ? OFFSET ?`;
+        db.all(query, [...values, limit, offset], (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Return both data and pagination metadata
+            resolve({
+              data: rows,
+              pagination: {
+                total,
+                limit,
+                offset,
+                count: rows.length,
+                totalPages: Math.ceil(total / limit)
+              }
+            });
+          }
+        });
+      });
+    } else {
+      // No pagination - return all results (backward compatibility)
+      db.all(
+        `SELECT * FROM positions ${whereClause} ORDER BY entry_time DESC`,
+        values,
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        }
+      );
+    }
   });
 }
 

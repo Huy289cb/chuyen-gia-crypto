@@ -27,6 +27,7 @@ RULES:
       minRRRatio: 2.0,
       riskPerTrade: 0.10, // 10% để trading nhanh
       maxPositionsPerSymbol: 6,
+      maxVolumePerAccount: 2000, // Max 2k USD total volume per account
       cooldownAfterLosses: 3,
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,
@@ -91,10 +92,11 @@ OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
 "comparison": "BTC vs ETH Correlated Analysis"
 }`,
     autoEntry: {
-      minConfidence: 60,
+      minConfidence: 75,
       minRRRatio: 2.5,
       riskPerTrade: 0.10, // 10% để trading nhanh
       maxPositionsPerSymbol: 6,
+      maxVolumePerAccount: 2000, // Max 2k USD total volume per account
       cooldownAfterLosses: 3,
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,

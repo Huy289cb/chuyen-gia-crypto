@@ -8,7 +8,7 @@ const AUTO_ENTRY_CONFIG = {
   minRRRatio: 2.0,             // Minimum risk/reward ratio
   riskPerTrade: 0.01,          // 1% of account balance
   maxPositionsPerSymbol: 6,    // Max concurrent positions per symbol - Updated 21/04/2026
-  maxConsecutiveLosses: 8,     // Trigger cooldown
+  maxConsecutiveLosses: 3,     // Trigger cooldown - Updated 23/04/2026 (was 8)
   cooldownHours: 4,            // Cooldown duration in hours
   requiredTimeframes: ['1h', '4h'],  // Check these for alignment - Updated 17/04/2026 (1h primary)
   minAlignment: 0.5,           // Majority (50%+) required
@@ -163,6 +163,20 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     return decision;
   }
   console.log(`[AutoEntry] Check 3 PASSED: Open positions ${openPositions.length}/${config.maxPositionsPerSymbol}`);
+
+  // Check 3.5: Max volume per account
+  if (config.maxVolumePerAccount) {
+    const totalOpenVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
+    const suggestedVolume = decision.suggestedPosition?.size_usd || 0;
+    const totalVolume = totalOpenVolume + suggestedVolume;
+    
+    if (totalVolume > config.maxVolumePerAccount) {
+      console.log(`[AutoEntry] Check 3.5 FAILED: Total volume $${totalVolume.toFixed(2)} exceeds max $${config.maxVolumePerAccount} for account`);
+      decision.reason = `Total volume $${totalVolume.toFixed(2)} exceeds max $${config.maxVolumePerAccount} for account`;
+      return decision;
+    }
+    console.log(`[AutoEntry] Check 3.5 PASSED: Total volume $${totalVolume.toFixed(2)} <= max $${config.maxVolumePerAccount}`);
+  }
 
   // Check 4: Confidence threshold
   const confidenceScore = (analysis.confidence || 0) * 100;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { History, TrendingUp, TrendingDown, XCircle, CheckCircle2, Target, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -25,17 +25,65 @@ const formatToGMT7 = (timestamp: string) => {
 };
 
 interface HistorySectionProps {
-  trades: Trade[];
+  symbol?: string;
+  method?: string;
 }
 
-export function HistorySection({ trades }: HistorySectionProps) {
+export function HistorySection({ symbol = 'BTC', method = 'kim_nghia' }: HistorySectionProps) {
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const tradesPerPage = 10;
-  
-  // Filter BTC trades only
-  const btcTrades = trades.filter(trade => trade.symbol === 'BTC');
-  
-  if (btcTrades.length === 0) {
+  const [itemsPerPage] = useState(10);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 0, page: 1, limit: 10 });
+
+  useEffect(() => {
+    const fetchTrades = async () => {
+      try {
+        const API_BASE = process.env.NODE_ENV === 'development'
+          ? 'http://localhost:3000/api'
+          : '/api';
+        const response = await fetch(`${API_BASE}/performance/trades?symbol=${symbol}&limit=${itemsPerPage}&page=${currentPage}&method=${method}`);
+        const data = await response.json();
+        if (data.success && data.data) {
+          setTrades(data.data);
+          setPagination(data.meta);
+        }
+      } catch (err) {
+        console.error('Error fetching trades:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTrades();
+  }, [symbol, method, currentPage, itemsPerPage]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  if (loading) {
+    return (
+      <section className="mb-8">
+        <CardHeader 
+          title="Trade History" 
+          subtitle="Loading..."
+          icon={<History className="w-5 h-5" />}
+        />
+        <Card className="mt-4">
+          <div className="animate-pulse space-y-3 p-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-12 bg-surface-1 rounded-lg" />
+            ))}
+          </div>
+        </Card>
+      </section>
+    );
+  }
+
+  if (trades.length === 0) {
     return (
       <section className="mb-8">
         <CardHeader 
@@ -52,24 +100,18 @@ export function HistorySection({ trades }: HistorySectionProps) {
     );
   }
 
-  // Pagination logic
-  const totalPages = Math.ceil(btcTrades.length / tradesPerPage);
-  const startIndex = (currentPage - 1) * tradesPerPage;
-  const endIndex = startIndex + tradesPerPage;
-  const currentTrades = btcTrades.slice(startIndex, endIndex);
-
   return (
     <section className="mb-8">
       <CardHeader 
-        title={`Trade History (${btcTrades.length})`}
-        subtitle={`Page ${currentPage} of ${totalPages} (BTC trades only)`}
+        title={`Trade History (${pagination.total})`}
+        subtitle={`Page ${pagination.page} of ${pagination.totalPages} (${symbol} trades)`}
         icon={<History className="w-5 h-5" />}
       />
       
       <Card className="mt-4 overflow-hidden" padding="none">
         {/* Mobile View */}
         <div className="sm:hidden">
-          {currentTrades.map((trade: Trade) => (
+          {trades.map((trade: Trade) => (
             <TradeCardMobile key={trade.id} trade={trade} />
           ))}
         </div>
@@ -92,7 +134,7 @@ export function HistorySection({ trades }: HistorySectionProps) {
               </tr>
             </thead>
             <tbody>
-              {currentTrades.map((trade: Trade, index: number) => (
+              {trades.map((trade: Trade, index: number) => (
                 <tr 
                   key={trade.id} 
                   className={cn(
@@ -146,12 +188,12 @@ export function HistorySection({ trades }: HistorySectionProps) {
       </Card>
 
       {/* Pagination Controls */}
-      {totalPages > 1 && (
+      {pagination.totalPages > 1 && (
         <div className="mt-4 flex items-center justify-center gap-2">
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
             leftIcon={<ChevronLeft size={16} />}
           >
@@ -159,12 +201,12 @@ export function HistorySection({ trades }: HistorySectionProps) {
           </Button>
           
           <div className="flex items-center gap-1">
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+            {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(page => (
               <Button
                 key={page}
                 variant={currentPage === page ? "primary" : "ghost"}
                 size="sm"
-                onClick={() => setCurrentPage(page)}
+                onClick={() => handlePageChange(page)}
                 className="min-w-[2.5rem]"
               >
                 {page}
@@ -175,8 +217,8 @@ export function HistorySection({ trades }: HistorySectionProps) {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === pagination.totalPages}
             rightIcon={<ChevronRight size={16} />}
           >
             Next

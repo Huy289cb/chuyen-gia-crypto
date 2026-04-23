@@ -27,15 +27,15 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 ### Paper Trading System
 - **Multi-Method Support**: ICT Smart Money (temporarily disabled) và Kim Nghia (SMC + Volume + Fibonacci) - code preserved for future multi-method support
 - **ICT Auto-Entry** (Temporarily Disabled): Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
-- **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 60%, R:R >= 2.5
+- **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 75%, R:R >= 2.5
 - **Risk Management**:
   - ICT: 1% risk per trade, SL distance minimum 0.75% (disabled)
   - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
 - **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
-- **Separate Accounts**: 100U demo account riêng cho BTC và ETH (mỗi method có account riêng)
+- **Volume Limit**: Tối đa 2k USD tổng volume positions per account
 - **Real-time PnL**: Cập nhật PnL mỗi 1 phút với 1-minute candle data, auto-close khi hit SL/TP
-- **Cooldown System**: 4h cooldown sau 3 consecutive losses
+- **Cooldown System**: 4h cooldown sau 3 consecutive losses (updated from 8)
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown, average R multiple
 - **Price Updates**: Cập nhật giá và PnL mỗi 1 phút với 1-minute candle OHLC data từ Binance API
 - **Prediction Timeline**: Hiển thị lịch sử dự báo theo thời gian với filter

@@ -342,7 +342,7 @@ export function KimNghiaRules({ language = 'en' }: KimNghiaRulesProps) {
             </div>
             <div>
               <span className="text-xs text-foreground-secondary">Min Confidence</span>
-              <p className="text-sm font-medium text-foreground">60%</p>
+              <p className="text-sm font-medium text-foreground">75%</p>
             </div>
             <div>
               <span className="text-xs text-foreground-secondary">Min R:R</span>

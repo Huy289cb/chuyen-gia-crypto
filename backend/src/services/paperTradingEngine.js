@@ -134,6 +134,23 @@ function calculateTPLevels(entry, sl, rrLevels) {
 export async function openPosition(db, account, suggestion, linkedPredictionId = null) {
   const positionId = randomUUID();
   
+  // Check volume limit before opening position
+  const { getPositions } = await import('../db/database.js');
+  const openPositions = await getPositions(db, { account_id: account.id, status: 'open' });
+  const totalOpenVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
+  const newVolume = suggestion.size_usd;
+  const totalVolume = totalOpenVolume + newVolume;
+  
+  // Get max volume limit from method config (default 2000 if not specified)
+  const maxVolume = suggestion.maxVolumePerAccount || 2000;
+  
+  if (totalVolume > maxVolume) {
+    console.error(`[PaperTrading] Volume limit exceeded: $${totalVolume.toFixed(2)} > $${maxVolume}`);
+    throw new Error(`Volume limit exceeded: $${totalVolume.toFixed(2)} > $${maxVolume}`);
+  }
+  
+  console.log(`[PaperTrading] Volume check passed: $${totalVolume.toFixed(2)} <= $${maxVolume}`);
+  
   // Determine ICT strategy based on expected R:R
   const ictStrategy = getICTStrategy(suggestion.expected_rr);
   const tpLevels = calculateICTTPLevels(suggestion.entry_price, suggestion.stop_loss, ictStrategy);

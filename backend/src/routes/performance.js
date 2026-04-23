@@ -140,30 +140,21 @@ router.get('/trades', async (req, res) => {
       filters.method_id = method;
     }
     
-    const trades = await getPositions(db, filters);
     const limitNum = parseInt(limit);
     const pageNum = parseInt(page);
     const offset = (pageNum - 1) * limitNum;
     
-    // Sort by close_time descending (newest first)
-    const sortedTrades = trades.sort((a, b) => {
-      const timeA = new Date(a.close_time || b.close_time || 0).getTime();
-      const timeB = new Date(b.close_time || a.close_time || 0).getTime();
-      return timeB - timeA;
-    });
-    
-    const paginatedTrades = sortedTrades.slice(offset, offset + limitNum);
-    const totalCount = sortedTrades.length;
-    const totalPages = Math.ceil(totalCount / limitNum);
+    // Use server-side pagination
+    const result = await getPositions(db, filters, { limit: limitNum, offset });
     
     res.json({
       success: true,
-      data: paginatedTrades,
+      data: result.data,
       meta: { 
-        count: paginatedTrades.length,
-        totalCount,
+        count: result.pagination.count,
+        totalCount: result.pagination.total,
         currentPage: pageNum,
-        totalPages,
+        totalPages: result.pagination.totalPages,
         limit: limitNum,
         symbol,
         outcome: outcome || 'all',

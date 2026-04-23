@@ -42,7 +42,7 @@
 [AutoEntry] Check 1 PASSED: No account cooldown
 [AutoEntry] Check 2 PASSED: Within allowed trading sessions
 [AutoEntry] Check 3 PASSED: Open positions 0/6
-[AutoEntry] Check 4 PASSED: Confidence 85% >= 60%
+[AutoEntry] Check 4 PASSED: Confidence 85% >= 75%
 [AutoEntry] Check 5 PASSED: Bias is bullish
 [AutoEntry] Check 6 SKIPPED: Kim Nghia method doesn't use timeframe predictions
 [AutoEntry] Check 7 PASSED: AI action is buy
@@ -110,7 +110,7 @@ After fix, verify:
 ## Configuration Review
 
 **Kim Nghia Method:**
-- minConfidence: 60%
+- minConfidence: 75%
 - minRRRatio: 2.5
 - maxPositionsPerSymbol: 6
 - SL distance: 0.75%

@@ -461,7 +461,7 @@ function RulesPageContentWrapper() {
   const methodBadge = 'Kim Nghia Methodology';
 
   const methodConfig = {
-    minConfidence: '60%',
+    minConfidence: '75%',
     minRR: '2.5',
     maxPositions: '6 mỗi ký hiệu',
     timeframes: 'H4 primary, H1 secondary',
