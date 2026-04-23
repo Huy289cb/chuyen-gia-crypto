@@ -2,6 +2,49 @@
 
 All notable changes to the project will be documented in this file.
 
+## [23/04/2026] - v2.7.1 - AI Prompt Context Testing & Validation
+
+### Testing
+
+**Issue 1: Unit Tests for AI Prompt Context**
+- **Problem**: No tests to verify that open positions and pending orders are correctly fetched and passed to AI prompt
+- **Solution**: Created comprehensive unit test suite for buildUserPrompt function
+- **Implementation**:
+  - Exported buildUserPrompt function from analyzerFactory.js for testing
+  - Created buildUserPrompt.test.js with 18 tests covering:
+    - Open positions fetching with correct filters (symbol: BTC, status: open, method_id)
+    - Pending orders fetching with correct filters (symbol: BTC, status: pending, method_id)
+    - Position formatting with PnL, time-in-position, risk info
+    - Pending order formatting with price distance, waiting time, R:R
+    - Decision instructions inclusion when positions/orders exist
+    - Error handling for database failures
+    - OHLC data fetching for Kim Nghia method
+  - Created getPositions.test.js with 14 tests covering:
+    - Filter by symbol, status, method_id, account_id
+    - Multiple filters together
+    - Pagination (limit/offset)
+    - Ordering by entry_time DESC
+  - Created getPendingOrders.test.js with 10 tests covering:
+    - Filter by symbol, status, method_id, account_id
+    - Multiple filters together
+    - Ordering by created_at DESC
+- **Impact**: Verified that AI prompt correctly includes position and order context for decision making
+- **Files**: `backend/src/analyzers/analyzerFactory.js`, `backend/tests/unit/buildUserPrompt.test.js`, `backend/tests/unit/getPositions.test.js`, `backend/tests/unit/getPendingOrders.test.js`
+
+### Documentation Updates
+
+**Issue 2: CHANGELOG Updated**
+- Added entry for v2.7.1 with testing improvements
+- **Impact**: Documentation reflects new test coverage
+- **Files**: `CHANGELOG.md`
+
+### Version Update
+
+**Issue 3: Version Bump to 2.7.1**
+- Updated frontend version from 2.7.0 to 2.7.1
+- **Impact**: Frontend reflects new version with test coverage improvements
+- **Files**: `frontend/lib/version.ts`
+
 ## [23/04/2026] - v2.7.0 - Pending Order Volume Management & Logic Validation
 
 ### Bug Fixes

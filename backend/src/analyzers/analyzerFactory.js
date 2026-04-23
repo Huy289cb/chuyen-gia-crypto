@@ -134,7 +134,7 @@ export function createAnalyzer(methodConfig) {
  * @param {string} methodId - Method ID for filtering
  * @returns {Promise<string>} User prompt string
  */
-async function buildUserPrompt(priceData, db, methodId) {
+export async function buildUserPrompt(priceData, db, methodId) {
   let historicalContext = '';
   let openPositionsContext = '';
   let pendingOrdersContext = '';
