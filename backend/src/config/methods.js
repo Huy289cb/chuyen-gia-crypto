@@ -96,7 +96,7 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1d'],
       minAlignment: 0.5,
-      minSLDistancePercent: 0.75 // Minimum SL distance as percentage of entry price (0.75% for ICT)
+      minSLDistancePercent: 0.0075 // Minimum SL distance as percentage of entry price (0.75% for ICT)
     }
   },
 
@@ -200,7 +200,7 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.5,
-      minSLDistancePercent: 0.40 // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
+      minSLDistancePercent: 0.004 // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
     }
   }
 };
