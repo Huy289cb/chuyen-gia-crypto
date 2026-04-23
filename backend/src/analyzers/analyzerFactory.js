@@ -144,7 +144,8 @@ export async function buildUserPrompt(priceData, db, methodId) {
       const { getRecentAnalysisWithPredictions, getPositions, getPendingOrders } = await import('../db/database.js');
       
       // Get predictions from last 24 hours, filtered by method_id (BTC only)
-      const btcHistory = await getRecentAnalysisWithPredictions(db, 'BTC', 20, methodId);
+      const btcHistoryResult = await getRecentAnalysisWithPredictions(db, 'BTC', 20, methodId);
+      const btcHistory = btcHistoryResult.data || [];
       
       // Filter to last 24 hours and only 4h/1d timeframes
       const twentyFourHoursAgo = new Date();
