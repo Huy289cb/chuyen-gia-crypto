@@ -112,6 +112,7 @@ The AI now receives enhanced context for decision making:
 - Processes `position_decisions` array with confidence threshold checking
 - Processes `pending_order_decisions` array with confidence threshold checking
 - Executes actions based on validated decisions
+- **Import Fix**: `getMethodConfig` is imported from `config/methods.js` (not `db/database.js`) to access method-specific confidence thresholds
 
 ### Validation
 

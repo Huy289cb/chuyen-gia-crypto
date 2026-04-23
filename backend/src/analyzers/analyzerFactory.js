@@ -296,10 +296,10 @@ async function buildUserPrompt(priceData, db, methodId) {
       const btcOhlc = await getOHLCCandles(db, 'BTC', 60, '15m');
       
       if (btcOhlc && btcOhlc.length > 0) {
-        const btcRecent = btcOhlc.slice(-20).map(c => 
+        const btcRecent = btcOhlc.map(c => 
           `[${new Date(c.timestamp).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}] O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)} V:${c.volume || 'N/A'}`
         ).join('\n');
-        ohlcContext += `\nBTC OHLC CANDLES (15m, last 20 of 60):\n${btcRecent}\n`;
+        ohlcContext += `\nBTC OHLC CANDLES (15m, 60 candles):\n${btcRecent}\n`;
       }
       
       console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles`);
@@ -308,7 +308,8 @@ async function buildUserPrompt(priceData, db, methodId) {
     }
   }
 
-  return `Analyze BTC using ${methodName} methodology (BTC-only mode - ETH temporarily paused).
+  // Build prompt with conditional instructions
+  let prompt = `Analyze BTC using ${methodName} methodology (BTC-only mode - ETH temporarily paused).
 
 BTC DATA:
 - Current Price: $${priceData.btc.price.toLocaleString()}
@@ -319,9 +320,14 @@ BTC DATA:
 ${ohlcContext}
 ${historicalContext}
 ${openPositionsContext}
-${pendingOrdersContext}
+${pendingOrdersContext}`;
 
-IMPORTANT: Return position_decisions and pending_order_decisions arrays as specified in the system prompt. Each decision must include the position_id or order_id from the context above.`;
+  // Only add decision instructions if there are positions or orders to analyze
+  if (openPositionsContext || pendingOrdersContext) {
+    prompt += `\n\nIMPORTANT: Return position_decisions and pending_order_decisions arrays as specified in the system prompt. Each decision must include the position_id or order_id from the context above.`;
+  }
+
+  return prompt;
 }
 
 /**
@@ -367,7 +373,7 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
 
   // Validate position_decisions array
   const validatePositionDecisions = (decisions) => {
-    if (!Array.isArray(decisions)) return null;
+    if (!decisions || !Array.isArray(decisions)) return null;
     
     const validActions = ['hold', 'close_early', 'close_partial', 'move_sl', 'reverse'];
     
@@ -416,7 +422,7 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
   
   // Validate pending_order_decisions array
   const validatePendingOrderDecisions = (decisions) => {
-    if (!Array.isArray(decisions)) return null;
+    if (!decisions || !Array.isArray(decisions)) return null;
     
     const validActions = ['hold', 'cancel', 'modify'];
     

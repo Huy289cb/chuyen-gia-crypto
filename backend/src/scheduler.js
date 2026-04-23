@@ -144,7 +144,8 @@ async function runMethodAnalysis(methodId) {
         if (analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
           const { closePosition, closePartialPosition, updateStopLoss, reversePosition } = await import('./services/paperTradingEngine.js');
           const { fetchRealTimePrices } = await import('./price-fetcher.js');
-          const { getPosition, getMethodConfig } = await import('./db/database.js');
+          const { getPosition } = await import('./db/database.js');
+          const { getMethodConfig } = await import('./config/methods.js');
           
           // Get method confidence threshold
           const methodConfig = getMethodConfig(methodId);
@@ -219,8 +220,8 @@ async function runMethodAnalysis(methodId) {
         
         // Process pending order decisions from AI analysis
         if (analysis.btc?.pending_order_decisions && Array.isArray(analysis.btc.pending_order_decisions)) {
-          const { cancelPendingOrder, modifyPendingOrder } = await import('./db/database.js');
-          const { getPendingOrders, getMethodConfig } = await import('./db/database.js');
+          const { cancelPendingOrder, modifyPendingOrder, getPendingOrders } = await import('./db/database.js');
+          const { getMethodConfig } = await import('./config/methods.js');
           
           // Get method confidence threshold
           const methodConfig = getMethodConfig(methodId);

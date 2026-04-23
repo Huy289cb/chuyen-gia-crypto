@@ -72,7 +72,7 @@ ACTION DEFINITIONS:
 - reverse: Đảo chiều position (close current + open opposite)
 - cancel: Hủy pending order
 - modify: Sửa pending order (specify new_entry, new_sl, new_tp)
-CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 70% (ICT) hoặc 75% (Kim Nghia). Nếu thấp hơn, default là hold.`,
+CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 70% (ICT). Nếu thấp hơn, default là hold.`,
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
@@ -92,7 +92,7 @@ CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 70% (ICT) h
 
   kim_nghia: {
     methodId: 'kim_nghia',
-    name: 'Kim Nghia (SMC + Volume)',
+    name: 'SMC + Volume + Fibonacci',
     description: 'SMC + Volume analysis for limit/market orders',
     scheduleOffset: 450,
     enabled: true,
@@ -166,7 +166,7 @@ ACTION DEFINITIONS:
 - reverse: Đảo chiều position (close current + open opposite)
 - cancel: Hủy pending order
 - modify: Sửa pending order (specify new_entry, new_sl, new_tp)
-CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 75% (Kim Nghia) hoặc 70% (ICT). Nếu thấp hơn, default là hold.`,
+CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 75%. Nếu thấp hơn, default là hold.`,
     autoEntry: {
       minConfidence: 75,
       minRRRatio: 2.5,
