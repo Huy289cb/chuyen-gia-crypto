@@ -2,6 +2,32 @@
 
 All notable changes to the project will be documented in this file.
 
+## [23/04/2026] - v2.7.6 - Trade History UI Pagination Fix
+
+### Bug Fixes
+
+**Issue 1: Trade History Count Displaying "undefined"**
+- **Problem**: Trade History header showed "Trade History (undefined)" instead of actual count
+- **Root Cause**: Backend API returned `meta.totalCount` but frontend expected `meta.total`
+- **Fix**: Renamed backend response fields to match frontend expectations:
+  - `totalCount` → `total`
+  - `currentPage` → `page`
+- **Impact**: Trade History header now displays correct count (e.g., "Trade History (0)" or "Trade History (5)")
+- **Files**: `backend/src/routes/performance.js`
+
+**Issue 2: usePaperTrading Hook Missing Pagination Parameters**
+- **Problem**: `fetchTradeHistory` in usePaperTrading hook didn't use pagination parameters
+- **Fix**: Added `limit` and `page` parameters to `fetchTradeHistory` function
+- **Impact**: Consistent server-side pagination across the codebase
+- **Files**: `frontend/app/hooks/usePaperTrading.ts`
+
+### Version Update
+
+**Issue 3: Version Bump to 2.7.6**
+- Updated frontend version from 2.7.5 to 2.7.6
+- **Impact**: Frontend reflects new version with Trade History UI fix
+- **Files**: `frontend/lib/version.ts`
+
 ## [23/04/2026] - v2.7.4 - Market Order SL/TP Recalculation Fix
 
 ### Bug Fixes

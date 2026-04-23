@@ -151,9 +151,8 @@ router.get('/trades', async (req, res) => {
       success: true,
       data: result.data,
       meta: { 
-        count: result.pagination.count,
-        totalCount: result.pagination.total,
-        currentPage: pageNum,
+        total: result.pagination.total,
+        page: pageNum,
         totalPages: result.pagination.totalPages,
         limit: limitNum,
         symbol,

@@ -38,9 +38,9 @@ export function usePaperTrading(method: string = 'kim_nghia') {
     }
   }, [method]);
 
-  const fetchTradeHistory = useCallback(async () => {
+  const fetchTradeHistory = useCallback(async (limit = 10, page = 1) => {
     try {
-      const response = await fetch(`${API_BASE}/performance/trades?symbol=BTC&method=${method}`);
+      const response = await fetch(`${API_BASE}/performance/trades?symbol=BTC&limit=${limit}&page=${page}&method=${method}`);
       const data: ApiResponse<Trade[]> = await response.json();
       if (data.success && data.data) {
         setTradeHistory(data.data);
