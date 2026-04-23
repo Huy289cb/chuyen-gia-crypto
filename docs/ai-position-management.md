@@ -74,6 +74,47 @@ Actions are only executed if the AI's confidence meets or exceeds the method-spe
 
 If confidence is below the threshold, the action defaults to `hold`.
 
+## Bias Consistency Rule
+
+**Critical Rule**: Position decisions MUST be consistent with market bias to prevent illogical actions.
+
+### Consistency Requirements
+
+- If bias=bullish and position=long → action should be hold (NOT close_early)
+- If bias=bearish and position=short → action should be hold (NOT close_early)
+
+### Valid Close Early Conditions
+
+Close_early is only allowed when:
+1. Bias has reversed direction (e.g., changed from bullish to bearish)
+2. Market structure has fundamentally changed (structure break)
+3. Position has reached the nearest take profit target
+
+### Implementation
+
+The system enforces bias consistency through two mechanisms:
+
+1. **System Prompt**: Explicit instructions in AI prompts to maintain consistency
+2. **Post-Processing Validation**: Auto-correction logic in analyzerFactory.js
+   - Validates position decisions against market bias
+   - Auto-corrects close_early to hold when bias aligns with position
+   - Auto-corrects reverse to hold when bias aligns with position
+   - Logs corrections for debugging
+
+### Example
+
+**Invalid Scenario (Auto-Corrected)**:
+- Bias: bearish (85% confidence)
+- Position: short (entry $78,386, current $78,550, PnL -0.21%)
+- AI Decision: close_early
+- **Correction**: Changed to hold (bias aligns with position direction)
+
+**Valid Scenario**:
+- Bias: bullish (80% confidence)
+- Position: short (entry $78,386, current $78,550, PnL -0.21%)
+- AI Decision: close_early
+- **Result**: Executed (bias reversed, position no longer aligned)
+
 ## Implementation Details
 
 ### Enhanced Prompt Context

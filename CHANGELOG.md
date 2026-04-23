@@ -2,6 +2,74 @@
 
 All notable changes to the project will be documented in this file.
 
+## [23/04/2026] - v2.7.2 - AI Position Decision Consistency Fix
+
+### Bug Fixes
+
+**Issue 1: AI Position Decision Logic Inconsistency**
+- **Problem**: AI suggested closing positions that aligned with market bias (e.g., bias=bearish but closed short position with -0.21% PnL)
+- **Root Cause**: System prompt lacked explicit consistency rule between bias and position decisions
+- **Example**: AI returned bias=bearish (85% confidence), action=sell, but position_decisions=close_early for existing short position
+- **Fix**:
+  - Added CRITICAL CONSISTENCY RULE to both ICT and Kim Nghia system prompts
+  - Rule: Position decisions PHẢI nhất quán với market bias
+  - If bias=bullish and position=long → action should be hold (KHÔNG close_early)
+  - If bias=bearish and position=short → action should be hold (KHÔNG close_early)
+  - Only use close_early when: (1) bias đã đảo chiều, HOẶC (2) cấu trúc thị trường đã thay đổi hoàn toàn, HOẶC (3) position đã đạt mục tiêu TP gần nhất
+- **Impact**: AI will no longer suggest closing positions that align with market bias
+- **Files**: `backend/src/config/methods.js`
+
+**Issue 2: Post-Processing Validation for Bias Consistency**
+- **Problem**: AI might still ignore consistency rules in prompt
+- **Fix**: Added post-processing validation in analyzerFactory.js
+  - Enhanced validatePositionDecisions function to check bias-position alignment
+  - Auto-corrects close_early to hold when bias aligns with position
+  - Auto-corrects reverse to hold when bias aligns with position
+  - Logs corrections for debugging
+  - Fetches open positions for validation context
+- **Impact**: Safety net catches any remaining inconsistencies from AI
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 3: User Prompt Enhancement**
+- **Problem**: AI needs explicit reminder during decision making
+- **Fix**: Added CRITICAL REMINDER in user prompt context
+  - "Position decisions MUST align with your overall bias assessment"
+  - "If you determine bias=bearish, do NOT close existing short positions unless structure has fundamentally changed"
+  - "If bias=bullish, do NOT close existing long positions unless structure has fundamentally changed"
+- **Impact**: AI receives explicit instruction during position decision analysis
+- **Files**: `backend/src/analyzers/analyzerFactory.js`
+
+### Testing
+
+**Issue 4: Unit Tests for Bias Consistency Validation**
+- Created comprehensive test suite for bias consistency validation
+- Tests cover:
+  - Auto-correction when bias=bearish + position=short
+  - Auto-correction when bias=bullish + position=long
+  - Allow close_early when bias changes direction
+  - Allow hold regardless of bias
+  - Auto-correction for reverse action
+  - Neutral bias handling
+  - Missing position handling
+- All 8 tests passing
+- **Impact**: Verified bias consistency validation logic works correctly
+- **Files**: `backend/tests/unit/biasConsistencyValidation.test.js`
+
+### Documentation Updates
+
+**Issue 5: AI Position Management Documentation Updated**
+- Added bias consistency rule section to ai-position-management.md
+- Documented the new validation logic and auto-correction behavior
+- **Impact**: Documentation reflects new bias consistency enforcement
+- **Files**: `docs/ai-position-management.md`
+
+### Version Update
+
+**Issue 6: Version Bump to 2.7.2**
+- Updated frontend version from 2.7.1 to 2.7.2
+- **Impact**: Frontend reflects new version with bias consistency fix
+- **Files**: `frontend/lib/version.ts`
+
 ## [23/04/2026] - v2.7.1 - AI Prompt Context Testing & Validation
 
 ### Testing

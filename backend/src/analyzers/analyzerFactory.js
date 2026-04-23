@@ -220,7 +220,7 @@ export async function buildUserPrompt(priceData, db, methodId) {
         const btcPositions = formatOpenPositions(btcOpenPositions, 'BTC');
         
         if (btcPositions) {
-          openPositionsContext = `\n\n${btcPositions}\n\nFor each open position, provide a decision in position_decisions array with action (hold/close_early/close_partial/move_sl/reverse), confidence (0-1), and reason. Include position_id from above.`;
+          openPositionsContext = `\n\n${btcPositions}\n\nFor each open position, provide a decision in position_decisions array with action (hold/close_early/close_partial/move_sl/reverse), confidence (0-1), and reason. Include position_id from above.\n\nCRITICAL REMINDER: Position decisions MUST align with your overall bias assessment. If you determine bias=bearish, do NOT close existing short positions unless structure has fundamentally changed (bias reversal or structure break). If bias=bullish, do NOT close existing long positions unless structure has fundamentally changed.`;
           console.log(`[AnalyzerFactory][${methodId}] Open positions context included:`, btcOpenPositions.length, 'positions');
         } else {
           console.log(`[AnalyzerFactory][${methodId}] No open positions to analyze`);
@@ -340,6 +340,19 @@ ${pendingOrdersContext}`;
  * @returns {Promise<Object>} Formatted response
  */
 async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
+  // Fetch open positions for bias consistency validation
+  let openPositions = [];
+  if (db) {
+    try {
+      const { getPositions } = await import('../db/database.js');
+      const btcOpenPositions = await getPositions(db, { symbol: 'BTC', status: 'open', method_id: methodId });
+      openPositions = btcOpenPositions || [];
+      console.log(`[AnalyzerFactory] Fetched ${openPositions.length} open positions for bias validation`);
+    } catch (error) {
+      console.log(`[AnalyzerFactory] Failed to fetch open positions for validation:`, error.message);
+    }
+  }
+
   // Calculate Fibonacci for Kim Nghia method before formatting
   let kimNghiaFibonacci = null;
   if (methodId === 'kim_nghia' && db) {
@@ -372,11 +385,19 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
     }
   }
 
-  // Validate position_decisions array
-  const validatePositionDecisions = (decisions) => {
+  // Validate position_decisions array with bias consistency check
+  const validatePositionDecisions = (decisions, bias, openPositions) => {
     if (!decisions || !Array.isArray(decisions)) return null;
     
     const validActions = ['hold', 'close_early', 'close_partial', 'move_sl', 'reverse'];
+    
+    // Create position lookup map
+    const positionMap = new Map();
+    if (openPositions && Array.isArray(openPositions)) {
+      openPositions.forEach(pos => {
+        positionMap.set(pos.position_id, pos);
+      });
+    }
     
     return decisions
       .filter(dec => {
@@ -408,6 +429,24 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
         if (dec.action === 'move_sl' && !dec.new_sl) {
           console.log(`[AnalyzerFactory] Missing new_sl for move_sl action`);
           return false;
+        }
+        
+        // CRITICAL: Check bias consistency for close_early and reverse actions
+        if (dec.action === 'close_early' || dec.action === 'reverse') {
+          const position = positionMap.get(dec.position_id);
+          if (position) {
+            // If bias aligns with position, reject close_early/reverse
+            if (bias === 'bullish' && position.side === 'long') {
+              console.log(`[AnalyzerFactory] REJECTED ${dec.action}: bias=bullish, position=long. Action changed to hold.`);
+              dec.action = 'hold';
+              dec.reason = 'Auto-corrected: Bias aligns with position direction. Holding position.';
+            }
+            if (bias === 'bearish' && position.side === 'short') {
+              console.log(`[AnalyzerFactory] REJECTED ${dec.action}: bias=bearish, position=short. Action changed to hold.`);
+              dec.action = 'hold';
+              dec.reason = 'Auto-corrected: Bias aligns with position direction. Holding position.';
+            }
+          }
         }
         
         return true;
@@ -615,7 +654,7 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
       invalidation_level: validatePriceLevel(coinData?.invalidation_level, currentPrice, 'invalidation', bias),
       reason_summary: coinData?.reason_summary ? coinData.reason_summary.substring(0, 200) : null,
       // Position and order management decisions with validation
-      position_decisions: validatePositionDecisions(coinData?.position_decisions),
+      position_decisions: validatePositionDecisions(coinData?.position_decisions, bias, openPositions),
       pending_order_decisions: validatePendingOrderDecisions(coinData?.pending_order_decisions),
       alternative_scenario: coinData?.alternative_scenario ? {
         ...coinData.alternative_scenario,

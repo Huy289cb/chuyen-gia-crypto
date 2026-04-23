@@ -72,7 +72,14 @@ ACTION DEFINITIONS:
 - reverse: Đảo chiều position (close current + open opposite)
 - cancel: Hủy pending order
 - modify: Sửa pending order (specify new_entry, new_sl, new_tp)
-CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 70% (ICT). Nếu thấp hơn, default là hold.`,
+CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 70% (ICT). Nếu thấp hơn, default là hold.
+
+CRITICAL CONSISTENCY RULE (BẮT BUỘC):
+- Position decisions PHẢI nhất quán với market bias.
+- Nếu bias=bullish và position=long → action nên là hold (KHÔNG close_early).
+- Nếu bias=bearish và position=short → action nên là hold (KHÔNG close_early).
+- Chỉ dùng close_early khi: (1) bias đã đảo chiều, HOẶC (2) cấu trúc thị trường đã thay đổi hoàn toàn (structure break), HOẶC (3) position đã đạt mục tiêu TP gần nhất.
+- Nếu vi phạm quy tắc này, quyết định sẽ bị từ chối.`,
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
@@ -168,7 +175,14 @@ ACTION DEFINITIONS:
 - reverse: Đảo chiều position (close current + open opposite)
 - cancel: Hủy pending order
 - modify: Sửa pending order (specify new_entry, new_sl, new_tp)
-CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 75%. Nếu thấp hơn, default là hold.`,
+CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 75%. Nếu thấp hơn, default là hold.
+
+CRITICAL CONSISTENCY RULE (BẮT BUỘC):
+- Position decisions PHẢI nhất quán với market bias.
+- Nếu bias=bullish và position=long → action nên là hold (KHÔNG close_early).
+- Nếu bias=bearish và position=short → action nên là hold (KHÔNG close_early).
+- Chỉ dùng close_early khi: (1) bias đã đảo chiều, HOẶC (2) cấu trúc thị trường đã thay đổi hoàn toàn (structure break), HOẶC (3) position đã đạt mục tiêu TP gần nhất.
+- Nếu vi phạm quy tắc này, quyết định sẽ bị từ chối.`,
     autoEntry: {
       minConfidence: 75,
       minRRRatio: 2.5,
