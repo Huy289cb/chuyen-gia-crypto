@@ -499,23 +499,23 @@ function addKimNghiaColumns(db, resolve, reject) {
       }
     } else {
       console.log('[Migration] Added r_multiple column to positions');
-    }
-  });
-
-  // Recalculate r_multiple for existing closed positions
-  db.run(`
-    UPDATE positions
-    SET r_multiple = CASE
-      WHEN risk_usd > 0 AND realized_pnl IS NOT NULL THEN realized_pnl / risk_usd
-      ELSE 0
-    END
-    WHERE status IN ('closed', 'stopped', 'taken_profit', 'closed_manual', 'prediction_reversal')
-    AND r_multiple = 0
-  `, (err) => {
-    if (err) {
-      console.error('[Migration] Error recalculating r_multiple:', err.message);
-    } else {
-      console.log('[Migration] Recalculated r_multiple for existing closed positions');
+      
+      // Recalculate r_multiple for existing closed positions (only after column is added)
+      db.run(`
+        UPDATE positions
+        SET r_multiple = CASE
+          WHEN risk_usd > 0 AND realized_pnl IS NOT NULL THEN realized_pnl / risk_usd
+          ELSE 0
+        END
+        WHERE status IN ('closed', 'stopped', 'taken_profit', 'closed_manual', 'prediction_reversal')
+        AND r_multiple = 0
+      `, (err) => {
+        if (err) {
+          console.error('[Migration] Error recalculating r_multiple:', err.message);
+        } else {
+          console.log('[Migration] Recalculated r_multiple for existing closed positions');
+        }
+      });
     }
   });
 
