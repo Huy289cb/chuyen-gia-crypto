@@ -171,8 +171,8 @@ async function runMethodAnalysis(methodId) {
                 continue;
               }
               
-              const priceData = await fetchRealTimePrices();
-              const currentPrice = priceData['btc']?.price || position.current_price;
+              const realtimePrices = await fetchRealTimePrices();
+              const currentPrice = realtimePrices['btc']?.price || position.current_price;
               
               // Handle close_early (full close)
               if (decision.action === 'close_early') {
