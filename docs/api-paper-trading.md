@@ -475,6 +475,13 @@ Create a new pending order (limit order).
 }
 ```
 
+**Validation Rules:**
+- Entry price must align with existing open positions to avoid executing in invalid price zones
+- **SHORT orders**: Entry must be >= SL OR <= TP (cannot be between TP and SL)
+- **LONG orders**: Entry must be >= TP OR <= SL (cannot be between SL and TP)
+- Mixed side positions (short vs long) do not conflict
+- Orders with same side are validated against each other
+
 **Response Example:**
 ```json
 {
@@ -488,6 +495,14 @@ Create a new pending order (limit order).
     "status": "pending"
   },
   "message": "Pending order created successfully"
+}
+```
+
+**Error Response (400) - Invalid Entry Alignment:**
+```json
+{
+  "success": false,
+  "error": "Invalid entry alignment: SHORT entry 67000.00 is between TP 66500.00 and SL 68000.00 of existing position pos1. Entry must be >= SL or <= TP to avoid executing in invalid zone."
 }
 ```
 

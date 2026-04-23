@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   calculateTotalVolume,
   validateStrategicEntry,
-  validateOrderLogic
+  validateOrderLogic,
+  validateEntryAlignmentWithPositions
 } from '../../src/services/autoEntryLogic.js';
 
 // Mock database functions
@@ -185,6 +186,116 @@ describe('autoEntryLogic - Volume Management & Order Validation', () => {
       const result = await calculateTotalVolume(db, 1, 'BTC');
       
       expect(result).toBe(1800); // 1000 + 0 + 500 + 300
+    });
+  });
+
+  describe('validateEntryAlignmentWithPositions', () => {
+    it('should return true when no open positions exist', () => {
+      const result = validateEntryAlignmentWithPositions(77000, 'short', []);
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBe('No open positions to validate against');
+    });
+
+    it('should allow SHORT order with entry >= SL (above SL)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: 77500, take_profit: 76500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(78000, 'short', openPositions);
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBe('Entry aligns with existing positions');
+    });
+
+    it('should allow SHORT order with entry <= TP (below TP)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: 77500, take_profit: 76500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(76000, 'short', openPositions);
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBe('Entry aligns with existing positions');
+    });
+
+    it('should reject SHORT order with entry between TP and SL (invalid zone)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: 77500, take_profit: 76500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(77000, 'short', openPositions);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('is between TP');
+      expect(result.reason).toContain('and SL');
+    });
+
+    it('should allow LONG order with entry >= TP (above TP)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'long', stop_loss: 76500, take_profit: 77500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(78000, 'long', openPositions);
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBe('Entry aligns with existing positions');
+    });
+
+    it('should allow LONG order with entry <= SL (below SL)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'long', stop_loss: 76500, take_profit: 77500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(76000, 'long', openPositions);
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBe('Entry aligns with existing positions');
+    });
+
+    it('should reject LONG order with entry between SL and TP (invalid zone)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'long', stop_loss: 76500, take_profit: 77500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(77000, 'long', openPositions);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('is between SL');
+      expect(result.reason).toContain('and TP');
+    });
+
+    it('should allow mixed side positions (no conflict)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: 77500, take_profit: 76500 },
+        { position_id: 'pos2', side: 'long', stop_loss: 76500, take_profit: 77500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(77000, 'short', openPositions);
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBe('Entry aligns with existing positions');
+    });
+
+    it('should skip positions without SL/TP data', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: null, take_profit: 76500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(77000, 'short', openPositions);
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBe('Entry aligns with existing positions');
+    });
+
+    it('should handle multiple positions and check against all', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: 77500, take_profit: 76500 },
+        { position_id: 'pos2', side: 'short', stop_loss: 78000, take_profit: 77000 }
+      ];
+      // Entry 77250 is invalid for pos2 (77000 < 77250 < 78000)
+      const result = validateEntryAlignmentWithPositions(77250, 'short', openPositions);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('pos2');
+    });
+
+    it('should allow entry at exact boundary (SHORT entry = SL)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: 77500, take_profit: 76500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(77500, 'short', openPositions);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should allow entry at exact boundary (SHORT entry = TP)', () => {
+      const openPositions = [
+        { position_id: 'pos1', side: 'short', stop_loss: 77500, take_profit: 76500 }
+      ];
+      const result = validateEntryAlignmentWithPositions(76500, 'short', openPositions);
+      expect(result.valid).toBe(true);
     });
   });
 });

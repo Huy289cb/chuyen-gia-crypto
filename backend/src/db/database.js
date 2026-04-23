@@ -1801,33 +1801,56 @@ function validatePendingOrderLogic(orderData) {
 
 // Create a pending order (limit order)
 export async function createPendingOrder(db, orderData) {
-  return new Promise((resolve, reject) => {
-    const {
-      order_id,
-      account_id,
-      symbol,
-      side,
-      entry_price,
-      stop_loss,
-      take_profit,
-      size_usd,
-      size_qty,
-      risk_usd,
-      risk_percent,
-      expected_rr,
-      linked_prediction_id = null,
-      invalidation_level = null,
-      method_id = 'ict'
-    } = orderData;
+  const {
+    order_id,
+    account_id,
+    symbol,
+    side,
+    entry_price,
+    stop_loss,
+    take_profit,
+    size_usd,
+    size_qty,
+    risk_usd,
+    risk_percent,
+    expected_rr,
+    linked_prediction_id = null,
+    invalidation_level = null,
+    method_id = 'ict'
+  } = orderData;
+  
+  // Validate order logic before database insertion
+  const validation = validatePendingOrderLogic(orderData);
+  if (!validation.valid) {
+    console.error(`[createPendingOrder] Validation failed: ${validation.reason}`);
+    return Promise.reject(new Error(`Invalid order logic: ${validation.reason}`));
+  }
+  
+  // Validate entry alignment with existing open positions
+  try {
+    const { getPositions } = await import('./database.js');
+    const openPositions = await getPositions(db, { 
+      account_id, 
+      symbol: symbol.toUpperCase(), 
+      status: 'open' 
+    });
     
-    // Validate order logic before database insertion
-    const validation = validatePendingOrderLogic(orderData);
-    if (!validation.valid) {
-      console.error(`[createPendingOrder] Validation failed: ${validation.reason}`);
-      reject(new Error(`Invalid order logic: ${validation.reason}`));
-      return;
+    const { validateEntryAlignmentWithPositions } = await import('../services/autoEntryLogic.js');
+    const alignmentValidation = validateEntryAlignmentWithPositions(entry_price, side, openPositions);
+    
+    if (!alignmentValidation.valid) {
+      console.error(`[createPendingOrder] Entry alignment validation failed: ${alignmentValidation.reason}`);
+      return Promise.reject(new Error(`Invalid entry alignment: ${alignmentValidation.reason}`));
     }
     
+    console.log(`[createPendingOrder] Entry alignment validation passed: ${alignmentValidation.reason}`);
+  } catch (error) {
+    console.error(`[createPendingOrder] Error during entry alignment validation:`, error.message);
+    // Don't reject on validation error - log and continue to avoid blocking order creation
+    // This is a safety check, not a hard requirement
+  }
+  
+  return new Promise((resolve, reject) => {
     db.run(
       `INSERT INTO pending_orders 
        (order_id, account_id, symbol, side, entry_price, stop_loss, take_profit, 

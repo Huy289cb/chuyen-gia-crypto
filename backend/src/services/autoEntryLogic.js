@@ -91,6 +91,59 @@ export function validateOrderLogic(side, entry, sl, tp) {
   return { valid: true, reason: 'Order logic valid' };
 }
 
+/**
+ * Validate if entry price aligns with existing open positions
+ * Prevents creating limit orders that would execute in invalid price zones
+ * @param {number} entryPrice - Suggested entry price for new order
+ * @param {string} side - Side of new order (long or short)
+ * @param {Array} openPositions - Array of existing open position objects
+ * @returns {Object} Validation result { valid: boolean, reason: string }
+ */
+export function validateEntryAlignmentWithPositions(entryPrice, side, openPositions) {
+  if (!openPositions || openPositions.length === 0) {
+    return { valid: true, reason: 'No open positions to validate against' };
+  }
+  
+  for (const position of openPositions) {
+    const posSide = position.side;
+    const posSL = position.stop_loss;
+    const posTP = position.take_profit;
+    
+    // Skip if position doesn't have SL/TP data
+    if (!posSL || !posTP) {
+      continue;
+    }
+    
+    // If sides are different, no conflict (short vs long can coexist)
+    if (side !== posSide) {
+      continue;
+    }
+    
+    // Same side - check entry alignment
+    if (side === 'short') {
+      // SHORT: Entry must be >= SL OR <= TP (cannot be between TP and SL)
+      // TP < entry < SL is INVALID because price would hit TP before entry
+      if (posTP < entryPrice && entryPrice < posSL) {
+        return { 
+          valid: false, 
+          reason: `SHORT entry ${entryPrice.toFixed(2)} is between TP ${posTP.toFixed(2)} and SL ${posSL.toFixed(2)} of existing position ${position.position_id}. Entry must be >= SL or <= TP to avoid executing in invalid zone.` 
+        };
+      }
+    } else if (side === 'long') {
+      // LONG: Entry must be >= TP OR <= SL (cannot be between SL and TP)
+      // SL < entry < TP is INVALID because price would hit SL before entry
+      if (posSL < entryPrice && entryPrice < posTP) {
+        return { 
+          valid: false, 
+          reason: `LONG entry ${entryPrice.toFixed(2)} is between SL ${posSL.toFixed(2)} and TP ${posTP.toFixed(2)} of existing position ${position.position_id}. Entry must be >= TP or <= SL to avoid executing in invalid zone.` 
+        };
+      }
+    }
+  }
+  
+  return { valid: true, reason: 'Entry aligns with existing positions' };
+}
+
 const AUTO_ENTRY_CONFIG = {
   minConfidence: 70,           // Minimum confidence score (0-100) - Updated 18/04/2026
   minRRRatio: 2.0,             // Minimum risk/reward ratio
@@ -405,6 +458,22 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
       console.log(`[AutoEntry] ${duplicateCheck.reason}`);
       return decision;
     }
+  }
+
+  // Check if entry price aligns with existing open positions
+  if (db && decision.shouldEnter && openPositions.length > 0) {
+    const side = decision.suggestedPosition.side;
+    const alignmentValidation = validateEntryAlignmentWithPositions(suggestedEntry, side, openPositions);
+    
+    if (!alignmentValidation.valid) {
+      decision.shouldEnter = false;
+      decision.action = 'no_trade';
+      decision.reason = alignmentValidation.reason;
+      decision.suggestedPosition = null;
+      console.log(`[AutoEntry] ${alignmentValidation.reason}`);
+      return decision;
+    }
+    console.log(`[AutoEntry] Entry alignment validation passed: ${alignmentValidation.reason}`);
   }
 
   // Check if entry price is already hit by current market price
