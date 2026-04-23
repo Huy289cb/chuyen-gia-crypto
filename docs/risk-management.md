@@ -196,6 +196,30 @@ For auto-entry, the system checks alignment on **main timeframes only**:
 - Reduces overtrading during drawdowns
 - Forces review of recent performance
 
+## Volume Management (Updated 23/04/2026)
+
+### Total Volume Limit
+- **Limit**: 2k USD total volume per account
+- **Calculation**: Open positions + Pending orders
+- **Rationale**: Prevents over-leveraging across both active and waiting positions
+
+### Strategic Entry Validation
+When volume reaches limit:
+- New pending orders only allowed at strategic levels
+- Entry must align with SL or TP of existing positions (±0.5% tolerance)
+- Ensures new positions add to existing strategy rather than diversifying randomly
+
+### Example Scenario
+- 2 open positions: $1,000 each = $2,000 total
+- Volume at limit
+- New analysis suggests entry at $76,500
+- Check: Does $76,500 align with SL/TP of existing positions?
+  - Position 1: SL $76,480, TP $77,500
+  - Position 2: SL $75,000, TP $76,600
+  - $76,500 is within 0.5% of Position 1's SL ($76,480) → ALLOW
+  - Or: $76,500 is within 0.5% of Position 2's TP ($76,600) → ALLOW
+  - Otherwise: REJECT
+
 ## Position Limits
 
 ### Maximum Positions Per Symbol

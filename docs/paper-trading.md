@@ -71,7 +71,8 @@ The system is designed to support multiple trading methods running in parallel. 
 - **AI Limit Order Analysis**: AI evaluates pending limit orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
 - **Account Management**: 100U BTC account (ETH trading temporarily disabled)
-- **Volume Limit**: Max 2k USD total position volume per account (updated 23/04/2026)
+- **Volume Limit**: Max 2k USD total position volume per account (open positions + pending orders). When volume reaches limit, new pending orders only allowed if entry aligns with SL/TP of existing positions (±0.5% tolerance) (updated 23/04/2026)
+- **Order Validation**: SL/TP validation ensures logical placement (LONG: SL<entry<TP, SHORT: SL>entry>TP) (updated 23/04/2026)
 - **Cooldown**: 4h cooldown after 3 consecutive losses (updated from 8, 23/04/2026)
 - **Position Limits**: Maximum 6 concurrent positions per symbol
 - **Trade History Pagination**: Paginated viewing of trade history (10 trades per page)
@@ -239,6 +240,29 @@ Each position opened is linked to a specific prediction timeframe for outcome tr
 }
 ```
 
+## Volume Management (Updated 23/04/2026)
+
+### Total Volume Calculation
+- Total volume = open positions volume + pending orders volume
+- Maximum limit: 2k USD per account
+- System checks both open positions and pending orders before creating new orders
+
+### Strategic Entry Validation
+When total volume reaches 2k limit (or 90% of limit):
+- New pending orders only allowed if entry price aligns with SL or TP of existing open positions
+- Tolerance: ±0.5% from SL/TP levels
+- Prevents over-leveraging while allowing strategic position additions
+
+### Example
+- Current open positions: $1,800 (2 positions)
+- Existing pending orders: $150 (1 order)
+- Total volume: $1,950
+- New pending order requested: $100
+- Check: $1,950 + $100 = $2,050 > $2,000 limit
+- Strategic check: Does entry align with SL/TP of existing positions?
+  - If yes: Allow order
+  - If no: Reject with reason "Volume limit reached, entry not at strategic level"
+
 ## Pending Orders System
 
 ### How It Works (Updated 18/04/2026)
@@ -405,6 +429,30 @@ Positions can have the following statuses:
 - **No Financial Advice**: All suggestions are for educational purposes only.
 - **API Limitations**: Analysis runs every 15 minutes due to free Groq API limits.
 - **Data Freshness**: Price updates every 1 minute using 1-minute candle data for accurate SL/TP detection.
+
+## Order Logic Validation (Updated 23/04/2026)
+
+### SL/TP Placement Rules
+All orders (market and pending) must have logically correct SL/TP placement:
+
+**LONG Positions:**
+- Stop Loss must be BELOW entry price
+- Take Profit must be ABOVE entry price
+- Example: Entry $77,000, SL $76,500, TP $78,000 ✓
+
+**SHORT Positions:**
+- Stop Loss must be ABOVE entry price
+- Take Profit must be BELOW entry price
+- Example: Entry $77,000, SL $77,500, TP $76,500 ✓
+
+**Validation Points:**
+- AI response validation (analyzerFactory.js)
+- Position calculation validation (autoEntryLogic.js)
+- Pending order creation validation (database.js)
+
+**Minimum SL Distance:**
+- ICT method: 0.75% from entry
+- Kim Nghia method: 0.3% from entry
 
 ## Position Opening Logic (Updated 18/04/2026)
 

@@ -3,6 +3,94 @@
 
 import { formatVietnamTime } from '../utils/dateHelpers.js';
 
+/**
+ * Calculate total volume of open positions and pending orders for an account
+ * @param {Object} db - Database instance
+ * @param {string} accountId - Account ID
+ * @param {string} symbol - Trading symbol (BTC, ETH)
+ * @returns {Promise<number>} Total volume in USD
+ */
+export async function calculateTotalVolume(db, accountId, symbol) {
+  const { getPositions, getPendingOrders } = await import('../db/database.js');
+  
+  const openPositions = await getPositions(db, { account_id: accountId, symbol, status: 'open' });
+  const pendingOrders = await getPendingOrders(db, { account_id: accountId, symbol, status: 'pending' });
+  
+  const openVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
+  const pendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
+  
+  return openVolume + pendingVolume;
+}
+
+/**
+ * Validate if entry price aligns with SL or TP of existing open positions
+ * Used for strategic entry validation when volume is at limit
+ * @param {number} entryPrice - Suggested entry price
+ * @param {Array} openPositions - Array of open position objects
+ * @param {number} tolerance - Tolerance percentage (default 0.005 = 0.5%)
+ * @returns {boolean} True if entry aligns with SL/TP of any existing position
+ */
+export function validateStrategicEntry(entryPrice, openPositions, tolerance = 0.005) {
+  if (!openPositions || openPositions.length === 0) {
+    return true; // No positions to validate against, allow entry
+  }
+  
+  for (const position of openPositions) {
+    const slDistance = Math.abs(entryPrice - position.stop_loss) / position.stop_loss;
+    const tpDistance = Math.abs(entryPrice - position.take_profit) / position.take_profit;
+    
+    // Check if entry is within tolerance of SL or TP
+    if (slDistance <= tolerance || tpDistance <= tolerance) {
+      console.log(`[AutoEntry] Strategic entry validated: ${entryPrice.toFixed(2)} within ${tolerance * 100}% of position ${position.position_id} SL/TP`);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Validate order logic (SL/TP placement based on side)
+ * @param {string} side - Position side (long or short)
+ * @param {number} entry - Entry price
+ * @param {number} sl - Stop loss price
+ * @param {number} tp - Take profit price
+ * @returns {Object} Validation result { valid: boolean, reason: string }
+ */
+export function validateOrderLogic(side, entry, sl, tp) {
+  if (!entry || !sl || !tp) {
+    return { valid: false, reason: 'Entry, SL, and TP are required' };
+  }
+  
+  if (side === 'long') {
+    // LONG: SL must be below entry, TP must be above entry
+    if (sl >= entry) {
+      return { valid: false, reason: `LONG stop loss ${sl} must be below entry ${entry}` };
+    }
+    if (tp <= entry) {
+      return { valid: false, reason: `LONG take profit ${tp} must be above entry ${entry}` };
+    }
+  } else if (side === 'short') {
+    // SHORT: SL must be above entry, TP must be below entry
+    if (sl <= entry) {
+      return { valid: false, reason: `SHORT stop loss ${sl} must be above entry ${entry}` };
+    }
+    if (tp >= entry) {
+      return { valid: false, reason: `SHORT take profit ${tp} must be below entry ${entry}` };
+    }
+  } else {
+    return { valid: false, reason: `Invalid side: ${side}` };
+  }
+  
+  // Validate minimum SL distance (0.5% from entry)
+  const slDistance = Math.abs(sl - entry) / entry;
+  if (slDistance < 0.005) {
+    return { valid: false, reason: `Stop loss too close to entry: ${(slDistance * 100).toFixed(2)}% (minimum 0.5%)` };
+  }
+  
+  return { valid: true, reason: 'Order logic valid' };
+}
+
 const AUTO_ENTRY_CONFIG = {
   minConfidence: 70,           // Minimum confidence score (0-100) - Updated 18/04/2026
   minRRRatio: 2.0,             // Minimum risk/reward ratio
@@ -164,18 +252,53 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 3 PASSED: Open positions ${openPositions.length}/${config.maxPositionsPerSymbol}`);
 
-  // Check 3.5: Max volume per account
+  // Check 3.5: Max volume per account (including pending orders)
   if (config.maxVolumePerAccount) {
     const totalOpenVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
+    
+    // Calculate pending order volume
+    let totalPendingVolume = 0;
+    if (db) {
+      try {
+        const { getPendingOrders } = await import('../db/database.js');
+        const pendingOrders = await getPendingOrders(db, { account_id: account.id, symbol, status: 'pending' });
+        totalPendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
+        console.log(`[AutoEntry] Pending order volume: $${totalPendingVolume.toFixed(2)} (${pendingOrders.length} orders)`);
+      } catch (error) {
+        console.log(`[AutoEntry] Failed to fetch pending orders for volume check:`, error.message);
+      }
+    }
+    
     const suggestedVolume = decision.suggestedPosition?.size_usd || 0;
-    const totalVolume = totalOpenVolume + suggestedVolume;
+    const totalVolume = totalOpenVolume + totalPendingVolume + suggestedVolume;
     
     if (totalVolume > config.maxVolumePerAccount) {
-      console.log(`[AutoEntry] Check 3.5 FAILED: Total volume $${totalVolume.toFixed(2)} exceeds max $${config.maxVolumePerAccount} for account`);
+      console.log(`[AutoEntry] Check 3.5 FAILED: Total volume $${totalVolume.toFixed(2)} (open: $${totalOpenVolume.toFixed(2)}, pending: $${totalPendingVolume.toFixed(2)}, new: $${suggestedVolume.toFixed(2)}) exceeds max $${config.maxVolumePerAccount} for account`);
       decision.reason = `Total volume $${totalVolume.toFixed(2)} exceeds max $${config.maxVolumePerAccount} for account`;
       return decision;
     }
-    console.log(`[AutoEntry] Check 3.5 PASSED: Total volume $${totalVolume.toFixed(2)} <= max $${config.maxVolumePerAccount}`);
+    console.log(`[AutoEntry] Check 3.5 PASSED: Total volume $${totalVolume.toFixed(2)} (open: $${totalOpenVolume.toFixed(2)}, pending: $${totalPendingVolume.toFixed(2)}, new: $${suggestedVolume.toFixed(2)}) <= max $${config.maxVolumePerAccount}`);
+  }
+  
+  // Check 3.6: Strategic entry validation when volume is at limit
+  if (config.maxVolumePerAccount && db) {
+    const currentVolume = await calculateTotalVolume(db, account.id, symbol);
+    const suggestedVolume = decision.suggestedPosition?.size_usd || 0;
+    const projectedVolume = currentVolume + suggestedVolume;
+    
+    // If projected volume is at 90% or more of limit, validate strategic entry
+    const volumeThreshold = config.maxVolumePerAccount * 0.9;
+    if (projectedVolume >= volumeThreshold) {
+      const suggestedEntry = decision.suggestedPosition?.entry_price;
+      const isStrategicEntry = validateStrategicEntry(suggestedEntry, openPositions);
+      
+      if (!isStrategicEntry) {
+        console.log(`[AutoEntry] Check 3.6 FAILED: Volume at limit ($${projectedVolume.toFixed(2)} / $${config.maxVolumePerAccount}), entry $${suggestedEntry.toFixed(2)} not at strategic level (SL/TP of existing positions)`);
+        decision.reason = `Volume at limit, entry not at strategic level (must align with SL/TP of existing positions)`;
+        return decision;
+      }
+      console.log(`[AutoEntry] Check 3.6 PASSED: Volume at limit but entry $${suggestedEntry.toFixed(2)} is at strategic level`);
+    }
   }
 
   // Check 4: Confidence threshold
@@ -368,7 +491,7 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   const bias = analysis.bias;
   const riskAmount = account.current_balance * config.riskPerTrade;
 
-  // Require AI-provided entry, SL, TP - with fallback calculation
+  // Require AI-provided entry, SL, TP - validate first, then fallback if null/undefined
   const suggestedEntry = analysis.suggested_entry || currentPrice;
   if (!suggestedEntry || suggestedEntry <= 0) {
     console.error('[AutoEntry] Invalid suggested entry:', suggestedEntry);
@@ -377,7 +500,33 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   let suggestedSL = analysis.suggested_stop_loss;
   let suggestedTP = analysis.suggested_take_profit;
 
-  // If AI didn't provide SL/TP, calculate defaults based on bias using suggested entry
+  // Validate AI-provided SL/TP placement first (before fallback)
+  if (suggestedSL && suggestedSL !== 0) {
+    // AI provided SL, validate it
+    if (bias === 'bullish' && suggestedSL >= suggestedEntry) {
+      console.error(`[AutoEntry] AI-provided LONG stop loss ${suggestedSL} must be below entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+    if (bias === 'bearish' && suggestedSL <= suggestedEntry) {
+      console.error(`[AutoEntry] AI-provided SHORT stop loss ${suggestedSL} must be above entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+  }
+  
+  if (suggestedTP && suggestedTP !== 0) {
+    // AI provided TP, validate it
+    if (bias === 'bullish' && suggestedTP <= suggestedEntry) {
+      console.error(`[AutoEntry] AI-provided LONG take profit ${suggestedTP} must be above entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+    if (bias === 'bearish' && suggestedTP >= suggestedEntry) {
+      console.error(`[AutoEntry] AI-provided SHORT take profit ${suggestedTP} must be below entry ${suggestedEntry} - rejecting trade`);
+      return null;
+    }
+  }
+
+  // If AI didn't provide SL/TP (null/undefined), calculate defaults based on bias using suggested entry
+  // Note: Only use fallback if AI didn't provide values, not if they were invalid (invalid values already rejected above)
   if (!suggestedSL || suggestedSL === 0) {
     console.warn('[AutoEntry] AI did not provide SL, calculating default based on bias using suggested entry');
     if (bias === 'bullish') {
@@ -400,7 +549,7 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
     }
   }
 
-  // Validate SL/TP placement based on bias
+  // Final validation of SL/TP placement (including fallback values)
   if (bias === 'bullish') {
     // LONG: SL must be below entry, TP must be above entry
     if (suggestedSL >= suggestedEntry) {

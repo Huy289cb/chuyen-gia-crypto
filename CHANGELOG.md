@@ -2,6 +2,92 @@
 
 All notable changes to the project will be documented in this file.
 
+## [23/04/2026] - v2.7.0 - Pending Order Volume Management & Logic Validation
+
+### Bug Fixes
+
+**Issue 1: Volume Limit Not Enforced for Pending Orders**
+- **Problem**: System allowed creating 6 pending orders simultaneously with total volume $9,123.53 exceeding 2k limit
+- **Root Cause**: Volume check in autoEntryLogic.js only considered open positions, ignored pending orders
+- **Fix**:
+  - Updated volume check to include pending order volume in total calculation
+  - Added strategic entry validation: when volume reaches 2k limit, new pending orders only allowed if entry aligns with SL/TP of existing positions (±0.5% tolerance)
+  - Total volume (open positions + pending orders) never exceeds 2k
+- **Impact**: System now properly enforces volume limit across both open positions and pending orders
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Issue 2: Pending Orders with Illogical SL/TP Placement**
+- **Problem**: Pending orders created with invalid SL/TP (e.g., SHORT order: entry $78,250, SL $77,950 below entry, TP $78,650 above entry)
+- **Root Cause**: SL/TP validation in createPendingOrder was missing, allowing invalid orders to be created
+- **Fix**:
+  - Added validatePendingOrderLogic function in createPendingOrder to check SL/TP placement before database insertion
+  - LONG: SL must be below entry, TP must be above entry
+  - SHORT: SL must be above entry, TP must be below entry
+  - Minimum SL distance validation (0.5% from entry)
+  - Reject invalid orders with descriptive error message
+- **Impact**: No pending orders with illogical SL/TP placement can be created
+- **Files**: `backend/src/db/database.js`
+
+**Issue 3: Fallback Logic Overriding Valid AI Values**
+- **Problem**: Fallback logic in calculateSuggestedPosition could override valid AI-provided SL/TP with invalid defaults
+- **Root Cause**: Fallback logic applied after validation, causing valid AI values to be replaced
+- **Fix**:
+  - Moved SL/TP validation before fallback logic
+  - If AI provides invalid SL/TP, reject trade instead of using fallback
+  - Added logging to track when fallback logic is triggered
+- **Impact**: AI-provided values are validated before fallback, preventing invalid overrides
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+### New Features
+
+**Helper Functions for Volume and Order Validation**
+- calculateTotalVolume(db, accountId, symbol) - Returns total volume of open positions + pending orders
+- validateStrategicEntry(entryPrice, openPositions, tolerance) - Checks if entry aligns with SL/TP of existing positions
+- validateOrderLogic(side, entry, sl, tp) - Validates SL/TP placement based on side
+- **Impact**: Reusable validation functions for consistent order logic across codebase
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+### Testing
+
+**Issue 4: Unit Tests for New Validation Logic**
+- Created comprehensive test suite for new validation functions
+- Tests for validateOrderLogic (12 tests covering LONG/SHORT, valid/invalid scenarios)
+- Tests for validateStrategicEntry (6 tests covering alignment checks)
+- Tests for calculateTotalVolume (3 tests covering volume calculation)
+- All 21 tests passing
+- **Files**: `backend/tests/unit/autoEntryLogic.test.js`
+
+### Documentation Updates
+
+**Issue 5: README Updated**
+- Updated version to 2.7.0
+- Added notes about volume management with strategic entry validation
+- Added notes about SL/TP validation for pending orders
+- **Impact**: README reflects new volume management and validation features
+- **Files**: `README.md`
+
+**Issue 6: Paper Trading Documentation Updated**
+- Updated volume limit section to include pending order volume
+- Added strategic entry validation documentation
+- Added order logic validation section
+- **Impact**: Documentation matches new volume management and validation implementation
+- **Files**: `docs/paper-trading.md`
+
+**Issue 7: Risk Management Documentation Updated**
+- Updated volume management section to include strategic entry rules
+- Added order validation best practices
+- **Impact**: Risk management docs reflect new volume strategy
+- **Files**: `docs/risk-management.md`
+
+### Version Update
+
+**Issue 8: Version Bump to 2.7.0**
+- Updated frontend version from 2.6.0 to 2.7.0
+- Updated frontend package.json from 2.0.3 to 2.7.0
+- Backend package.json remains at 1.0.0 (separate versioning)
+- **Impact**: Frontend reflects new version with pending order fixes
+- **Files**: `frontend/lib/version.ts`, `frontend/package.json`
+
 ## [22/04/2026] - v2.6.0 - Prediction Timeline Enhancement: Raw Data Display & Pagination
 
 ### New Features

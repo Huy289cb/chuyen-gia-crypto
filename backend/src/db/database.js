@@ -1762,6 +1762,43 @@ export async function calculateAverageHoldTime(db, accountId) {
 // PENDING ORDERS - LIMIT ORDER FUNCTIONALITY
 // ==========================================
 
+// Validate order logic (SL/TP placement based on side)
+function validatePendingOrderLogic(orderData) {
+  const { side, entry_price, stop_loss, take_profit } = orderData;
+  
+  if (!entry_price || !stop_loss || !take_profit) {
+    return { valid: false, reason: 'Entry, SL, and TP are required' };
+  }
+  
+  if (side === 'long') {
+    // LONG: SL must be below entry, TP must be above entry
+    if (stop_loss >= entry_price) {
+      return { valid: false, reason: `LONG stop loss ${stop_loss} must be below entry ${entry_price}` };
+    }
+    if (take_profit <= entry_price) {
+      return { valid: false, reason: `LONG take profit ${take_profit} must be above entry ${entry_price}` };
+    }
+  } else if (side === 'short') {
+    // SHORT: SL must be above entry, TP must be below entry
+    if (stop_loss <= entry_price) {
+      return { valid: false, reason: `SHORT stop loss ${stop_loss} must be above entry ${entry_price}` };
+    }
+    if (take_profit >= entry_price) {
+      return { valid: false, reason: `SHORT take profit ${take_profit} must be below entry ${entry_price}` };
+    }
+  } else {
+    return { valid: false, reason: `Invalid side: ${side}` };
+  }
+  
+  // Validate minimum SL distance (0.5% from entry)
+  const slDistance = Math.abs(stop_loss - entry_price) / entry_price;
+  if (slDistance < 0.005) {
+    return { valid: false, reason: `Stop loss too close to entry: ${(slDistance * 100).toFixed(2)}% (minimum 0.5%)` };
+  }
+  
+  return { valid: true, reason: 'Order logic valid' };
+}
+
 // Create a pending order (limit order)
 export async function createPendingOrder(db, orderData) {
   return new Promise((resolve, reject) => {
@@ -1782,6 +1819,14 @@ export async function createPendingOrder(db, orderData) {
       invalidation_level = null,
       method_id = 'ict'
     } = orderData;
+    
+    // Validate order logic before database insertion
+    const validation = validatePendingOrderLogic(orderData);
+    if (!validation.valid) {
+      console.error(`[createPendingOrder] Validation failed: ${validation.reason}`);
+      reject(new Error(`Invalid order logic: ${validation.reason}`));
+      return;
+    }
     
     db.run(
       `INSERT INTO pending_orders 
