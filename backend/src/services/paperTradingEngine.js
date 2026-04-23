@@ -172,6 +172,34 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
   
   console.log(`[PaperTrading] Volume check passed: $${(totalOpenVolume + newVolume).toFixed(2)} <= $${maxVolume}`);
   
+  // Validate SL distance using method-specific threshold
+  const methodId = account.method_id || 'ict';
+  const entryPrice = suggestion.entry_price;
+  const stopLoss = suggestion.stop_loss;
+  const riskDistance = Math.abs(entryPrice - stopLoss);
+  
+  let minSLDistancePercent = 0.005; // Default 0.5%
+  
+  try {
+    const { getMethodConfig } = await import('../config/methods.js');
+    const methodConfig = getMethodConfig(methodId);
+    minSLDistancePercent = methodConfig.autoEntry?.minSLDistancePercent || 0.005;
+  } catch (error) {
+    console.warn(`[PaperTrading] Failed to get method config for ${methodId}, using default 0.5%:`, error.message);
+  }
+  
+  const minRiskDistance = entryPrice * minSLDistancePercent;
+  if (riskDistance <= 0) {
+    console.error(`[PaperTrading] Invalid risk distance (entry equals stop loss) for ${methodId}`);
+    throw new Error(`Invalid risk distance (entry equals stop loss) for ${methodId}`);
+  }
+  if (riskDistance < minRiskDistance) {
+    console.error(`[PaperTrading] Risk distance too small for ${methodId}: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, ${(minSLDistancePercent * 100).toFixed(1)}% of entry)`);
+    throw new Error(`Risk distance too small for ${methodId}: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, ${(minSLDistancePercent * 100).toFixed(1)}% of entry)`);
+  }
+  
+  console.log(`[PaperTrading] SL distance validation passed for ${methodId}: ${riskDistance.toFixed(2)} >= ${minRiskDistance.toFixed(2)} (${(minSLDistancePercent * 100).toFixed(1)}%)`);
+  
   // Determine ICT strategy based on expected R:R
   const ictStrategy = getICTStrategy(suggestion.expected_rr);
   const tpLevels = calculateICTTPLevels(suggestion.entry_price, suggestion.stop_loss, ictStrategy);

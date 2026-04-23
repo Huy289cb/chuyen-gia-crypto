@@ -116,6 +116,10 @@ ICT Concepts for Stop Loss:
 - Long: 2% below entry price
 - Short: 2% above entry price
 
+**Minimum SL Distance:**
+- ICT method: 0.75% from entry
+- Kim Nghia method: 0.4% from entry price
+
 ### 8. Take Profit Placement
 
 ICT Concepts for Take Profit:

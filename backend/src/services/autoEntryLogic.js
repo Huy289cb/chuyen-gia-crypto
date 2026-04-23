@@ -55,9 +55,10 @@ export function validateStrategicEntry(entryPrice, openPositions, tolerance = 0.
  * @param {number} entry - Entry price
  * @param {number} sl - Stop loss price
  * @param {number} tp - Take profit price
- * @returns {Object} Validation result { valid: boolean, reason: string }
+ * @param {string} methodId - Method ID (ict or kim_nghia) for method-specific thresholds
+ * @returns {Promise<Object>} Validation result { valid: boolean, reason: string }
  */
-export function validateOrderLogic(side, entry, sl, tp) {
+export async function validateOrderLogic(side, entry, sl, tp, methodId = null) {
   if (!entry || !sl || !tp) {
     return { valid: false, reason: 'Entry, SL, and TP are required' };
   }
@@ -82,10 +83,22 @@ export function validateOrderLogic(side, entry, sl, tp) {
     return { valid: false, reason: `Invalid side: ${side}` };
   }
   
-  // Validate minimum SL distance (0.5% from entry)
+  // Validate minimum SL distance using method-specific threshold
+  let minSLDistancePercent = 0.005; // Default 0.5% for backward compatibility
+  
+  if (methodId) {
+    try {
+      const { getMethodConfig } = await import('../config/methods.js');
+      const methodConfig = getMethodConfig(methodId);
+      minSLDistancePercent = methodConfig.autoEntry?.minSLDistancePercent || 0.005;
+    } catch (error) {
+      console.warn(`[AutoEntry] Failed to get method config for ${methodId}, using default 0.5%:`, error.message);
+    }
+  }
+  
   const slDistance = Math.abs(sl - entry) / entry;
-  if (slDistance < 0.005) {
-    return { valid: false, reason: `Stop loss too close to entry: ${(slDistance * 100).toFixed(2)}% (minimum 0.5%)` };
+  if (slDistance < minSLDistancePercent) {
+    return { valid: false, reason: `Stop loss too close to entry: ${(slDistance * 100).toFixed(2)}% (minimum ${(minSLDistancePercent * 100).toFixed(1)}% for ${methodId || 'default'})` };
   }
   
   return { valid: true, reason: 'Order logic valid' };
@@ -422,7 +435,8 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
 
   // Calculate suggested position parameters
-  decision.suggestedPosition = calculateSuggestedPosition(analysis, account, config);
+  const methodId = methodConfig?.methodId || null;
+  decision.suggestedPosition = await calculateSuggestedPosition(analysis, account, config, methodId);
   
   // If position calculation failed, reject entry
   if (!decision.suggestedPosition) {
@@ -550,8 +564,9 @@ function checkTimeframeAlignment(analysis, requiredTimeframes) {
  * @param {Object} analysis - Analysis result
  * @param {Object} account - Account data
  * @param {Object} config - Configuration object (optional, defaults to AUTO_ENTRY_CONFIG)
+ * @param {string} methodId - Method ID (ict or kim_nghia) for method-specific thresholds
  */
-function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFIG) {
+async function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFIG, methodId = null) {
   const currentPrice = analysis.current_price || 0;
   if (!currentPrice || currentPrice <= 0) {
     console.error('[AutoEntry] Invalid current price:', currentPrice);
@@ -647,14 +662,26 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   // Calculate position size based on risk
   const riskDistance = Math.abs(suggestedEntry - stopLoss);
 
-  // Validate risk distance is at least 0.3% of entry price (minimum reasonable stop loss)
-  const minRiskDistance = suggestedEntry * 0.003; // 0.3% minimum
+  // Validate risk distance using method-specific threshold
+  let minSLDistancePercent = 0.003; // Default 0.3% minimum
+  
+  if (methodId) {
+    try {
+      const { getMethodConfig } = await import('../config/methods.js');
+      const methodConfig = getMethodConfig(methodId);
+      minSLDistancePercent = methodConfig.autoEntry?.minSLDistancePercent || 0.003;
+    } catch (error) {
+      console.warn(`[AutoEntry] Failed to get method config for ${methodId}, using default 0.3%:`, error.message);
+    }
+  }
+  
+  const minRiskDistance = suggestedEntry * minSLDistancePercent;
   if (riskDistance <= 0) {
     console.error('[AutoEntry] Invalid risk distance (entry equals stop loss)');
     return null;
   }
   if (riskDistance < minRiskDistance) {
-    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.3% of entry)`);
+    console.error(`[AutoEntry] Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, ${(minSLDistancePercent * 100).toFixed(1)}% of entry for ${methodId || 'default'})`);
     return null;
   }
   

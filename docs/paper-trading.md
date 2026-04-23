@@ -452,7 +452,7 @@ All orders (market and pending) must have logically correct SL/TP placement:
 
 **Minimum SL Distance:**
 - ICT method: 0.75% from entry
-- Kim Nghia method: 0.3% from entry
+- Kim Nghia method: 0.4% from entry
 
 ## Position Opening Logic (Updated 18/04/2026)
 

@@ -95,7 +95,8 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
       enabledSymbols: ['BTC'],
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1d'],
-      minAlignment: 0.5
+      minAlignment: 0.5,
+      minSLDistancePercent: 0.75 // Minimum SL distance as percentage of entry price (0.75% for ICT)
     }
   },
 
@@ -198,7 +199,8 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
       enabledSymbols: ['BTC', 'ETH'],
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
-      minAlignment: 0.5
+      minAlignment: 0.5,
+      minSLDistancePercent: 0.40 // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
     }
   }
 };

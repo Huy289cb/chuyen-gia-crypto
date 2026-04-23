@@ -109,6 +109,7 @@ router.post('/open', async (req, res) => {
     const { openPosition } = await import('../services/paperTradingEngine.js');
     const { getPositions } = await import('../db/database.js');
     const { AUTO_ENTRY_CONFIG } = await import('../services/autoEntryLogic.js');
+    const { getMethodConfig } = await import('../config/methods.js');
     
     // Get account
     const account = await getOrCreateAccount(db, symbol, method_id || 'ict', 100);
@@ -126,8 +127,18 @@ router.post('/open', async (req, res) => {
     const riskAmount = account.current_balance * 0.01; // 1% risk
     const riskDistance = Math.abs(entry_price - stop_loss);
     
-    // Validate minimum risk distance (0.5% of entry price to prevent tight stop losses)
-    const minRiskDistance = entry_price * 0.005; // 0.5% minimum
+    // Validate minimum risk distance using method-specific threshold
+    let minSLDistancePercent = 0.005; // Default 0.5%
+    const currentMethodId = method_id || 'ict';
+    
+    try {
+      const methodConfig = getMethodConfig(currentMethodId);
+      minSLDistancePercent = methodConfig.autoEntry?.minSLDistancePercent || 0.005;
+    } catch (error) {
+      console.warn(`[Routes] Failed to get method config for ${currentMethodId}, using default 0.5%:`, error.message);
+    }
+    
+    const minRiskDistance = entry_price * minSLDistancePercent;
     if (riskDistance <= 0) {
       return res.status(400).json({
         success: false,
@@ -137,7 +148,7 @@ router.post('/open', async (req, res) => {
     if (riskDistance < minRiskDistance) {
       return res.status(400).json({
         success: false,
-        error: `Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, 0.5% of entry)`
+        error: `Risk distance too small: ${riskDistance.toFixed(2)} (minimum ${minRiskDistance.toFixed(2)}, ${(minSLDistancePercent * 100).toFixed(1)}% of entry for ${currentMethodId})`
       });
     }
     
