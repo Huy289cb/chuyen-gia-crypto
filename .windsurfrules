@@ -84,7 +84,7 @@
 
 **Multi-Method Architecture:**
 - ICT Method: 15m schedule, confidence threshold 70%, multi-timeframe alignment required
-- Kim Nghia Method: 7.5m schedule, confidence threshold 60%, không cần multi-timeframe alignment
+- Kim Nghia Method: 7.5m schedule, confidence threshold 75%, không cần multi-timeframe alignment
 - Separate accounts cho mỗi method (100U demo account)
 - Method-specific auto-entry logic
 
@@ -103,7 +103,7 @@
 **Kỷ luật Trading - Kim Nghia Method:**
 - Risk Management: Rủi ro tối đa 10% tài khoản mỗi lệnh
 - RR Ratio: Tỷ lệ Reward/Risk phải đạt tối thiểu 2.5 mới được phép vào lệnh
-- Confidence Score: Chỉ thực hiện buy/sell khi confidence >= 60%
+- Confidence Score: Chỉ thực hiện buy/sell khi confidence >= 75%
 - No Multi-timeframe Alignment: Không cần alignment, trade trong all timeframes
 - SL Distance: Khoảng cách SL tối thiểu 0.3% từ Entry
 - Scoring System: HTF Alignment (30%), Liquidity & Structure (30%), Confluence (20%), Volume (20%)
@@ -155,7 +155,7 @@
 
 **Auto-Entry Evaluation:**
 1. ICT: Check confidence >= 70%, multi-timeframe alignment (4h, 1d), R:R >= 2.0
-2. Kim Nghia: Check confidence >= 60%, R:R >= 2.5 (skip multi-timeframe alignment)
+2. Kim Nghia: Check confidence >= 75%, R:R >= 2.5 (skip multi-timeframe alignment)
 3. Nếu entry criteria met, create position trong paper trading system
 4. Nếu entry price > 0.5% away from current price, create pending order
 
