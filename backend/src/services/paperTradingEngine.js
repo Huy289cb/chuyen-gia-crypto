@@ -138,18 +138,39 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
   const { getPositions } = await import('../db/database.js');
   const openPositions = await getPositions(db, { account_id: account.id, status: 'open' });
   const totalOpenVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
-  const newVolume = suggestion.size_usd;
+  let newVolume = suggestion.size_usd;
   const totalVolume = totalOpenVolume + newVolume;
   
   // Get max volume limit from method config (default 2000 if not specified)
   const maxVolume = suggestion.maxVolumePerAccount || 2000;
   
+  // Fallback: if volume exceeds limit, cap to remaining available volume
   if (totalVolume > maxVolume) {
-    console.error(`[PaperTrading] Volume limit exceeded: $${totalVolume.toFixed(2)} > $${maxVolume}`);
-    throw new Error(`Volume limit exceeded: $${totalVolume.toFixed(2)} > $${maxVolume}`);
+    const remainingVolume = maxVolume - totalOpenVolume;
+    if (remainingVolume <= 0) {
+      console.error(`[PaperTrading] No volume available: open volume $${totalOpenVolume.toFixed(2)} already at limit $${maxVolume}`);
+      throw new Error(`No volume available: open volume $${totalOpenVolume.toFixed(2)} already at limit $${maxVolume}`);
+    }
+    
+    console.log(`[PaperTrading] Volume limit exceeded: $${totalVolume.toFixed(2)} > $${maxVolume}, falling back to cap at $${remainingVolume.toFixed(2)}`);
+    newVolume = remainingVolume;
+    
+    // Recalculate size_qty based on capped volume
+    const entryPrice = suggestion.entry_price;
+    const newSizeQty = newVolume / entryPrice;
+    
+    // Update suggestion with capped values
+    suggestion.size_usd = newVolume;
+    suggestion.size_qty = newSizeQty;
+    
+    // Recalculate risk_usd based on new size_qty
+    const riskDistance = Math.abs(entryPrice - suggestion.stop_loss);
+    suggestion.risk_usd = riskDistance * newSizeQty;
+    
+    console.log(`[PaperTrading] Volume fallback applied: size_usd=$${newVolume.toFixed(2)}, size_qty=${newSizeQty.toFixed(6)}, risk_usd=$${suggestion.risk_usd.toFixed(2)}`);
   }
   
-  console.log(`[PaperTrading] Volume check passed: $${totalVolume.toFixed(2)} <= $${maxVolume}`);
+  console.log(`[PaperTrading] Volume check passed: $${(totalOpenVolume + newVolume).toFixed(2)} <= $${maxVolume}`);
   
   // Determine ICT strategy based on expected R:R
   const ictStrategy = getICTStrategy(suggestion.expected_rr);
