@@ -79,6 +79,8 @@ CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 70% (ICT). 
       riskPerTrade: 0.10, // 10% để trading nhanh
       maxPositionsPerSymbol: 6,
       maxVolumePerAccount: 2000, // Max 2k USD total volume per account
+      maxPositionSize: 2000, // Max 2k USD per individual position
+      maxPendingOrderSize: 2000, // Max 2k USD per individual pending order
       cooldownAfterLosses: 3,
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,
@@ -173,6 +175,8 @@ CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 75%. Nếu 
       riskPerTrade: 0.10, // 10% để trading nhanh
       maxPositionsPerSymbol: 6,
       maxVolumePerAccount: 2000, // Max 2k USD total volume per account
+      maxPositionSize: 2000, // Max 2k USD per individual position
+      maxPendingOrderSize: 2000, // Max 2k USD per individual pending order
       cooldownAfterLosses: 3,
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,

@@ -198,6 +198,12 @@ For auto-entry, the system checks alignment on **main timeframes only**:
 
 ## Volume Management (Updated 23/04/2026)
 
+### Individual Position/Order Size Limits (Updated 23/04/2026)
+- **Position Size Limit**: 2k USD per individual position
+- **Pending Order Size Limit**: 2k USD per individual pending order
+- **Rationale**: Prevents oversized single trades even when account balance allows larger positions
+- **Implementation**: Size is capped after risk-based calculation, so it only affects oversized positions
+
 ### Total Volume Limit
 - **Limit**: 2k USD total volume per account
 - **Calculation**: Open positions + Pending orders

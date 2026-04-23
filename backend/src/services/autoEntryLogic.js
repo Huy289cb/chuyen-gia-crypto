@@ -590,7 +590,19 @@ function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY_CONFI
   }
   
   const sizeQty = riskAmount / riskDistance;
-  const sizeUsd = sizeQty * suggestedEntry;
+  let sizeUsd = sizeQty * suggestedEntry;
+
+  // Cap position size at maxPositionSize (default 2000 USD)
+  const maxPositionSize = config.maxPositionSize || 2000;
+  if (sizeUsd > maxPositionSize) {
+    console.log(`[AutoEntry] Position size $${sizeUsd.toFixed(2)} exceeds max $${maxPositionSize}, capping to $${maxPositionSize}`);
+    sizeUsd = maxPositionSize;
+    // Recalculate sizeQty based on capped sizeUsd
+    const newSizeQty = sizeUsd / suggestedEntry;
+    if (newSizeQty > 0) {
+      sizeQty = newSizeQty;
+    }
+  }
 
   // Validate minimum position size (at least $1)
   if (sizeUsd < 1) {

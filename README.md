@@ -33,7 +33,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
   - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
 - **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
-- **Volume Limit**: Tối đa 2k USD tổng volume positions per account (open positions + pending orders). Khi volume đạt giới hạn, các pending order mới chỉ được phép nếu entry align với SL/TP của các position đang chạy (±0.5% tolerance)
+- **Volume Limit**: Tối đa 2k USD tổng volume positions per account (open positions + pending orders). Tối đa 2k USD cho từng position và pending order riêng lẻ. Khi volume đạt giới hạn, các pending order mới chỉ được phép nếu entry align với SL/TP của các position đang chạy (±0.5% tolerance)
 - **Order Validation**: Validation SL/TP placement đảm bảo logic hợp lý (LONG: SL<entry<TP, SHORT: SL>entry>TP)
 - **Real-time PnL**: Cập nhật PnL mỗi 1 phút với 1-minute candle data, auto-close khi hit SL/TP
 - **Cooldown System**: 4h cooldown sau 3 consecutive losses (updated from 8)

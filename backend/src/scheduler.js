@@ -293,6 +293,19 @@ async function runMethodAnalysis(methodId) {
               // Create pending limit order
               const { createPendingOrder } = await import('./db/database.js');
               const { randomUUID } = await import('crypto');
+              
+              // Cap pending order size at maxPendingOrderSize
+              let orderSizeUsd = position.size_usd;
+              let orderSizeQty = position.size_qty;
+              const maxPendingOrderSize = method.autoEntry.maxPendingOrderSize || 2000;
+              
+              if (orderSizeUsd > maxPendingOrderSize) {
+                console.log(`[Scheduler][${method.name}] Pending order size $${orderSizeUsd.toFixed(2)} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
+                orderSizeUsd = maxPendingOrderSize;
+                // Recalculate sizeQty based on capped sizeUsd
+                orderSizeQty = orderSizeUsd / position.entry_price;
+              }
+              
               await createPendingOrder(db, {
                 order_id: randomUUID(),
                 account_id: account.id,
@@ -301,8 +314,8 @@ async function runMethodAnalysis(methodId) {
                 entry_price: position.entry_price,
                 stop_loss: position.stop_loss,
                 take_profit: position.take_profit,
-                size_usd: position.size_usd,
-                size_qty: position.size_qty,
+                size_usd: orderSizeUsd,
+                size_qty: orderSizeQty,
                 risk_usd: position.risk_usd,
                 risk_percent: position.risk_percent,
                 expected_rr: position.expected_rr,
@@ -310,7 +323,7 @@ async function runMethodAnalysis(methodId) {
                 invalidation_level: position.invalidation_level,
                 method_id: methodId
               });
-              console.log(`[Scheduler][${method.name}] BTC limit order created (pending): entry ${position.entry_price}`);
+              console.log(`[Scheduler][${method.name}] BTC limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd.toFixed(2)}`);
             }
           } catch (posError) {
             console.error(`[Scheduler][${method.name}] Failed to process BTC order:`, posError.message);

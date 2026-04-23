@@ -71,7 +71,7 @@ The system is designed to support multiple trading methods running in parallel. 
 - **AI Limit Order Analysis**: AI evaluates pending limit orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
 - **Account Management**: 100U BTC account (ETH trading temporarily disabled)
-- **Volume Limit**: Max 2k USD total position volume per account (open positions + pending orders). When volume reaches limit, new pending orders only allowed if entry aligns with SL/TP of existing positions (±0.5% tolerance) (updated 23/04/2026)
+- **Volume Limit**: Max 2k USD total position volume per account (open positions + pending orders). Individual positions and pending orders are capped at 2k USD each. When volume reaches limit, new pending orders only allowed if entry aligns with SL/TP of existing positions (±0.5% tolerance) (updated 23/04/2026)
 - **Order Validation**: SL/TP validation ensures logical placement (LONG: SL<entry<TP, SHORT: SL>entry>TP) (updated 23/04/2026)
 - **Cooldown**: 4h cooldown after 3 consecutive losses (updated from 8, 23/04/2026)
 - **Position Limits**: Maximum 6 concurrent positions per symbol
