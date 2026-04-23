@@ -141,39 +141,125 @@ async function runMethodAnalysis(methodId) {
         const btcPredictionId = btcResult.predictionIds?.['4h'] || btcResult.predictionIds?.['1d'];
 
         // Process position decisions from AI analysis
-        if (analysis.btc?.position_decisions?.recommendations) {
-          const { closePosition } = await import('./services/paperTradingEngine.js');
+        if (analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
+          const { closePosition, closePartialPosition, updateStopLoss, reversePosition } = await import('./services/paperTradingEngine.js');
           const { fetchRealTimePrices } = await import('./price-fetcher.js');
-          const { getPosition, getPendingOrders, cancelPendingOrder } = await import('./db/database.js');
+          const { getPosition, getMethodConfig } = await import('./db/database.js');
+          
+          // Get method confidence threshold
+          const methodConfig = getMethodConfig(methodId);
+          const confidenceThreshold = (methodConfig.autoEntry?.minConfidence || 70) / 100;
 
-          for (const recommendation of analysis.btc.position_decisions.recommendations) {
-            // Handle position closing
-            if (recommendation.action === 'close' && recommendation.position_id) {
-              try {
-                const position = await getPosition(db, recommendation.position_id);
-                if (position && position.status === 'open') {
-                  const priceData = await fetchRealTimePrices();
-                  const currentPrice = priceData['btc']?.price || position.current_price;
-                  await closePosition(db, position, currentPrice, 'ai_recommendation');
-                  console.log(`[Scheduler][${method.name}] Closed position ${recommendation.position_id} based on AI recommendation: ${recommendation.reason}`);
-                }
-              } catch (error) {
-                console.error(`[Scheduler][${method.name}] Failed to close position ${recommendation.position_id}:`, error.message);
-              }
+          for (const decision of analysis.btc.position_decisions) {
+            // Check confidence threshold
+            if (decision.confidence < confidenceThreshold) {
+              console.log(`[Scheduler][${method.name}] Skipping position decision for ${decision.position_id}: confidence ${decision.confidence} < threshold ${confidenceThreshold}`);
+              continue;
             }
             
-            // Handle pending order cancellation
-            if (recommendation.action === 'cancel' && recommendation.order_id) {
-              try {
-                const pendingOrders = await getPendingOrders(db, { order_id: recommendation.order_id });
-                const order = pendingOrders[0];
-                if (order && order.status === 'pending') {
-                  await cancelPendingOrder(db, order.id, 'ai_recommendation');
-                  console.log(`[Scheduler][${method.name}] Cancelled pending order ${recommendation.order_id} based on AI recommendation: ${recommendation.reason}`);
-                }
-              } catch (error) {
-                console.error(`[Scheduler][${method.name}] Failed to cancel pending order ${recommendation.order_id}:`, error.message);
+            // Handle hold action (do nothing)
+            if (decision.action === 'hold') {
+              console.log(`[Scheduler][${method.name}] Holding position ${decision.position_id}: ${decision.reason}`);
+              continue;
+            }
+            
+            try {
+              const position = await getPosition(db, decision.position_id);
+              if (!position || position.status !== 'open') {
+                console.log(`[Scheduler][${method.name}] Position ${decision.position_id} not found or not open, skipping`);
+                continue;
               }
+              
+              const priceData = await fetchRealTimePrices();
+              const currentPrice = priceData['btc']?.price || position.current_price;
+              
+              // Handle close_early (full close)
+              if (decision.action === 'close_early') {
+                await closePosition(db, position, currentPrice, `ai_recommendation: ${decision.reason}`);
+                console.log(`[Scheduler][${method.name}] Closed position ${decision.position_id} early: ${decision.reason}`);
+              }
+              
+              // Handle close_partial
+              else if (decision.action === 'close_partial') {
+                const closePercent = decision.close_percent || 0.5;
+                await closePartialPosition(db, position, closePercent, currentPrice, `ai_recommendation: ${decision.reason}`);
+                console.log(`[Scheduler][${method.name}] Closed ${(closePercent * 100).toFixed(0)}% of position ${decision.position_id}: ${decision.reason}`);
+              }
+              
+              // Handle move_sl
+              else if (decision.action === 'move_sl') {
+                const newSl = decision.new_sl;
+                if (newSl) {
+                  await updateStopLoss(db, position, newSl, `ai_recommendation: ${decision.reason}`);
+                  console.log(`[Scheduler][${method.name}] Moved SL for position ${decision.position_id} to ${newSl}: ${decision.reason}`);
+                }
+              }
+              
+              // Handle reverse
+              else if (decision.action === 'reverse') {
+                const suggestion = {
+                  side: position.side === 'long' ? 'short' : 'long',
+                  entry_price: currentPrice,
+                  stop_loss: decision.new_sl || position.stop_loss,
+                  take_profit: decision.new_tp || position.take_profit,
+                  size_usd: position.size_usd,
+                  size_qty: position.size_qty,
+                  risk_usd: position.risk_usd,
+                  risk_percent: position.risk_percent,
+                  expected_rr: position.expected_rr
+                };
+                await reversePosition(db, position, currentPrice, suggestion, `ai_recommendation: ${decision.reason}`);
+                console.log(`[Scheduler][${method.name}] Reversed position ${decision.position_id}: ${decision.reason}`);
+              }
+            } catch (error) {
+              console.error(`[Scheduler][${method.name}] Failed to execute position decision for ${decision.position_id}:`, error.message);
+            }
+          }
+        }
+        
+        // Process pending order decisions from AI analysis
+        if (analysis.btc?.pending_order_decisions && Array.isArray(analysis.btc.pending_order_decisions)) {
+          const { cancelPendingOrder, modifyPendingOrder } = await import('./db/database.js');
+          const { getPendingOrders, getMethodConfig } = await import('./db/database.js');
+          
+          // Get method confidence threshold
+          const methodConfig = getMethodConfig(methodId);
+          const confidenceThreshold = (methodConfig.autoEntry?.minConfidence || 70) / 100;
+
+          for (const decision of analysis.btc.pending_order_decisions) {
+            // Check confidence threshold
+            if (decision.confidence < confidenceThreshold) {
+              console.log(`[Scheduler][${method.name}] Skipping pending order decision for ${decision.order_id}: confidence ${decision.confidence} < threshold ${confidenceThreshold}`);
+              continue;
+            }
+            
+            // Handle hold action (do nothing)
+            if (decision.action === 'hold') {
+              console.log(`[Scheduler][${method.name}] Holding pending order ${decision.order_id}: ${decision.reason}`);
+              continue;
+            }
+            
+            try {
+              const pendingOrders = await getPendingOrders(db, { order_id: decision.order_id });
+              const order = pendingOrders[0];
+              if (!order || order.status !== 'pending') {
+                console.log(`[Scheduler][${method.name}] Pending order ${decision.order_id} not found or not pending, skipping`);
+                continue;
+              }
+              
+              // Handle cancel
+              if (decision.action === 'cancel') {
+                await cancelPendingOrder(db, order.id, `ai_recommendation: ${decision.reason}`);
+                console.log(`[Scheduler][${method.name}] Cancelled pending order ${decision.order_id}: ${decision.reason}`);
+              }
+              
+              // Handle modify
+              else if (decision.action === 'modify') {
+                await modifyPendingOrder(db, order, decision.new_entry, decision.new_sl, decision.new_tp);
+                console.log(`[Scheduler][${method.name}] Modified pending order ${decision.order_id}: ${decision.reason}`);
+              }
+            } catch (error) {
+              console.error(`[Scheduler][${method.name}] Failed to execute pending order decision for ${decision.order_id}:`, error.message);
             }
           }
         }

@@ -1907,3 +1907,97 @@ export async function cancelPendingOrder(db, orderId, reason = 'cancelled') {
     );
   });
 }
+
+// Update a pending order (modify entry, SL, TP)
+export async function updatePendingOrder(db, orderId, updates) {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    
+    if (updates.entry_price !== undefined) {
+      fields.push('entry_price = ?');
+      values.push(updates.entry_price);
+    }
+    if (updates.stop_loss !== undefined) {
+      fields.push('stop_loss = ?');
+      values.push(updates.stop_loss);
+    }
+    if (updates.take_profit !== undefined) {
+      fields.push('take_profit = ?');
+      values.push(updates.take_profit);
+    }
+    if (updates.size_usd !== undefined) {
+      fields.push('size_usd = ?');
+      values.push(updates.size_usd);
+    }
+    if (updates.risk_usd !== undefined) {
+      fields.push('risk_usd = ?');
+      values.push(updates.risk_usd);
+    }
+    if (updates.risk_percent !== undefined) {
+      fields.push('risk_percent = ?');
+      values.push(updates.risk_percent);
+    }
+    if (updates.expected_rr !== undefined) {
+      fields.push('expected_rr = ?');
+      values.push(updates.expected_rr);
+    }
+    
+    if (fields.length === 0) {
+      resolve(0);
+      return;
+    }
+    
+    values.push(orderId);
+    
+    db.run(
+      `UPDATE pending_orders 
+       SET ${fields.join(', ')}
+       WHERE id = ?`,
+      values,
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+// Modify a pending order with validation
+export async function modifyPendingOrder(db, order, newEntry, newSl, newTp) {
+  const updates = {};
+  
+  if (newEntry) {
+    updates.entry_price = newEntry;
+  }
+  if (newSl) {
+    updates.stop_loss = newSl;
+  }
+  if (newTp) {
+    updates.take_profit = newTp;
+  }
+  
+  // Recalculate risk if SL changed
+  if (newSl && order.entry_price) {
+    const entryPrice = newEntry || order.entry_price;
+    const riskDistance = Math.abs(entryPrice - newSl);
+    updates.risk_usd = riskDistance * order.size_qty;
+    updates.risk_percent = (updates.risk_usd / order.size_usd) * 100;
+  }
+  
+  // Recalculate R:R if TP changed
+  if (newTp && (newSl || order.stop_loss) && (newEntry || order.entry_price)) {
+    const entryPrice = newEntry || order.entry_price;
+    const sl = newSl || order.stop_loss;
+    const tp = newTp;
+    const riskDistance = Math.abs(entryPrice - sl);
+    const rewardDistance = Math.abs(tp - entryPrice);
+    updates.expected_rr = rewardDistance / riskDistance;
+  }
+  
+  return await updatePendingOrder(db, order.id, updates);
+}
+

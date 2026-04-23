@@ -21,7 +21,58 @@ RULES:
 - SL phải đặt sau râu nến quét thanh khoản hoặc ngoài Order Block (Min 0.75% từ entry).
 - TP mục tiêu là vùng thanh khoản đối ứng hoặc FVG chưa lấp.
 - Tỉ lệ RR tối thiểu 2.0.
-- Trả về JSON tiếng Việt, ngắn gọn, quyết đoán.`,
+- Trả về JSON tiếng Việt, ngắn gọn, quyết đoán.
+
+OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
+⚠️ CẢNH BÁO HỆ THỐNG:
+- CHỈ trả về duy nhất mã JSON thuần túy.
+- KHÔNG có văn bản dẫn nhập, KHÔNG có markdown (không dùng \`\`\`json), KHÔNG có lời kết.
+- Bắt đầu bằng dấu { và kết thúc bằng dấu }.
+- Đảm bảo tất cả các ngoặc kép và phẩy đúng cú pháp JSON.
+- Nếu vi phạm, hệ thống sẽ crash.
+{
+"btc": {
+"bias": "bullish|bearish|neutral",
+"action": "buy|sell|hold",
+"confidence": 0.00-1.00,
+"narrative": "...",
+"suggested_entry": number,
+"suggested_stop_loss": number,
+"suggested_take_profit": number,
+"expected_rr": number,
+"position_decisions": [
+  {
+    "position_id": "string",
+    "action": "hold|close_early|close_partial|move_sl|reverse",
+    "confidence": 0.00-1.00,
+    "reason": "string",
+    "new_sl": number (optional, cho move_sl),
+    "new_tp": number (optional, cho move_sl/close_partial),
+    "close_percent": number (optional, cho close_partial, 0-1)
+  }
+],
+"pending_order_decisions": [
+  {
+    "order_id": "string",
+    "action": "hold|cancel|modify",
+    "confidence": 0.00-1.00,
+    "reason": "string",
+    "new_entry": number (optional, cho modify),
+    "new_sl": number (optional, cho modify),
+    "new_tp": number (optional, cho modify)
+  }
+]
+}
+}
+ACTION DEFINITIONS:
+- hold: Giữ nguyên position/order
+- close_early: Đóng position sớm (full close)
+- close_partial: Chốt một phần position (specify close_percent)
+- move_sl: Dịch chuyển stop loss (specify new_sl, optionally new_tp)
+- reverse: Đảo chiều position (close current + open opposite)
+- cancel: Hủy pending order
+- modify: Sửa pending order (specify new_entry, new_sl, new_tp)
+CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 70% (ICT) hoặc 75% (Kim Nghia). Nếu thấp hơn, default là hold.`,
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
@@ -78,19 +129,44 @@ OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
 "bias": "bullish|bearish|neutral",
 "action": "buy|sell|hold",
 "confidence": 0.00-1.00,
-"scoring_detail": "HTF:x/30, Structure:x/30, Confluence:x/20, Volume:x/20",
-"narrative": "Tóm tắt logic theo bảng: [Cấu trúc] -> [Thanh khoản] -> [Vùng vào lệnh] (Max 200 ký tự)",
-"structure": { "trend": "bullish|bearish|sideways", "key_event": "BOS/CHOCH tại mức giá..." },
-"volume_analysis": "Mô tả trạng thái Volume Profile và xác nhận breakout",
+"narrative": "...",
 "suggested_entry": number,
 "suggested_stop_loss": number,
 "suggested_take_profit": number,
 "expected_rr": number,
-"alternative_scenario": { "trigger": "Mức giá vô hiệu hóa", "logic": "Kịch bản ngược lại" }
-},
-"marketSentiment": "bullish|bearish|neutral",
-"comparison": "BTC vs ETH Correlated Analysis"
-}`,
+"position_decisions": [
+  {
+    "position_id": "string",
+    "action": "hold|close_early|close_partial|move_sl|reverse",
+    "confidence": 0.00-1.00,
+    "reason": "string",
+    "new_sl": number (optional, cho move_sl),
+    "new_tp": number (optional, cho move_sl/close_partial),
+    "close_percent": number (optional, cho close_partial, 0-1)
+  }
+],
+"pending_order_decisions": [
+  {
+    "order_id": "string",
+    "action": "hold|cancel|modify",
+    "confidence": 0.00-1.00,
+    "reason": "string",
+    "new_entry": number (optional, cho modify),
+    "new_sl": number (optional, cho modify),
+    "new_tp": number (optional, cho modify)
+  }
+]
+}
+}
+ACTION DEFINITIONS:
+- hold: Giữ nguyên position/order
+- close_early: Đóng position sớm (full close)
+- close_partial: Chốt một phần position (specify close_percent)
+- move_sl: Dịch chuyển stop loss (specify new_sl, optionally new_tp)
+- reverse: Đảo chiều position (close current + open opposite)
+- cancel: Hủy pending order
+- modify: Sửa pending order (specify new_entry, new_sl, new_tp)
+CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 75% (Kim Nghia) hoặc 70% (ICT). Nếu thấp hơn, default là hold.`,
     autoEntry: {
       minConfidence: 75,
       minRRRatio: 2.5,

@@ -48,6 +48,16 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - Phân tích tự động mỗi 10 phút (KimNghia: 0,10,20,30,40,50), ICT: disabled
 - Cache 20 phút để đảm bảo performance
 - Lưu trữ OHLCV candles trong SQLite database
+
+### AI Position Management (New)
+- **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
+- **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
+- **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
+- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 75% (Kim Nghia)
+- **Enhanced Context**: AI receives 60 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
+- See `docs/ai-position-management.md` for detailed documentation
+
+### Price Data & AI Models
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
 - Không còn lỗi 429 rate limit (Binance: 1200 req/min vs CoinGecko: ~10-50 req/min)
 - **1-minute Candle Data**: Sử dụng nến 1 phút (OHLC) để detect chính xác SL/TP (v2.2.0)

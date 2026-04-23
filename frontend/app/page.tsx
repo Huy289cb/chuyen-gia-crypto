@@ -107,7 +107,8 @@ function HomeContent() {
 
         {/* Trade History */}
         <HistorySection
-          trades={tradeHistory}
+          symbol="BTC"
+          method="kim_nghia"
         />
 
         {/* Prediction Timeline */}

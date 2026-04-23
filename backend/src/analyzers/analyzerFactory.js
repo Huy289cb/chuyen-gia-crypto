@@ -143,9 +143,8 @@ async function buildUserPrompt(priceData, db, methodId) {
     try {
       const { getRecentAnalysisWithPredictions, getPositions, getPendingOrders } = await import('../db/database.js');
       
-      // Get predictions from last 24 hours, filtered by method_id
+      // Get predictions from last 24 hours, filtered by method_id (BTC only)
       const btcHistory = await getRecentAnalysisWithPredictions(db, 'BTC', 20, methodId);
-      const ethHistory = await getRecentAnalysisWithPredictions(db, 'ETH', 20, methodId);
       
       // Filter to last 24 hours and only 4h/1d timeframes
       const twentyFourHoursAgo = new Date();
@@ -180,46 +179,48 @@ async function buildUserPrompt(priceData, db, methodId) {
       };
       
       const btcContext = formatPredictionHistory(btcHistory, 'BTC');
-      const ethContext = formatPredictionHistory(ethHistory, 'ETH');
 
       // Skip prediction history for Kim Nghia method (it doesn't use timeframe predictions)
       if (methodId === 'kim_nghia') {
         console.log(`[AnalyzerFactory][${methodId}] Skipping prediction history for Kim Nghia method`);
-      } else if (btcContext || ethContext) {
-        historicalContext = `\n\nPREDICTION HISTORY (24H):\n${btcContext}\n${ethContext}\n\nReview past accuracy. If recent predictions were incorrect, be more conservative. If accurate, maintain confidence.`;
+      } else if (btcContext) {
+        historicalContext = `\n\nPREDICTION HISTORY (24H):\n${btcContext}\n\nReview past accuracy. If recent predictions were incorrect, be more conservative. If accurate, maintain confidence.`;
         console.log(`[AnalyzerFactory][${methodId}] Historical prediction context included`);
       } else {
         console.log(`[AnalyzerFactory][${methodId}] No historical predictions available in last 24h`);
       }
       
-      // Fetch open positions for AI decision making, filtered by method_id
+      // Fetch open positions for AI decision making, filtered by method_id (BTC only)
       try {
         const btcOpenPositions = await getPositions(db, { symbol: 'BTC', status: 'open', method_id: methodId });
-        const ethOpenPositions = await getPositions(db, { symbol: 'ETH', status: 'open', method_id: methodId });
         
         const formatOpenPositions = (positions, coinName) => {
           if (!positions || positions.length === 0) return '';
           
           const lines = [`OPEN ${coinName} POSITIONS:`];
           positions.forEach(pos => {
-            const pnl = ((priceData[coinName.toLowerCase()]?.price || pos.entry_price) - pos.entry_price) * (pos.side === 'long' ? 1 : -1);
-            const pnlPercent = (pnl / (pos.entry_price * pos.size_qty)) * 100;
+            const currentPrice = priceData[coinName.toLowerCase()]?.price || pos.entry_price;
+            const pnl = (currentPrice - pos.entry_price) * (pos.side === 'long' ? 1 : -1) * pos.size_qty;
+            const pnlPercent = (pnl / pos.size_usd) * 100;
             const riskPercent = ((pos.entry_price - pos.stop_loss) / pos.entry_price) * 100;
+            const timeInPosition = pos.entry_time ? Math.floor((Date.now() - new Date(pos.entry_time).getTime()) / (1000 * 60 * 60)) : 0;
             
             lines.push(
-              `- ${pos.side.toUpperCase()}: Entry $${pos.entry_price.toLocaleString()}, Current $${(priceData[coinName.toLowerCase()]?.price || pos.entry_price).toLocaleString()}, SL $${pos.stop_loss.toLocaleString()}, TP $${pos.take_profit.toLocaleString()}`,
-              `  PnL: $${pnl.toFixed(2)} (${pnlPercent.toFixed(2)}%), Risk: ${riskPercent.toFixed(2)}%, Size: ${pos.size_qty} ${coinName}`
+              `- Position ID: ${pos.position_id}`,
+              `  ${pos.side.toUpperCase()}: Entry $${pos.entry_price.toLocaleString()}, Current $${currentPrice.toLocaleString()}`,
+              `  SL $${pos.stop_loss.toLocaleString()}, TP $${pos.take_profit.toLocaleString()}`,
+              `  PnL: $${pnl.toFixed(2)} (${pnlPercent.toFixed(2)}%), Risk: ${riskPercent.toFixed(2)}%, Size: $${pos.size_usd.toLocaleString()}`,
+              `  Time in position: ${timeInPosition}h`
             );
           });
           return lines.join('\n');
         };
         
         const btcPositions = formatOpenPositions(btcOpenPositions, 'BTC');
-        const ethPositions = formatOpenPositions(ethOpenPositions, 'ETH');
         
-        if (btcPositions || ethPositions) {
-          openPositionsContext = `\n\n${btcPositions}\n${ethPositions}\n\nANALYZE OPEN POSITIONS: If confidence > 80%, recommend whether to CLOSE any positions early. Consider current market conditions vs original entry logic. Provide specific recommendations with confidence levels.`;
-          console.log(`[AnalyzerFactory][${methodId}] Open positions context included:`, btcOpenPositions.length + ethOpenPositions.length, 'positions');
+        if (btcPositions) {
+          openPositionsContext = `\n\n${btcPositions}\n\nFor each open position, provide a decision in position_decisions array with action (hold/close_early/close_partial/move_sl/reverse), confidence (0-1), and reason. Include position_id from above.`;
+          console.log(`[AnalyzerFactory][${methodId}] Open positions context included:`, btcOpenPositions.length, 'positions');
         } else {
           console.log(`[AnalyzerFactory][${methodId}] No open positions to analyze`);
         }
@@ -227,10 +228,9 @@ async function buildUserPrompt(priceData, db, methodId) {
         console.log(`[AnalyzerFactory][${methodId}] Failed to fetch open positions:`, error.message);
       }
       
-      // Fetch pending orders for AI decision making, filtered by method_id
+      // Fetch pending orders for AI decision making, filtered by method_id (BTC only)
       try {
         const btcPendingOrders = await getPendingOrders(db, { symbol: 'BTC', status: 'pending', method_id: methodId });
-        const ethPendingOrders = await getPendingOrders(db, { symbol: 'ETH', status: 'pending', method_id: methodId });
         
         const formatPendingOrders = (orders, coinName) => {
           if (!orders || orders.length === 0) return '';
@@ -242,7 +242,8 @@ async function buildUserPrompt(priceData, db, methodId) {
             const timeWaiting = order.created_at ? Math.floor((Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60)) : 0;
             
             lines.push(
-              `- ${order.side.toUpperCase()}: Entry $${order.entry_price.toLocaleString()}, Current $${(priceData[coinName.toLowerCase()]?.price || order.entry_price).toLocaleString()}`,
+              `- Order ID: ${order.order_id}`,
+              `  ${order.side.toUpperCase()}: Entry $${order.entry_price.toLocaleString()}, Current $${currentPrice.toLocaleString()}`,
               `  SL $${order.stop_loss.toLocaleString()}, TP $${order.take_profit.toLocaleString()}, Size $${order.size_usd.toLocaleString()}`,
               `  Price Diff: ${priceDiff.toFixed(2)}%, Waiting: ${timeWaiting}h, Risk: ${order.risk_percent.toFixed(2)}%, R:R ${order.expected_rr.toFixed(1)}`
             );
@@ -251,11 +252,10 @@ async function buildUserPrompt(priceData, db, methodId) {
         };
         
         const btcPending = formatPendingOrders(btcPendingOrders, 'BTC');
-        const ethPending = formatPendingOrders(ethPendingOrders, 'ETH');
         
-        if (btcPending || ethPending) {
-          pendingOrdersContext = `\n\n${btcPending}\n${ethPending}\n\nPENDING ORDER ANALYSIS: If confidence > 80%, recommend whether to KEEP or CANCEL any limit orders. Consider if market conditions have changed since order creation, if price is moving away from entry, or if setup is no longer valid.`;
-          console.log(`[AnalyzerFactory][${methodId}] Pending orders context included:`, btcPendingOrders.length + ethPendingOrders.length, 'orders');
+        if (btcPending) {
+          pendingOrdersContext = `\n\n${btcPending}\n\nFor each pending order, provide a decision in pending_order_decisions array with action (hold/cancel/modify), confidence (0-1), and reason. Include order_id from above.`;
+          console.log(`[AnalyzerFactory][${methodId}] Pending orders context included:`, btcPendingOrders.length, 'orders');
         } else {
           console.log(`[AnalyzerFactory][${methodId}] No pending orders to analyze`);
         }
@@ -283,46 +283,32 @@ async function buildUserPrompt(priceData, db, methodId) {
     '4h': calcChange(priceData.btc.prices4h),
     '1d': calcChange(priceData.btc.prices1d)
   };
-  const ethChanges = {
-    '15m': calcChange(priceData.eth.sparkline7d?.slice(-2)),
-    '1h': calcChange(priceData.eth.prices1h),
-    '4h': calcChange(priceData.eth.prices4h),
-    '1d': calcChange(priceData.eth.prices1d)
-  };
 
   const methodConfig = getMethodConfig(methodId);
   const methodName = methodConfig.name;
 
-  // Fetch OHLC candle data for Kim Nghia method
+  // Fetch OHLC candle data for Kim Nghia method (BTC only, 60 candles)
   let ohlcContext = '';
   if (methodId === 'kim_nghia' && db) {
     try {
       const { getOHLCCandles } = await import('../db/database.js');
       console.log(`[AnalyzerFactory][${methodId}] Fetching OHLC data for analysis...`);
-      const btcOhlc = await getOHLCCandles(db, 'BTC', 50, '15m');
-      const ethOhlc = await getOHLCCandles(db, 'ETH', 50, '15m');
+      const btcOhlc = await getOHLCCandles(db, 'BTC', 60, '15m');
       
       if (btcOhlc && btcOhlc.length > 0) {
-        const btcRecent = btcOhlc.slice(-10).map(c => 
+        const btcRecent = btcOhlc.slice(-20).map(c => 
           `[${new Date(c.timestamp).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}] O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)} V:${c.volume || 'N/A'}`
         ).join('\n');
-        ohlcContext += `\nBTC OHLC CANDLES (15m, last 10):\n${btcRecent}\n`;
+        ohlcContext += `\nBTC OHLC CANDLES (15m, last 20 of 60):\n${btcRecent}\n`;
       }
       
-      if (ethOhlc && ethOhlc.length > 0) {
-        const ethRecent = ethOhlc.slice(-10).map(c => 
-          `[${new Date(c.timestamp).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}] O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)} V:${c.volume || 'N/A'}`
-        ).join('\n');
-        ohlcContext += `\nETH OHLC CANDLES (15m, last 10):\n${ethRecent}\n`;
-      }
-      
-      console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles, ETH: ${ethOhlc?.length || 0} candles`);
+      console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles`);
     } catch (error) {
       console.log(`[AnalyzerFactory][${methodId}] Failed to fetch OHLC data:`, error.message);
     }
   }
 
-  return `Analyze BTC and ETH using ${methodName} methodology.
+  return `Analyze BTC using ${methodName} methodology (BTC-only mode - ETH temporarily paused).
 
 BTC DATA:
 - Current Price: $${priceData.btc.price.toLocaleString()}
@@ -330,34 +316,12 @@ BTC DATA:
 - 7d Change: ${priceData.btc.change7d?.toFixed(2)}%
 - Timeframe Changes: 15m=${btcChanges['15m']?.toFixed(3)}%, 1h=${btcChanges['1h']?.toFixed(3)}%, 4h=${btcChanges['4h']?.toFixed(3)}%, 1d=${btcChanges['1d']?.toFixed(3)}%
 - Recent Prices (last points): ${JSON.stringify(priceData.btc.prices1d?.slice(-6) || [])}
-
-ETH DATA:
-- Current Price: $${priceData.eth.price.toLocaleString()}
-- 24h Change: ${priceData.eth.change24h?.toFixed(2)}%
-- 7d Change: ${priceData.eth.change7d?.toFixed(2)}%
-- Timeframe Changes: 15m=${ethChanges['15m']?.toFixed(3)}%, 1h=${ethChanges['1h']?.toFixed(3)}%, 4h=${ethChanges['4h']?.toFixed(3)}%, 1d=${ethChanges['1d']?.toFixed(3)}%
-- Recent Prices (last points): ${JSON.stringify(priceData.eth.prices1d?.slice(-6) || [])}
 ${ohlcContext}
 ${historicalContext}
 ${openPositionsContext}
 ${pendingOrdersContext}
-Apply ${methodName} methodology:
-1. Check multi-timeframe structure
-2. Identify liquidity levels
-3. Look for BOS (Break of Structure) or CHOCH (Change of Character) patterns
-4. Note any FVGs in recent price action
-5. Build narrative: Where is price? Where is liquidity? Where is it going?
-6. Give directional bias and action
-7. Market Sentiment: Determine overall market sentiment (bullish/bearish/neutral/mixed) based on both coins
-8. Comparison: Briefly compare BTC vs ETH performance and structure
-9. Position Management: If open positions exist, evaluate if they should be closed early based on current analysis
-10. Pending Order Management: If limit orders exist, evaluate if they should be kept or cancelled based on current market conditions
 
-IMPORTANT: Identify specific price levels for:
-- BOS: Price where structure broke (new highs/lows)
-- CHOCH: Price where character changed from trend to range or reverse
-
-Return ONLY valid JSON following the system format.`;
+IMPORTANT: Return position_decisions and pending_order_decisions arrays as specified in the system prompt. Each decision must include the position_id or order_id from the context above.`;
 }
 
 /**
@@ -400,6 +364,99 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
       kimNghiaFibonacci = null;
     }
   }
+
+  // Validate position_decisions array
+  const validatePositionDecisions = (decisions) => {
+    if (!Array.isArray(decisions)) return null;
+    
+    const validActions = ['hold', 'close_early', 'close_partial', 'move_sl', 'reverse'];
+    
+    return decisions
+      .filter(dec => {
+        // Required fields
+        if (!dec.position_id || !dec.action || !dec.reason) {
+          console.log(`[AnalyzerFactory] Invalid position decision: missing required fields`);
+          return false;
+        }
+        
+        // Validate action
+        if (!validActions.includes(dec.action)) {
+          console.log(`[AnalyzerFactory] Invalid position action: ${dec.action}`);
+          return false;
+        }
+        
+        // Validate confidence
+        const confidence = parseFloat(dec.confidence);
+        if (isNaN(confidence) || confidence < 0 || confidence > 1) {
+          console.log(`[AnalyzerFactory] Invalid position confidence: ${dec.confidence}`);
+          return false;
+        }
+        
+        // Validate optional fields based on action
+        if (dec.action === 'close_partial' && (!dec.close_percent || dec.close_percent <= 0 || dec.close_percent > 1)) {
+          console.log(`[AnalyzerFactory] Invalid close_percent for close_partial: ${dec.close_percent}`);
+          return false;
+        }
+        
+        if (dec.action === 'move_sl' && !dec.new_sl) {
+          console.log(`[AnalyzerFactory] Missing new_sl for move_sl action`);
+          return false;
+        }
+        
+        return true;
+      })
+      .map(dec => ({
+        ...dec,
+        confidence: parseFloat(dec.confidence),
+        close_percent: dec.close_percent ? parseFloat(dec.close_percent) : null,
+        new_sl: dec.new_sl ? parseFloat(dec.new_sl) : null,
+        new_tp: dec.new_tp ? parseFloat(dec.new_tp) : null
+      }));
+  };
+  
+  // Validate pending_order_decisions array
+  const validatePendingOrderDecisions = (decisions) => {
+    if (!Array.isArray(decisions)) return null;
+    
+    const validActions = ['hold', 'cancel', 'modify'];
+    
+    return decisions
+      .filter(dec => {
+        // Required fields
+        if (!dec.order_id || !dec.action || !dec.reason) {
+          console.log(`[AnalyzerFactory] Invalid pending order decision: missing required fields`);
+          return false;
+        }
+        
+        // Validate action
+        if (!validActions.includes(dec.action)) {
+          console.log(`[AnalyzerFactory] Invalid pending order action: ${dec.action}`);
+          return false;
+        }
+        
+        // Validate confidence
+        const confidence = parseFloat(dec.confidence);
+        if (isNaN(confidence) || confidence < 0 || confidence > 1) {
+          console.log(`[AnalyzerFactory] Invalid pending order confidence: ${dec.confidence}`);
+          return false;
+        }
+        
+        // Validate optional fields based on action
+        if (dec.action === 'modify' && !dec.new_entry && !dec.new_sl && !dec.new_tp) {
+          console.log(`[AnalyzerFactory] Modify action requires at least one of new_entry, new_sl, or new_tp`);
+          return false;
+        }
+        
+        return true;
+      })
+      .map(dec => ({
+        ...dec,
+        confidence: parseFloat(dec.confidence),
+        new_entry: dec.new_entry ? parseFloat(dec.new_entry) : null,
+        new_sl: dec.new_sl ? parseFloat(dec.new_sl) : null,
+        new_tp: dec.new_tp ? parseFloat(dec.new_tp) : null
+      }));
+  };
 
   const formatCoin = (coinData, currentPrice, coin) => {
     // Check if predictions have valid targets
@@ -550,8 +607,9 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
       expected_rr: coinData?.expected_rr && !isNaN(coinData.expected_rr) ? Math.max(0, parseFloat(coinData.expected_rr)) : null,
       invalidation_level: validatePriceLevel(coinData?.invalidation_level, currentPrice, 'invalidation', bias),
       reason_summary: coinData?.reason_summary ? coinData.reason_summary.substring(0, 200) : null,
-      // Position and order management decisions
-      position_decisions: coinData?.position_decisions || null,
+      // Position and order management decisions with validation
+      position_decisions: validatePositionDecisions(coinData?.position_decisions),
+      pending_order_decisions: validatePendingOrderDecisions(coinData?.pending_order_decisions),
       alternative_scenario: coinData?.alternative_scenario ? {
         ...coinData.alternative_scenario,
         new_entry: validatePriceLevel(coinData.alternative_scenario.new_entry, currentPrice, 'entry', bias),

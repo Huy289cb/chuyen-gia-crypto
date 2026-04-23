@@ -788,3 +788,146 @@ export async function createAccountSnapshot(db, account) {
     })()
   );
 }
+
+/**
+ * Close a partial position (close a percentage of the position)
+ * @param {Object} db - Database connection
+ * @param {Object} position - Position object
+ * @param {number} closePercent - Percentage to close (0-1)
+ * @param {number} currentPrice - Current price
+ * @param {string} reason - Reason for partial close
+ * @returns {Promise<Object>} Result with partial close info
+ */
+export async function closePartialPosition(db, position, closePercent, currentPrice, reason) {
+  const { updatePosition, updateAccount, getPositions } = await import('../db/database.js');
+  
+  if (closePercent <= 0 || closePercent > 1) {
+    throw new Error(`Invalid close_percent: ${closePercent}. Must be between 0 and 1.`);
+  }
+  
+  const partialSizeQty = position.size_qty * closePercent;
+  const partialSizeUsd = position.size_usd * closePercent;
+  const partialRiskUsd = position.risk_usd * closePercent;
+  
+  const { pnl: partialPnl } = calculateUnrealizedPnL(position, currentPrice);
+  const realizedPartialPnl = partialPnl * closePercent;
+  
+  console.log(`[PaperTrading] Partial close position ${position.position_id}:`, {
+    close_percent: closePercent,
+    partial_size_qty: partialSizeQty,
+    partial_size_usd: partialSizeUsd,
+    partial_pnl: realizedPartialPnl,
+    reason
+  });
+  
+  const newSizeQty = position.size_qty - partialSizeQty;
+  const newSizeUsd = position.size_usd - partialSizeUsd;
+  const newRiskUsd = position.risk_usd - partialRiskUsd;
+  
+  await updatePosition(db, position.id, {
+    size_qty: newSizeQty,
+    size_usd: newSizeUsd,
+    risk_usd: newRiskUsd
+  });
+  
+  const account = await (await import('../db/database.js')).getAccountById(db, position.account_id);
+  const openPositions = await getPositions(db, { account_id: position.account_id, status: 'open' });
+  const newUnrealizedPnl = openPositions.reduce((sum, pos) => sum + (pos.unrealized_pnl || 0), 0);
+  
+  const newBalance = account.current_balance + realizedPartialPnl;
+  const newEquity = newBalance + newUnrealizedPnl;
+  
+  await updateAccount(db, account.id, {
+    current_balance: newBalance,
+    equity: newEquity,
+    unrealized_pnl: newUnrealizedPnl,
+    realized_pnl: (account.realized_pnl || 0) + realizedPartialPnl
+  });
+  
+  console.log(`[PaperTrading] Partial close completed. New size: ${newSizeQty} ${position.symbol}`);
+  
+  return {
+    position_id: position.position_id,
+    close_percent: closePercent,
+    partial_pnl: realizedPartialPnl,
+    new_size_qty: newSizeQty,
+    new_size_usd: newSizeUsd
+  };
+}
+
+/**
+ * Update stop loss for a position
+ * @param {Object} db - Database connection
+ * @param {Object} position - Position object
+ * @param {number} newSl - New stop loss price
+ * @param {string} reason - Reason for SL update
+ * @returns {Promise<Object>} Result with updated SL info
+ */
+export async function updateStopLoss(db, position, newSl, reason) {
+  const { updatePosition } = await import('../db/database.js');
+  
+  if (!newSl || isNaN(newSl)) {
+    throw new Error(`Invalid new_sl: ${newSl}`);
+  }
+  
+  console.log(`[PaperTrading] Updating SL for position ${position.position_id}:`, {
+    old_sl: position.stop_loss,
+    new_sl: newSl,
+    reason
+  });
+  
+  const newRiskUsd = Math.abs(position.entry_price - newSl) * position.size_qty;
+  const newRiskPercent = (newRiskUsd / position.size_usd) * 100;
+  
+  await updatePosition(db, position.id, {
+    stop_loss: newSl,
+    risk_usd: newRiskUsd,
+    risk_percent: newRiskPercent
+  });
+  
+  console.log(`[PaperTrading] SL updated. New risk: ${newRiskUsd.toFixed(2)} USD (${newRiskPercent.toFixed(2)}%)`);
+  
+  return {
+    position_id: position.position_id,
+    old_sl: position.stop_loss,
+    new_sl: newSl,
+    new_risk_usd: newRiskUsd,
+    new_risk_percent: newRiskPercent
+  };
+}
+
+/**
+ * Reverse a position (close current and open opposite)
+ * @param {Object} db - Database connection
+ * @param {Object} position - Position object
+ * @param {number} currentPrice - Current price
+ * @param {Object} suggestion - New position suggestion
+ * @param {string} reason - Reason for reversal
+ * @returns {Promise<Object>} Result with reversal info
+ */
+export async function reversePosition(db, position, currentPrice, suggestion, reason) {
+  console.log(`[PaperTrading] Reversing position ${position.position_id}:`, {
+    old_side: position.side,
+    reason
+  });
+  
+  await closePosition(db, position, currentPrice, `reverse_${reason}`);
+  
+  const newSide = position.side === 'long' ? 'short' : 'long';
+  const newSuggestion = {
+    ...suggestion,
+    side: newSide
+  };
+  
+  const account = await (await import('../db/database.js')).getAccountById(db, position.account_id);
+  const newPosition = await openPosition(db, account, newSuggestion, null);
+  
+  console.log(`[PaperTrading] Reversal completed. New position: ${newPosition.position_id}`);
+  
+  return {
+    closed_position_id: position.position_id,
+    new_position_id: newPosition.position_id,
+    new_side: newSide
+  };
+}
+
