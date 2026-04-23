@@ -3,8 +3,34 @@ import {
   calculateTotalVolume,
   validateStrategicEntry,
   validateOrderLogic,
-  validateEntryAlignmentWithPositions
+  validateEntryAlignmentWithPositions,
+  recalculateSLTPForMarketOrder
 } from '../../src/services/autoEntryLogic.js';
+
+// Mock method config
+vi.mock('../../src/config/methods.js', () => ({
+  getMethodConfig: vi.fn((methodId) => {
+    if (methodId === 'ict') {
+      return {
+        autoEntry: {
+          minSLDistancePercent: 0.0075 // 0.75% for ICT
+        }
+      };
+    }
+    if (methodId === 'kim_nghia') {
+      return {
+        autoEntry: {
+          minSLDistancePercent: 0.004 // 0.4% for Kim Nghia
+        }
+      };
+    }
+    return {
+      autoEntry: {
+        minSLDistancePercent: 0.005 // Default 0.5%
+      }
+    };
+  })
+}));
 
 // Mock database functions
 vi.mock('../../src/db/database.js', () => ({
@@ -296,6 +322,180 @@ describe('autoEntryLogic - Volume Management & Order Validation', () => {
       ];
       const result = validateEntryAlignmentWithPositions(76500, 'short', openPositions);
       expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('recalculateSLTPForMarketOrder', () => {
+    it('should recalculate SL/TP for LONG position maintaining percentage distance', async () => {
+      const suggestedPosition = {
+        entry_price: 77000,
+        stop_loss: 76500, // 0.65% below entry
+        take_profit: 78000, // 1.3% above entry
+        side: 'long'
+      };
+      const newEntryPrice = 77500;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'long', null);
+      
+      expect(result).not.toBeNull();
+      expect(result.entry_price).toBe(77500);
+      expect(result.stop_loss).toBeLessThan(77500); // SL below entry for long
+      expect(result.take_profit).toBeGreaterThan(77500); // TP above entry for long
+      
+      // Verify percentage distance is maintained
+      const originalSLDistance = Math.abs(76500 - 77000) / 77000;
+      const newSLDistance = Math.abs(result.stop_loss - 77500) / 77500;
+      expect(Math.abs(newSLDistance - originalSLDistance)).toBeLessThan(0.0001);
+    });
+
+    it('should recalculate SL/TP for SHORT position maintaining percentage distance', async () => {
+      const suggestedPosition = {
+        entry_price: 77800,
+        stop_loss: 78400, // 0.77% above entry
+        take_profit: 77200, // 0.77% below entry
+        side: 'short'
+      };
+      const newEntryPrice = 78300;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'short', 'ict');
+      
+      expect(result).not.toBeNull();
+      expect(result.entry_price).toBe(78300);
+      expect(result.stop_loss).toBeGreaterThan(78300); // SL above entry for short
+      expect(result.take_profit).toBeLessThan(78300); // TP below entry for short
+      
+      // Verify SL distance meets ICT minimum (0.75%)
+      const newSLDistance = Math.abs(result.stop_loss - 78300) / 78300;
+      expect(newSLDistance).toBeGreaterThanOrEqual(0.0075);
+    });
+
+    it('should reject if recalculated SL distance is below minimum threshold', async () => {
+      const suggestedPosition = {
+        entry_price: 77800,
+        stop_loss: 77850, // Only 0.06% above entry - too small
+        take_profit: 77200,
+        side: 'short'
+      };
+      const newEntryPrice = 78300;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'short', 'ict');
+      
+      expect(result).toBeNull(); // Should reject due to insufficient SL distance
+    });
+
+    it('should use minimum SL distance when original SL is not provided', async () => {
+      const suggestedPosition = {
+        entry_price: 77000,
+        stop_loss: 0, // No SL provided
+        take_profit: 78000,
+        side: 'long'
+      };
+      const newEntryPrice = 77500;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'long', null);
+      
+      expect(result).not.toBeNull();
+      expect(result.entry_price).toBe(77500);
+      
+      // Should use default minimum (0.5%)
+      const newSLDistance = Math.abs(result.stop_loss - 77500) / 77500;
+      expect(newSLDistance).toBeGreaterThanOrEqual(0.005);
+    });
+
+    it('should use 2x SL distance for TP when original TP is not provided', async () => {
+      const suggestedPosition = {
+        entry_price: 77000,
+        stop_loss: 76500, // 0.65% below
+        take_profit: 0, // No TP provided
+        side: 'long'
+      };
+      const newEntryPrice = 77500;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'long', null);
+      
+      expect(result).not.toBeNull();
+      
+      const slDistance = Math.abs(result.stop_loss - 77500) / 77500;
+      const tpDistance = Math.abs(result.take_profit - 77500) / 77500;
+      
+      // TP distance should be approximately 2x SL distance
+      expect(tpDistance).toBeCloseTo(slDistance * 2, 2);
+    });
+
+    it('should use method-specific minimum SL distance for ICT', async () => {
+      const suggestedPosition = {
+        entry_price: 77000,
+        stop_loss: 0,
+        take_profit: 78000,
+        side: 'long'
+      };
+      const newEntryPrice = 77500;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'long', 'ict');
+      
+      expect(result).not.toBeNull();
+      
+      // ICT minimum is 0.75%
+      const newSLDistance = Math.abs(result.stop_loss - 77500) / 77500;
+      expect(newSLDistance).toBeGreaterThanOrEqual(0.0075);
+    });
+
+    it('should use method-specific minimum SL distance for Kim Nghia', async () => {
+      const suggestedPosition = {
+        entry_price: 77000,
+        stop_loss: 0,
+        take_profit: 78000,
+        side: 'long'
+      };
+      const newEntryPrice = 77500;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'long', 'kim_nghia');
+      
+      expect(result).not.toBeNull();
+      
+      // Kim Nghia minimum is 0.4%
+      const newSLDistance = Math.abs(result.stop_loss - 77500) / 77500;
+      expect(newSLDistance).toBeGreaterThanOrEqual(0.004);
+    });
+
+    it('should return null for invalid side', async () => {
+      const suggestedPosition = {
+        entry_price: 77000,
+        stop_loss: 76500,
+        take_profit: 78000,
+        side: 'invalid'
+      };
+      const newEntryPrice = 77500;
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'invalid', null);
+      
+      expect(result).toBeNull();
+    });
+
+    it('should handle the user-reported bug case: short with current price above suggested entry', async () => {
+      // User's example: current=78300, AI: entry=77800, SL=78400, TP=77200
+      const suggestedPosition = {
+        entry_price: 77800,
+        stop_loss: 78400, // 0.77% above original entry
+        take_profit: 77200, // 0.77% below original entry
+        side: 'short'
+      };
+      const newEntryPrice = 78300; // Current price
+      
+      const result = await recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, 'short', 'ict');
+      
+      expect(result).not.toBeNull();
+      expect(result.entry_price).toBe(78300);
+      expect(result.stop_loss).toBeGreaterThan(78300); // SL above entry for short
+      expect(result.take_profit).toBeLessThan(78300); // TP below entry for short
+      
+      // Verify SL distance meets ICT minimum (0.75%)
+      const newSLDistance = Math.abs(result.stop_loss - 78300) / 78300;
+      expect(newSLDistance).toBeGreaterThanOrEqual(0.0075);
+      
+      // Original distance was ~0.77%, new should be similar
+      const originalSLDistance = Math.abs(78400 - 77800) / 77800;
+      expect(Math.abs(newSLDistance - originalSLDistance)).toBeLessThan(0.0001);
     });
   });
 });

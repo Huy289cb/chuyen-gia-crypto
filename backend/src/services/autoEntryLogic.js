@@ -259,6 +259,104 @@ function isWithinAllowedSessions(config = AUTO_ENTRY_CONFIG) {
 }
 
 /**
+ * Recalculate SL/TP for market orders when entry price changes to current price
+ * Maintains the same percentage distance from the original entry/SL/TP relationship
+ * @param {Object} suggestedPosition - Position object with original entry, SL, TP
+ * @param {number} newEntryPrice - New entry price (current market price)
+ * @param {string} side - Position side (long or short)
+ * @param {string} methodId - Method ID for method-specific thresholds
+ * @returns {Object|null} Recalculated position with new SL/TP, or null if invalid
+ */
+async function recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, side, methodId = null) {
+  const originalEntry = suggestedPosition.entry_price;
+  const originalSL = suggestedPosition.stop_loss;
+  const originalTP = suggestedPosition.take_profit;
+
+  console.log(`[AutoEntry] Recalculating SL/TP for market order:`, {
+    original_entry: originalEntry,
+    original_sl: originalSL,
+    original_tp: originalTP,
+    new_entry: newEntryPrice,
+    side
+  });
+
+  // Calculate percentage distances from original entry
+  let slDistancePercent = 0;
+  let tpDistancePercent = 0;
+
+  if (originalSL && originalSL !== 0) {
+    slDistancePercent = Math.abs(originalSL - originalEntry) / originalEntry;
+  }
+
+  if (originalTP && originalTP !== 0) {
+    tpDistancePercent = Math.abs(originalTP - originalEntry) / originalEntry;
+  }
+
+  // If no original SL/TP provided, use method-specific minimum distances
+  let minSLDistancePercent = 0.005; // Default 0.5%
+  
+  if (methodId) {
+    try {
+      const { getMethodConfig } = await import('../config/methods.js');
+      const methodConfig = getMethodConfig(methodId);
+      minSLDistancePercent = methodConfig.autoEntry?.minSLDistancePercent || 0.005;
+    } catch (error) {
+      console.warn(`[AutoEntry] Failed to get method config for ${methodId}, using default 0.5%:`, error.message);
+    }
+  }
+
+  // If no original SL distance, use minimum
+  if (slDistancePercent === 0) {
+    slDistancePercent = minSLDistancePercent;
+  }
+
+  // If no original TP distance, use 2x SL distance (R:R 2:1)
+  if (tpDistancePercent === 0) {
+    tpDistancePercent = slDistancePercent * 2;
+  }
+
+  // Recalculate SL and TP based on new entry price
+  let newSL, newTP;
+
+  if (side === 'long') {
+    // LONG: SL below entry, TP above entry
+    newSL = newEntryPrice * (1 - slDistancePercent);
+    newTP = newEntryPrice * (1 + tpDistancePercent);
+  } else if (side === 'short') {
+    // SHORT: SL above entry, TP below entry
+    newSL = newEntryPrice * (1 + slDistancePercent);
+    newTP = newEntryPrice * (1 - tpDistancePercent);
+  } else {
+    console.error(`[AutoEntry] Invalid side for SL/TP recalculation: ${side}`);
+    return null;
+  }
+
+  // Validate recalculated SL distance meets minimum threshold
+  const newSLDistance = Math.abs(newSL - newEntryPrice) / newEntryPrice;
+  if (newSLDistance < minSLDistancePercent) {
+    console.error(`[AutoEntry] Recalculated SL distance too small: ${(newSLDistance * 100).toFixed(2)}% (minimum ${(minSLDistancePercent * 100).toFixed(1)}% for ${methodId || 'default'})`);
+    return null;
+  }
+
+  console.log(`[AutoEntry] SL/TP recalculation successful:`, {
+    original_sl_distance_pct: (slDistancePercent * 100).toFixed(2),
+    original_tp_distance_pct: (tpDistancePercent * 100).toFixed(2),
+    new_sl: newSL.toFixed(2),
+    new_tp: newTP.toFixed(2),
+    new_sl_distance_pct: (newSLDistance * 100).toFixed(2),
+    new_tp_distance_pct: (tpDistancePercent * 100).toFixed(2)
+  });
+
+  // Return updated position with recalculated SL/TP
+  return {
+    ...suggestedPosition,
+    entry_price: newEntryPrice,
+    stop_loss: newSL,
+    take_profit: newTP
+  };
+}
+
+/**
  * Determine if auto-entry should be suggested based on analysis
  * @param {Object} analysis - ICT analysis result
  * @param {Object} account - Account data
@@ -507,8 +605,29 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   if (entryAlreadyHit) {
     // Entry already hit - execute as market order immediately
     decision.orderType = 'market';
-    decision.suggestedPosition.entry_price = currentPrice; // Use current price as entry
-    decision.reason += ` | Market order: entry ${suggestedEntry.toFixed(2)} already hit (current: ${currentPrice.toFixed(2)})`;
+    
+    // Recalculate SL/TP based on new entry price to maintain proper distance
+    const methodId = methodConfig?.methodId || null;
+    const recalculatedPosition = await recalculateSLTPForMarketOrder(
+      decision.suggestedPosition,
+      currentPrice,
+      decision.suggestedPosition.side,
+      methodId
+    );
+    
+    if (!recalculatedPosition) {
+      // Recalculation failed - reject the trade
+      decision.shouldEnter = false;
+      decision.action = 'no_trade';
+      decision.reason = `Market order rejected: Unable to recalculate SL/TP with valid distance for current price ${currentPrice.toFixed(2)}`;
+      decision.suggestedPosition = null;
+      console.log(`[AutoEntry] ${decision.reason}`);
+      return decision;
+    }
+    
+    // Update position with recalculated SL/TP
+    decision.suggestedPosition = recalculatedPosition;
+    decision.reason += ` | Market order: entry ${suggestedEntry.toFixed(2)} already hit (current: ${currentPrice.toFixed(2)}), SL/TP recalculated to maintain distance`;
   } else {
     // Entry not yet hit - create pending limit order
     decision.orderType = 'limit'; // Will create pending order
@@ -765,4 +884,4 @@ export function resetConsecutiveLosses() {
   };
 }
 
-export { AUTO_ENTRY_CONFIG };
+export { AUTO_ENTRY_CONFIG, recalculateSLTPForMarketOrder };

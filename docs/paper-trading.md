@@ -112,11 +112,14 @@ A position is suggested when ALL of the following conditions are met:
 
 ## Order Types
 
-### Market Orders
+### Market Orders (Updated 23/04/2026)
 When AI suggests entry price that is **already hit** by current market price:
 - **LONG**: Market order when `current_price <= entry_price` (price already dropped to entry)
 - **SHORT**: Market order when `current_price >= entry_price` (price already rose to entry)
 - Position opened **immediately** at current price
+- **SL/TP Recalculation**: When entry changes to current price, SL/TP are recalculated to maintain the same percentage distance from the original AI suggestion
+- **Validation**: Recalculated SL must meet method-specific minimum distance (ICT: 0.75%, Kim Nghia: 0.4%)
+- If recalculated SL distance is too small, the trade is rejected
 - No waiting required
 - Best for when setup is already active
 

@@ -2,6 +2,59 @@
 
 All notable changes to the project will be documented in this file.
 
+## [23/04/2026] - v2.7.4 - Market Order SL/TP Recalculation Fix
+
+### Bug Fixes
+
+**Issue 1: Market Order SL Distance Violation**
+- **Problem**: When AI suggested entry price was already hit by current price, system executed market order with entry=currentPrice but kept original AI SL/TP, causing invalid SL distances
+- **Example**: 
+  - AI: entry=77800, SL=78400, TP=77200 (short)
+  - Current: 78300
+  - System: entry changed to 78300, but SL kept at 78400
+  - Result: SL distance = 100 USD (~0.13%) < ICT minimum (0.75%)
+- **Root Cause**: autoEntryLogic.js changed entry to currentPrice for market orders but didn't recalculate SL/TP to maintain proper distance
+- **Fix**:
+  - Added recalculateSLTPForMarketOrder function to recalculate SL/TP when entry changes
+  - Maintains same percentage distance from original AI suggestion
+  - Validates recalculated SL meets method-specific minimum (ICT: 0.75%, Kim Nghia: 0.4%)
+  - Rejects trade if recalculated SL distance is too small
+  - Added comprehensive logging for debugging
+- **Impact**: Market orders now have valid SL/TP distances that meet method requirements
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+### Testing
+
+**Issue 2: Unit Tests for SL/TP Recalculation**
+- Created comprehensive test suite for recalculateSLTPForMarketOrder function
+- Tests cover:
+  - LONG position recalculation maintaining % distance
+  - SHORT position recalculation maintaining % distance
+  - Rejection when recalculated SL distance < minimum threshold
+  - Using minimum SL distance when original SL not provided
+  - Using 2x SL distance for TP when original TP not provided
+  - Method-specific minimum distances (ICT: 0.75%, Kim Nghia: 0.4%)
+  - Invalid side handling
+  - User-reported bug case (short 78300, entry 77800, SL 78400)
+- All 9 tests passing
+- **Impact**: Verified SL/TP recalculation logic works correctly for both long and short positions
+- **Files**: `backend/tests/unit/autoEntryLogic.test.js`
+
+### Documentation Updates
+
+**Issue 3: Paper Trading Documentation Updated**
+- Updated Market Orders section to document SL/TP recalculation behavior
+- Added validation notes for method-specific minimum distances
+- **Impact**: Documentation reflects new market order SL/TP recalculation feature
+- **Files**: `docs/paper-trading.md`
+
+### Version Update
+
+**Issue 4: Version Bump to 2.7.4**
+- Updated frontend version from 2.7.3 to 2.7.4
+- **Impact**: Frontend reflects new version with market order SL/TP fix
+- **Files**: `frontend/lib/version.ts`
+
 ## [23/04/2026] - v2.7.2 - AI Position Decision Consistency Fix
 
 ### Bug Fixes
