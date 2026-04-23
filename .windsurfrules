@@ -84,7 +84,7 @@
 
 **Multi-Method Architecture:**
 - ICT Method: 15m schedule, confidence threshold 70%, multi-timeframe alignment required
-- Kim Nghia Method: 7.5m schedule, confidence threshold 75%, không cần multi-timeframe alignment
+- Kim Nghia Method: 10m schedule (0, 10, 20, 30, 40, 50), confidence threshold 75%, không cần multi-timeframe alignment
 - Separate accounts cho mỗi method (100U demo account)
 - Method-specific auto-entry logic
 
@@ -134,7 +134,7 @@
 ## 5. Workflow
 
 **Data Fetching:**
-1. Scheduler triggers (ICT: 15m, Kim Nghia: 7.5m)
+1. Scheduler triggers (ICT: 15m, Kim Nghia: 10m at 0,10,20,30,40,50)
 2. Fetch BTC/ETH prices từ Binance API (primary), CoinGecko (fallback)
 3. Fetch 1-minute OHLC candles cho SL/TP detection
 4. Cache prices in-memory (TTL: 20 minutes)
