@@ -19,10 +19,11 @@ export const binanceConfig = {
   leverage: parseInt(process.env.BINANCE_TESTNET_LEVERAGE || '1', 10),
   
   // Rate Limits (Binance Futures Testnet)
-  // https://binance-docs.github.io/apidocs/futures/en/#limits
+  // https://developers.binance.com/docs/derivatives/usdm/introduction
   rateLimits: {
-    requestWeight: 2400, // per minute
-    orderRate: 1200, // per minute
+    requestWeight: 2400, // per minute (API request weight limit)
+    orderRate: 1200, // per minute (order placement limit)
+    rawRequests: 1200, // per minute (raw HTTP requests)
   },
   
   // Order Types

@@ -200,7 +200,7 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
     const response = await client.newOrder(symbol, side, 'STOP_MARKET', {
       quantity: quantity.toString(),
       stopPrice: stopPrice.toString(),
-      closePosition: 'true', // Close position on trigger
+      reduceOnly: 'true', // Close position on trigger
     });
     
     console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}`);
@@ -232,7 +232,7 @@ export async function placeTakeProfitOrder(client, symbol, side, quantity, price
     const response = await client.newOrder(symbol, side, 'TAKE_PROFIT_MARKET', {
       quantity: quantity.toString(),
       stopPrice: price.toString(),
-      closePosition: 'true', // Close position on trigger
+      reduceOnly: 'true', // Close position on trigger
     });
     
     console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
