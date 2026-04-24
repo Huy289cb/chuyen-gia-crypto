@@ -11,6 +11,7 @@ import {
   getAccountBalance,
   getCurrentPosition,
   placeMarketOrder,
+  placeLimitOrder,
   placeStopLossOrder,
   placeTakeProfitOrder,
   cancelOrder,
@@ -709,3 +710,6 @@ async function getTestnetAccounts(db) {
 export function getTestnetClient() {
   return testnetClient;
 }
+
+// Re-export Binance client functions for use in scheduler
+export { placeLimitOrder, cancelOrder };

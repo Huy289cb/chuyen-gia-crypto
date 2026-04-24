@@ -478,7 +478,119 @@ async function runMethodAnalysis(methodId) {
           console.log(`[Scheduler][${method.name}] Testnet execution skipped: BINANCE_ENABLED=${process.env.BINANCE_ENABLED}`);
         }
         
-        // Step 6: Testnet position decisions (if enabled)
+        // Step 6: Testnet pending order decisions (if enabled)
+        if (process.env.BINANCE_ENABLED === 'true' && analysis.btc?.pending_order_decisions && Array.isArray(analysis.btc.pending_order_decisions)) {
+          try {
+            const { cancelTestnetPendingOrder, getTestnetPendingOrders } = await import('./db/testnetDatabase.js');
+            const { getMethodConfig } = await import('./config/methods.js');
+            
+            // Get method confidence threshold
+            const methodConfig = getMethodConfig(methodId);
+            const confidenceThreshold = (methodConfig.autoEntry?.minConfidence || 70) / 100;
+
+            for (const decision of analysis.btc.pending_order_decisions) {
+              // Check confidence threshold
+              if (decision.confidence < confidenceThreshold) {
+                console.log(`[Scheduler][${method.name}] Skipping testnet pending order decision for ${decision.order_id}: confidence ${decision.confidence} < threshold ${confidenceThreshold}`);
+                continue;
+              }
+              
+              // Handle hold action (do nothing)
+              if (decision.action === 'hold') {
+                console.log(`[Scheduler][${method.name}] Holding testnet pending order ${decision.order_id}: ${decision.reason}`);
+                continue;
+              }
+              
+              try {
+                const pendingOrders = await getTestnetPendingOrders(db, { order_id: decision.order_id });
+                const order = pendingOrders[0];
+                if (!order || order.status !== 'pending') {
+                  console.log(`[Scheduler][${method.name}] Testnet pending order ${decision.order_id} not found or not pending, skipping`);
+                  continue;
+                }
+                
+                // Handle cancel
+                if (decision.action === 'cancel') {
+                  await cancelTestnetPendingOrder(db, order.order_id, `ai_recommendation: ${decision.reason}`, order.binance_order_id);
+                  console.log(`[Scheduler][${method.name}] Cancelled testnet pending order ${decision.order_id}: ${decision.reason}`);
+                }
+                
+                // Handle modify
+                else if (decision.action === 'modify') {
+                  // For testnet pending orders, need to sync with Binance
+                  if (order.binance_order_id) {
+                    try {
+                      const { cancelOrder, placeLimitOrder, getTestnetClient } = await import('./services/testnetEngine.js');
+                      const { getSymbol } = await import('./config/binance.js');
+                      const testnetClient = getTestnetClient();
+                      
+                      if (testnetClient) {
+                        // Cancel old Binance limit order
+                        await cancelOrder(testnetClient, getSymbol(), order.binance_order_id);
+                        console.log(`[Scheduler][${method.name}] Cancelled old Binance limit order ${order.binance_order_id}`);
+                        
+                        // Place new Binance limit order with updated parameters
+                        const newEntry = decision.new_entry || order.entry_price;
+                        const newQty = decision.new_entry ? (order.size_usd / newEntry) : order.size_qty;
+                        const newLimitOrder = await placeLimitOrder(
+                          testnetClient,
+                          getSymbol(),
+                          order.side.toUpperCase(),
+                          newQty,
+                          newEntry
+                        );
+                        const newBinanceOrderId = newLimitOrder.orderId.toString();
+                        console.log(`[Scheduler][${method.name}] Placed new Binance limit order ${newBinanceOrderId}`);
+                        
+                        // Update database with new parameters and new binance_order_id
+                        const { updateTestnetPendingOrder } = await import('./db/testnetDatabase.js');
+                        await updateTestnetPendingOrder(db, order.order_id, {
+                          entry_price: newEntry,
+                          stop_loss: decision.new_sl,
+                          take_profit: decision.new_tp,
+                          binance_order_id: newBinanceOrderId
+                        });
+                        console.log(`[Scheduler][${method.name}] Modified testnet pending order ${decision.order_id}: ${decision.reason}`);
+                      } else {
+                        console.warn(`[Scheduler][${method.name}] Testnet client not available, only updating DB`);
+                        const { updateTestnetPendingOrder } = await import('./db/testnetDatabase.js');
+                        await updateTestnetPendingOrder(db, order.order_id, {
+                          entry_price: decision.new_entry,
+                          stop_loss: decision.new_sl,
+                          take_profit: decision.new_tp
+                        });
+                      }
+                    } catch (binanceError) {
+                      console.error(`[Scheduler][${method.name}] Failed to sync modify with Binance:`, binanceError.message);
+                      // Continue to update DB even if Binance sync fails
+                      const { updateTestnetPendingOrder } = await import('./db/testnetDatabase.js');
+                      await updateTestnetPendingOrder(db, order.order_id, {
+                        entry_price: decision.new_entry,
+                        stop_loss: decision.new_sl,
+                        take_profit: decision.new_tp
+                      });
+                    }
+                  } else {
+                    // No Binance order ID, just update DB
+                    const { updateTestnetPendingOrder } = await import('./db/testnetDatabase.js');
+                    await updateTestnetPendingOrder(db, order.order_id, {
+                      entry_price: decision.new_entry,
+                      stop_loss: decision.new_sl,
+                      take_profit: decision.new_tp
+                    });
+                    console.log(`[Scheduler][${method.name}] Modified testnet pending order ${decision.order_id} (DB only): ${decision.reason}`);
+                  }
+                }
+              } catch (error) {
+                console.error(`[Scheduler][${method.name}] Failed to execute testnet pending order decision for ${decision.order_id}:`, error.message);
+              }
+            }
+          } catch (testnetPendingDecisionError) {
+            console.error(`[Scheduler][${method.name}] Testnet pending order decisions failed:`, testnetPendingDecisionError.message);
+          }
+        }
+        
+        // Step 7: Testnet position decisions (if enabled)
         if (process.env.BINANCE_ENABLED === 'true' && analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
           try {
             const { closeTestnetPositionEngine, updateTestnetPositionSL } = await import('./services/testnetEngine.js');

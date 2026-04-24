@@ -2,6 +2,49 @@
 
 All notable changes to the project will be documented in this file.
 
+## [24/04/2026] - v2.8.2 - Binance Testnet Order Sync Critical Fixes
+
+### Bug Fixes
+
+**Issue 1: Pending Orders Not Creating Limit Orders on Binance (Import Error)**
+- **Problem**: Paper trading created pending orders but Binance testnet didn't create corresponding limit orders
+- **Root Cause**: `placeLimitOrder` was imported in `testnetEngine.js` but not re-exported, causing import failures in `scheduler.js`
+- **Fix**:
+  - Added `placeLimitOrder` to imports from `binanceClient.js` in `testnetEngine.js`
+  - Re-exported `placeLimitOrder` and `cancelOrder` for use in scheduler
+- **Impact**: Testnet pending orders now create actual limit orders on Binance
+- **Files**: `backend/src/services/testnetEngine.js`
+
+**Issue 2: Testnet Pending Order Decisions Not Processed**
+- **Problem**: Scheduler processed paper trading pending order decisions and testnet position decisions, but not testnet pending order decisions
+- **Root Cause**: Missing Step 6 in scheduler to process testnet pending order decisions (cancel/modify)
+- **Fix**:
+  - Added Step 6 to process testnet pending order decisions in scheduler.js
+  - Syncs with Binance when modifying orders (cancel old limit, place new limit)
+  - Added confidence threshold check for testnet pending order decisions
+- **Impact**: AI can now cancel/modify testnet pending orders with Binance sync
+- **Files**: `backend/src/scheduler.js`
+
+**Issue 3: Missing updateTestnetPendingOrder Function**
+- **Problem**: No function to update testnet pending orders in database
+- **Fix**: Added `updateTestnetPendingOrder` function to support modify operations
+- **Impact**: Testnet pending orders can be modified in database and synced with Binance
+- **Files**: `backend/src/db/testnetDatabase.js`
+
+### Verified Working
+
+- **Market orders**: `openTestnetPosition` correctly places market orders with SL/TP
+- **Close orders**: `closeTestnetPositionEngine` correctly cancels SL/TP and places market close order
+- **Pending order execution**: `checkTestnetPendingOrders` correctly cancels Binance limit order and places market order when triggered
+
+### Version Update
+
+**Issue 4: Version Bump to 2.8.2**
+- Updated frontend version from 2.8.1 to 2.8.2
+- Updated backend version from 1.0.1 to 1.0.2
+- **Impact**: Versions reflect critical Binance sync fixes
+- **Files**: `frontend/lib/version.ts`, `backend/package.json`
+
 ## [24/04/2026] - v2.8.1 - Binance Testnet Pending Order Synchronization Fix
 
 ### Bug Fixes

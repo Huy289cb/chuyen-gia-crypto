@@ -709,6 +709,36 @@ export async function cancelTestnetPendingOrder(db, orderId, reason = 'cancelled
 }
 
 /**
+ * Update a testnet pending order
+ */
+export async function updateTestnetPendingOrder(db, orderId, updates) {
+  return new Promise((resolve, reject) => {
+    const keys = Object.keys(updates);
+    const values = Object.values(updates);
+    
+    if (keys.length === 0) {
+      resolve(0);
+      return;
+    }
+    
+    const setClause = keys.map(key => `${key} = ?`).join(', ');
+    const query = `UPDATE testnet_pending_orders SET ${setClause} WHERE order_id = ?`;
+    values.push(orderId);
+    
+    db.run(query, values, function(err) {
+      if (err) {
+        console.error('[TestnetDB] Error updating testnet pending order:', err.message);
+        reject(err);
+        return;
+      }
+      
+      console.log(`[TestnetDB] Updated testnet pending order ${orderId}`);
+      resolve(this.changes);
+    });
+  });
+}
+
+/**
  * Create a testnet pending order (limit order)
  */
 export async function createTestnetPendingOrder(db, orderData) {
