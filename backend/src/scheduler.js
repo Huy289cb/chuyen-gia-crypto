@@ -31,6 +31,14 @@ async function initDb() {
     await runMigrations(db);
     dbEnabled = true;
     console.log('[Scheduler] Database initialized and migrations run');
+    
+    // Initialize testnet engine if enabled
+    try {
+      const { initTestnetEngine } = await import('./services/testnetEngine.js');
+      await initTestnetEngine();
+    } catch (testnetError) {
+      console.log('[Scheduler] Testnet engine initialization skipped or failed:', testnetError.message);
+    }
   } catch (error) {
     console.error('[Scheduler] Database initialization failed:', error.message);
     console.error('[Scheduler] Error stack:', error.stack);
@@ -327,6 +335,31 @@ async function runMethodAnalysis(methodId) {
             }
           } catch (posError) {
             console.error(`[Scheduler][${method.name}] Failed to process BTC order:`, posError.message);
+          }
+        }
+        
+        // Step 5: Testnet auto-entry (if enabled)
+        if (process.env.BINANCE_TESTNET_ENABLED === 'true') {
+          try {
+            const { openTestnetPosition } = await import('./services/testnetEngine.js');
+            const { getOrCreateTestnetAccount, getTestnetPositions } = await import('./db/testnetDatabase.js');
+            
+            // Get or create testnet account
+            const testnetAccount = await getOrCreateTestnetAccount(db, 'BTC', methodId);
+            
+            // Get open testnet positions
+            const openTestnetPositions = await getTestnetPositions(db, { account_id: testnetAccount.id, status: 'open' });
+            
+            // Evaluate auto-entry for testnet (reuse same logic)
+            const testnetDecision = await evaluateAutoEntry(analysis.btc, testnetAccount, openTestnetPositions, method, db);
+            
+            if (testnetDecision.shouldEnter && testnetDecision.suggestedPosition && testnetDecision.orderType === 'market') {
+              const position = testnetDecision.suggestedPosition;
+              await openTestnetPosition(db, testnetAccount, position, btcPredictionId, methodId);
+              console.log(`[Scheduler][${method.name}] Testnet order executed: ${position.side} @ ${position.entry_price}`);
+            }
+          } catch (testnetError) {
+            console.error(`[Scheduler][${method.name}] Testnet execution failed:`, testnetError.message);
           }
         }
         

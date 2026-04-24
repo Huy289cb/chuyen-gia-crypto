@@ -568,6 +568,159 @@ function addRawDataColumns(db, resolve, reject) {
 
       if (completed === rawColumns.length) {
         console.log('[Migration] Raw data columns migration completed');
+        // Continue with testnet tables migration
+        addTestnetTables(db, resolve, reject);
+      }
+    });
+  });
+}
+
+/**
+ * Add testnet database tables for Binance Futures Testnet integration
+ */
+function addTestnetTables(db, resolve, reject) {
+  console.log('[Migration] Starting testnet tables migration...');
+
+  // Create testnet_accounts table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS testnet_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol TEXT NOT NULL UNIQUE,
+      method_id TEXT NOT NULL,
+      starting_balance REAL NOT NULL,
+      current_balance REAL NOT NULL,
+      equity REAL NOT NULL,
+      unrealized_pnl REAL DEFAULT 0,
+      realized_pnl REAL DEFAULT 0,
+      total_trades INTEGER DEFAULT 0,
+      winning_trades INTEGER DEFAULT 0,
+      losing_trades INTEGER DEFAULT 0,
+      max_drawdown REAL DEFAULT 0,
+      consecutive_losses INTEGER DEFAULT 0,
+      last_trade_time DATETIME,
+      cooldown_until DATETIME,
+      api_key_hash TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(symbol, method_id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error('[Migration] Error creating testnet_accounts table:', err.message);
+      reject(err);
+      return;
+    }
+    console.log('[Migration] testnet_accounts table created/verified');
+    
+    // Create testnet_positions table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS testnet_positions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        position_id TEXT UNIQUE NOT NULL,
+        account_id INTEGER NOT NULL,
+        symbol TEXT NOT NULL,
+        side TEXT NOT NULL,
+        entry_price REAL NOT NULL,
+        current_price REAL DEFAULT 0,
+        stop_loss REAL NOT NULL,
+        take_profit REAL NOT NULL,
+        entry_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        status TEXT NOT NULL DEFAULT 'open',
+        size_usd REAL NOT NULL,
+        size_qty REAL NOT NULL,
+        risk_usd REAL NOT NULL,
+        risk_percent REAL NOT NULL,
+        expected_rr REAL NOT NULL,
+        realized_pnl REAL DEFAULT 0,
+        unrealized_pnl REAL DEFAULT 0,
+        close_price REAL,
+        close_time DATETIME,
+        close_reason TEXT,
+        linked_prediction_id INTEGER,
+        binance_order_id TEXT,
+        binance_sl_order_id TEXT,
+        binance_tp_order_id TEXT,
+        FOREIGN KEY (account_id) REFERENCES testnet_accounts(id)
+      )
+    `, (err) => {
+      if (err) {
+        console.error('[Migration] Error creating testnet_positions table:', err.message);
+        reject(err);
+        return;
+      }
+      console.log('[Migration] testnet_positions table created/verified');
+      
+      // Create testnet_trade_events table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS testnet_trade_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          position_id TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          event_data TEXT,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `, (err) => {
+        if (err) {
+          console.error('[Migration] Error creating testnet_trade_events table:', err.message);
+          reject(err);
+          return;
+        }
+        console.log('[Migration] testnet_trade_events table created/verified');
+        
+        // Create testnet_account_snapshots table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS testnet_account_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            balance REAL NOT NULL,
+            equity REAL NOT NULL,
+            unrealized_pnl REAL DEFAULT 0,
+            realized_pnl REAL DEFAULT 0,
+            open_positions_count INTEGER DEFAULT 0,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (account_id) REFERENCES testnet_accounts(id)
+          )
+        `, (err) => {
+          if (err) {
+            console.error('[Migration] Error creating testnet_account_snapshots table:', err.message);
+            reject(err);
+            return;
+          }
+          console.log('[Migration] testnet_account_snapshots table created/verified');
+          
+          // Create indexes for testnet tables
+          createTestnetIndexes(db, resolve, reject);
+        });
+      });
+    });
+  });
+}
+
+/**
+ * Create indexes for testnet tables
+ */
+function createTestnetIndexes(db, resolve, reject) {
+  const indexes = [
+    "CREATE INDEX IF NOT EXISTS idx_testnet_positions_account ON testnet_positions(account_id)",
+    "CREATE INDEX IF NOT EXISTS idx_testnet_positions_symbol ON testnet_positions(symbol)",
+    "CREATE INDEX IF NOT EXISTS idx_testnet_positions_status ON testnet_positions(status)",
+    "CREATE INDEX IF NOT EXISTS idx_testnet_snapshots_account_time ON testnet_account_snapshots(account_id, timestamp)",
+    "CREATE INDEX IF NOT EXISTS idx_testnet_events_position ON testnet_trade_events(position_id)",
+    "CREATE INDEX IF NOT EXISTS idx_testnet_accounts_method ON testnet_accounts(method_id)",
+  ];
+  
+  let completed = 0;
+  indexes.forEach((sql, index) => {
+    db.run(sql, (err) => {
+      if (err) {
+        console.error(`[Migration] Error creating testnet index ${index + 1}:`, err.message);
+      } else {
+        console.log(`[Migration] Created testnet index ${index + 1}/${indexes.length}`);
+      }
+      completed++;
+      
+      if (completed === indexes.length) {
+        console.log('[Migration] Testnet tables migration completed successfully');
         resolve();
       }
     });
