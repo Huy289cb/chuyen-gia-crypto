@@ -68,13 +68,18 @@ export async function initTestnetEngine() {
     return null; // Stop initialization if futures permissions are missing
   }
 
-  // Set margin type (optional - skip if fails)
+  // Set margin type (optional - skip if fails or already set)
   try {
     await setMarginType(testnetClient, getSymbol(), 'ISOLATED');
     console.log('[TestnetEngine] Margin type configured');
   } catch (error) {
-    console.error('[TestnetEngine] Failed to set margin type: Invalid API-key permissions. Please enable "Enable Futures" for your API key.', error.message);
-    return null; // Stop initialization if futures permissions are missing
+    // Ignore "No need to change margin type" error - it means margin type is already correct
+    if (error.message.includes('No need to change margin type')) {
+      console.log('[TestnetEngine] Margin type already set correctly');
+    } else {
+      console.error('[TestnetEngine] Failed to set margin type: Invalid API-key permissions. Please enable "Enable Futures" for your API key.', error.message);
+      return null; // Stop initialization if futures permissions are missing
+    }
   }
 
   return testnetClient;
