@@ -107,13 +107,24 @@ export async function openTestnetPosition(db, account, positionData, predictionI
 
   const symbol = getSymbol();
   const leverage = getLeverage();
-  
-  // Calculate quantity based on size_usd and leverage
-  const size_qty = size_usd / entry_price;
-  
+
+  // Cap position size to max 2000 USDT (same as paper trading)
+  const maxOrderSize = 2000;
+  let cappedSizeUsd = size_usd;
+  let cappedSizeQty = size_usd / entry_price;
+
+  if (size_usd > maxOrderSize) {
+    console.log(`[TestnetEngine] Position size $${size_usd.toFixed(2)} exceeds max $${maxOrderSize}, capping to $${maxOrderSize}`);
+    cappedSizeUsd = maxOrderSize;
+    cappedSizeQty = maxOrderSize / entry_price;
+  }
+
+  // Calculate quantity based on capped size_usd and leverage
+  const size_qty = cappedSizeQty;
+
   // Validate position size vs account balance
-  if (size_usd > account.current_balance) {
-    console.error(`[TestnetEngine] Position size ${size_usd} exceeds account balance ${account.current_balance}`);
+  if (cappedSizeUsd > account.current_balance) {
+    console.error(`[TestnetEngine] Position size ${cappedSizeUsd} exceeds account balance ${account.current_balance}`);
     throw new Error('Position size exceeds account balance');
   }
 
