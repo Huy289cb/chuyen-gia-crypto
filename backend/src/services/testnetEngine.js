@@ -475,8 +475,10 @@ export async function syncTestnetAccount(db, account) {
     const balance = await getAccountBalance(testnetClient);
 
     // Detect discrepancies
+    // Use availableBalance (USDT only) for equity comparison since DB tracks USDT balance
+    // totalWalletBalance includes all assets (USDT + BNB + others) which can cause false discrepancies
     const balanceDiff = Math.abs(balance.availableBalance - account.current_balance);
-    const equityDiff = Math.abs(balance.totalWalletBalance - account.equity);
+    const equityDiff = Math.abs(balance.availableBalance - account.equity);
 
     // Skip auto-correction if Binance balance is 0 (unfunded testnet account)
     // Keep DB balance for paper trading
@@ -487,25 +489,25 @@ export async function syncTestnetAccount(db, account) {
     } else if (balanceDiff > 0.01 || equityDiff > 0.01) {
       console.warn(`[TestnetEngine] Balance discrepancy detected for account ${account.id}:`);
       console.warn(`  DB balance: ${account.current_balance}, Binance balance: ${balance.availableBalance} (diff: ${balanceDiff.toFixed(2)})`);
-      console.warn(`  DB equity: ${account.equity}, Binance equity: ${balance.totalWalletBalance} (diff: ${equityDiff.toFixed(2)})`);
+      console.warn(`  DB equity: ${account.equity}, Binance equity: ${balance.availableBalance} (diff: ${equityDiff.toFixed(2)})`);
 
       // Auto-correct: update database with Binance values
       await updateTestnetAccountBalance(db, account.id, balance.availableBalance, 0);
-      await updateTestnetAccountEquityDirect(db, account.id, balance.totalWalletBalance);
+      await updateTestnetAccountEquityDirect(db, account.id, balance.availableBalance);
 
       // Record sync event
       await recordTestnetTradeEvent(db, `account_${account.id}`, 'balance_sync', {
         old_balance: account.current_balance,
         new_balance: balance.availableBalance,
         old_equity: account.equity,
-        new_equity: balance.totalWalletBalance,
+        new_equity: balance.availableBalance,
         reason: 'discrepancy_detected',
       });
 
       console.log(`[TestnetEngine] Auto-corrected account ${account.id} with Binance values`);
     } else {
-      // No discrepancy, just update equity with latest total wallet balance
-      await updateTestnetAccountEquityDirect(db, account.id, balance.totalWalletBalance);
+      // No discrepancy, just update equity with latest available balance (USDT only)
+      await updateTestnetAccountEquityDirect(db, account.id, balance.availableBalance);
     }
     
     // Sync positions with Binance
@@ -514,7 +516,7 @@ export async function syncTestnetAccount(db, account) {
     // Create snapshot
     await createTestnetAccountSnapshot(db, account.id);
     
-    console.log(`[TestnetEngine] Synced testnet account ${account.id}: balance=${balance.availableBalance}, equity=${balance.totalWalletBalance}`);
+    console.log(`[TestnetEngine] Synced testnet account ${account.id}: balance=${balance.availableBalance}, equity=${balance.availableBalance}`);
     
     return balance;
   } catch (error) {
