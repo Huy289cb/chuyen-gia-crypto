@@ -807,11 +807,19 @@ async function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY
   const sizeQty = riskAmount / riskDistance;
   let sizeUsd = sizeQty * suggestedEntry;
 
-  // Cap position size at account balance (cannot exceed what you have)
-  const maxPositionSizeByBalance = account.current_balance;
-  if (sizeUsd > maxPositionSizeByBalance) {
-    console.log(`[AutoEntry] Position size $${sizeUsd.toFixed(2)} exceeds account balance $${maxPositionSizeByBalance.toFixed(2)}, capping to balance`);
-    sizeUsd = maxPositionSizeByBalance;
+  // Cap position size at account balance * leverage (for futures trading)
+  // Get leverage from binance config if available, default to 20x for testnet
+  let leverage = 20; // Default 20x for testnet
+  try {
+    const { getLeverage } = await import('../config/binance.js');
+    leverage = getLeverage() || 20;
+  } catch (error) {
+    console.warn('[AutoEntry] Failed to get leverage, using default 20x');
+  }
+  const maxPositionSizeByLeverage = account.current_balance * leverage;
+  if (sizeUsd > maxPositionSizeByLeverage) {
+    console.log(`[AutoEntry] Position size $${sizeUsd.toFixed(2)} exceeds leverage cap $${maxPositionSizeByLeverage.toFixed(2)} (${leverage}x), capping`);
+    sizeUsd = maxPositionSizeByLeverage;
     // Recalculate sizeQty based on capped sizeUsd
     const newSizeQty = sizeUsd / suggestedEntry;
     if (newSizeQty > 0) {

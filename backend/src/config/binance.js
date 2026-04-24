@@ -16,7 +16,7 @@ export const binanceConfig = {
   
   // Trading Configuration
   symbol: process.env.BINANCE_TESTNET_SYMBOL || 'BTCUSDT',
-  leverage: parseInt(process.env.BINANCE_TESTNET_LEVERAGE || '1', 10),
+  leverage: parseInt(process.env.BINANCE_TESTNET_LEVERAGE || '20', 10),
   
   // Rate Limits (Binance Futures Testnet)
   // https://developers.binance.com/docs/derivatives/usdm/introduction
