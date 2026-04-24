@@ -461,20 +461,26 @@ export async function syncTestnetAccount(db, account) {
   try {
     // Fetch real balance from Binance
     const balance = await getAccountBalance(testnetClient);
-    
+
     // Detect discrepancies
     const balanceDiff = Math.abs(balance.availableBalance - account.current_balance);
     const equityDiff = Math.abs(balance.totalWalletBalance - account.equity);
-    
-    if (balanceDiff > 0.01 || equityDiff > 0.01) {
+
+    // Skip auto-correction if Binance balance is 0 (unfunded testnet account)
+    // Keep DB balance for paper trading
+    if (balance.availableBalance < 1) {
+      console.log(`[TestnetEngine] Binance balance is ${balance.availableBalance} (unfunded), keeping DB balance ${account.current_balance} for paper trading`);
+      // Still update equity with unrealized PnL from positions (if any)
+      await updateTestnetAccountEquity(db, account.id, balance.totalUnrealizedProfit);
+    } else if (balanceDiff > 0.01 || equityDiff > 0.01) {
       console.warn(`[TestnetEngine] Balance discrepancy detected for account ${account.id}:`);
       console.warn(`  DB balance: ${account.current_balance}, Binance balance: ${balance.availableBalance} (diff: ${balanceDiff.toFixed(2)})`);
       console.warn(`  DB equity: ${account.equity}, Binance equity: ${balance.totalWalletBalance} (diff: ${equityDiff.toFixed(2)})`);
-      
+
       // Auto-correct: update database with Binance values
       await updateTestnetAccountBalance(db, account.id, balance.availableBalance, 0);
       await updateTestnetAccountEquity(db, account.id, balance.totalUnrealizedProfit);
-      
+
       // Record sync event
       await recordTestnetTradeEvent(db, `account_${account.id}`, 'balance_sync', {
         old_balance: account.current_balance,
@@ -483,7 +489,7 @@ export async function syncTestnetAccount(db, account) {
         new_equity: balance.totalWalletBalance,
         reason: 'discrepancy_detected',
       });
-      
+
       console.log(`[TestnetEngine] Auto-corrected account ${account.id} with Binance values`);
     } else {
       // No discrepancy, just update equity with latest unrealized PnL
