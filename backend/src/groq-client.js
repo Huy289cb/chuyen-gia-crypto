@@ -113,12 +113,8 @@ class GroqClient {
   }
 
   switchToNextApiKey() {
-    if (this.currentKeyIndex < this.apiKeys.length - 1) {
-      this.currentKeyIndex++;
-      console.log(`[GroqClient] Switching to API key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
-      return true;
-    }
-    return false;
+    this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
+    console.log(`[GroqClient] Switching to API key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
   }
 
   /**
@@ -142,97 +138,95 @@ class GroqClient {
     lastCallTime = Date.now();
 
     let lastError;
+    const totalApiKeys = this.apiKeys.length;
+    let keyLoopCount = 0;
+    const maxKeyLoops = 2; // Prevent infinite loops, allow 2 full cycles
 
-    // Try each model in sequence, starting with the first one
-    for (let modelIndex = 0; modelIndex < MODELS.length; modelIndex++) {
-      const currentModel = MODELS[modelIndex];
-      console.log(`[GroqClient] Trying model: ${currentModel}`);
+    // Outer loop: Try each API key (circular)
+    while (keyLoopCount < maxKeyLoops) {
+      const currentKeyIndex = this.currentKeyIndex;
+      console.log(`[GroqClient] Using API key ${currentKeyIndex + 1}/${totalApiKeys}`);
 
-      const requestBody = {
-        model: currentModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature,
-        max_tokens: 1024
-        // Disable response_format json_object to allow manual JSON cleaning
-        // response_format: { type: 'json_object' }
-      };
+      // Inner loop: Try each model with current API key
+      for (let modelIndex = 0; modelIndex < MODELS.length; modelIndex++) {
+        const currentModel = MODELS[modelIndex];
+        console.log(`[GroqClient] Trying model: ${currentModel}`);
 
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          console.log(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1}/${maxRetries + 1}`);
+        const requestBody = {
+          model: currentModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature,
+          max_tokens: 1024
+        };
 
-          const response = await fetchWithTimeout(this.baseUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${this.getCurrentApiKey()}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-          }, 30000); // 30s timeout for Groq API
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1}/${maxRetries + 1}`);
 
-          if (!response.ok) {
-            const errorText = await response.text();
+            const response = await fetchWithTimeout(this.baseUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${this.getCurrentApiKey()}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(requestBody)
+            }, 30000);
 
-            // If 429 or 404 error, try next API key instead of retrying
-            if (response.status === 429 || response.status === 404) {
-              console.log(`[GroqClient] Model ${currentModel} hit rate limit (429) or not found (404), trying next API key...`);
-              if (this.switchToNextApiKey()) {
-                attempt = -1; // Reset attempt counter to retry with new key
-                continue;
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            const content = data.choices[0]?.message?.content;
+
+            if (!content) {
+              throw new Error('Empty response from Groq API');
+            }
+
+            const parsed = cleanJSONResponse(content);
+            if (parsed === null) {
+              console.error('[GroqClient] Failed to clean JSON from response');
+              console.log('[GroqClient] Raw content:', content.substring(0, 200));
+              throw new Error('Invalid JSON in response after cleaning');
+            }
+
+            console.log(`[GroqClient] Successfully parsed response from model ${currentModel}`);
+            return parsed;
+
+          } catch (error) {
+            lastError = error;
+            console.error(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1} failed:`, error.message);
+
+            if (attempt < maxRetries) {
+              let delay;
+              if (error.message.includes('429') || error.message.includes('rate limit')) {
+                delay = 60000;
+                console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms (1 minute) before retry...`);
+              } else {
+                delay = Math.pow(2, attempt) * 1000;
+                console.log(`[GroqClient] Retrying in ${delay}ms...`);
               }
-              console.log(`[GroqClient] No more API keys available, switching to next model...`);
-              break; // Break out of retry loop to try next model
+              await new Promise(resolve => setTimeout(resolve, delay));
             }
-
-            throw new Error(`Groq API error: ${response.status} - ${errorText}`);
-          }
-
-          const data = await response.json();
-          const content = data.choices[0]?.message?.content;
-
-          if (!content) {
-            throw new Error('Empty response from Groq API');
-          }
-
-          // Parse JSON response using cleanJSONResponse to handle extra text
-          const parsed = cleanJSONResponse(content);
-          if (parsed === null) {
-            console.error('[GroqClient] Failed to clean JSON from response');
-            console.log('[GroqClient] Raw content:', content.substring(0, 200));
-            throw new Error('Invalid JSON in response after cleaning');
-          }
-
-          console.log(`[GroqClient] Successfully parsed response from model ${currentModel}`);
-          return parsed;
-
-        } catch (error) {
-          lastError = error;
-          console.error(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1} failed:`, error.message);
-
-          if (attempt < maxRetries) {
-            let delay;
-
-            // Check for specific 429 rate limit error
-            if (error.message.includes('429') || error.message.includes('rate limit')) {
-              // For 429 errors, use much longer delays (1 minute minimum)
-              delay = 60000; // Fixed 1 minute wait for rate limits
-              console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms (1 minute) before retry...`);
-            } else {
-              // For other errors, use normal exponential backoff
-              delay = Math.pow(2, attempt) * 1000;
-              console.log(`[GroqClient] Retrying in ${delay}ms...`);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
       }
+
+      // All models failed with current key, switch to next key
+      console.log(`[GroqClient] All models failed with API key ${currentKeyIndex + 1}, switching to next key...`);
+      this.switchToNextApiKey();
+      
+      // Track if we've completed a full cycle through all keys
+      if (this.currentKeyIndex === 0) {
+        keyLoopCount++;
+      }
     }
 
-    throw new Error(`All models failed: ${lastError.message}`);
+    throw new Error(`All models failed with all API keys: ${lastError.message}`);
   }
 
   /**
