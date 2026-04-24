@@ -313,6 +313,43 @@ router.get('/sync/:accountId', async (req, res) => {
 });
 
 /**
+ * GET /api/testnet/balance - Get real-time balance from Binance Testnet
+ */
+router.get('/balance', async (req, res) => {
+  try {
+    const { getTestnetClient } = await import('../services/testnetEngine.js');
+    const { getAccountBalance } = await import('../services/binanceClient.js');
+
+    const client = getTestnetClient();
+
+    if (!client) {
+      return res.status(503).json({
+        success: false,
+        error: 'Testnet client not initialized'
+      });
+    }
+
+    const balance = await getAccountBalance(client);
+
+    res.json({
+      success: true,
+      data: {
+        wallet_balance: balance.walletBalance,
+        available_balance: balance.availableBalance,
+        total_wallet_balance: balance.totalWalletBalance,
+        total_unrealized_profit: balance.totalUnrealizedProfit,
+        fetched_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /api/testnet/positions/:id/close - Close a testnet position manually
  */
 router.post('/positions/:id/close', async (req, res) => {
