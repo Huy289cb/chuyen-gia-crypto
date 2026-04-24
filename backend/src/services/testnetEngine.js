@@ -29,6 +29,7 @@ import {
   recordTestnetTradeEvent,
   updateTestnetAccountBalance,
   updateTestnetAccountEquity,
+  updateTestnetAccountEquityDirect,
   updateTestnetAccountStats,
   createTestnetAccountSnapshot,
 } from '../db/testnetDatabase.js';
