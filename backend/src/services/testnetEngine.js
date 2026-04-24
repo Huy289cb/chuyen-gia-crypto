@@ -19,7 +19,7 @@ import {
   setLeverage,
   setMarginType,
 } from './binanceClient.js';
-import { binanceConfig, getLeverage, getSymbol } from '../config/binance.js';
+import { binanceConfig, getLeverage, getSymbol, validateConfig } from '../config/binance.js';
 import {
   createTestnetPosition,
   getTestnetPosition,

@@ -116,9 +116,9 @@ export async function updateTestnetAccountBalance(db, accountId, newBalance, pnl
 export async function updateTestnetAccountEquity(db, accountId, unrealizedPnl) {
   return new Promise((resolve, reject) => {
     const now = new Date().toISOString();
-    
+
     db.run(
-      `UPDATE testnet_accounts 
+      `UPDATE testnet_accounts
        SET unrealized_pnl = ?,
            equity = current_balance + ?,
            updated_at = ?
@@ -130,7 +130,38 @@ export async function updateTestnetAccountEquity(db, accountId, unrealizedPnl) {
           reject(err);
           return;
         }
-        resolve(this.changes);
+
+        console.log(`[TestnetDB] Updated testnet account equity: account_id=${accountId}, unrealized_pnl=${unrealizedPnl}`);
+        resolve();
+      }
+    );
+  });
+}
+
+/**
+ * Update testnet account equity directly with total wallet balance from Binance
+ * This is more accurate than calculating locally
+ */
+export async function updateTestnetAccountEquityDirect(db, accountId, totalWalletBalance) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+
+    db.run(
+      `UPDATE testnet_accounts
+       SET equity = ?,
+           unrealized_pnl = ? - current_balance,
+           updated_at = ?
+       WHERE id = ?`,
+      [totalWalletBalance, totalWalletBalance, now, accountId],
+      function(err) {
+        if (err) {
+          console.error('[TestnetDB] Error updating testnet account equity directly:', err.message);
+          reject(err);
+          return;
+        }
+
+        console.log(`[TestnetDB] Updated testnet account equity directly: account_id=${accountId}, equity=${totalWalletBalance}`);
+        resolve();
       }
     );
   });
