@@ -217,12 +217,15 @@ class GroqClient {
       }
 
       // All models failed with current key, switch to next key
-      console.log(`[GroqClient] All models failed with API key ${currentKeyIndex + 1}, switching to next key...`);
+      console.log(`[GroqClient] All ${MODELS.length} models failed with API key ${currentKeyIndex + 1}/${totalApiKeys}, switching to next key...`);
+      const nextKeyIndex = (currentKeyIndex + 1) % totalApiKeys;
+      console.log(`[GroqClient] Switching from key ${currentKeyIndex + 1} to key ${nextKeyIndex + 1}`);
       this.switchToNextApiKey();
-      
+
       // Track if we've completed a full cycle through all keys
       if (this.currentKeyIndex === 0) {
         keyLoopCount++;
+        console.log(`[GroqClient] Completed full cycle through all API keys (${keyLoopCount}/${maxKeyLoops})`);
       }
     }
 
