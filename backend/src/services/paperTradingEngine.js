@@ -448,8 +448,8 @@ export function checkStopLevels(position, currentPrice, candle) {
 export async function updatePositionPnL(db, position, currentPrice) {
   const { pnl, pnl_percent } = calculateUnrealizedPnL(position, currentPrice);
   const { updatePosition } = await import('../db/database.js');
-  
-  await updatePosition(db, position.id, {
+
+  await updatePosition(db, position.position_id, {
     unrealized_pnl: pnl,
     current_price: currentPrice
   });
@@ -511,7 +511,7 @@ export async function closePartialPosition(db, position, currentPrice, closeSize
     });
   }
   
-  await logTradeEvent(db, position.id, 'partial_close', tradeEventData);
+  await logTradeEvent(db, position.position_id, 'partial_close', tradeEventData);
   
   console.log(`[PaperTrading] Partial closed ${position.side} position for ${position.symbol}:`, {
     position_id: position.position_id,
@@ -545,7 +545,7 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   });
   
   // Close position
-  await closePos(db, position.id, currentPrice, closeReason);
+  await closePos(db, position.position_id, currentPrice, closeReason);
   
   // CRITICAL FIX: Update position with realized PnL and R-Multiple
   const { updatePosition } = await import('../db/database.js');
@@ -553,7 +553,7 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   // Calculate R-Multiple: realized_pnl / risk_usd
   const r_multiple = position.risk_usd > 0 ? realizedPnl / position.risk_usd : 0;
   
-  await updatePosition(db, position.id, {
+  await updatePosition(db, position.position_id, {
     realized_pnl: realizedPnl,
     close_price: currentPrice,
     r_multiple: r_multiple
@@ -575,7 +575,7 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   }
   
   // Get updated position
-  const closedPosition = await getPosition(db, position.id);
+  const closedPosition = await getPosition(db, position.position_id);
   
   // Update account - use position's account_id to get correct account
   const account = await (await import('../db/database.js')).getAccountById(db, position.account_id);
@@ -765,7 +765,7 @@ export async function updateOpenPositions(db, symbol, currentPrice, candle) {
                 newStopLoss = position.entry_price;
               }
 
-              await updatePosition(db, position.id, {
+              await updatePosition(db, position.position_id, {
                 size_qty: newSize,
                 size_usd: newSize * currentPrice,
                 partial_closed: newPartialClosed,
@@ -863,7 +863,7 @@ export async function updateStopLoss(db, position, newSl, reason) {
   const newRiskUsd = Math.abs(position.entry_price - newSl) * position.size_qty;
   const newRiskPercent = (newRiskUsd / position.size_usd) * 100;
   
-  await updatePosition(db, position.id, {
+  await updatePosition(db, position.position_id, {
     stop_loss: newSl,
     risk_usd: newRiskUsd,
     risk_percent: newRiskPercent
