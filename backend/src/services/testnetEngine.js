@@ -135,9 +135,11 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     return null;
   }
 
+  // Generate positionId before try block for error handling
+  const positionId = `testnet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
   try {
     // Record event: position opening started
-    const positionId = `testnet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Place market order
     const order = await placeMarketOrder(testnetClient, symbol, side, size_qty);
