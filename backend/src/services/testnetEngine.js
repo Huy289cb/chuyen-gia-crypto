@@ -491,7 +491,7 @@ export async function syncTestnetAccount(db, account) {
 
       // Auto-correct: update database with Binance values
       await updateTestnetAccountBalance(db, account.id, balance.availableBalance, 0);
-      await updateTestnetAccountEquity(db, account.id, balance.totalUnrealizedProfit);
+      await updateTestnetAccountEquityDirect(db, account.id, balance.totalWalletBalance);
 
       // Record sync event
       await recordTestnetTradeEvent(db, `account_${account.id}`, 'balance_sync', {
