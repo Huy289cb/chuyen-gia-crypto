@@ -73,17 +73,16 @@ export async function getAccountBalance(client) {
   }
 
   try {
-    const response = await client.getAccount();
-    const balances = response.assets || [];
+    const balances = await client.getBalance();
     
     // Find USDT balance
     const usdtBalance = balances.find(asset => asset.asset === 'USDT');
     
     return {
-      walletBalance: parseFloat(usdtBalance?.walletBalance || 0),
+      walletBalance: parseFloat(usdtBalance?.balance || 0),
       availableBalance: parseFloat(usdtBalance?.availableBalance || 0),
-      totalWalletBalance: parseFloat(response.totalWalletBalance || 0),
-      totalUnrealizedProfit: parseFloat(response.totalUnrealizedProfit || 0),
+      totalWalletBalance: parseFloat(usdtBalance?.balance || 0),
+      totalUnrealizedProfit: parseFloat(usdtBalance?.crossUnPnl || 0),
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to get account balance:', error.message);
