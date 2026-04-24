@@ -153,6 +153,9 @@ async function updateSymbolPositions(symbol, currentPrice, candle) {
     // Check and execute pending orders first with candle data
     await checkAndExecutePendingOrders(symbol, currentPrice, candle);
 
+    // Check and execute testnet pending orders
+    await checkTestnetPendingOrders(symbol, currentPrice, candle);
+
     // Update all open positions with candle data for SL/TP detection
     const result = await updateOpenPositions(db, symbol, currentPrice, candle);
     
@@ -276,6 +279,84 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
     previousPrices[symbol] = currentPrice;
   } catch (error) {
     console.error(`[PriceScheduler] Error checking pending orders for ${symbol}:`, error.message);
+  }
+}
+
+/**
+ * Check and execute testnet pending orders
+ */
+async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
+  try {
+    if (process.env.BINANCE_ENABLED !== 'true') return;
+
+    const { getTestnetPendingOrders, getTestnetAccount, executeTestnetPendingOrder } = await import('../db/testnetDatabase.js');
+    const { openTestnetPosition } = await import('../services/testnetEngine.js');
+
+    // Get all testnet pending orders for this symbol
+    const pendingOrders = await getTestnetPendingOrders(db, { symbol, status: 'pending' });
+
+    if (pendingOrders.length === 0) return;
+
+    console.log(`[PriceScheduler] Checking ${pendingOrders.length} testnet pending orders for ${symbol} at $${currentPrice.toLocaleString()} (candle H:${candle?.high} L:${candle?.low})`);
+
+    for (const order of pendingOrders) {
+      const isLong = order.side === 'long';
+      const entryPrice = order.entry_price;
+
+      // Check if price crossed the entry level using candle high/low
+      let shouldExecute = false;
+
+      if (isLong) {
+        // Long: Execute if candle low is at or below entry
+        if (candle && candle.low <= entryPrice) {
+          shouldExecute = true;
+        } else if (currentPrice <= entryPrice) {
+          // Fallback: check current price
+          shouldExecute = true;
+        }
+      } else {
+        // Short: Execute if candle high is at or above entry
+        if (candle && candle.high >= entryPrice) {
+          shouldExecute = true;
+        } else if (currentPrice >= entryPrice) {
+          // Fallback: check current price
+          shouldExecute = true;
+        }
+      }
+
+      if (shouldExecute) {
+        try {
+          const account = await getTestnetAccount(db, order.symbol, order.method_id);
+          if (!account) {
+            console.error(`[PriceScheduler] Testnet account not found for order ${order.order_id} (symbol: ${order.symbol}, method_id: ${order.method_id})`);
+            continue;
+          }
+
+          // Execute the order (convert to actual position on Binance testnet)
+          const positionData = {
+            side: order.side,
+            entry_price: entryPrice,
+            stop_loss: order.stop_loss,
+            take_profit: order.take_profit,
+            size_usd: order.size_usd,
+            size_qty: order.size_qty,
+            risk_usd: order.risk_usd,
+            risk_percent: order.risk_percent,
+            expected_rr: order.expected_rr,
+            invalidation_level: order.invalidation_level
+          };
+
+          await openTestnetPosition(db, account, positionData, order.linked_prediction_id, order.method_id);
+          await executeTestnetPendingOrder(db, order.order_id);
+
+          console.log(`[PriceScheduler] Testnet limit order executed: ${order.side} @ $${entryPrice.toLocaleString()}`);
+        } catch (execError) {
+          console.error(`[PriceScheduler] Failed to execute testnet pending order ${order.order_id}:`, execError.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[PriceScheduler] Error checking testnet pending orders for ${symbol}:`, error.message);
   }
 }
 

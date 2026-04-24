@@ -687,9 +687,48 @@ function addTestnetTables(db, resolve, reject) {
             return;
           }
           console.log('[Migration] testnet_account_snapshots table created/verified');
-          
-          // Create indexes for testnet tables
-          createTestnetIndexes(db, resolve, reject);
+
+          // Create testnet_pending_orders table
+          db.run(`
+            CREATE TABLE IF NOT EXISTS testnet_pending_orders (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              order_id TEXT UNIQUE NOT NULL,
+              account_id INTEGER NOT NULL,
+              symbol TEXT NOT NULL,
+              side TEXT NOT NULL,
+              entry_price REAL NOT NULL,
+              stop_loss REAL NOT NULL,
+              take_profit REAL NOT NULL,
+              size_usd REAL NOT NULL,
+              size_qty REAL NOT NULL,
+              risk_usd REAL NOT NULL,
+              risk_percent REAL NOT NULL,
+              expected_rr REAL NOT NULL,
+              linked_prediction_id INTEGER,
+              invalidation_level REAL,
+              method_id TEXT,
+              status TEXT NOT NULL DEFAULT 'pending',
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              executed_at DATETIME,
+              executed_price REAL,
+              executed_size_qty REAL,
+              executed_size_usd REAL,
+              realized_pnl REAL,
+              realized_pnl_percent REAL,
+              close_reason TEXT,
+              FOREIGN KEY (account_id) REFERENCES testnet_accounts(id)
+            )
+          `, (err) => {
+            if (err) {
+              console.error('[Migration] Error creating testnet_pending_orders table:', err.message);
+              reject(err);
+              return;
+            }
+            console.log('[Migration] testnet_pending_orders table created/verified');
+
+            // Create indexes for testnet tables
+            createTestnetIndexes(db, resolve, reject);
+          });
         });
       });
     });

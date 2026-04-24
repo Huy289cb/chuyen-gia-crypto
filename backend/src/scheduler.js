@@ -362,12 +362,48 @@ async function runMethodAnalysis(methodId) {
 
             console.log(`[Scheduler][${method.name}] Testnet decision: shouldEnter=${testnetDecision.shouldEnter}, orderType=${testnetDecision.orderType}, reason=${testnetDecision.reason}`);
 
-            if (testnetDecision.shouldEnter && testnetDecision.suggestedPosition && testnetDecision.orderType === 'market') {
+            if (testnetDecision.shouldEnter && testnetDecision.suggestedPosition) {
               const position = testnetDecision.suggestedPosition;
-              await openTestnetPosition(db, testnetAccount, position, btcPredictionId, methodId);
-              console.log(`[Scheduler][${method.name}] Testnet order executed: ${position.side} @ ${position.entry_price}`);
-            } else if (testnetDecision.shouldEnter && testnetDecision.orderType !== 'market') {
-              console.log(`[Scheduler][${method.name}] Testnet skipped: orderType is ${testnetDecision.orderType} (not market)`);
+
+              if (testnetDecision.orderType === 'market') {
+                // Execute immediately as market order
+                await openTestnetPosition(db, testnetAccount, position, btcPredictionId, methodId);
+                console.log(`[Scheduler][${method.name}] Testnet market order executed: ${position.side} @ ${position.entry_price}`);
+              } else {
+                // Create pending limit order for testnet
+                const { createTestnetPendingOrder } = await import('./db/testnetDatabase.js');
+                const { randomUUID } = await import('crypto');
+
+                // Cap pending order size at maxPendingOrderSize
+                let orderSizeUsd = position.size_usd;
+                let orderSizeQty = position.size_qty;
+                const maxPendingOrderSize = method.autoEntry.maxPendingOrderSize || 2000;
+
+                if (orderSizeUsd > maxPendingOrderSize) {
+                  console.log(`[Scheduler][${method.name}] Testnet pending order size $${orderSizeUsd.toFixed(2)} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
+                  orderSizeUsd = maxPendingOrderSize;
+                  orderSizeQty = orderSizeUsd / position.entry_price;
+                }
+
+                await createTestnetPendingOrder(db, {
+                  order_id: randomUUID(),
+                  account_id: testnetAccount.id,
+                  symbol: 'BTC',
+                  side: position.side,
+                  entry_price: position.entry_price,
+                  stop_loss: position.stop_loss,
+                  take_profit: position.take_profit,
+                  size_usd: orderSizeUsd,
+                  size_qty: orderSizeQty,
+                  risk_usd: position.risk_usd,
+                  risk_percent: position.risk_percent,
+                  expected_rr: position.expected_rr,
+                  linked_prediction_id: btcPredictionId,
+                  invalidation_level: position.invalidation_level,
+                  method_id: methodId
+                });
+                console.log(`[Scheduler][${method.name}] Testnet limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd.toFixed(2)}`);
+              }
             }
           } catch (testnetError) {
             console.error(`[Scheduler][${method.name}] Testnet execution failed:`, testnetError.message);

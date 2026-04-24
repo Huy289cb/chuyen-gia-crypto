@@ -606,3 +606,162 @@ export async function resetTestnetAccount(db, accountId) {
     );
   });
 }
+
+/**
+ * Get testnet pending orders by filters
+ */
+export async function getTestnetPendingOrders(db, filters = {}) {
+  return new Promise((resolve, reject) => {
+    const conditions = [];
+    const values = [];
+
+    if (filters.order_id) {
+      conditions.push('order_id = ?');
+      values.push(filters.order_id);
+    }
+    if (filters.symbol) {
+      conditions.push('symbol = ?');
+      values.push(filters.symbol.toUpperCase());
+    }
+    if (filters.status) {
+      conditions.push('status = ?');
+      values.push(filters.status);
+    }
+    if (filters.account_id) {
+      conditions.push('account_id = ?');
+      values.push(filters.account_id);
+    }
+    if (filters.method_id) {
+      conditions.push('method_id = ?');
+      values.push(filters.method_id);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    db.all(
+      `SELECT * FROM testnet_pending_orders ${whereClause} ORDER BY created_at DESC`,
+      values,
+      (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      }
+    );
+  });
+}
+
+/**
+ * Execute a testnet pending order (convert to actual position)
+ */
+export async function executeTestnetPendingOrder(db, orderId, positionId) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE testnet_pending_orders
+       SET status = 'executed', executed_at = datetime('now')
+       WHERE order_id = ?`,
+      [orderId],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+/**
+ * Cancel a testnet pending order
+ */
+export async function cancelTestnetPendingOrder(db, orderId, reason = 'cancelled') {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE testnet_pending_orders
+       SET status = ?
+       WHERE order_id = ?`,
+      [`cancelled_${reason}`, orderId],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+/**
+ * Create a testnet pending order (limit order)
+ */
+export async function createTestnetPendingOrder(db, orderData) {
+  const {
+    order_id,
+    account_id,
+    symbol,
+    side,
+    entry_price,
+    stop_loss,
+    take_profit,
+    size_usd,
+    size_qty,
+    risk_usd,
+    risk_percent,
+    expected_rr,
+    linked_prediction_id = null,
+    invalidation_level = null,
+    method_id = 'ict'
+  } = orderData;
+
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO testnet_pending_orders
+       (order_id, account_id, symbol, side, entry_price, stop_loss, take_profit,
+        size_usd, size_qty, risk_usd, risk_percent, expected_rr,
+        linked_prediction_id, invalidation_level, status, created_at, executed_at,
+        executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        order_id,
+        account_id,
+        symbol.toUpperCase(),
+        side,
+        entry_price,
+        stop_loss,
+        take_profit,
+        size_usd,
+        size_qty,
+        risk_usd,
+        risk_percent,
+        expected_rr,
+        linked_prediction_id,
+        invalidation_level,
+        'pending', // status
+        new Date().toISOString(), // created_at
+        null, // executed_at
+        null, // executed_price
+        null, // executed_size_qty
+        null, // executed_size_usd
+        null, // realized_pnl
+        null, // realized_pnl_percent
+        null, // close_reason
+        method_id
+      ],
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        db.get(
+          `SELECT * FROM testnet_pending_orders WHERE id = ?`,
+          [this.lastID],
+          (err2, row) => {
+            if (err2) reject(err2);
+            else resolve(row);
+          }
+        );
+      }
+    );
+  });
+}
