@@ -277,16 +277,18 @@ async function runMethodAnalysis(methodId) {
             }
           }
         }
-        
+
         // Cache with method_id
         cache.setMethod(methodId, {
           prices: priceData,
           analysis: analysis,
           lastUpdated: priceData.timestamp
         });
-        
-        // Get open positions for this method's account
+
+        // CRITICAL: Refresh open positions AFTER processing position decisions
+        // This ensures auto-entry sees the correct state after closes/reverses
         const openPositions = await getPositions(db, { account_id: account.id, status: 'open' });
+        console.log(`[Scheduler][${method.name}] Open positions after decisions: ${openPositions.length}`);
         
         // Auto-entry evaluation (method-specific)
         const decision = await evaluateAutoEntry(analysis.btc, account, openPositions, method, db);
