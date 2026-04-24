@@ -1440,12 +1440,15 @@ export async function updatePrediction(db, predictionId, updates) {
 export async function closePosition(db, positionId, closePrice, closeReason) {
   return new Promise((resolve, reject) => {
     db.run(
-      `UPDATE positions 
-       SET status = CASE 
+      `UPDATE positions
+       SET status = CASE
          WHEN close_reason = 'stop_loss' THEN 'stopped'
          WHEN close_reason = 'take_profit' THEN 'taken_profit'
          WHEN close_reason = 'manual' THEN 'closed_manual'
          WHEN close_reason = 'prediction_reversal' THEN 'closed_reversal'
+         WHEN close_reason = 'close_early' THEN 'closed_early'
+         WHEN close_reason = 'close_partial' THEN 'closed_partial'
+         WHEN close_reason = 'reverse' THEN 'closed_reverse'
          ELSE 'closed'
        END,
        close_price = ?,

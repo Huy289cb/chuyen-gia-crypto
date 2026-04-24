@@ -189,26 +189,26 @@ async function runMethodAnalysis(methodId) {
               
               // Handle close_early (full close)
               if (decision.action === 'close_early') {
-                await closePosition(db, position, currentPrice, `ai_recommendation: ${decision.reason}`);
+                await closePosition(db, position, currentPrice, 'close_early');
                 console.log(`[Scheduler][${method.name}] Closed position ${decision.position_id} early: ${decision.reason}`);
               }
-              
+
               // Handle close_partial
               else if (decision.action === 'close_partial') {
                 const closePercent = decision.close_percent || 0.5;
-                await closePartialPosition(db, position, closePercent, currentPrice, `ai_recommendation: ${decision.reason}`);
+                await closePartialPosition(db, position, closePercent, currentPrice, 'close_partial');
                 console.log(`[Scheduler][${method.name}] Closed ${(closePercent * 100).toFixed(0)}% of position ${decision.position_id}: ${decision.reason}`);
               }
-              
+
               // Handle move_sl
               else if (decision.action === 'move_sl') {
                 const newSl = decision.new_sl;
                 if (newSl) {
-                  await updateStopLoss(db, position, newSl, `ai_recommendation: ${decision.reason}`);
+                  await updateStopLoss(db, position, newSl, 'move_sl');
                   console.log(`[Scheduler][${method.name}] Moved SL for position ${decision.position_id} to ${newSl}: ${decision.reason}`);
                 }
               }
-              
+
               // Handle reverse
               else if (decision.action === 'reverse') {
                 const suggestion = {
@@ -222,7 +222,7 @@ async function runMethodAnalysis(methodId) {
                   risk_percent: position.risk_percent,
                   expected_rr: position.expected_rr
                 };
-                await reversePosition(db, position, currentPrice, suggestion, `ai_recommendation: ${decision.reason}`);
+                await reversePosition(db, position, currentPrice, suggestion, 'reverse');
                 console.log(`[Scheduler][${method.name}] Reversed position ${decision.position_id}: ${decision.reason}`);
               }
             } catch (error) {
