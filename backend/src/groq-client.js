@@ -117,6 +117,11 @@ class GroqClient {
     console.log(`[GroqClient] Switching to API key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
   }
 
+  resetToFirstApiKey() {
+    this.currentKeyIndex = 0;
+    console.log(`[GroqClient] Resetting to first API key`);
+  }
+
   /**
    * Send chat completion request to Groq API
    * @param {Object} params - Request parameters
@@ -139,13 +144,14 @@ class GroqClient {
 
     let lastError;
     const totalApiKeys = this.apiKeys.length;
-    let keyLoopCount = 0;
-    const maxKeyLoops = 2; // Prevent infinite loops, allow 2 full cycles
+    const startingKeyIndex = this.currentKeyIndex;
+    let keysTried = new Set();
 
-    // Outer loop: Try each API key (circular)
-    while (keyLoopCount < maxKeyLoops) {
+    // Try current key first, then try other keys if current fails
+    while (keysTried.size < totalApiKeys) {
       const currentKeyIndex = this.currentKeyIndex;
-      console.log(`[GroqClient] Using API key ${currentKeyIndex + 1}/${totalApiKeys}`);
+      keysTried.add(currentKeyIndex);
+      console.log(`[GroqClient] Using API key ${currentKeyIndex + 1}/${totalApiKeys} (tried ${keysTried.size}/${totalApiKeys} keys)`);
 
       // Inner loop: Try each model with current API key
       for (let modelIndex = 0; modelIndex < MODELS.length; modelIndex++) {
@@ -194,7 +200,8 @@ class GroqClient {
               throw new Error('Invalid JSON in response after cleaning');
             }
 
-            console.log(`[GroqClient] Successfully parsed response from model ${currentModel}`);
+            console.log(`[GroqClient] Successfully parsed response from model ${currentModel} with API key ${currentKeyIndex + 1}`);
+            // Keep current key index for next call (don't reset)
             return parsed;
 
           } catch (error) {
@@ -218,17 +225,12 @@ class GroqClient {
 
       // All models failed with current key, switch to next key
       console.log(`[GroqClient] All ${MODELS.length} models failed with API key ${currentKeyIndex + 1}/${totalApiKeys}, switching to next key...`);
-      const nextKeyIndex = (currentKeyIndex + 1) % totalApiKeys;
-      console.log(`[GroqClient] Switching from key ${currentKeyIndex + 1} to key ${nextKeyIndex + 1}`);
       this.switchToNextApiKey();
-
-      // Track if we've completed a full cycle through all keys
-      if (this.currentKeyIndex === 0) {
-        keyLoopCount++;
-        console.log(`[GroqClient] Completed full cycle through all API keys (${keyLoopCount}/${maxKeyLoops})`);
-      }
     }
 
+    // All keys failed, reset to first key for next attempt
+    console.log(`[GroqClient] All API keys failed, resetting to first key for next attempt`);
+    this.resetToFirstApiKey();
     throw new Error(`All models failed with all API keys: ${lastError.message}`);
   }
 
