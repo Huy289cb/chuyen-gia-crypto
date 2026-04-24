@@ -5,7 +5,7 @@
  * with error handling, retry logic, and rate limiting
  */
 
-import { UMFutures } from 'binance-connector-js';
+import { USDMClient } from 'binance';
 import { binanceConfig, getBaseUrl } from '../config/binance.js';
 
 // Retry configuration
@@ -32,11 +32,11 @@ export function initTestnetClient() {
   }
 
   try {
-    const client = new UMFutures(
-      binanceConfig.apiKey,
-      binanceConfig.secretKey,
-      { baseURL: getBaseUrl() }
-    );
+    const client = new USDMClient({
+      api_key: binanceConfig.apiKey,
+      api_secret: binanceConfig.secretKey,
+      httpBase: getBaseUrl(),
+    });
 
     console.log('[BinanceClient] Testnet client initialized successfully');
     return client;
@@ -55,9 +55,9 @@ export async function testConnection(client) {
   }
 
   try {
-    const response = await client.serverTime();
-    console.log('[BinanceClient] Connection test successful, server time:', response.data.serverTime);
-    return { success: true, serverTime: response.data.serverTime };
+    const response = await client.getServerTime();
+    console.log('[BinanceClient] Connection test successful, server time:', response.serverTime);
+    return { success: true, serverTime: response.serverTime };
   } catch (error) {
     console.error('[BinanceClient] Connection test failed:', error.message);
     return { success: false, error: error.message };
@@ -73,8 +73,8 @@ export async function getAccountBalance(client) {
   }
 
   try {
-    const response = await client.account();
-    const balances = response.data.assets || [];
+    const response = await client.getAccount();
+    const balances = response.assets || [];
     
     // Find USDT balance
     const usdtBalance = balances.find(asset => asset.asset === 'USDT');
@@ -82,8 +82,8 @@ export async function getAccountBalance(client) {
     return {
       walletBalance: parseFloat(usdtBalance?.walletBalance || 0),
       availableBalance: parseFloat(usdtBalance?.availableBalance || 0),
-      totalWalletBalance: parseFloat(response.data.totalWalletBalance || 0),
-      totalUnrealizedProfit: parseFloat(response.data.totalUnrealizedProfit || 0),
+      totalWalletBalance: parseFloat(response.totalWalletBalance || 0),
+      totalUnrealizedProfit: parseFloat(response.totalUnrealizedProfit || 0),
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to get account balance:', error.message);
@@ -101,7 +101,7 @@ export async function getCurrentPosition(client, symbol) {
 
   try {
     const response = await client.getPositionRisk({ symbol });
-    const positions = response.data || [];
+    const positions = response || [];
     
     // Find position with non-zero quantity
     const position = positions.find(pos => parseFloat(pos.positionAmt) !== 0);
@@ -134,21 +134,24 @@ export async function placeMarketOrder(client, symbol, side, quantity) {
   }
 
   try {
-    const response = await client.newOrder(symbol, side, 'MARKET', {
+    const response = await client.submitOrder({
+      symbol,
+      side,
+      type: 'MARKET',
       quantity: quantity.toString(),
     });
     
     console.log(`[BinanceClient] Market order placed: ${side} ${quantity} ${symbol}`);
     return {
-      orderId: response.data.orderId,
-      clientOrderId: response.data.clientOrderId,
-      symbol: response.data.symbol,
-      side: response.data.side,
-      type: response.data.type,
-      transactTime: response.data.transactTime,
-      executedQty: parseFloat(response.data.executedQty),
-      cummulativeQuoteQty: parseFloat(response.data.cummulativeQuoteQty),
-      status: response.data.status,
+      orderId: response.orderId,
+      clientOrderId: response.clientOrderId,
+      symbol: response.symbol,
+      side: response.side,
+      type: response.type,
+      transactTime: response.transactTime,
+      executedQty: parseFloat(response.executedQty),
+      cummulativeQuoteQty: parseFloat(response.cummulativeQuoteQty),
+      status: response.status,
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to place market order:', error.message);
@@ -165,7 +168,10 @@ export async function placeLimitOrder(client, symbol, side, quantity, price) {
   }
 
   try {
-    const response = await client.newOrder(symbol, side, 'LIMIT', {
+    const response = await client.submitOrder({
+      symbol,
+      side,
+      type: 'LIMIT',
       quantity: quantity.toString(),
       price: price.toString(),
       timeInForce: 'GTC',
@@ -173,14 +179,14 @@ export async function placeLimitOrder(client, symbol, side, quantity, price) {
     
     console.log(`[BinanceClient] Limit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
     return {
-      orderId: response.data.orderId,
-      clientOrderId: response.data.clientOrderId,
-      symbol: response.data.symbol,
-      side: response.data.side,
-      type: response.data.type,
-      price: parseFloat(response.data.price),
-      transactTime: response.data.transactTime,
-      status: response.data.status,
+      orderId: response.orderId,
+      clientOrderId: response.clientOrderId,
+      symbol: response.symbol,
+      side: response.side,
+      type: response.type,
+      price: parseFloat(response.price),
+      transactTime: response.transactTime,
+      status: response.status,
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to place limit order:', error.message);
@@ -197,22 +203,25 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
   }
 
   try {
-    const response = await client.newOrder(symbol, side, 'STOP_MARKET', {
+    const response = await client.submitOrder({
+      symbol,
+      side,
+      type: 'STOP_MARKET',
       quantity: quantity.toString(),
       stopPrice: stopPrice.toString(),
-      reduceOnly: 'true', // Close position on trigger
+      reduceOnly: true, // Close position on trigger
     });
     
     console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}`);
     return {
-      orderId: response.data.orderId,
-      clientOrderId: response.data.clientOrderId,
-      symbol: response.data.symbol,
-      side: response.data.side,
-      type: response.data.type,
-      stopPrice: parseFloat(response.data.stopPrice),
-      transactTime: response.data.transactTime,
-      status: response.data.status,
+      orderId: response.orderId,
+      clientOrderId: response.clientOrderId,
+      symbol: response.symbol,
+      side: response.side,
+      type: response.type,
+      stopPrice: parseFloat(response.stopPrice),
+      transactTime: response.transactTime,
+      status: response.status,
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to place stop loss order:', error.message);
@@ -229,22 +238,25 @@ export async function placeTakeProfitOrder(client, symbol, side, quantity, price
   }
 
   try {
-    const response = await client.newOrder(symbol, side, 'TAKE_PROFIT_MARKET', {
+    const response = await client.submitOrder({
+      symbol,
+      side,
+      type: 'TAKE_PROFIT_MARKET',
       quantity: quantity.toString(),
       stopPrice: price.toString(),
-      reduceOnly: 'true', // Close position on trigger
+      reduceOnly: true, // Close position on trigger
     });
     
     console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
     return {
-      orderId: response.data.orderId,
-      clientOrderId: response.data.clientOrderId,
-      symbol: response.data.symbol,
-      side: response.data.side,
-      type: response.data.type,
-      stopPrice: parseFloat(response.data.stopPrice),
-      transactTime: response.data.transactTime,
-      status: response.data.status,
+      orderId: response.orderId,
+      clientOrderId: response.clientOrderId,
+      symbol: response.symbol,
+      side: response.side,
+      type: response.type,
+      stopPrice: parseFloat(response.stopPrice),
+      transactTime: response.transactTime,
+      status: response.status,
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to place take profit order:', error.message);
@@ -261,12 +273,15 @@ export async function cancelOrder(client, symbol, orderId) {
   }
 
   try {
-    const response = await client.cancelOrder(symbol, { orderId });
+    const response = await client.cancelOrder({
+      symbol,
+      orderId: orderId.toString(),
+    });
     console.log(`[BinanceClient] Order cancelled: ${orderId} for ${symbol}`);
     return {
-      orderId: response.data.orderId,
-      symbol: response.data.symbol,
-      status: response.data.status,
+      orderId: response.orderId,
+      symbol: response.symbol,
+      status: response.status,
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to cancel order:', error.message);
@@ -283,9 +298,9 @@ export async function cancelAllOrders(client, symbol) {
   }
 
   try {
-    const response = await client.cancelAllOpenOrders(symbol);
+    const response = await client.cancelAllOrders({ symbol });
     console.log(`[BinanceClient] All orders cancelled for ${symbol}`);
-    return response.data;
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to cancel all orders:', error.message);
     throw error;
@@ -301,8 +316,8 @@ export async function getOpenOrders(client, symbol) {
   }
 
   try {
-    const response = await client.getOpenOrders(symbol);
-    const orders = response.data || [];
+    const response = await client.getOpenOrders({ symbol });
+    const orders = response || [];
     
     return orders.map(order => ({
       orderId: order.orderId,
@@ -333,7 +348,7 @@ export async function getPositionRisk(client, symbol) {
 
   try {
     const response = await client.getPositionRisk({ symbol });
-    const positions = response.data || [];
+    const positions = response || [];
     
     return positions.map(pos => ({
       symbol: pos.symbol,
@@ -366,12 +381,12 @@ export async function setLeverage(client, symbol, leverage) {
   }
 
   try {
-    const response = await client.changeLeverage({ symbol, leverage: leverage.toString() });
+    const response = await client.setLeverage({ symbol, leverage: leverage.toString() });
     console.log(`[BinanceClient] Leverage set to ${leverage}x for ${symbol}`);
     return {
-      symbol: response.data.symbol,
-      leverage: parseInt(response.data.leverage),
-      maxNotionalValue: response.data.maxNotionalValue,
+      symbol: response.symbol,
+      leverage: parseInt(response.leverage),
+      maxNotionalValue: response.maxNotionalValue,
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to set leverage:', error.message);
@@ -388,9 +403,9 @@ export async function setMarginType(client, symbol, marginType) {
   }
 
   try {
-    const response = await client.changeMarginType({ symbol, marginType });
+    const response = await client.setMarginType({ symbol, marginType });
     console.log(`[BinanceClient] Margin type set to ${marginType} for ${symbol}`);
-    return response.data;
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to set margin type:', error.message);
     throw error;
