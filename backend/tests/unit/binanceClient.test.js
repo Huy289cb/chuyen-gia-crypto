@@ -20,77 +20,64 @@ import {
   setMarginType,
 } from '../../src/services/binanceClient.js';
 
-// Mock @binance/connector
-vi.mock('@binance/connector', () => ({
-  Spot: vi.fn(),
-  Futures: vi.fn().mockImplementation(() => ({
-    serverTime: vi.fn().mockResolvedValue({ data: { serverTime: 1234567890 } }),
-    account: vi.fn().mockResolvedValue({
-      data: {
-        assets: [{ asset: 'USDT', walletBalance: '1000.00', availableBalance: '950.00' }],
-        totalWalletBalance: '1000.00',
-        totalUnrealizedProfit: '50.00',
+// Mock binance package
+vi.mock('binance', () => ({
+  USDMClient: vi.fn().mockImplementation(() => ({
+    getServerTime: vi.fn().mockResolvedValue({ serverTime: 1234567890 }),
+    getAccount: vi.fn().mockResolvedValue({
+      assets: [{ asset: 'USDT', walletBalance: '1000.00', availableBalance: '950.00' }],
+      totalWalletBalance: '1000.00',
+      totalUnrealizedProfit: '50.00',
+    }),
+    getPositionRisk: vi.fn().mockResolvedValue([
+      {
+        symbol: 'BTCUSDT',
+        positionAmt: '0.01',
+        entryPrice: '50000.00',
+        markPrice: '51000.00',
+        unRealizedProfit: '10.00',
+        leverage: '1',
+        positionSide: 'LONG',
       }
+    ]),
+    submitOrder: vi.fn().mockResolvedValue({
+      orderId: 12345,
+      clientOrderId: 'client123',
+      symbol: 'BTCUSDT',
+      side: 'BUY',
+      type: 'MARKET',
+      transactTime: 1234567890,
+      executedQty: '0.01',
+      cummulativeQuoteQty: '500.00',
+      status: 'FILLED',
     }),
-    getPositionRisk: vi.fn().mockResolvedValue({
-      data: [
-        {
-          symbol: 'BTCUSDT',
-          positionAmt: '0.01',
-          entryPrice: '50000.00',
-          markPrice: '51000.00',
-          unRealizedProfit: '10.00',
-          leverage: '1',
-          positionSide: 'LONG',
-        }
-      ]
+    cancelOrder: vi.fn().mockResolvedValue({
+      orderId: 12345,
+      symbol: 'BTCUSDT',
+      status: 'CANCELED',
     }),
-    newOrder: vi.fn().mockResolvedValue({
-      data: {
+    cancelAllOrders: vi.fn().mockResolvedValue([]),
+    getOpenOrders: vi.fn().mockResolvedValue([
+      {
         orderId: 12345,
         clientOrderId: 'client123',
         symbol: 'BTCUSDT',
         side: 'BUY',
-        type: 'MARKET',
-        transactTime: 1234567890,
-        executedQty: '0.01',
-        cummulativeQuoteQty: '500.00',
-        status: 'FILLED',
+        type: 'LIMIT',
+        origQty: '0.01',
+        price: '50000.00',
+        stopPrice: '0',
+        status: 'NEW',
+        timeInForce: 'GTC',
+        updateTime: 1234567890,
       }
+    ]),
+    setLeverage: vi.fn().mockResolvedValue({
+      symbol: 'BTCUSDT',
+      leverage: '1',
+      maxNotionalValue: '1000000',
     }),
-    cancelOrder: vi.fn().mockResolvedValue({
-      data: {
-        orderId: 12345,
-        symbol: 'BTCUSDT',
-        status: 'CANCELED',
-      }
-    }),
-    cancelAllOpenOrders: vi.fn().mockResolvedValue({ data: [] }),
-    getOpenOrders: vi.fn().mockResolvedValue({
-      data: [
-        {
-          orderId: 12345,
-          clientOrderId: 'client123',
-          symbol: 'BTCUSDT',
-          side: 'BUY',
-          type: 'LIMIT',
-          origQty: '0.01',
-          price: '50000.00',
-          stopPrice: '0',
-          status: 'NEW',
-          timeInForce: 'GTC',
-          updateTime: 1234567890,
-        }
-      ]
-    }),
-    changeLeverage: vi.fn().mockResolvedValue({
-      data: {
-        symbol: 'BTCUSDT',
-        leverage: '1',
-        maxNotionalValue: '1000000',
-      }
-    }),
-    changeMarginType: vi.fn().mockResolvedValue({ data: { symbol: 'BTCUSDT', marginType: 'ISOLATED' } }),
+    setMarginType: vi.fn().mockResolvedValue({ symbol: 'BTCUSDT', marginType: 'ISOLATED' }),
   }))
 }));
 
