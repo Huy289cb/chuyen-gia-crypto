@@ -6,7 +6,7 @@
 
 export const binanceConfig = {
   // Testnet API endpoints
-  testnetBaseUrl: 'https://testnet.binancefuture.com',
+  testnetBaseUrl: 'https://demo-fapi.binance.com',
   mainnetBaseUrl: 'https://fapi.binance.com',
   
   // API Configuration
