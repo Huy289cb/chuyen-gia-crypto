@@ -406,6 +406,11 @@ export async function setMarginType(client, symbol, marginType) {
     console.log(`[BinanceClient] Margin type set to ${marginType} for ${symbol}`);
     return response;
   } catch (error) {
+    // Ignore "No need to change margin type" error - it means margin type is already correct
+    if (error.message.includes('No need to change margin type')) {
+      console.log(`[BinanceClient] Margin type already set to ${marginType} for ${symbol}`);
+      return { symbol, marginType };
+    }
     console.error('[BinanceClient] Failed to set margin type:', error.message);
     throw error;
   }
