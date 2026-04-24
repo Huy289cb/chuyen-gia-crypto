@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_BASE = process.env.NODE_ENV === 'development'
   ? 'http://localhost:3000/api'
@@ -121,6 +121,8 @@ export function useTestnet() {
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const hasFetchedInitial = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchAccount = useCallback(async () => {
     try {
@@ -149,10 +151,9 @@ export function useTestnet() {
     }
   }, []);
 
-  const fetchPerformance = useCallback(async () => {
-    if (!account) return;
+  const fetchPerformance = useCallback(async (accountId: number) => {
     try {
-      const response = await fetch(`${API_BASE}/testnet/performance/${account.id}`);
+      const response = await fetch(`${API_BASE}/testnet/performance/${accountId}`);
       const data: ApiResponse<TestnetPerformance> = await response.json();
       if (data.success && data.data) {
         setPerformance(data.data);
@@ -160,12 +161,11 @@ export function useTestnet() {
     } catch (err) {
       console.error('Error fetching testnet performance:', err);
     }
-  }, [account]);
+  }, []);
 
-  const fetchEquityCurve = useCallback(async (limit = 100) => {
-    if (!account) return;
+  const fetchEquityCurve = useCallback(async (accountId: number, limit = 100) => {
     try {
-      const response = await fetch(`${API_BASE}/testnet/equity-curve/${account.id}?limit=${limit}`);
+      const response = await fetch(`${API_BASE}/testnet/equity-curve/${accountId}?limit=${limit}`);
       const data: ApiResponse<TestnetSnapshot[]> = await response.json();
       if (data.success && data.data) {
         setEquityCurve(data.data);
@@ -173,12 +173,11 @@ export function useTestnet() {
     } catch (err) {
       console.error('Error fetching equity curve:', err);
     }
-  }, [account]);
+  }, []);
 
-  const fetchTradeHistory = useCallback(async (limit = 20) => {
-    if (!account) return;
+  const fetchTradeHistory = useCallback(async (accountId: number, limit = 20) => {
     try {
-      const response = await fetch(`${API_BASE}/testnet/trades/${account.id}?limit=${limit}`);
+      const response = await fetch(`${API_BASE}/testnet/trades/${accountId}?limit=${limit}`);
       const data: ApiResponse<TestnetPosition[]> = await response.json();
       if (data.success && data.data) {
         setTradeHistory(data.data);
@@ -186,7 +185,7 @@ export function useTestnet() {
     } catch (err) {
       console.error('Error fetching trade history:', err);
     }
-  }, [account]);
+  }, []);
 
   const fetchPendingOrders = useCallback(async (status?: string) => {
     try {
@@ -210,22 +209,71 @@ export function useTestnet() {
       await fetchAccount();
       await fetchPositions('open');
       await fetchPendingOrders('pending');
-      await fetchPerformance();
-      await fetchEquityCurve();
-      await fetchTradeHistory();
+      if (account) {
+        await fetchPerformance(account.id);
+        await fetchEquityCurve(account.id);
+        await fetchTradeHistory(account.id);
+      }
     } catch (err) {
       setError('Failed to fetch testnet data');
     } finally {
       setLoading(false);
     }
-  }, [fetchAccount, fetchPositions, fetchPendingOrders, fetchPerformance, fetchEquityCurve, fetchTradeHistory]);
+  }, [fetchAccount, fetchPositions, fetchPendingOrders, fetchPerformance, fetchEquityCurve, fetchTradeHistory, account]);
 
+  // Single useEffect for all data fetching with ref to prevent infinite loop
   useEffect(() => {
-    fetchData();
-    // Refresh every 1 minute
-    const interval = setInterval(fetchData, 60000);
+    const fetchAllData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await fetchAccount();
+        await fetchPositions('open');
+        await fetchPendingOrders('pending');
+      } catch (err) {
+        setError('Failed to fetch testnet data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAllData();
+
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+
+    // Set up new interval
+    intervalRef.current = setInterval(fetchAllData, 60000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [fetchAccount, fetchPositions, fetchPendingOrders]);
+
+  // Fetch account-dependent data when account is available
+  useEffect(() => {
+    if (!account) return;
+
+    const fetchAccountDependentData = async () => {
+      try {
+        await fetchPerformance(account.id);
+        await fetchEquityCurve(account.id);
+        await fetchTradeHistory(account.id);
+      } catch (err) {
+        console.error('Error fetching account-dependent data:', err);
+      }
+    };
+
+    fetchAccountDependentData();
+
+    // Set up separate interval for account-dependent data
+    const interval = setInterval(fetchAccountDependentData, 60000);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [account, fetchPerformance, fetchEquityCurve, fetchTradeHistory]);
 
   const syncAccount = useCallback(async () => {
     if (!account) return { success: false, error: 'No account found' };

@@ -2,6 +2,41 @@
 
 All notable changes to the project will be documented in this file.
 
+## [25/04/2026] - v2.8.3 - Frontend Infinite API Loop Fix
+
+### Bug Fixes
+
+**Issue 1: Infinite API Call Loop on Binance Testnet & Comparison Tabs**
+- **Problem**: When switching to Binance Testnet or Comparison tabs, frontend made continuous API calls in an infinite loop
+- **Root Cause**: Circular dependency in `useTestnet` hook where `fetchData` depended on functions that depended on `account` state, causing infinite re-renders
+- **Fix**:
+  - Changed `fetchPerformance`, `fetchEquityCurve`, `fetchTradeHistory` to accept `accountId` as parameter instead of depending on `account` state
+  - Added `intervalRef` to properly manage intervals and prevent multiple intervals
+  - Split data fetching into two separate useEffects (initial data and account-dependent data)
+- **Impact**: Frontend no longer makes infinite API calls when switching tabs
+- **Files**: `frontend/app/hooks/useTestnet.ts`
+
+**Issue 2: Testnet Routes Not Registered in Backend**
+- **Problem**: Testnet routes existed in `backend/src/routes/testnet.js` but were not registered in `backend/src/index.js`, causing 404 errors
+- **Fix**:
+  - Imported and registered `testnetRouter` in `index.js`
+  - Added testnet account initialization on startup
+- **Impact**: Testnet API endpoints now accessible from frontend
+- **Files**: `backend/src/index.js`
+
+**Issue 3: ComparisonDashboard Chart Re-rendering Performance**
+- **Problem**: Chart was recreated on every snapshot update, causing performance issues
+- **Fix**: Added `useMemo` to memoize chart data, preventing unnecessary recalculations
+- **Impact**: Improved performance when displaying equity curve chart
+- **Files**: `frontend/app/components/crypto/ComparisonDashboard.tsx`
+
+### Version Update
+
+**Issue 4: Version Bump to 2.8.3**
+- Updated frontend version from 2.8.2 to 2.8.3
+- **Impact**: Frontend reflects new version with infinite loop fix
+- **Files**: `frontend/lib/version.ts`
+
 ## [24/04/2026] - v2.8.2 - Binance Testnet Order Sync Critical Fixes
 
 ### Bug Fixes

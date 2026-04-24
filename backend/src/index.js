@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { startScheduler } from './scheduler.js';
 import analysisRouter, { initDb } from './routes.js';
+import testnetRouter from './routes/testnet.js';
 import { corsMiddleware } from './config/cors.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -38,6 +39,15 @@ try {
       // await getOrCreateAccount(db, 'BTC', 'ict', 100);
       await getOrCreateAccount(db, 'BTC', 'kim_nghia', 100);
       console.log('[Index] Paper trading accounts initialized (BTC-KimNghia: 100U, ICT: disabled)');
+
+      // Initialize testnet account for BTC Kim Nghia
+      try {
+        const { getOrCreateTestnetAccount } = await import('./db/testnetDatabase.js');
+        await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+        console.log('[Index] Testnet account initialized (BTC-KimNghia)');
+      } catch (testnetError) {
+        console.log('[Index] Testnet account initialization failed:', testnetError.message);
+      }
       
       // Run schema validation on startup to prevent column mismatch errors
       try {
@@ -58,6 +68,7 @@ try {
 
 // Routes
 app.use('/api', analysisRouter);
+app.use('/api/testnet', testnetRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { usePaperTrading } from '@/app/hooks/usePaperTrading';
@@ -223,6 +223,25 @@ export function ComparisonDashboard() {
 function EquityCurveChart({ paperSnapshots, testnetSnapshots }: { paperSnapshots: any[]; testnetSnapshots: any[] }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
+  // Memoize chart data to prevent unnecessary recalculations
+  const paperData = useMemo(() => {
+    return paperSnapshots
+      .map((snap) => ({
+        time: Math.floor(new Date(snap.timestamp).getTime() / 1000) as Time,
+        value: snap.equity,
+      }))
+      .sort((a, b) => (a.time as number) - (b.time as number));
+  }, [paperSnapshots]);
+
+  const testnetData = useMemo(() => {
+    return testnetSnapshots
+      .map((snap) => ({
+        time: Math.floor(new Date(snap.timestamp).getTime() / 1000) as Time,
+        value: snap.equity,
+      }))
+      .sort((a, b) => (a.time as number) - (b.time as number));
+  }, [testnetSnapshots]);
+
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -253,22 +272,6 @@ function EquityCurveChart({ paperSnapshots, testnetSnapshots }: { paperSnapshots
       title: 'Testnet',
     });
 
-    // Convert paper snapshots to chart data
-    const paperData: LineData<Time>[] = paperSnapshots
-      .map((snap) => ({
-        time: Math.floor(new Date(snap.timestamp).getTime() / 1000) as Time,
-        value: snap.equity,
-      }))
-      .sort((a, b) => (a.time as number) - (b.time as number));
-
-    // Convert testnet snapshots to chart data
-    const testnetData: LineData<Time>[] = testnetSnapshots
-      .map((snap) => ({
-        time: Math.floor(new Date(snap.timestamp).getTime() / 1000) as Time,
-        value: snap.equity,
-      }))
-      .sort((a, b) => (a.time as number) - (b.time as number));
-
     if (paperData.length > 0) {
       paperSeries.setData(paperData);
     }
@@ -291,7 +294,7 @@ function EquityCurveChart({ paperSnapshots, testnetSnapshots }: { paperSnapshots
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [paperSnapshots, testnetSnapshots]);
+  }, [paperData, testnetData]);
 
   return (
     <div ref={chartContainerRef} style={{ height: '300px' }} />
