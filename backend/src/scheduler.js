@@ -160,6 +160,8 @@ async function runMethodAnalysis(methodId) {
           const confidenceThreshold = (methodConfig.autoEntry?.minConfidence || 70) / 100;
 
           for (const decision of analysis.btc.position_decisions) {
+            console.log(`[Scheduler][${method.name}] Processing position decision: position_id=${decision.position_id}, action=${decision.action}, confidence=${decision.confidence}`);
+
             // Check confidence threshold
             if (decision.confidence < confidenceThreshold) {
               console.log(`[Scheduler][${method.name}] Skipping position decision for ${decision.position_id}: confidence ${decision.confidence} < threshold ${confidenceThreshold}`);
@@ -173,7 +175,10 @@ async function runMethodAnalysis(methodId) {
             }
             
             try {
+              console.log(`[Scheduler][${method.name}] Fetching position from database: ${decision.position_id}`);
               const position = await getPosition(db, decision.position_id);
+              console.log(`[Scheduler][${method.name}] Position found:`, position ? `id=${position.id}, status=${position.status}, side=${position.side}` : 'null');
+              
               if (!position || position.status !== 'open') {
                 console.log(`[Scheduler][${method.name}] Position ${decision.position_id} not found or not open, skipping`);
                 continue;

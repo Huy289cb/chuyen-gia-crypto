@@ -1224,7 +1224,7 @@ export async function createPosition(db, positionData) {
 export async function getPosition(db, positionId) {
   return new Promise((resolve, reject) => {
     db.get(
-      `SELECT * FROM positions WHERE id = ?`,
+      `SELECT * FROM positions WHERE position_id = ?`,
       [positionId],
       (err, row) => {
         if (err) reject(err);
