@@ -1,6 +1,7 @@
 // Price Update Scheduler - Runs every 1 minute
 // Updates position PnL, checks SL/TP, closes positions, creates account snapshots
 // Uses 1-minute candle data for accurate SL/TP detection
+// Supports both Paper Trading and Binance Testnet
 
 import cron from 'node-cron';
 import { formatVietnamTime } from '../utils/dateHelpers.js';
@@ -8,6 +9,7 @@ import { formatVietnamTime } from '../utils/dateHelpers.js';
 let db = null;
 let dbEnabled = false;
 let isRunning = false;
+let testnetEnabled = false;
 
 /**
  * Initialize the price update scheduler
@@ -15,6 +17,9 @@ let isRunning = false;
 export async function initPriceUpdateScheduler(database, enabled) {
   db = database;
   dbEnabled = enabled;
+  
+  // Check if testnet is enabled
+  testnetEnabled = process.env.BINANCE_TESTNET_ENABLED === 'true';
   
   if (!dbEnabled) {
     console.log('[PriceScheduler] Database not enabled, price updates skipped');
@@ -71,6 +76,11 @@ async function runPriceUpdateJob() {
     // Update ETH positions
     if (prices.eth) {
       await updateSymbolPositions('ETH', prices.eth.price, prices.eth);
+    }
+    
+    // Update testnet positions (if enabled)
+    if (testnetEnabled) {
+      await updateTestnetPositions(prices);
     }
     
     const duration = Date.now() - startTime;
@@ -311,9 +321,68 @@ async function runAccountSnapshotJob() {
       );
     }
     
-    console.log(`[PriceScheduler] Created snapshots for ${accounts.length} accounts`);
+    console.log(`[PriceScheduler] Created snapshots for ${accounts.length} paper trading accounts`);
+    
+    // Create testnet account snapshots (if enabled)
+    if (testnetEnabled) {
+      await createTestnetAccountSnapshots();
+    }
     
   } catch (error) {
     console.error('[PriceScheduler] Snapshot error:', error.message);
+  }
+}
+
+/**
+ * Update testnet positions with current price
+ * @param {Object} prices - Current prices from Binance API
+ */
+async function updateTestnetPositions(prices) {
+  try {
+    const { updateTestnetPositionsPnL, syncTestnetAccount } = await import('../services/testnetEngine.js');
+    const { getTestnetPositions, getTestnetAccount } = await import('../db/testnetDatabase.js');
+
+    // Get current price for BTC (testnet only supports BTC)
+    const currentPrice = prices.btc?.price;
+    if (!currentPrice) {
+      console.log('[PriceScheduler] No BTC price available for testnet update');
+      return;
+    }
+
+    console.log(`[PriceScheduler] Updating testnet positions at $${currentPrice.toLocaleString()}`);
+
+    // Update unrealized PnL and check SL/TP
+    await updateTestnetPositionsPnL(db, currentPrice);
+
+    // Sync account balance from Binance (every cycle)
+    const testnetAccount = await getTestnetAccount(db, 'BTC', 'kim_nghia');
+    if (testnetAccount) {
+      try {
+        await syncTestnetAccount(db, testnetAccount);
+      } catch (syncError) {
+        console.error('[PriceScheduler] Testnet account sync failed:', syncError.message);
+      }
+    }
+
+    console.log('[PriceScheduler] Testnet positions updated');
+  } catch (error) {
+    console.error('[PriceScheduler] Error updating testnet positions:', error.message);
+  }
+}
+
+/**
+ * Create testnet account snapshots
+ */
+async function createTestnetAccountSnapshots() {
+  try {
+    const { getTestnetAccount, createTestnetAccountSnapshot } = await import('../db/testnetDatabase.js');
+
+    const testnetAccount = await getTestnetAccount(db, 'BTC', 'kim_nghia');
+    if (testnetAccount) {
+      await createTestnetAccountSnapshot(db, testnetAccount.id);
+      console.log(`[PriceScheduler] Created testnet account snapshot for account ${testnetAccount.id}`);
+    }
+  } catch (error) {
+    console.error('[PriceScheduler] Error creating testnet account snapshots:', error.message);
   }
 }

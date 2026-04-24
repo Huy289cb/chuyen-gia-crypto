@@ -363,6 +363,76 @@ async function runMethodAnalysis(methodId) {
           }
         }
         
+        // Step 6: Testnet position decisions (if enabled)
+        if (process.env.BINANCE_TESTNET_ENABLED === 'true' && analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
+          try {
+            const { closeTestnetPositionEngine, updateTestnetPositionSL } = await import('./services/testnetEngine.js');
+            const { getTestnetPosition } = await import('./db/testnetDatabase.js');
+            const { fetchRealTimePrices } = await import('./price-fetcher.js');
+            const { getMethodConfig } = await import('./config/methods.js');
+            
+            // Get method confidence threshold
+            const methodConfig = getMethodConfig(methodId);
+            const confidenceThreshold = (methodConfig.autoEntry?.minConfidence || 70) / 100;
+
+            for (const decision of analysis.btc.position_decisions) {
+              // Check confidence threshold
+              if (decision.confidence < confidenceThreshold) {
+                console.log(`[Scheduler][${method.name}] Skipping testnet position decision for ${decision.position_id}: confidence ${decision.confidence} < threshold ${confidenceThreshold}`);
+                continue;
+              }
+              
+              // Handle hold action (do nothing)
+              if (decision.action === 'hold') {
+                console.log(`[Scheduler][${method.name}] Holding testnet position ${decision.position_id}: ${decision.reason}`);
+                continue;
+              }
+              
+              try {
+                const position = await getTestnetPosition(db, decision.position_id);
+                if (!position || position.status !== 'open') {
+                  console.log(`[Scheduler][${method.name}] Testnet position ${decision.position_id} not found or not open, skipping`);
+                  continue;
+                }
+                
+                const realtimePrices = await fetchRealTimePrices();
+                const currentPrice = realtimePrices['btc']?.price || position.current_price;
+                
+                // Handle close_early (full close)
+                if (decision.action === 'close_early') {
+                  await closeTestnetPositionEngine(db, position, currentPrice, `ai_recommendation: ${decision.reason}`);
+                  console.log(`[Scheduler][${method.name}] Closed testnet position ${decision.position_id} early: ${decision.reason}`);
+                }
+                
+                // Handle close_partial
+                else if (decision.action === 'close_partial') {
+                  // Testnet doesn't support partial close yet, log for now
+                  console.log(`[Scheduler][${method.name}] Partial close not yet supported for testnet position ${decision.position_id}: ${decision.reason}`);
+                }
+                
+                // Handle move_sl
+                else if (decision.action === 'move_sl') {
+                  const newSl = decision.new_sl;
+                  if (newSl) {
+                    await updateTestnetPositionSL(db, position, newSl, `ai_recommendation: ${decision.reason}`);
+                    console.log(`[Scheduler][${method.name}] Moved SL for testnet position ${decision.position_id} to ${newSl}: ${decision.reason}`);
+                  }
+                }
+                
+                // Handle reverse
+                else if (decision.action === 'reverse') {
+                  // Testnet doesn't support reverse yet, log for now
+                  console.log(`[Scheduler][${method.name}] Reverse not yet supported for testnet position ${decision.position_id}: ${decision.reason}`);
+                }
+              } catch (error) {
+                console.error(`[Scheduler][${method.name}] Failed to execute testnet position decision for ${decision.position_id}:`, error.message);
+              }
+            }
+          } catch (testnetDecisionError) {
+            console.error(`[Scheduler][${method.name}] Testnet position decisions failed:`, testnetDecisionError.message);
+          }
+        }
+        
         console.log(`[Scheduler][${method.name}] Analysis complete - Account: ${account.id}, Balance: $${account.current_balance.toFixed(2)}`);
       } catch (dbError) {
         console.error(`[Scheduler][${method.name}] Database save error:`, dbError.message);

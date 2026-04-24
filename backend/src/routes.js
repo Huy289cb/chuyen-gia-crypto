@@ -3,6 +3,7 @@ import { cache } from './cache.js';
 import positionsRouter from './routes/positions.js';
 import accountsRouter from './routes/accounts.js';
 import performanceRouter from './routes/performance.js';
+import testnetRouter from './routes/testnet.js';
 
 const router = express.Router();
 let db = null;
@@ -532,6 +533,7 @@ router.get('/compare', async (req, res) => {
 router.use('/positions', positionsRouter);
 router.use('/accounts', accountsRouter);
 router.use('/performance', performanceRouter);
+router.use('/testnet', testnetRouter);
 
 export default router;
 export { db, dbEnabled };

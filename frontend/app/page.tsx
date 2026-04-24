@@ -3,6 +3,7 @@
 // Cache-bust: v{APP_VERSION}
 import { useState, useEffect, Suspense } from 'react';
 import { APP_VERSION } from '@/lib/version';
+import { cn } from '@/lib/utils';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
 import { HeroSection } from './sections/HeroSection';
@@ -12,6 +13,8 @@ import { HistorySection } from './sections/HistorySection';
 import { PendingOrdersSection } from './sections/PendingOrdersSection';
 import { PredictionsSection } from './sections/PredictionsSection';
 import { PerformanceSection } from './sections/PerformanceSection';
+import { TestnetPanel } from './components/crypto/TestnetPanel';
+import { ComparisonDashboard } from './components/crypto/ComparisonDashboard';
 import { useTrends } from './hooks/useTrends';
 import { usePaperTrading } from './hooks/usePaperTrading';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -27,6 +30,7 @@ export default function Home() {
 function HomeContent() {
   const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends('kim_nghia');
   const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading('kim_nghia');
+  const [activeTab, setActiveTab] = useState<'paper' | 'testnet' | 'comparison'>('paper');
 
   const prices = data?.prices;
   const analysis = data?.analysis;
@@ -88,40 +92,95 @@ function HomeContent() {
           method="kim_nghia"
         />
 
+        {/* Trading System Tabs */}
+        <div className="mb-6">
+          <div className="flex gap-2 border-b border-surface-2">
+            <button
+              onClick={() => setActiveTab('paper')}
+              className={cn(
+                'px-4 py-2 font-medium transition-colors',
+                activeTab === 'paper' 
+                  ? 'text-accent-primary border-b-2 border-accent-primary' 
+                  : 'text-foreground-secondary hover:text-foreground'
+              )}
+            >
+              Paper Trading
+            </button>
+            <button
+              onClick={() => setActiveTab('testnet')}
+              className={cn(
+                'px-4 py-2 font-medium transition-colors',
+                activeTab === 'testnet' 
+                  ? 'text-accent-primary border-b-2 border-accent-primary' 
+                  : 'text-foreground-secondary hover:text-foreground'
+              )}
+            >
+              Binance Testnet
+            </button>
+            <button
+              onClick={() => setActiveTab('comparison')}
+              className={cn(
+                'px-4 py-2 font-medium transition-colors',
+                activeTab === 'comparison' 
+                  ? 'text-accent-primary border-b-2 border-accent-primary' 
+                  : 'text-foreground-secondary hover:text-foreground'
+              )}
+            >
+              Comparison
+            </button>
+          </div>
+        </div>
+
         {/* Paper Trading Dashboard */}
-        <TradingDashboard
-          accounts={accounts}
-          loading={ptLoading}
-          onReset={resetAccount}
-          method="kim_nghia"
-        />
+        {activeTab === 'paper' && (
+          <TradingDashboard
+            accounts={accounts}
+            loading={ptLoading}
+            onReset={resetAccount}
+            method="kim_nghia"
+          />
+        )}
 
-        {/* Open Positions */}
-        <PositionsSection
-          positions={positions}
-          onClosePosition={closePosition}
-        />
+        {/* Testnet Panel */}
+        {activeTab === 'testnet' && <TestnetPanel />}
 
-        {/* Pending Orders */}
-        <PendingOrdersSection method="kim_nghia" />
+        {/* Comparison Dashboard */}
+        {activeTab === 'comparison' && <ComparisonDashboard />}
 
-        {/* Trade History */}
-        <HistorySection
-          symbol="BTC"
-          method="kim_nghia"
-        />
+        {/* Open Positions - Only show on paper trading tab */}
+        {activeTab === 'paper' && (
+          <PositionsSection
+            positions={positions}
+            onClosePosition={closePosition}
+          />
+        )}
 
-        {/* Prediction Timeline */}
-        <PredictionsSection
-          symbol="BTC"
-          method="kim_nghia"
-        />
+        {/* Pending Orders - Only show on paper trading tab */}
+        {activeTab === 'paper' && <PendingOrdersSection method="kim_nghia" />}
 
-        {/* Performance Charts & Metrics */}
-        <PerformanceSection
-          symbol="BTC"
-          method="kim_nghia"
-        />
+        {/* Trade History - Only show on paper trading tab */}
+        {activeTab === 'paper' && (
+          <HistorySection
+            symbol="BTC"
+            method="kim_nghia"
+          />
+        )}
+
+        {/* Prediction Timeline - Only show on paper trading tab */}
+        {activeTab === 'paper' && (
+          <PredictionsSection
+            symbol="BTC"
+            method="kim_nghia"
+          />
+        )}
+
+        {/* Performance Charts & Metrics - Only show on paper trading tab */}
+        {activeTab === 'paper' && (
+          <PerformanceSection
+            symbol="BTC"
+            method="kim_nghia"
+          />
+        )}
       </main>
 
       <Footer />

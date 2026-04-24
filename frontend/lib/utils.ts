@@ -51,3 +51,20 @@ export function getTimeSince(timestamp: string | number | undefined): { text: st
   if (hours < 1) return { text: `${minutes}m ago`, status: 'stale' };
   return { text: `${hours}h ago`, status: 'error' };
 }
+
+export function formatVietnamTime(timestamp: string | null | undefined): string {
+  if (!timestamp) return '-';
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch {
+    return '-';
+  }
+}

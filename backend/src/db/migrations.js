@@ -697,6 +697,42 @@ function addTestnetTables(db, resolve, reject) {
 }
 
 /**
+ * Add partial TP columns to testnet_positions table
+ */
+function addTestnetPartialTPColumns(db) {
+  const columns = [
+    {
+      name: 'tp_levels',
+      sql: 'ALTER TABLE testnet_positions ADD COLUMN tp_levels TEXT'
+    },
+    {
+      name: 'tp_hit_count',
+      sql: 'ALTER TABLE testnet_positions ADD COLUMN tp_hit_count INTEGER DEFAULT 0'
+    },
+    {
+      name: 'partial_closed',
+      sql: 'ALTER TABLE testnet_positions ADD COLUMN partial_closed REAL DEFAULT 0'
+    }
+  ];
+
+  let completed = 0;
+  columns.forEach((column, index) => {
+    db.run(column.sql, (err) => {
+      if (err) {
+        // Column might already exist, log but don't fail
+        console.log(`[Migration] Column ${column.name} check: ${err.message}`);
+      } else {
+        console.log(`[Migration] Added testnet column: ${column.name}`);
+      }
+      completed++;
+      if (completed === columns.length) {
+        console.log('[Migration] Testnet partial TP columns migration completed');
+      }
+    });
+  });
+}
+
+/**
  * Create indexes for testnet tables
  */
 function createTestnetIndexes(db, resolve, reject) {
@@ -721,6 +757,8 @@ function createTestnetIndexes(db, resolve, reject) {
       
       if (completed === indexes.length) {
         console.log('[Migration] Testnet tables migration completed successfully');
+        // Add partial TP columns
+        addTestnetPartialTPColumns(db);
         resolve();
       }
     });

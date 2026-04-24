@@ -58,6 +58,19 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - See `docs/ai-position-management.md` for detailed documentation
 
+### Binance Futures Testnet Integration (New)
+- **Real Trading on Testnet**: Execute actual trades on Binance Futures Testnet environment
+- **Parallel with Paper Trading**: Compare performance between paper trading and real testnet execution
+- **BTC-Only**: Currently supports BTCUSDT trading with Kim Nghia method
+- **Auto-Entry**: Automatic position opening based on Kim Nghia analysis (75% confidence threshold, R:R >= 2.5)
+- **Risk Management**: 10% risk per trade, SL/TP orders placed immediately, leverage support (default 1x)
+- **Account Sync**: Auto-sync with Binance every 5 minutes, manual sync available via API
+- **Position Management**: Open/close positions, update SL, partial TP support
+- **Trade Events**: Complete audit trail of all trading actions
+- **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown
+- **API Endpoints**: Full REST API for testnet accounts, positions, performance metrics
+- See `docs/binance-testnet-integration.md` for detailed documentation
+
 ### Price Data & AI Models
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
 - Không còn lỗi 429 rate limit (Binance: 1200 req/min vs CoinGecko: ~10-50 req/min)
@@ -119,19 +132,23 @@ crypto-analyzer/
 │   │   ├── routes/                # API route modules
 │   │   │   ├── positions.js       # Position management API
 │   │   │   ├── accounts.js        # Account management API
-│   │   │   └── performance.js     # Performance metrics API
+│   │   │   ├── performance.js     # Performance metrics API
+│   │   │   └── testnet.js         # Testnet trading API
 │   │   ├── schedulers/            # Scheduler modules
 │   │   │   └── priceUpdateScheduler.js # 1m price updates with 1-minute candle data
 │   │   ├── services/              # Business logic
 │   │   │   ├── autoEntryLogic.js  # Auto-entry decision engine (multi-method support)
-│   │   │   └── paperTradingEngine.js # Position management
+│   │   │   ├── paperTradingEngine.js # Position management
+│   │   │   ├── binanceClient.js  # Binance Testnet API wrapper
+│   │   │   └── testnetEngine.js   # Testnet trading engine
 │   │   ├── config/                # Configuration
 │   │   │   ├── methods.js         # Method configurations (ICT, Kim Nghia)
 │   │   │   └── cors.js            # CORS middleware
 │   │   └── db/                    # Database layer
 │   │       ├── database.js        # SQLite operations
 │   │       ├── init.js            # DB initialization
-│   │       └── migrations.js      # Paper trading migrations
+│   │       ├── migrations.js      # Paper trading migrations
+│   │       └── testnetDatabase.js  # Testnet database operations
 │   ├── data/               # SQLite database storage
 │   ├── scripts/
 │   │   └── ensure-data-dir.js
@@ -174,6 +191,7 @@ crypto-analyzer/
 │   ├── architecture.md   # System architecture
 │   ├── api-spec.md       # API specification
 │   ├── api-paper-trading.md # Paper trading API
+│   ├── binance-testnet-integration.md # Binance Testnet integration docs
 │   ├── app-behaviors.md  # ICT methodology
 │   ├── paper-trading.md  # Paper trading system docs
 │   ├── risk-management.md # ICT risk management
@@ -187,6 +205,7 @@ crypto-analyzer/
 
 - Node.js >= 18
 - Groq API Key (free tier: 20 requests/min)
+- Binance Futures Testnet API Key (optional, for testnet trading)
 
 ## Chạy local
 
@@ -197,6 +216,11 @@ npm install
 
 # Tạo .env file với GROQ_API_KEY
 echo "GROQ_API_KEY=gsk_your_key_here" > .env
+
+# (Optional) Thêm Binance Testnet API keys cho testnet trading
+echo "BINANCE_TESTNET_ENABLED=true" >> .env
+echo "BINANCE_TESTNET_API_KEY=your_testnet_api_key" >> .env
+echo "BINANCE_TESTNET_SECRET_KEY=your_testnet_secret_key" >> .env
 
 # Khởi tạo database (tự động chạy khi start, có thể chạy thủ công)
 npm run db:init
@@ -334,6 +358,7 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 - [API Spec](./docs/api-spec.md)
 - [ICT Rules](./rules/analysis.rules.md)
 - [Setup Guide](./docs/setup.md)
+- [Binance Testnet Integration](./docs/binance-testnet-integration.md)
 - [Changelog](./CHANGELOG.md)
 
 ## License

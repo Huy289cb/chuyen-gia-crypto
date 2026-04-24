@@ -11,6 +11,7 @@ export function usePaperTrading(method: string = 'kim_nghia') {
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
+  const [equityCurve, setEquityCurve] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +51,18 @@ export function usePaperTrading(method: string = 'kim_nghia') {
     }
   }, [method]);
 
+  const fetchEquityCurve = useCallback(async (limit = 100) => {
+    try {
+      const response = await fetch(`${API_BASE}/performance/equity-curve?symbol=BTC&limit=${limit}&method=${method}`);
+      const data: ApiResponse<any[]> = await response.json();
+      if (data.success && data.data) {
+        setEquityCurve(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching equity curve:', err);
+    }
+  }, [method]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -57,14 +70,15 @@ export function usePaperTrading(method: string = 'kim_nghia') {
     setAccounts([]);
     setPositions([]);
     setTradeHistory([]);
+    setEquityCurve([]);
     try {
-      await Promise.all([fetchAccounts(), fetchPositions(), fetchTradeHistory()]);
+      await Promise.all([fetchAccounts(), fetchPositions(), fetchTradeHistory(), fetchEquityCurve()]);
     } catch (err) {
       setError('Failed to fetch paper trading data');
     } finally {
       setLoading(false);
     }
-  }, [fetchAccounts, fetchPositions, fetchTradeHistory]);
+  }, [fetchAccounts, fetchPositions, fetchTradeHistory, fetchEquityCurve]);
 
   useEffect(() => {
     fetchData();
@@ -113,6 +127,7 @@ export function usePaperTrading(method: string = 'kim_nghia') {
     accounts,
     positions,
     tradeHistory,
+    equityCurve,
     loading,
     error,
     refresh: fetchData,

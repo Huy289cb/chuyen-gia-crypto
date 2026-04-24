@@ -1,24 +1,11 @@
 /**
- * Unit tests for Testnet Trading Engine
+ * Integration tests for Testnet Trading Flow
+ * 
+ * Tests the complete flow from analysis → auto-entry → Binance order → database save
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sqlite3 from 'sqlite3';
-import {
-  initTestnetEngine,
-  openTestnetPosition,
-  closeTestnetPositionEngine,
-  updateTestnetPositionSL,
-  checkTestnetSLTP,
-  syncTestnetAccount,
-  updateTestnetPositionsPnL,
-  getTestnetClient,
-} from '../../src/services/testnetEngine.js';
-import {
-  getOrCreateTestnetAccount,
-  createTestnetPosition,
-  getTestnetPosition,
-} from '../../src/db/testnetDatabase.js';
 
 // Mock binance client
 vi.mock('../../src/services/binanceClient.js', () => ({
@@ -30,7 +17,6 @@ vi.mock('../../src/services/binanceClient.js', () => ({
     totalWalletBalance: 1000,
     totalUnrealizedProfit: 50,
   })),
-  getCurrentPosition: vi.fn(() => Promise.resolve(null)),
   placeMarketOrder: vi.fn(() => Promise.resolve({
     orderId: 12345,
     clientOrderId: 'client123',
@@ -228,7 +214,7 @@ async function runTestMigrations(db) {
   });
 }
 
-describe('Testnet Engine', () => {
+describe('Testnet Flow Integration', () => {
   let db;
 
   beforeEach(async () => {
@@ -245,19 +231,23 @@ describe('Testnet Engine', () => {
     });
   });
 
-  describe('initTestnetEngine', () => {
-    it('should initialize testnet client', async () => {
-      const client = await initTestnetEngine();
-      expect(client).not.toBeNull();
-      expect(client.mockClient).toBe(true);
-    });
-  });
+  describe('Full flow: analysis → auto-entry → Binance order → database save', () => {
+    it('should complete full position opening flow', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
+      const { openTestnetPosition } = await import('../../src/services/testnetEngine.js');
 
-  describe('openTestnetPosition', () => {
-    it('should open testnet position successfully', async () => {
+      // Initialize testnet engine
       await initTestnetEngine();
+
+      // Get or create testnet account
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
+      expect(account).not.toBeNull();
+      expect(account.symbol).toBe('BTC');
+      expect(account.method_id).toBe('kim_nghia');
+      expect(account.current_balance).toBe(100);
+
+      // Simulate analysis result
       const positionData = {
         side: 'BUY',
         entry_price: 50000,
@@ -268,7 +258,8 @@ describe('Testnet Engine', () => {
         risk_percent: 10,
         expected_rr: 2.0,
       };
-      
+
+      // Open testnet position
       const position = await openTestnetPosition(db, account, positionData, 1, 'kim_nghia');
       
       expect(position).not.toBeNull();
@@ -276,12 +267,282 @@ describe('Testnet Engine', () => {
       expect(position.entry_price).toBe(50000);
       expect(position.status).toBe('open');
       expect(position.binance_order_id).toBe('12345');
-    });
+      expect(position.binance_sl_order_id).toBe('12346');
+      expect(position.binance_tp_order_id).toBe('12347');
 
-    it('should throw error when position size exceeds balance', async () => {
+      // Verify position was saved to database
+      const savedPosition = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM testnet_positions WHERE position_id = ?', [position.position_id], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      expect(savedPosition).not.toBeNull();
+      expect(savedPosition.side).toBe('BUY');
+      expect(savedPosition.entry_price).toBe(50000);
+
+      // Verify trade event was recorded
+      const events = await new Promise((resolve, reject) => {
+        db.all('SELECT * FROM testnet_trade_events WHERE position_id = ?', [position.position_id], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+
+      expect(events).toHaveLength(1);
+      expect(events[0].event_type).toBe('position_opened');
+    });
+  });
+
+  describe('SL/TP execution flow', () => {
+    it('should execute SL and close position', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount, createTestnetPosition, getTestnetPosition } = await import('../../src/db/testnetDatabase.js');
+      const { checkTestnetSLTP } = await import('../../src/services/testnetEngine.js');
+
       await initTestnetEngine();
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
+
+      await createTestnetPosition(db, {
+        position_id: 'test_pos_sl',
+        account_id: account.id,
+        symbol: 'BTCUSDT',
+        side: 'BUY',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        size_qty: 0.002,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+        binance_order_id: '12345',
+        binance_sl_order_id: '12346',
+        binance_tp_order_id: '12347',
+      });
+
+      const position = await getTestnetPosition(db, 'test_pos_sl');
+      const result = await checkTestnetSLTP(db, position, 48500);
+
+      expect(result).toBe('stop_loss');
+
+      const closedPosition = await getTestnetPosition(db, 'test_pos_sl');
+      expect(closedPosition.status).toBe('closed');
+      expect(closedPosition.close_price).toBe(48500);
+      expect(closedPosition.close_reason).toBe('stop_loss');
+    });
+
+    it('should execute TP and close position', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount, createTestnetPosition, getTestnetPosition } = await import('../../src/db/testnetDatabase.js');
+      const { checkTestnetSLTP } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      await createTestnetPosition(db, {
+        position_id: 'test_pos_tp',
+        account_id: account.id,
+        symbol: 'BTCUSDT',
+        side: 'BUY',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        size_qty: 0.002,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+        binance_order_id: '12345',
+        binance_sl_order_id: '12346',
+        binance_tp_order_id: '12347',
+      });
+
+      const position = await getTestnetPosition(db, 'test_pos_tp');
+      const result = await checkTestnetSLTP(db, position, 52500);
+
+      expect(result).toBe('take_profit');
+
+      const closedPosition = await getTestnetPosition(db, 'test_pos_tp');
+      expect(closedPosition.status).toBe('closed');
+      expect(closedPosition.close_price).toBe(52500);
+      expect(closedPosition.close_reason).toBe('take_profit');
+    });
+  });
+
+  describe('Position decisions flow', () => {
+    it('should handle AI position decision to close early', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount, createTestnetPosition, getTestnetPosition } = await import('../../src/db/testnetDatabase.js');
+      const { closeTestnetPositionEngine } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      await createTestnetPosition(db, {
+        position_id: 'test_pos_decision',
+        account_id: account.id,
+        symbol: 'BTCUSDT',
+        side: 'BUY',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        size_qty: 0.002,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+        binance_order_id: '12345',
+        binance_sl_order_id: '12346',
+        binance_tp_order_id: '12347',
+      });
+
+      const position = await getTestnetPosition(db, 'test_pos_decision');
+      const result = await closeTestnetPositionEngine(db, position, 50500, 'ai_close_early');
+
+      expect(result).not.toBeNull();
+      expect(result.realizedPnl).toBe(10); // (50500 - 50000) * 0.002 = 10
+      expect(result.isWin).toBe(true);
+
+      const closedPosition = await getTestnetPosition(db, 'test_pos_decision');
+      expect(closedPosition.status).toBe('closed');
+      expect(closedPosition.close_reason).toBe('ai_close_early');
+    });
+
+    it('should handle AI position decision to update SL', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount, createTestnetPosition, getTestnetPosition } = await import('../../src/db/testnetDatabase.js');
+      const { updateTestnetPositionSL } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      await createTestnetPosition(db, {
+        position_id: 'test_pos_sl_update',
+        account_id: account.id,
+        symbol: 'BTCUSDT',
+        side: 'BUY',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        size_qty: 0.002,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+        binance_sl_order_id: '12346',
+      });
+
+      const position = await getTestnetPosition(db, 'test_pos_sl_update');
+      await updateTestnetPositionSL(db, position, 49500, 'breakeven');
+
+      const updated = await getTestnetPosition(db, 'test_pos_sl_update');
+      expect(updated.stop_loss).toBe(49500);
+    });
+  });
+
+  describe('Account sync flow', () => {
+    it('should sync account balance from Binance and detect discrepancies', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
+      const { syncTestnetAccount } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      // Manually set a different balance in database
+      await new Promise((resolve, reject) => {
+        db.run('UPDATE testnet_accounts SET current_balance = 900, equity = 900 WHERE id = ?', [account.id], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      const balance = await syncTestnetAccount(db, account);
+
+      expect(balance).not.toBeNull();
+      expect(balance.availableBalance).toBe(950);
+
+      // Verify database was auto-corrected
+      const updatedAccount = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM testnet_accounts WHERE id = ?', [account.id], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      expect(updatedAccount.current_balance).toBe(950);
+    });
+
+    it('should create account snapshot on sync', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
+      const { syncTestnetAccount } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      await syncTestnetAccount(db, account);
+
+      // Verify snapshot was created
+      const snapshots = await new Promise((resolve, reject) => {
+        db.all('SELECT * FROM testnet_account_snapshots WHERE account_id = ?', [account.id], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+
+      expect(snapshots.length).toBeGreaterThan(0);
+      expect(snapshots[0].account_id).toBe(account.id);
+    });
+  });
+
+  describe('Error handling and fallback', () => {
+    it('should handle Binance API failure gracefully', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
+      const { openTestnetPosition } = await import('../../src/services/testnetEngine.js');
+
+      // Mock API failure
+      const { placeMarketOrder } = await import('../../src/services/binanceClient.js');
+      vi.mocked(placeMarketOrder).mockRejectedValueOnce(new Error('API Error'));
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      const positionData = {
+        side: 'BUY',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+      };
+
+      await expect(openTestnetPosition(db, account, positionData, 1, 'kim_nghia')).rejects.toThrow();
+
+      // Verify failure event was recorded
+      const events = await new Promise((resolve, reject) => {
+        db.all('SELECT * FROM testnet_trade_events WHERE event_type = ?', ['position_open_failed'], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+
+      expect(events.length).toBeGreaterThan(0);
+    });
+
+    it('should handle position size validation', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
+      const { openTestnetPosition } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
       const positionData = {
         side: 'BUY',
         entry_price: 50000,
@@ -292,314 +553,8 @@ describe('Testnet Engine', () => {
         risk_percent: 10,
         expected_rr: 2.0,
       };
-      
+
       await expect(openTestnetPosition(db, account, positionData, 1, 'kim_nghia')).rejects.toThrow('Position size exceeds account balance');
-    });
-
-    it('should skip when account is in cooldown', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      // Set cooldown to future
-      const futureTime = new Date(Date.now() + 3600000).toISOString();
-      await new Promise((resolve, reject) => {
-        db.run('UPDATE testnet_accounts SET cooldown_until = ? WHERE id = ?', [futureTime, account.id], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      
-      // Re-fetch account to get updated cooldown
-      const updatedAccount = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      const positionData = {
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-      };
-      
-      const result = await openTestnetPosition(db, updatedAccount, positionData, 1, 'kim_nghia');
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('closeTestnetPositionEngine', () => {
-    it('should close position and calculate PnL', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      await createTestnetPosition(db, {
-        position_id: 'test_pos_1',
-        account_id: account.id,
-        symbol: 'BTCUSDT',
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        size_qty: 0.002,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-        binance_order_id: '12345',
-        binance_sl_order_id: '12346',
-        binance_tp_order_id: '12347',
-      });
-      
-      const position = await getTestnetPosition(db, 'test_pos_1');
-      const result = await closeTestnetPositionEngine(db, position, 51000, 'manual');
-      
-      expect(result).not.toBeNull();
-      expect(result.realizedPnl).toBe(2); // (51000 - 50000) * 0.002 = 1000 * 0.002 = 2
-      expect(result.isWin).toBe(true);
-      
-      const closedPosition = await getTestnetPosition(db, 'test_pos_1');
-      expect(closedPosition.status).toBe('closed');
-      expect(closedPosition.close_price).toBe(51000);
-    });
-  });
-
-  describe('updateTestnetPositionSL', () => {
-    it('should update stop loss', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      await createTestnetPosition(db, {
-        position_id: 'test_pos_1',
-        account_id: account.id,
-        symbol: 'BTCUSDT',
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        size_qty: 0.002,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-        binance_sl_order_id: '12346',
-      });
-      
-      const position = await getTestnetPosition(db, 'test_pos_1');
-      await updateTestnetPositionSL(db, position, 49500, 'breakeven');
-      
-      const updated = await getTestnetPosition(db, 'test_pos_1');
-      expect(updated.stop_loss).toBe(49500);
-    });
-  });
-
-  describe('checkTestnetSLTP', () => {
-    it('should detect SL hit for long position', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      await createTestnetPosition(db, {
-        position_id: 'test_pos_1',
-        account_id: account.id,
-        symbol: 'BTCUSDT',
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        size_qty: 0.002,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-        binance_order_id: '12345',
-        binance_sl_order_id: '12346',
-        binance_tp_order_id: '12347',
-      });
-      
-      const position = await getTestnetPosition(db, 'test_pos_1');
-      const result = await checkTestnetSLTP(db, position, 48500);
-      
-      expect(result).toBe('stop_loss');
-      
-      const closed = await getTestnetPosition(db, 'test_pos_1');
-      expect(closed.status).toBe('closed');
-    });
-
-    it('should detect TP hit for long position', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      await createTestnetPosition(db, {
-        position_id: 'test_pos_1',
-        account_id: account.id,
-        symbol: 'BTCUSDT',
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        size_qty: 0.002,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-        binance_order_id: '12345',
-        binance_sl_order_id: '12346',
-        binance_tp_order_id: '12347',
-      });
-      
-      const position = await getTestnetPosition(db, 'test_pos_1');
-      const result = await checkTestnetSLTP(db, position, 52500);
-      
-      expect(result).toBe('take_profit');
-      
-      const closed = await getTestnetPosition(db, 'test_pos_1');
-      expect(closed.status).toBe('closed');
-    });
-
-    it('should return null when SL/TP not hit', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      await createTestnetPosition(db, {
-        position_id: 'test_pos_1',
-        account_id: account.id,
-        symbol: 'BTCUSDT',
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        size_qty: 0.002,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-      });
-      
-      const position = await getTestnetPosition(db, 'test_pos_1');
-      const result = await checkTestnetSLTP(db, position, 50500);
-      
-      expect(result).toBeNull();
-      
-      const stillOpen = await getTestnetPosition(db, 'test_pos_1');
-      expect(stillOpen.status).toBe('open');
-    });
-  });
-
-  describe('syncTestnetAccount', () => {
-    it('should sync account balance from Binance', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      const balance = await syncTestnetAccount(db, account);
-      
-      expect(balance).not.toBeNull();
-      expect(balance.availableBalance).toBe(950);
-      expect(balance.totalWalletBalance).toBe(1000);
-    });
-
-    it('should detect and auto-correct balance discrepancies', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      // Manually set a different balance in database
-      db.run('UPDATE testnet_accounts SET current_balance = 900, equity = 900 WHERE id = ?', [account.id]);
-      
-      const balance = await syncTestnetAccount(db, account);
-      
-      expect(balance.availableBalance).toBe(950);
-      
-      // Verify database was auto-corrected
-      const updatedAccount = await new Promise((resolve, reject) => {
-        db.get('SELECT * FROM testnet_accounts WHERE id = ?', [account.id], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
-      });
-      
-      expect(updatedAccount.current_balance).toBe(950);
-    });
-
-    it('should not correct when discrepancy is within threshold', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      // Set balance within 0.01 threshold
-      db.run('UPDATE testnet_accounts SET current_balance = 950.005, equity = 950.005 WHERE id = ?', [account.id]);
-      
-      const balance = await syncTestnetAccount(db, account);
-      
-      expect(balance.availableBalance).toBe(950);
-    });
-
-    it('should sync positions and track order status', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      // Create a position with SL/TP orders
-      await createTestnetPosition(db, {
-        position_id: 'test_pos_sync',
-        account_id: account.id,
-        symbol: 'BTCUSDT',
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        size_qty: 0.002,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-        binance_order_id: '12345',
-        binance_sl_order_id: '12346',
-        binance_tp_order_id: '12347',
-      });
-      
-      // Sync account (which calls syncTestnetPositions internally)
-      const balance = await syncTestnetAccount(db, account);
-      
-      expect(balance).not.toBeNull();
-      
-      // Verify position still has orders
-      const position = await getTestnetPosition(db, 'test_pos_sync');
-      expect(position.binance_sl_order_id).toBe('12346');
-      expect(position.binance_tp_order_id).toBe('12347');
-    });
-  });
-
-  describe('updateTestnetPositionsPnL', () => {
-    it('should update unrealized PnL for open positions', async () => {
-      await initTestnetEngine();
-      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
-      
-      await createTestnetPosition(db, {
-        position_id: 'test_pos_1',
-        account_id: account.id,
-        symbol: 'BTCUSDT',
-        side: 'BUY',
-        entry_price: 50000,
-        stop_loss: 49000,
-        take_profit: 52000,
-        size_usd: 100,
-        size_qty: 0.002,
-        risk_usd: 10,
-        risk_percent: 10,
-        expected_rr: 2.0,
-      });
-      
-      await updateTestnetPositionsPnL(db, 51000);
-      
-      const position = await getTestnetPosition(db, 'test_pos_1');
-      expect(position.current_price).toBe(51000);
-      expect(position.unrealized_pnl).toBe(2); // (51000 - 50000) * 0.002 = 2
-    });
-  });
-
-  describe('getTestnetClient', () => {
-    it('should return client instance', async () => {
-      await initTestnetEngine();
-      const client = getTestnetClient();
-      expect(client).not.toBeNull();
-      expect(client.mockClient).toBe(true);
     });
   });
 });
