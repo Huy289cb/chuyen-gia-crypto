@@ -807,6 +807,18 @@ async function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY
   const sizeQty = riskAmount / riskDistance;
   let sizeUsd = sizeQty * suggestedEntry;
 
+  // Cap position size at account balance (cannot exceed what you have)
+  const maxPositionSizeByBalance = account.current_balance;
+  if (sizeUsd > maxPositionSizeByBalance) {
+    console.log(`[AutoEntry] Position size $${sizeUsd.toFixed(2)} exceeds account balance $${maxPositionSizeByBalance.toFixed(2)}, capping to balance`);
+    sizeUsd = maxPositionSizeByBalance;
+    // Recalculate sizeQty based on capped sizeUsd
+    const newSizeQty = sizeUsd / suggestedEntry;
+    if (newSizeQty > 0) {
+      sizeQty = newSizeQty;
+    }
+  }
+
   // Cap position size at maxPositionSize (default 2000 USD)
   const maxPositionSize = config.maxPositionSize || 2000;
   if (sizeUsd > maxPositionSize) {
