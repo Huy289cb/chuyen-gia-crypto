@@ -315,9 +315,9 @@ export async function getOpenOrders(client, symbol) {
   }
 
   try {
-    const response = await client.getOpenOrders({ symbol });
+    const response = await client.getAllOpenOrders({ symbol });
     const orders = response || [];
-    
+
     return orders.map(order => ({
       orderId: order.orderId,
       clientOrderId: order.clientOrderId,
