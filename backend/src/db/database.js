@@ -2018,6 +2018,10 @@ export async function updatePendingOrder(db, orderId, updates) {
       fields.push('expected_rr = ?');
       values.push(updates.expected_rr);
     }
+    if (updates.binance_order_id !== undefined) {
+      fields.push('binance_order_id = ?');
+      values.push(updates.binance_order_id);
+    }
     
     if (fields.length === 0) {
       resolve(0);
@@ -2043,7 +2047,7 @@ export async function updatePendingOrder(db, orderId, updates) {
 }
 
 // Modify a pending order with validation
-export async function modifyPendingOrder(db, order, newEntry, newSl, newTp) {
+export async function modifyPendingOrder(db, order, newEntry, newSl, newTp, newBinanceOrderId = null) {
   const updates = {};
   
   if (newEntry) {
@@ -2054,6 +2058,9 @@ export async function modifyPendingOrder(db, order, newEntry, newSl, newTp) {
   }
   if (newTp) {
     updates.take_profit = newTp;
+  }
+  if (newBinanceOrderId) {
+    updates.binance_order_id = newBinanceOrderId;
   }
   
   // Recalculate risk if SL changed

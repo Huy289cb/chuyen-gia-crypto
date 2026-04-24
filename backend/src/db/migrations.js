@@ -253,13 +253,22 @@ function runMigration5(db, resolve, reject) {
     
     // Add the missing columns in sequence
     const missingColumnsToAdd = [
-      'executed_at', 'executed_price', 'executed_size_qty', 'executed_size_usd', 
+      'executed_at', 'executed_price', 'executed_size_qty', 'executed_size_usd',
       'realized_pnl', 'realized_pnl_percent', 'close_reason'
     ];
     
     promiseAllWithTimeout(missingColumnsToAdd.map(col => addMissingColumn(col)), 30000)
       .then(() => {
         console.log('[Migration] Updated pending_orders table from 19 to 21 columns');
+        
+        // Add binance_order_id column to pending_orders for testnet sync support
+        db.run(`ALTER TABLE pending_orders ADD COLUMN binance_order_id TEXT`, (err) => {
+          if (err && !err.message.includes('duplicate column name')) {
+            console.error('[Migration] Error adding binance_order_id column to pending_orders:', err.message);
+          } else {
+            console.log('[Migration] Added binance_order_id column to pending_orders');
+          }
+        });
       })
       .catch((err) => {
         console.error('[Migration] Error adding columns:', err.message);
@@ -716,6 +725,7 @@ function addTestnetTables(db, resolve, reject) {
               realized_pnl REAL,
               realized_pnl_percent REAL,
               close_reason TEXT,
+              binance_order_id TEXT,
               FOREIGN KEY (account_id) REFERENCES testnet_accounts(id)
             )
           `, (err) => {
@@ -766,8 +776,24 @@ function addTestnetPartialTPColumns(db) {
       completed++;
       if (completed === columns.length) {
         console.log('[Migration] Testnet partial TP columns migration completed');
+        // Add binance_order_id column to testnet_pending_orders
+        addTestnetPendingOrderBinanceColumn(db);
       }
     });
+  });
+}
+
+/**
+ * Add binance_order_id column to testnet_pending_orders table
+ */
+function addTestnetPendingOrderBinanceColumn(db) {
+  db.run('ALTER TABLE testnet_pending_orders ADD COLUMN binance_order_id TEXT', (err) => {
+    if (err) {
+      // Column might already exist, log but don't fail
+      console.log(`[Migration] binance_order_id column check: ${err.message}`);
+    } else {
+      console.log('[Migration] Added binance_order_id column to testnet_pending_orders');
+    }
   });
 }
 

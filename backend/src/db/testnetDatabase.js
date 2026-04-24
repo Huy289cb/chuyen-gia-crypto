@@ -673,7 +673,24 @@ export async function executeTestnetPendingOrder(db, orderId, positionId) {
 /**
  * Cancel a testnet pending order
  */
-export async function cancelTestnetPendingOrder(db, orderId, reason = 'cancelled') {
+export async function cancelTestnetPendingOrder(db, orderId, reason = 'cancelled', binanceOrderId = null) {
+  // Cancel Binance limit order if binance_order_id is provided
+  if (binanceOrderId) {
+    try {
+      const { cancelOrder, getTestnetClient } = await import('../services/testnetEngine.js');
+      const { getSymbol } = await import('../config/binance.js');
+      const testnetClient = getTestnetClient();
+      
+      if (testnetClient) {
+        await cancelOrder(testnetClient, getSymbol(), binanceOrderId);
+        console.log(`[TestnetDB] Cancelled Binance limit order ${binanceOrderId} for pending order ${orderId}`);
+      }
+    } catch (binanceError) {
+      console.error(`[TestnetDB] Failed to cancel Binance limit order ${binanceOrderId}:`, binanceError.message);
+      // Continue to update DB even if Binance cancel fails
+    }
+  }
+
   return new Promise((resolve, reject) => {
     db.run(
       `UPDATE testnet_pending_orders
@@ -710,7 +727,8 @@ export async function createTestnetPendingOrder(db, orderData) {
     expected_rr,
     linked_prediction_id = null,
     invalidation_level = null,
-    method_id = 'ict'
+    method_id = 'ict',
+    binance_order_id = null
   } = orderData;
 
   return new Promise((resolve, reject) => {
@@ -719,8 +737,8 @@ export async function createTestnetPendingOrder(db, orderData) {
        (order_id, account_id, symbol, side, entry_price, stop_loss, take_profit,
         size_usd, size_qty, risk_usd, risk_percent, expected_rr,
         linked_prediction_id, invalidation_level, status, created_at, executed_at,
-        executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        executed_price, executed_size_qty, executed_size_usd, realized_pnl, realized_pnl_percent, close_reason, method_id, binance_order_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         order_id,
         account_id,
@@ -745,7 +763,8 @@ export async function createTestnetPendingOrder(db, orderData) {
         null, // realized_pnl
         null, // realized_pnl_percent
         null, // close_reason
-        method_id
+        method_id,
+        binance_order_id
       ],
       function(err) {
         if (err) {

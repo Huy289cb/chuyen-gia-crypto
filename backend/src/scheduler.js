@@ -263,14 +263,54 @@ async function runMethodAnalysis(methodId) {
               
               // Handle cancel
               if (decision.action === 'cancel') {
-                await cancelPendingOrder(db, order.id, `ai_recommendation: ${decision.reason}`);
+                await cancelPendingOrder(db, order.id, `ai_recommendation: ${decision.reason}`, order.binance_order_id);
                 console.log(`[Scheduler][${method.name}] Cancelled pending order ${decision.order_id}: ${decision.reason}`);
               }
               
               // Handle modify
               else if (decision.action === 'modify') {
-                await modifyPendingOrder(db, order, decision.new_entry, decision.new_sl, decision.new_tp);
-                console.log(`[Scheduler][${method.name}] Modified pending order ${decision.order_id}: ${decision.reason}`);
+                // For testnet pending orders, need to sync with Binance
+                if (order.binance_order_id) {
+                  try {
+                    const { cancelOrder, placeLimitOrder, getTestnetClient } = await import('./services/testnetEngine.js');
+                    const { getSymbol } = await import('./config/binance.js');
+                    const testnetClient = getTestnetClient();
+                    
+                    if (testnetClient) {
+                      // Cancel old Binance limit order
+                      await cancelOrder(testnetClient, getSymbol(), order.binance_order_id);
+                      console.log(`[Scheduler][${method.name}] Cancelled old Binance limit order ${order.binance_order_id}`);
+                      
+                      // Place new Binance limit order with updated parameters
+                      const newEntry = decision.new_entry || order.entry_price;
+                      const newQty = decision.new_entry ? (order.size_usd / newEntry) : order.size_qty;
+                      const newLimitOrder = await placeLimitOrder(
+                        testnetClient,
+                        getSymbol(),
+                        order.side.toUpperCase(),
+                        newQty,
+                        newEntry
+                      );
+                      const newBinanceOrderId = newLimitOrder.orderId.toString();
+                      console.log(`[Scheduler][${method.name}] Placed new Binance limit order ${newBinanceOrderId}`);
+                      
+                      // Update database with new parameters and new binance_order_id
+                      await modifyPendingOrder(db, order, decision.new_entry, decision.new_sl, decision.new_tp, newBinanceOrderId);
+                      console.log(`[Scheduler][${method.name}] Modified testnet pending order ${decision.order_id}: ${decision.reason}`);
+                    } else {
+                      console.warn(`[Scheduler][${method.name}] Testnet client not available, only updating DB`);
+                      await modifyPendingOrder(db, order, decision.new_entry, decision.new_sl, decision.new_tp);
+                    }
+                  } catch (binanceError) {
+                    console.error(`[Scheduler][${method.name}] Failed to sync modify with Binance:`, binanceError.message);
+                    // Continue to update DB even if Binance sync fails
+                    await modifyPendingOrder(db, order, decision.new_entry, decision.new_sl, decision.new_tp);
+                  }
+                } else {
+                  // No Binance order ID, just update DB
+                  await modifyPendingOrder(db, order, decision.new_entry, decision.new_sl, decision.new_tp);
+                  console.log(`[Scheduler][${method.name}] Modified pending order ${decision.order_id} (DB only): ${decision.reason}`);
+                }
               }
             } catch (error) {
               console.error(`[Scheduler][${method.name}] Failed to execute pending order decision for ${decision.order_id}:`, error.message);
@@ -373,6 +413,8 @@ async function runMethodAnalysis(methodId) {
                 // Create pending limit order for testnet
                 const { createTestnetPendingOrder } = await import('./db/testnetDatabase.js');
                 const { randomUUID } = await import('crypto');
+                const { placeLimitOrder, getTestnetClient } = await import('./services/testnetEngine.js');
+                const { getSymbol } = await import('./config/binance.js');
 
                 // Cap pending order size at maxPendingOrderSize
                 let orderSizeUsd = position.size_usd;
@@ -383,6 +425,28 @@ async function runMethodAnalysis(methodId) {
                   console.log(`[Scheduler][${method.name}] Testnet pending order size $${orderSizeUsd.toFixed(2)} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
                   orderSizeUsd = maxPendingOrderSize;
                   orderSizeQty = orderSizeUsd / position.entry_price;
+                }
+
+                // Place limit order on Binance
+                let binanceOrderId = null;
+                try {
+                  const testnetClient = getTestnetClient();
+                  if (testnetClient) {
+                    const limitOrder = await placeLimitOrder(
+                      testnetClient,
+                      getSymbol(),
+                      position.side.toUpperCase(),
+                      orderSizeQty,
+                      position.entry_price
+                    );
+                    binanceOrderId = limitOrder.orderId.toString();
+                    console.log(`[Scheduler][${method.name}] Binance limit order placed: ${binanceOrderId}`);
+                  } else {
+                    console.warn(`[Scheduler][${method.name}] Testnet client not available, skipping Binance limit order`);
+                  }
+                } catch (binanceError) {
+                  console.error(`[Scheduler][${method.name}] Failed to place Binance limit order:`, binanceError.message);
+                  // Continue to save to DB even if Binance order fails
                 }
 
                 await createTestnetPendingOrder(db, {
@@ -400,9 +464,10 @@ async function runMethodAnalysis(methodId) {
                   expected_rr: position.expected_rr,
                   linked_prediction_id: btcPredictionId,
                   invalidation_level: position.invalidation_level,
-                  method_id: methodId
+                  method_id: methodId,
+                  binance_order_id: binanceOrderId
                 });
-                console.log(`[Scheduler][${method.name}] Testnet limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd.toFixed(2)}`);
+                console.log(`[Scheduler][${method.name}] Testnet limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd.toFixed(2)}, binance_order_id: ${binanceOrderId}`);
               }
             }
           } catch (testnetError) {

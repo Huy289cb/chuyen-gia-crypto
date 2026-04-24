@@ -332,6 +332,23 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
             continue;
           }
 
+          // Cancel Binance limit order before executing as market order
+          if (order.binance_order_id) {
+            try {
+              const { cancelOrder, getTestnetClient } = await import('../services/testnetEngine.js');
+              const { getSymbol } = await import('../config/binance.js');
+              const testnetClient = getTestnetClient();
+              
+              if (testnetClient) {
+                await cancelOrder(testnetClient, getSymbol(), order.binance_order_id);
+                console.log(`[PriceScheduler] Cancelled Binance limit order ${order.binance_order_id} before executing as market order`);
+              }
+            } catch (cancelError) {
+              console.error(`[PriceScheduler] Failed to cancel Binance limit order ${order.binance_order_id}:`, cancelError.message);
+              // Continue to execute even if cancel fails
+            }
+          }
+
           // Execute the order (convert to actual position on Binance testnet)
           const positionData = {
             side: order.side,

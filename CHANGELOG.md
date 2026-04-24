@@ -2,6 +2,59 @@
 
 All notable changes to the project will be documented in this file.
 
+## [24/04/2026] - v2.8.1 - Binance Testnet Pending Order Synchronization Fix
+
+### Bug Fixes
+
+**Issue 1: Pending Orders Not Creating Limit Orders on Binance**
+- **Problem**: Paper trading created pending orders but Binance testnet didn't create corresponding limit orders
+- **Root Cause**: `scheduler.js` only saved pending orders to database, didn't call Binance API to place limit orders
+- **Fix**:
+  - Added `placeLimitOrder` call when creating testnet pending orders in scheduler.js
+  - Added `binance_order_id` column to `testnet_pending_orders` table to track Binance order IDs
+  - Updated `createTestnetPendingOrder` to accept and save `binance_order_id` parameter
+- **Impact**: Testnet pending orders now create actual limit orders on Binance, mirroring paper trading behavior
+- **Files**: `backend/src/scheduler.js`, `backend/src/db/migrations.js`, `backend/src/db/testnetDatabase.js`
+
+**Issue 2: Cancel Pending Order Not Syncing with Binance**
+- **Problem**: Canceling pending orders only updated database, didn't cancel Binance limit orders
+- **Fix**:
+  - Updated `cancelTestnetPendingOrder` to cancel Binance limit order before updating DB
+  - Updated scheduler to pass `binance_order_id` when canceling pending orders
+- **Impact**: Canceling pending orders now cancels corresponding Binance limit orders
+- **Files**: `backend/src/db/testnetDatabase.js`, `backend/src/scheduler.js`
+
+**Issue 3: Execute Pending Order Not Canceling Binance Limit Order**
+- **Problem**: When price hit entry, system placed market order but didn't cancel existing Binance limit order
+- **Fix**:
+  - Added Binance limit order cancellation in `checkTestnetPendingOrders` before executing as market order
+- **Impact**: Prevents duplicate orders when pending orders execute
+- **Files**: `backend/src/schedulers/priceUpdateScheduler.js`
+
+**Issue 4: Modify Pending Order Not Syncing with Binance**
+- **Problem**: Modifying pending orders only updated database, didn't sync with Binance
+- **Fix**:
+  - Updated scheduler modify logic to cancel old Binance order and place new order with updated parameters
+  - Updated `modifyPendingOrder` to accept `newBinanceOrderId` parameter
+  - Updated `updatePendingOrder` to support `binance_order_id` field
+- **Impact**: Modifying pending orders now syncs with Binance by replacing the limit order
+- **Files**: `backend/src/scheduler.js`, `backend/src/db/database.js`
+
+### Database Schema Updates
+
+**Issue 5: Add binance_order_id Column to Pending Orders Tables**
+- Added `binance_order_id TEXT` column to `testnet_pending_orders` table
+- Added `binance_order_id TEXT` column to `pending_orders` table (for consistency)
+- **Impact**: Both tables can track Binance order IDs for synchronization
+- **Files**: `backend/src/db/migrations.js`
+
+### Version Update
+
+**Issue 6: Version Bump to 2.8.1**
+- Updated frontend version from 2.8.0 to 2.8.1
+- **Impact**: Frontend reflects new version with pending order sync fixes
+- **Files**: `frontend/lib/version.ts`
+
 ## [24/04/2026] - v2.8.0 - Binance Futures REST API Refactoring
 
 ### Major Refactoring
