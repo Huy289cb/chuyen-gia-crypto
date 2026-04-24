@@ -1,4 +1,4 @@
-# Crypto Trend Analyzer (v2.7.0)
+# Crypto Trend Analyzer (v2.8.0)
 
 MVP web app phân tích xu hướng BTC/ETH sử dụng **Kim Nghia (SMC + Volume + Fibonacci)** với AI và **Paper Trading**.
 
@@ -58,17 +58,19 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - See `docs/ai-position-management.md` for detailed documentation
 
-### Binance Futures Testnet Integration (New)
-- **Real Trading on Testnet**: Execute actual trades on Binance Futures Testnet environment
-- **Parallel with Paper Trading**: Compare performance between paper trading and real testnet execution
+### Binance Futures Integration (New - REST API)
+- **Real Trading**: Execute actual trades on Binance Futures (Demo + Mainnet support)
+- **Official REST API**: No SDK dependency, uses official Binance REST API directly
+- **Parallel with Paper Trading**: Compare performance between paper trading and real execution
 - **BTC-Only**: Currently supports BTCUSDT trading with Kim Nghia method
 - **Auto-Entry**: Automatic position opening based on Kim Nghia analysis (75% confidence threshold, R:R >= 2.5)
-- **Risk Management**: 10% risk per trade, SL/TP orders placed immediately, leverage support (default 1x)
+- **Risk Management**: 10% risk per trade, SL/TP orders placed immediately, leverage support (default 20x)
 - **Account Sync**: Auto-sync with Binance every 5 minutes, manual sync available via API
 - **Position Management**: Open/close positions, update SL, partial TP support
 - **Trade Events**: Complete audit trail of all trading actions
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown
-- **API Endpoints**: Full REST API for testnet accounts, positions, performance metrics
+- **API Endpoints**: Full REST API for accounts, positions, performance metrics
+- **Environment Switch**: Switch between Demo and Mainnet by changing `BINANCE_BASE_URL`
 - See `docs/binance-testnet-integration.md` for detailed documentation
 
 ### Price Data & AI Models
@@ -139,7 +141,16 @@ crypto-analyzer/
 │   │   ├── services/              # Business logic
 │   │   │   ├── autoEntryLogic.js  # Auto-entry decision engine (multi-method support)
 │   │   │   ├── paperTradingEngine.js # Position management
-│   │   │   ├── binanceClient.js  # Binance Testnet API wrapper
+│   │   │   ├── binanceClient.js  # Binance REST API wrapper (no SDK)
+│   │   │   ├── binance/          # Binance REST API modules
+│   │   │   │   ├── signer.js     # HMAC SHA256 signature
+│   │   │   │   ├── config.js     # Configuration
+│   │   │   │   ├── endpoints.js  # API endpoints
+│   │   │   │   ├── client.js     # HTTP client
+│   │   │   │   ├── market.js     # Market data
+│   │   │   │   ├── account.js    # Account functions
+│   │   │   │   ├── trading.js    # Trading functions
+│   │   │   │   └── stream.js     # User data stream
 │   │   │   └── testnetEngine.js   # Testnet trading engine
 │   │   ├── config/                # Configuration
 │   │   │   ├── methods.js         # Method configurations (ICT, Kim Nghia)
@@ -205,7 +216,7 @@ crypto-analyzer/
 
 - Node.js >= 18
 - Groq API Key (free tier: 20 requests/min)
-- Binance Futures Testnet API Key (optional, for testnet trading)
+- Binance API Key (optional, for real trading on Demo/Mainnet)
 
 ## Chạy local
 
@@ -217,10 +228,11 @@ npm install
 # Tạo .env file với GROQ_API_KEY
 echo "GROQ_API_KEY=gsk_your_key_here" > .env
 
-# (Optional) Thêm Binance Testnet API keys cho testnet trading
-echo "BINANCE_TESTNET_ENABLED=true" >> .env
-echo "BINANCE_TESTNET_API_KEY=your_testnet_api_key" >> .env
-echo "BINANCE_TESTNET_SECRET_KEY=your_testnet_secret_key" >> .env
+# (Optional) Thêm Binance API keys cho trading
+echo "BINANCE_ENABLED=true" >> .env
+echo "BINANCE_BASE_URL=https://demo-fapi.binance.com" >> .env
+echo "BINANCE_API_KEY=your_binance_api_key" >> .env
+echo "BINANCE_API_SECRET=your_binance_secret_key" >> .env
 
 # Khởi tạo database (tự động chạy khi start, có thể chạy thủ công)
 npm run db:init

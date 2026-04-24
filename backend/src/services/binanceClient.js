@@ -1,63 +1,38 @@
 /**
- * Binance Futures Testnet Client Service
+ * Binance Futures Client Service (REST API)
  * 
- * This module provides a wrapper around Binance Futures Testnet API
- * with error handling, retry logic, and rate limiting
+ * This module provides a wrapper around Binance Futures REST API
+ * using the official REST API instead of the SDK
  */
 
-import { USDMClient } from 'binance';
-import { binanceConfig, getBaseUrl } from '../config/binance.js';
-
-// Retry configuration
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
-const RATE_LIMIT_DELAY_MS = 100;
-
-// Rate limit tracking
-let requestCount = 0;
-let lastResetTime = Date.now();
+import { validateConfig } from './binance/config.js';
+import { getServerTime } from './binance/market.js';
+import { getBalance } from './binance/account.js';
+import { getCurrentPosition as getCurrentPositionAPI, getPositionRisk as getPositionRiskAPI } from './binance/account.js';
+import { placeOrder as placeOrderAPI, testOrder, cancelOrder as cancelOrderAPI, cancelAllOrders as cancelAllOrdersAPI, getOpenOrders as getOpenOrdersAPI } from './binance/trading.js';
+import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI } from './binance/trading.js';
 
 /**
- * Initialize Binance Testnet Client
+ * Initialize Binance Client
  */
 export function initTestnetClient() {
-  if (!binanceConfig.enabled) {
-    console.log('[BinanceClient] Testnet is disabled, skipping client initialization');
+  if (!validateConfig()) {
+    console.log('[BinanceClient] Configuration validation failed');
     return null;
   }
 
-  if (!binanceConfig.apiKey || !binanceConfig.secretKey) {
-    console.error('[BinanceClient] API keys are missing');
-    return null;
-  }
-
-  try {
-    const client = new USDMClient({
-      api_key: binanceConfig.apiKey,
-      api_secret: binanceConfig.secretKey,
-      httpBase: getBaseUrl(),
-    });
-
-    console.log('[BinanceClient] Testnet client initialized successfully');
-    return client;
-  } catch (error) {
-    console.error('[BinanceClient] Failed to initialize client:', error.message);
-    return null;
-  }
+  console.log('[BinanceClient] Client initialized successfully (REST API mode)');
+  return {}; // Return empty object - we use module functions
 }
 
 /**
- * Test connection to Binance Testnet
+ * Test connection to Binance
  */
 export async function testConnection(client) {
-  if (!client) {
-    return { success: false, error: 'Client not initialized' };
-  }
-
   try {
-    const response = await client.getServerTime();
-    console.log('[BinanceClient] Connection test successful, server time:', response.serverTime);
-    return { success: true, serverTime: response.serverTime };
+    const serverTime = await getServerTime();
+    console.log('[BinanceClient] Connection test successful, server time:', serverTime);
+    return { success: true, serverTime };
   } catch (error) {
     console.error('[BinanceClient] Connection test failed:', error.message);
     return { success: false, error: error.message };
@@ -65,50 +40,13 @@ export async function testConnection(client) {
 }
 
 /**
- * Get account balance from Binance Testnet
+ * Get account balance from Binance
  * Returns full account information including all balances
  */
 export async function getAccountBalance(client) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const balances = await client.getBalance();
-
-    // Find USDT balance
-    const usdtBalance = balances.find(asset => asset.asset === 'USDT');
-
-    // Calculate total wallet balance across all assets
-    const totalWalletBalance = balances.reduce((sum, b) => sum + parseFloat(b.balance || 0), 0);
-    const totalAvailableBalance = balances.reduce((sum, b) => sum + parseFloat(b.availableBalance || 0), 0);
-
-    return {
-      // USDT specific
-      walletBalance: parseFloat(usdtBalance?.balance || 0),
-      availableBalance: parseFloat(usdtBalance?.availableBalance || 0),
-      crossWalletBalance: parseFloat(usdtBalance?.crossWalletBalance || 0),
-      crossUnPnl: parseFloat(usdtBalance?.crossUnPnl || 0),
-      maxWithdrawAmount: parseFloat(usdtBalance?.maxWithdrawAmount || 0),
-
-      // Total across all assets
-      totalWalletBalance: totalWalletBalance,
-      totalAvailableBalance: totalAvailableBalance,
-      totalUnrealizedProfit: balances.reduce((sum, b) => sum + parseFloat(b.crossUnPnl || 0), 0),
-
-      // All balances
-      balances: balances.map(b => ({
-        asset: b.asset,
-        balance: parseFloat(b.balance || 0),
-        availableBalance: parseFloat(b.availableBalance || 0),
-        crossWalletBalance: parseFloat(b.crossWalletBalance || 0),
-        crossUnPnl: parseFloat(b.crossUnPnl || 0),
-        maxWithdrawAmount: parseFloat(b.maxWithdrawAmount || 0),
-      })),
-
-      // API endpoint used
-      endpoint: getBaseUrl(),
-    };
+    const balance = await getBalance();
+    return balance;
   } catch (error) {
     console.error('[BinanceClient] Failed to get account balance:', error.message);
     throw error;
@@ -119,30 +57,9 @@ export async function getAccountBalance(client) {
  * Get current position for a symbol
  */
 export async function getCurrentPosition(client, symbol) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.getPositionRisk({ symbol });
-    const positions = response || [];
-    
-    // Find position with non-zero quantity
-    const position = positions.find(pos => parseFloat(pos.positionAmt) !== 0);
-    
-    if (!position) {
-      return null;
-    }
-    
-    return {
-      symbol: position.symbol,
-      positionAmt: parseFloat(position.positionAmt),
-      entryPrice: parseFloat(position.entryPrice),
-      markPrice: parseFloat(position.markPrice),
-      unRealizedProfit: parseFloat(position.unRealizedProfit),
-      leverage: parseInt(position.leverage),
-      positionSide: position.positionSide,
-    };
+    const position = await getCurrentPositionAPI(symbol);
+    return position;
   } catch (error) {
     console.error('[BinanceClient] Failed to get current position:', error.message);
     throw error;
@@ -153,12 +70,8 @@ export async function getCurrentPosition(client, symbol) {
  * Place market order
  */
 export async function placeMarketOrder(client, symbol, side, quantity) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.submitOrder({
+    const response = await placeOrderAPI({
       symbol,
       side,
       type: 'MARKET',
@@ -166,17 +79,7 @@ export async function placeMarketOrder(client, symbol, side, quantity) {
     });
     
     console.log(`[BinanceClient] Market order placed: ${side} ${quantity} ${symbol}`);
-    return {
-      orderId: response.orderId,
-      clientOrderId: response.clientOrderId,
-      symbol: response.symbol,
-      side: response.side,
-      type: response.type,
-      transactTime: response.transactTime,
-      executedQty: parseFloat(response.executedQty),
-      cummulativeQuoteQty: parseFloat(response.cummulativeQuoteQty),
-      status: response.status,
-    };
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place market order:', error.message);
     throw error;
@@ -187,12 +90,8 @@ export async function placeMarketOrder(client, symbol, side, quantity) {
  * Place limit order
  */
 export async function placeLimitOrder(client, symbol, side, quantity, price) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.submitOrder({
+    const response = await placeOrderAPI({
       symbol,
       side,
       type: 'LIMIT',
@@ -202,16 +101,7 @@ export async function placeLimitOrder(client, symbol, side, quantity, price) {
     });
     
     console.log(`[BinanceClient] Limit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
-    return {
-      orderId: response.orderId,
-      clientOrderId: response.clientOrderId,
-      symbol: response.symbol,
-      side: response.side,
-      type: response.type,
-      price: parseFloat(response.price),
-      transactTime: response.transactTime,
-      status: response.status,
-    };
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place limit order:', error.message);
     throw error;
@@ -222,12 +112,8 @@ export async function placeLimitOrder(client, symbol, side, quantity, price) {
  * Place stop loss order (STOP_MARKET)
  */
 export async function placeStopLossOrder(client, symbol, side, quantity, stopPrice) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.submitOrder({
+    const response = await placeOrderAPI({
       symbol,
       side,
       type: 'STOP_MARKET',
@@ -237,16 +123,7 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
     });
     
     console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}`);
-    return {
-      orderId: response.orderId,
-      clientOrderId: response.clientOrderId,
-      symbol: response.symbol,
-      side: response.side,
-      type: response.type,
-      stopPrice: parseFloat(response.stopPrice),
-      transactTime: response.transactTime,
-      status: response.status,
-    };
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place stop loss order:', error.message);
     throw error;
@@ -257,12 +134,8 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
  * Place take profit order (TAKE_PROFIT_MARKET)
  */
 export async function placeTakeProfitOrder(client, symbol, side, quantity, price) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.submitOrder({
+    const response = await placeOrderAPI({
       symbol,
       side,
       type: 'TAKE_PROFIT_MARKET',
@@ -272,16 +145,7 @@ export async function placeTakeProfitOrder(client, symbol, side, quantity, price
     });
     
     console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
-    return {
-      orderId: response.orderId,
-      clientOrderId: response.clientOrderId,
-      symbol: response.symbol,
-      side: response.side,
-      type: response.type,
-      stopPrice: parseFloat(response.stopPrice),
-      transactTime: response.transactTime,
-      status: response.status,
-    };
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place take profit order:', error.message);
     throw error;
@@ -292,21 +156,10 @@ export async function placeTakeProfitOrder(client, symbol, side, quantity, price
  * Cancel order by ID
  */
 export async function cancelOrder(client, symbol, orderId) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.cancelOrder({
-      symbol,
-      orderId: orderId.toString(),
-    });
+    const response = await cancelOrderAPI(symbol, orderId);
     console.log(`[BinanceClient] Order cancelled: ${orderId} for ${symbol}`);
-    return {
-      orderId: response.orderId,
-      symbol: response.symbol,
-      status: response.status,
-    };
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to cancel order:', error.message);
     throw error;
@@ -317,12 +170,8 @@ export async function cancelOrder(client, symbol, orderId) {
  * Cancel all orders for a symbol
  */
 export async function cancelAllOrders(client, symbol) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.cancelAllOrders({ symbol });
+    const response = await cancelAllOrdersAPI(symbol);
     console.log(`[BinanceClient] All orders cancelled for ${symbol}`);
     return response;
   } catch (error) {
@@ -335,27 +184,9 @@ export async function cancelAllOrders(client, symbol) {
  * Get open orders for a symbol
  */
 export async function getOpenOrders(client, symbol) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.getAllOpenOrders({ symbol });
-    const orders = response || [];
-
-    return orders.map(order => ({
-      orderId: order.orderId,
-      clientOrderId: order.clientOrderId,
-      symbol: order.symbol,
-      side: order.side,
-      type: order.type,
-      quantity: parseFloat(order.origQty),
-      price: parseFloat(order.price),
-      stopPrice: parseFloat(order.stopPrice || 0),
-      status: order.status,
-      timeInForce: order.timeInForce,
-      updateTime: order.updateTime,
-    }));
+    const orders = await getOpenOrdersAPI(symbol);
+    return orders;
   } catch (error) {
     console.error('[BinanceClient] Failed to get open orders:', error.message);
     throw error;
@@ -366,30 +197,9 @@ export async function getOpenOrders(client, symbol) {
  * Get position risk information
  */
 export async function getPositionRisk(client, symbol) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.getPositionRisk({ symbol });
-    const positions = response || [];
-    
-    return positions.map(pos => ({
-      symbol: pos.symbol,
-      positionAmt: parseFloat(pos.positionAmt),
-      entryPrice: parseFloat(pos.entryPrice),
-      markPrice: parseFloat(pos.markPrice),
-      unRealizedProfit: parseFloat(pos.unRealizedProfit),
-      liquidationPrice: parseFloat(pos.liquidationPrice),
-      leverage: parseInt(pos.leverage),
-      maxNotionalValue: parseFloat(pos.maxNotionalValue),
-      marginType: pos.marginType,
-      isolatedMargin: parseFloat(pos.isolatedMargin),
-      isAutoAddMargin: pos.isAutoAddMargin === 'true',
-      positionSide: pos.positionSide,
-      notional: parseFloat(pos.notional),
-      isolatedWallet: parseFloat(pos.isolatedWallet),
-    }));
+    const positions = await getPositionRiskAPI(symbol);
+    return positions;
   } catch (error) {
     console.error('[BinanceClient] Failed to get position risk:', error.message);
     throw error;
@@ -400,18 +210,10 @@ export async function getPositionRisk(client, symbol) {
  * Set leverage for a symbol
  */
 export async function setLeverage(client, symbol, leverage) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.setLeverage({ symbol, leverage: leverage.toString() });
+    const response = await setLeverageAPI(symbol, leverage);
     console.log(`[BinanceClient] Leverage set to ${leverage}x for ${symbol}`);
-    return {
-      symbol: response.symbol,
-      leverage: parseInt(response.leverage),
-      maxNotionalValue: response.maxNotionalValue,
-    };
+    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to set leverage:', error.message);
     throw error;
@@ -422,12 +224,8 @@ export async function setLeverage(client, symbol, leverage) {
  * Set margin type (ISOLATED or CROSSED)
  */
 export async function setMarginType(client, symbol, marginType) {
-  if (!client) {
-    throw new Error('Client not initialized');
-  }
-
   try {
-    const response = await client.setMarginType({ symbol, marginType });
+    const response = await setMarginTypeAPI(symbol, marginType);
     console.log(`[BinanceClient] Margin type set to ${marginType} for ${symbol}`);
     return response;
   } catch (error) {
@@ -441,56 +239,3 @@ export async function setMarginType(client, symbol, marginType) {
   }
 }
 
-/**
- * Helper function to delay execution (for rate limiting)
- */
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Helper function to retry failed requests
- */
-async function retryWithBackoff(fn, retries = MAX_RETRIES) {
-  try {
-    return await fn();
-  } catch (error) {
-    if (retries <= 0) {
-      throw error;
-    }
-    
-    // Check if error is rate limit related
-    if (error.response?.status === 429 || error.code === -1003) {
-      console.warn(`[BinanceClient] Rate limit hit, waiting ${RETRY_DELAY_MS}ms before retry...`);
-      await delay(RETRY_DELAY_MS);
-    }
-    
-    console.warn(`[BinanceClient] Request failed, retrying... (${retries} attempts left)`);
-    await delay(RETRY_DELAY_MS);
-    return retryWithBackoff(fn, retries - 1);
-  }
-}
-
-/**
- * Check and enforce rate limits
- */
-function checkRateLimit() {
-  const now = Date.now();
-  const elapsed = now - lastResetTime;
-  
-  // Reset counter every minute
-  if (elapsed > 60000) {
-    requestCount = 0;
-    lastResetTime = now;
-  }
-  
-  requestCount++;
-  
-  if (requestCount > binanceConfig.rateLimits.requestWeight) {
-    const waitTime = 60000 - elapsed;
-    console.warn(`[BinanceClient] Rate limit reached, waiting ${waitTime}ms`);
-    return delay(waitTime);
-  }
-  
-  return Promise.resolve();
-}

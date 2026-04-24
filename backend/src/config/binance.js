@@ -1,24 +1,21 @@
 /**
- * Binance Futures Testnet Configuration
+ * Binance Futures Configuration
  * 
- * This module exports configuration for Binance Futures Testnet integration
+ * This module exports configuration for Binance Futures integration
+ * Supports both Demo Trading (demo-fapi.binance.com) and Mainnet (fapi.binance.com)
  */
 
 export const binanceConfig = {
-  // Testnet API endpoints
-  testnetBaseUrl: 'https://demo-fapi.binance.com',
-  mainnetBaseUrl: 'https://fapi.binance.com',
-  
-  // API Configuration
-  apiKey: process.env.BINANCE_TESTNET_API_KEY || '',
-  secretKey: process.env.BINANCE_TESTNET_SECRET_KEY || '',
-  enabled: process.env.BINANCE_TESTNET_ENABLED === 'true',
+  // API Configuration - Uses new environment variables
+  apiKey: process.env.BINANCE_API_KEY || '',
+  secretKey: process.env.BINANCE_API_SECRET || '',
+  enabled: process.env.BINANCE_ENABLED === 'true',
   
   // Trading Configuration
-  symbol: process.env.BINANCE_TESTNET_SYMBOL || 'BTCUSDT',
-  leverage: parseInt(process.env.BINANCE_TESTNET_LEVERAGE || '20', 10),
+  symbol: process.env.BINANCE_SYMBOL || 'BTCUSDT',
+  leverage: parseInt(process.env.BINANCE_LEVERAGE || '20', 10),
   
-  // Rate Limits (Binance Futures Testnet)
+  // Rate Limits (Binance Futures)
   // https://developers.binance.com/docs/derivatives/usdm/introduction
   rateLimits: {
     requestWeight: 2400, // per minute (API request weight limit)
@@ -70,21 +67,14 @@ export const binanceConfig = {
 export function validateConfig() {
   if (binanceConfig.enabled) {
     if (!binanceConfig.apiKey || !binanceConfig.secretKey) {
-      console.error('[BinanceConfig] Testnet is enabled but API keys are missing');
+      console.error('[BinanceConfig] Binance is enabled but API keys are missing');
       return false;
     }
-    console.log('[BinanceConfig] Testnet configuration validated successfully');
+    console.log('[BinanceConfig] Binance configuration validated successfully');
     return true;
   }
-  console.log('[BinanceConfig] Testnet is disabled');
+  console.log('[BinanceConfig] Binance is disabled');
   return true;
-}
-
-/**
- * Get base URL based on environment
- */
-export function getBaseUrl() {
-  return binanceConfig.testnetBaseUrl;
 }
 
 /**

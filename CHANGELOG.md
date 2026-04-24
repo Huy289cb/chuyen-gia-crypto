@@ -2,6 +2,63 @@
 
 All notable changes to the project will be documented in this file.
 
+## [24/04/2026] - v2.8.0 - Binance Futures REST API Refactoring
+
+### Major Refactoring
+
+**Issue 1: Remove SDK Dependency - Use Official REST API**
+- **Problem**: System used `binance` SDK package which added unnecessary dependency and potential compatibility issues
+- **Solution**: Refactored to use official Binance Futures REST API directly
+- **Implementation**:
+  - Created new architecture in `backend/src/services/binance/`:
+    - `signer.js` - HMAC SHA256 signature generation for signed requests
+    - `config.js` - Configuration with environment variables (BINANCE_BASE_URL, API_KEY, API_SECRET, etc.)
+    - `endpoints.js` - API endpoints definitions (TIME, KLINE, PRICE, ACCOUNT, ORDER, etc.)
+    - `client.js` - Core HTTP client with signature, retry logic, error handling
+    - `market.js` - Market data functions (getServerTime, getKlines, getPrice)
+    - `account.js` - Account functions (getAccount, getBalance, getPositionRisk)
+    - `trading.js` - Trading functions (setLeverage, setMarginType, placeOrder, cancelOrder, etc.)
+    - `stream.js` - User data stream (listenKey management)
+  - Updated `binanceClient.js` to use new REST API modules instead of SDK
+  - Removed `binance` package from dependencies
+  - Added `axios` ^1.7.9 as HTTP client
+- **Impact**: 
+  - No SDK dependency - more control and transparency
+  - Better error handling with specific error code detection (-1021, -2015, -1008)
+  - Modular architecture for easier maintenance
+  - Support for both Demo and Mainnet via environment variable
+- **Files**: `backend/src/services/binance/`, `backend/src/services/binanceClient.js`, `backend/package.json`
+
+**Issue 2: Environment Variable Update for Demo/Mainnet Switching**
+- **Problem**: Old environment variables were testnet-specific, couldn't easily switch to mainnet
+- **Solution**: Updated environment variables to support both environments
+- **Implementation**:
+  - Changed `BINANCE_TESTNET_*` to `BINANCE_*` for consistency
+  - Added `BINANCE_BASE_URL` to switch between environments:
+    - Demo: `https://demo-fapi.binance.com`
+    - Mainnet: `https://fapi.binance.com`
+  - Updated `binance.js` config to use new environment variables
+  - Updated `.env.example` with new variable structure
+- **Impact**: Easy switch between Demo and Mainnet by changing one environment variable
+- **Files**: `backend/src/config/binance.js`, `backend/.env.example`
+
+### Documentation Updates
+
+**Issue 3: Documentation Updated for REST API Architecture**
+- Updated `docs/binance-testnet-integration.md` to reflect new REST API architecture
+- Added changelog section documenting the refactoring
+- Updated README.md with new environment variables and architecture
+- **Impact**: Documentation matches new implementation
+- **Files**: `docs/binance-testnet-integration.md`, `README.md`
+
+### Version Update
+
+**Issue 4: Version Bump to 2.8.0**
+- Updated backend version from 1.0.0 to 1.0.1
+- Updated frontend version from 2.7.6 to 2.8.0
+- **Impact**: Versions reflect new REST API refactoring
+- **Files**: `backend/package.json`, `frontend/lib/version.ts`
+
 ## [23/04/2026] - v2.7.6 - Trade History UI Pagination Fix
 
 ### Bug Fixes
