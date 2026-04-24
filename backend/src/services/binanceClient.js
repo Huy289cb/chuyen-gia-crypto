@@ -5,7 +5,8 @@
  * with error handling, retry logic, and rate limiting
  */
 
-import { Spot, Futures } from '@binance/connector';
+import pkg from '@binance/connector';
+const { Spot, Futures } = pkg;
 import { binanceConfig, getBaseUrl } from '../config/binance.js';
 
 // Retry configuration
