@@ -64,6 +64,11 @@ export async function request(method, path, params = {}, signed = false) {
       } else if (code === -1008) {
         // Too many requests
         console.error('[BinanceClient] Rate limit exceeded');
+      } else if (code === -4046) {
+        // No need to change margin type (already set)
+        console.log('[BinanceClient] Margin type already set, skipping retry');
+        // Don't retry this error - it's already in the desired state
+        throw new Error(`Binance API Error ${code}: ${msg}`);
       }
       
       throw new Error(`Binance API Error ${code}: ${msg}`);
@@ -95,6 +100,12 @@ export async function requestWithRetry(method, path, params = {}, signed = false
       return await request(method, path, params, signed);
     } catch (error) {
       lastError = error;
+
+      // Don't retry certain error codes
+      if (error.message.includes('-4046')) {
+        // Margin type already set - no need to retry
+        throw error;
+      }
       
       if (attempt < MAX_RETRIES) {
         console.warn(`[BinanceClient] Request failed (attempt ${attempt}/${MAX_RETRIES}), retrying in ${RETRY_DELAY_MS}ms...`);
