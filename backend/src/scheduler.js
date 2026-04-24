@@ -343,24 +343,31 @@ async function runMethodAnalysis(methodId) {
           try {
             const { openTestnetPosition } = await import('./services/testnetEngine.js');
             const { getOrCreateTestnetAccount, getTestnetPositions } = await import('./db/testnetDatabase.js');
-            
+
             // Get or create testnet account
             const testnetAccount = await getOrCreateTestnetAccount(db, 'BTC', methodId);
-            
+
             // Get open testnet positions
             const openTestnetPositions = await getTestnetPositions(db, { account_id: testnetAccount.id, status: 'open' });
-            
+
             // Evaluate auto-entry for testnet (reuse same logic)
             const testnetDecision = await evaluateAutoEntry(analysis.btc, testnetAccount, openTestnetPositions, method, db);
-            
+
+            console.log(`[Scheduler][${method.name}] Testnet decision: shouldEnter=${testnetDecision.shouldEnter}, orderType=${testnetDecision.orderType}, reason=${testnetDecision.reason}`);
+
             if (testnetDecision.shouldEnter && testnetDecision.suggestedPosition && testnetDecision.orderType === 'market') {
               const position = testnetDecision.suggestedPosition;
               await openTestnetPosition(db, testnetAccount, position, btcPredictionId, methodId);
               console.log(`[Scheduler][${method.name}] Testnet order executed: ${position.side} @ ${position.entry_price}`);
+            } else if (testnetDecision.shouldEnter && testnetDecision.orderType !== 'market') {
+              console.log(`[Scheduler][${method.name}] Testnet skipped: orderType is ${testnetDecision.orderType} (not market)`);
             }
           } catch (testnetError) {
             console.error(`[Scheduler][${method.name}] Testnet execution failed:`, testnetError.message);
+            console.error(`[Scheduler][${method.name}] Testnet error stack:`, testnetError.stack);
           }
+        } else {
+          console.log(`[Scheduler][${method.name}] Testnet execution skipped: BINANCE_TESTNET_ENABLED=${process.env.BINANCE_TESTNET_ENABLED}`);
         }
         
         // Step 6: Testnet position decisions (if enabled)
