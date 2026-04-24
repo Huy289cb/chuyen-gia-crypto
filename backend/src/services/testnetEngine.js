@@ -64,7 +64,8 @@ export async function initTestnetEngine() {
     await setLeverage(testnetClient, getSymbol(), getLeverage());
     console.log('[TestnetEngine] Leverage configured');
   } catch (error) {
-    console.warn('[TestnetEngine] Failed to set leverage (continuing without it):', error.message);
+    console.error('[TestnetEngine] Failed to set leverage: Invalid API-key permissions. Please enable "Enable Futures" for your API key.', error.message);
+    return null; // Stop initialization if futures permissions are missing
   }
 
   // Set margin type (optional - skip if fails)
@@ -72,7 +73,8 @@ export async function initTestnetEngine() {
     await setMarginType(testnetClient, getSymbol(), 'ISOLATED');
     console.log('[TestnetEngine] Margin type configured');
   } catch (error) {
-    console.warn('[TestnetEngine] Failed to set margin type (continuing without it):', error.message);
+    console.error('[TestnetEngine] Failed to set margin type: Invalid API-key permissions. Please enable "Enable Futures" for your API key.', error.message);
+    return null; // Stop initialization if futures permissions are missing
   }
 
   return testnetClient;
