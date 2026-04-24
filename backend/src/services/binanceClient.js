@@ -66,6 +66,7 @@ export async function testConnection(client) {
 
 /**
  * Get account balance from Binance Testnet
+ * Returns full account information including all balances
  */
 export async function getAccountBalance(client) {
   if (!client) {
@@ -74,15 +75,39 @@ export async function getAccountBalance(client) {
 
   try {
     const balances = await client.getBalance();
-    
+
     // Find USDT balance
     const usdtBalance = balances.find(asset => asset.asset === 'USDT');
-    
+
+    // Calculate total wallet balance across all assets
+    const totalWalletBalance = balances.reduce((sum, b) => sum + parseFloat(b.balance || 0), 0);
+    const totalAvailableBalance = balances.reduce((sum, b) => sum + parseFloat(b.availableBalance || 0), 0);
+
     return {
+      // USDT specific
       walletBalance: parseFloat(usdtBalance?.balance || 0),
       availableBalance: parseFloat(usdtBalance?.availableBalance || 0),
-      totalWalletBalance: parseFloat(usdtBalance?.balance || 0),
-      totalUnrealizedProfit: parseFloat(usdtBalance?.crossUnPnl || 0),
+      crossWalletBalance: parseFloat(usdtBalance?.crossWalletBalance || 0),
+      crossUnPnl: parseFloat(usdtBalance?.crossUnPnl || 0),
+      maxWithdrawAmount: parseFloat(usdtBalance?.maxWithdrawAmount || 0),
+
+      // Total across all assets
+      totalWalletBalance: totalWalletBalance,
+      totalAvailableBalance: totalAvailableBalance,
+      totalUnrealizedProfit: balances.reduce((sum, b) => sum + parseFloat(b.crossUnPnl || 0), 0),
+
+      // All balances
+      balances: balances.map(b => ({
+        asset: b.asset,
+        balance: parseFloat(b.balance || 0),
+        availableBalance: parseFloat(b.availableBalance || 0),
+        crossWalletBalance: parseFloat(b.crossWalletBalance || 0),
+        crossUnPnl: parseFloat(b.crossUnPnl || 0),
+        maxWithdrawAmount: parseFloat(b.maxWithdrawAmount || 0),
+      })),
+
+      // API endpoint used
+      endpoint: getBaseUrl(),
     };
   } catch (error) {
     console.error('[BinanceClient] Failed to get account balance:', error.message);
