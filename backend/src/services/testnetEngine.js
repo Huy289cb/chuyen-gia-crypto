@@ -157,7 +157,7 @@ export async function openTestnetPosition(db, account, positionData, predictionI
       entry_price: entry_price,
       stop_loss: stop_loss,
       take_profit: take_profit,
-      size_usd: size_usd,
+      size_usd: cappedSizeUsd,
       size_qty: size_qty,
       risk_usd: risk_usd,
       risk_percent: risk_percent,
@@ -503,8 +503,8 @@ export async function syncTestnetAccount(db, account) {
 
       console.log(`[TestnetEngine] Auto-corrected account ${account.id} with Binance values`);
     } else {
-      // No discrepancy, just update equity with latest unrealized PnL
-      await updateTestnetAccountEquity(db, account.id, balance.totalUnrealizedProfit);
+      // No discrepancy, just update equity with latest total wallet balance
+      await updateTestnetAccountEquityDirect(db, account.id, balance.totalWalletBalance);
     }
     
     // Sync positions with Binance
