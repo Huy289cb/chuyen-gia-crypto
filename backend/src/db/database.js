@@ -1367,7 +1367,7 @@ export async function updatePosition(db, positionId, updates) {
     values.push(positionId);
     
     db.run(
-      `UPDATE positions SET ${fields.join(', ')} WHERE id = ?`,
+      `UPDATE positions SET ${fields.join(', ')} WHERE position_id = ?`,
       values,
       function(err) {
         if (err) {
@@ -1451,7 +1451,7 @@ export async function closePosition(db, positionId, closePrice, closeReason) {
        close_price = ?,
        close_time = datetime('now'),
        close_reason = ?
-       WHERE id = ?`,
+       WHERE position_id = ?`,
       [closePrice, closeReason, positionId],
       function(err) {
         if (err) {
@@ -1908,7 +1908,11 @@ export async function getPendingOrders(db, filters = {}) {
   return new Promise((resolve, reject) => {
     const conditions = [];
     const values = [];
-    
+
+    if (filters.order_id) {
+      conditions.push('order_id = ?');
+      values.push(filters.order_id);
+    }
     if (filters.symbol) {
       conditions.push('symbol = ?');
       values.push(filters.symbol.toUpperCase());
@@ -1925,7 +1929,7 @@ export async function getPendingOrders(db, filters = {}) {
       conditions.push('method_id = ?');
       values.push(filters.method_id);
     }
-    
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     
     db.all(
@@ -1943,9 +1947,9 @@ export async function getPendingOrders(db, filters = {}) {
 export async function executePendingOrder(db, orderId, positionId) {
   return new Promise((resolve, reject) => {
     db.run(
-      `UPDATE pending_orders 
+      `UPDATE pending_orders
        SET status = 'executed', executed_at = datetime('now')
-       WHERE id = ?`,
+       WHERE order_id = ?`,
       [orderId],
       function(err) {
         if (err) {
@@ -1962,9 +1966,9 @@ export async function executePendingOrder(db, orderId, positionId) {
 export async function cancelPendingOrder(db, orderId, reason = 'cancelled') {
   return new Promise((resolve, reject) => {
     db.run(
-      `UPDATE pending_orders 
+      `UPDATE pending_orders
        SET status = ?
-       WHERE id = ?`,
+       WHERE order_id = ?`,
       [`cancelled_${reason}`, orderId],
       function(err) {
         if (err) {
@@ -2020,9 +2024,9 @@ export async function updatePendingOrder(db, orderId, updates) {
     values.push(orderId);
     
     db.run(
-      `UPDATE pending_orders 
+      `UPDATE pending_orders
        SET ${fields.join(', ')}
-       WHERE id = ?`,
+       WHERE order_id = ?`,
       values,
       function(err) {
         if (err) {
