@@ -121,7 +121,7 @@ The system enforces bias consistency through two mechanisms:
 
 The AI now receives enhanced context for decision making:
 
-- **60 most recent 15m candles** for BTC (reduced from unlimited to focus on recent price action)
+- **30 most recent 15m candles** for BTC (reduced from 60 to avoid rate limits)
 - **Open positions** with detailed info:
   - Position ID
   - Entry price, current price, SL, TP

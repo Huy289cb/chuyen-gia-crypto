@@ -276,7 +276,7 @@ describe('buildUserPrompt', () => {
 
       await buildUserPrompt(mockPriceData, mockDb, 'kim_nghia');
 
-      expect(getOHLCCandles).toHaveBeenCalledWith(mockDb, 'BTC', 60, '15m');
+      expect(getOHLCCandles).toHaveBeenCalledWith(mockDb, 'BTC', 30, '15m');
     });
 
     it('should include OHLC data in prompt when available', async () => {
@@ -290,7 +290,7 @@ describe('buildUserPrompt', () => {
 
       const prompt = await buildUserPrompt(mockPriceData, mockDb, 'kim_nghia');
 
-      expect(prompt).toContain('BTC OHLC CANDLES (15m, 60 candles):');
+      expect(prompt).toContain('BTC OHLC CANDLES (15m, 30 candles):');
     });
 
     it('should not fetch OHLC for non-Kim Nghia methods', async () => {

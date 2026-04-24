@@ -56,8 +56,8 @@ export async function startScheduler() {
   //   });
   // });
 
-  // KimNghia Method - Runs at 0m, 10m, 20m, 30m, 40m, 50m (every 10 minutes)
-  cron.schedule('0,10,20,30,40,50 * * * *', () => {
+  // KimNghia Method - Runs at 0m, 15m, 30m, 45m (every 15 minutes)
+  cron.schedule('0,15,30,45 * * * *', () => {
     console.log('[Scheduler] Triggering KimNghia analysis...');
     runMethodAnalysis('kim_nghia').catch(err => {
       console.error('[Scheduler] KimNghia analysis failed:', err.message);
@@ -102,7 +102,7 @@ export async function startScheduler() {
     })();
   }
   
-  console.log('[Scheduler] Staggered scheduler registered (ICT: disabled, KimNghia: 0,10,20,30,40,50 * * * *)');
+  console.log('[Scheduler] Staggered scheduler registered (ICT: disabled, KimNghia: 0,15,30,45 * * * *)');
 }
 
 /**

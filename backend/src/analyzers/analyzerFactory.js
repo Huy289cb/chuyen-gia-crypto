@@ -288,22 +288,22 @@ export async function buildUserPrompt(priceData, db, methodId) {
   const methodConfig = getMethodConfig(methodId);
   const methodName = methodConfig.name;
 
-  // Fetch OHLC candle data for Kim Nghia method (BTC only, 60 candles)
+  // Fetch OHLC candle data for Kim Nghia method (BTC only, 30 candles)
   let ohlcContext = '';
   if (methodId === 'kim_nghia' && db) {
     try {
       const { getOHLCCandles } = await import('../db/database.js');
       console.log(`[AnalyzerFactory][${methodId}] Fetching OHLC data for analysis...`);
-      const btcOhlc = await getOHLCCandles(db, 'BTC', 60, '15m');
+      const btcOhlc = await getOHLCCandles(db, 'BTC', 30, '15m');
       
       if (btcOhlc && btcOhlc.length > 0) {
         const btcRecent = btcOhlc.map(c => 
           `[${new Date(c.timestamp).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}] O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)} V:${c.volume || 'N/A'}`
         ).join('\n');
-        ohlcContext += `\nBTC OHLC CANDLES (15m, 60 candles):\n${btcRecent}\n`;
+        ohlcContext += `\nBTC OHLC CANDLES (15m, 30 candles):\n${btcRecent}\n`;
       }
       
-      console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles`);
+      console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles (reduced to 30 for rate limit)`);
     } catch (error) {
       console.log(`[AnalyzerFactory][${methodId}] Failed to fetch OHLC data:`, error.message);
     }
@@ -360,8 +360,8 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
       const { getFibonacciFromOHLC } = await import('../utils/fibonacci.js');
       const { getOHLCCandles } = await import('../db/database.js');
       console.log('[AnalyzerFactory] Fetching OHLC data for Fibonacci calculation...');
-      const btcOhlc = await getOHLCCandles(db, 'BTC', 50, '15m');
-      const ethOhlc = await getOHLCCandles(db, 'ETH', 50, '15m');
+      const btcOhlc = await getOHLCCandles(db, 'BTC', 30, '15m');
+      const ethOhlc = await getOHLCCandles(db, 'ETH', 30, '15m');
       console.log('[AnalyzerFactory] OHLC data fetched - BTC:', btcOhlc?.length, 'candles, ETH:', ethOhlc?.length, 'candles');
 
       // Check if OHLC data is available before calculating Fibonacci

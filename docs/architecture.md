@@ -51,7 +51,7 @@ Hệ thống hỗ trợ 2 phương pháp phân tích:
 
 **Current Status:**
 - ICT method: Disabled (scheduler commented out, account initialization commented out)
-- Kim Nghia method: Active (10-minute schedule: 0,10,20,30,40,50)
+- Kim Nghia method: Active (15-minute schedule: 0,15,30,45)
 - Frontend: Defaults to kim_nghia, method selector UI preserved
 - Backend: ICT configuration preserved in methods.js with `enabled: false`
 

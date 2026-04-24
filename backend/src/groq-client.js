@@ -4,6 +4,15 @@
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'openai/gpt-oss-120b'];
 
+// Get available API keys from environment
+function getApiKeys() {
+  const keys = [];
+  if (process.env.GROQ_API_KEY_1) keys.push(process.env.GROQ_API_KEY_1);
+  if (process.env.GROQ_API_KEY_2) keys.push(process.env.GROQ_API_KEY_2);
+  if (process.env.GROQ_API_KEY) keys.push(process.env.GROQ_API_KEY);
+  return keys.length > 0 ? keys : null;
+}
+
 // Rate limiting protection
 let lastCallTime = 0;
 const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
@@ -93,9 +102,23 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
 }
 
 class GroqClient {
-  constructor(apiKey) {
-    this.apiKey = apiKey;
+  constructor(apiKeys) {
+    this.apiKeys = Array.isArray(apiKeys) ? apiKeys : [apiKeys];
+    this.currentKeyIndex = 0;
     this.baseUrl = GROQ_API_URL;
+  }
+
+  getCurrentApiKey() {
+    return this.apiKeys[this.currentKeyIndex] || this.apiKeys[0];
+  }
+
+  switchToNextApiKey() {
+    if (this.currentKeyIndex < this.apiKeys.length - 1) {
+      this.currentKeyIndex++;
+      console.log(`[GroqClient] Switching to API key ${this.currentKeyIndex + 1}/${this.apiKeys.length}`);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -118,6 +141,8 @@ class GroqClient {
     }
     lastCallTime = Date.now();
 
+    let lastError;
+
     // Try each model in sequence, starting with the first one
     for (let modelIndex = 0; modelIndex < MODELS.length; modelIndex++) {
       const currentModel = MODELS[modelIndex];
@@ -135,8 +160,6 @@ class GroqClient {
         // response_format: { type: 'json_object' }
       };
 
-      let lastError;
-
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           console.log(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1}/${maxRetries + 1}`);
@@ -144,7 +167,7 @@ class GroqClient {
           const response = await fetchWithTimeout(this.baseUrl, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${this.apiKey}`,
+              'Authorization': `Bearer ${this.getCurrentApiKey()}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify(requestBody)
@@ -153,9 +176,14 @@ class GroqClient {
           if (!response.ok) {
             const errorText = await response.text();
 
-            // If 429 error, try next model instead of retrying
-            if (response.status === 429) {
-              console.log(`[GroqClient] Model ${currentModel} hit rate limit (429), switching to next model...`);
+            // If 429 or 404 error, try next API key instead of retrying
+            if (response.status === 429 || response.status === 404) {
+              console.log(`[GroqClient] Model ${currentModel} hit rate limit (429) or not found (404), trying next API key...`);
+              if (this.switchToNextApiKey()) {
+                attempt = -1; // Reset attempt counter to retry with new key
+                continue;
+              }
+              console.log(`[GroqClient] No more API keys available, switching to next model...`);
               break; // Break out of retry loop to try next model
             }
 
@@ -184,20 +212,14 @@ class GroqClient {
           lastError = error;
           console.error(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1} failed:`, error.message);
 
-          // If it's a 429 error, break to try next model
-          if (error.message.includes('429') || error.message.includes('rate limit')) {
-            console.log(`[GroqClient] Model ${currentModel} rate limited, will try next model`);
-            break;
-          }
-
           if (attempt < maxRetries) {
             let delay;
 
             // Check for specific 429 rate limit error
             if (error.message.includes('429') || error.message.includes('rate limit')) {
-              // For 429 errors, use much longer delays
-              delay = Math.min(60000, Math.pow(2, attempt) * 5000); // Start at 5s, max 60s
-              console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms before retry...`);
+              // For 429 errors, use much longer delays (1 minute minimum)
+              delay = 60000; // Fixed 1 minute wait for rate limits
+              console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms (1 minute) before retry...`);
             } else {
               // For other errors, use normal exponential backoff
               delay = Math.pow(2, attempt) * 1000;
@@ -232,12 +254,14 @@ class GroqClient {
 }
 
 // Factory function for easy instantiation
-export function createGroqClient(apiKey) {
-  if (!apiKey) {
+export function createGroqClient(apiKeyOrKeys) {
+  const keys = Array.isArray(apiKeyOrKeys) ? apiKeyOrKeys : getApiKeys();
+  if (!keys || keys.length === 0) {
     console.log('[GroqClient] No API key provided, client will use fallback');
     return null;
   }
-  return new GroqClient(apiKey);
+  console.log(`[GroqClient] Initialized with ${keys.length} API key(s)`);
+  return new GroqClient(keys);
 }
 
 export { GroqClient };
