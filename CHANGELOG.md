@@ -2,6 +2,41 @@
 
 All notable changes to the project will be documented in this file.
 
+## [25/04/2026] - v2.8.4 - Binance API Side Parameter Format Fix
+
+### Bug Fixes
+
+**Issue 1: Binance API Error -1117: Invalid side**
+- **Problem**: Binance API returned error "-1117: Invalid side" when placing orders
+- **Root Cause**: Internal system uses lowercase 'long'/'short' for side parameters, but Binance API requires uppercase 'BUY'/'SELL'
+- **Fix**:
+  - Added side conversion in testnetEngine.js: `binanceSide = side === 'long' ? 'BUY' : 'SELL'`
+  - Fixed all functions that call Binance API: openTestnetPosition, closeTestnetPositionEngine, updateTestnetPositionSL, checkTestnetSLTP, handlePartialTP, syncTestnetPositions
+  - Fixed scheduler.js limit order placement: converted position.side to binanceSide before calling placeLimitOrder
+  - Fixed all side comparisons: changed `position.side === 'BUY'` to `position.side === 'long'`
+- **Impact**: Binance orders now place successfully with correct side format
+- **Files**: `backend/src/services/testnetEngine.js`, `backend/src/scheduler.js`
+
+### Quality Assurance
+
+**Issue 2: QA Review - Format Conversion Documentation**
+- **Problem**: No centralized documentation for Binance API format requirements
+- **Solution**: Created comprehensive format conversion utilities and documentation
+- **Implementation**:
+  - Created `src/utils/binanceFormatConverter.js` with conversion functions (toBinanceSide, fromBinanceSide, toBinanceOrderType)
+  - Created `docs/binance-api-format-guide.md` with format requirements, examples, and code review checklist
+  - Documented all Binance API parameter formats (side, order type, numeric, string enums, boolean)
+  - Added error code reference for common Binance API errors
+- **Impact**: Future developers have clear guidance for Binance API format conversions
+- **Files**: `backend/src/utils/binanceFormatConverter.js`, `docs/binance-api-format-guide.md`
+
+### Version Update
+
+**Issue 3: Version Bump to 2.8.4**
+- Updated frontend version from 2.8.3 to 2.8.4
+- **Impact**: Frontend reflects new version with Binance side parameter fix
+- **Files**: `frontend/lib/version.ts`
+
 ## [25/04/2026] - v2.8.3 - Frontend Infinite API Loop Fix
 
 ### Bug Fixes

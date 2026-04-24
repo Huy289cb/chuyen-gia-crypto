@@ -142,11 +142,14 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   try {
     // Record event: position opening started
     
+    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+    const binanceSide = side === 'long' ? 'BUY' : 'SELL';
+    
     // Place market order
-    const order = await placeMarketOrder(testnetClient, symbol, side, size_qty);
+    const order = await placeMarketOrder(testnetClient, symbol, binanceSide, size_qty);
     
     // Place SL order (opposite side)
-    const slSide = side === 'BUY' ? 'SELL' : 'BUY';
+    const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
     const slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, size_qty, stop_loss);
     
     // Place TP order (opposite side)
@@ -270,7 +273,9 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
     }
     
     // Place opposite market order to close
-    const closeSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+    const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
     const closeOrder = await placeMarketOrder(testnetClient, position.symbol, closeSide, position.size_qty);
     
     // Calculate realized PnL
@@ -330,7 +335,9 @@ export async function updateTestnetPositionSL(db, position, newSL, reason) {
     }
     
     // Place new SL order
-    const slSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+    const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
     const newSLOrder = await placeStopLossOrder(testnetClient, position.symbol, slSide, position.size_qty, newSL);
     
     // Update database
@@ -363,7 +370,7 @@ export async function checkTestnetSLTP(db, position, currentPrice) {
     return null;
   }
 
-  const isLong = position.side === 'BUY';
+  const isLong = position.side === 'long';
   
   // Check SL hit
   const slHit = isLong ? currentPrice <= position.stop_loss : currentPrice >= position.stop_loss;
@@ -444,7 +451,9 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
 
   try {
     const symbol = getSymbol();
-    const closeSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+    const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
     
     // Calculate partial close ratio (e.g., 50% for 2 TP levels, 33% for 3 TP levels)
     const closeRatio = 1 / totalTPLevels;
@@ -616,7 +625,9 @@ async function syncTestnetPositions(db, account) {
           
           // Re-place SL order if position is still open
           try {
-            const slSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+            // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+            const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+            const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
             const newSLOrder = await placeStopLossOrder(testnetClient, symbol, slSide, position.size_qty, position.stop_loss);
             
             await updateTestnetPosition(db, position.position_id, {
@@ -659,7 +670,9 @@ async function syncTestnetPositions(db, account) {
           
           // Re-place TP order if position is still open
           try {
-            const tpSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+            // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+            const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+            const tpSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
             const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, tpSide, position.size_qty, position.take_profit);
             
             await updateTestnetPosition(db, position.position_id, {
@@ -706,7 +719,7 @@ export async function updateTestnetPositionsPnL(db, currentPrice) {
     const openPositions = await getTestnetPositions(db, { status: 'open' });
     
     for (const position of openPositions) {
-      const isLong = position.side === 'BUY';
+      const isLong = position.side === 'long';
       const priceDiff = isLong 
         ? currentPrice - position.entry_price 
         : position.entry_price - currentPrice;

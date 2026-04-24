@@ -284,10 +284,12 @@ async function runMethodAnalysis(methodId) {
                       // Place new Binance limit order with updated parameters
                       const newEntry = decision.new_entry || order.entry_price;
                       const newQty = decision.new_entry ? (order.size_usd / newEntry) : order.size_qty;
+                      // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+                      const binanceSide = order.side === 'long' ? 'BUY' : 'SELL';
                       const newLimitOrder = await placeLimitOrder(
                         testnetClient,
                         getSymbol(),
-                        order.side.toUpperCase(),
+                        binanceSide,
                         newQty,
                         newEntry
                       );
@@ -432,10 +434,12 @@ async function runMethodAnalysis(methodId) {
                 try {
                   const testnetClient = getTestnetClient();
                   if (testnetClient) {
+                    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+                    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
                     const limitOrder = await placeLimitOrder(
                       testnetClient,
                       getSymbol(),
-                      position.side.toUpperCase(),
+                      binanceSide,
                       orderSizeQty,
                       position.entry_price
                     );
@@ -532,10 +536,12 @@ async function runMethodAnalysis(methodId) {
                         // Place new Binance limit order with updated parameters
                         const newEntry = decision.new_entry || order.entry_price;
                         const newQty = decision.new_entry ? (order.size_usd / newEntry) : order.size_qty;
+                        // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+                        const binanceSide = order.side === 'long' ? 'BUY' : 'SELL';
                         const newLimitOrder = await placeLimitOrder(
                           testnetClient,
                           getSymbol(),
-                          order.side.toUpperCase(),
+                          binanceSide,
                           newQty,
                           newEntry
                         );
