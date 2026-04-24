@@ -59,13 +59,20 @@ export async function initTestnetEngine() {
     return null;
   }
 
-  // Set leverage for the symbol
+  // Set leverage for the symbol (optional - skip if fails)
   try {
     await setLeverage(testnetClient, getSymbol(), getLeverage());
-    await setMarginType(testnetClient, getSymbol(), 'ISOLATED');
-    console.log('[TestnetEngine] Leverage and margin type configured');
+    console.log('[TestnetEngine] Leverage configured');
   } catch (error) {
-    console.error('[TestnetEngine] Failed to configure leverage/margin:', error.message);
+    console.warn('[TestnetEngine] Failed to set leverage (continuing without it):', error.message);
+  }
+
+  // Set margin type (optional - skip if fails)
+  try {
+    await setMarginType(testnetClient, getSymbol(), 'ISOLATED');
+    console.log('[TestnetEngine] Margin type configured');
+  } catch (error) {
+    console.warn('[TestnetEngine] Failed to set margin type (continuing without it):', error.message);
   }
 
   return testnetClient;
