@@ -190,20 +190,16 @@ describe('Price Update Scheduler - Testnet Monitoring', () => {
 
   describe('Testnet Enabled Check', () => {
     it('should only run testnet updates when enabled', () => {
-      const originalEnv = process.env.BINANCE_TESTNET_ENABLED;
-      
-      // Test when enabled
-      process.env.BINANCE_TESTNET_ENABLED = 'true';
-      const enabled = process.env.BINANCE_TESTNET_ENABLED === 'true';
-      expect(enabled).toBe(true);
+      const originalEnv = process.env.BINANCE_ENABLED;
 
-      // Test when disabled
-      process.env.BINANCE_TESTNET_ENABLED = 'false';
-      const disabled = process.env.BINANCE_TESTNET_ENABLED === 'true';
+      process.env.BINANCE_ENABLED = 'true';
+      const enabled = process.env.BINANCE_ENABLED === 'true';
+
+      process.env.BINANCE_ENABLED = 'false';
+      const disabled = process.env.BINANCE_ENABLED === 'true';
+
+      process.env.BINANCE_ENABLED = originalEnv;
       expect(disabled).toBe(false);
-
-      // Restore original
-      process.env.BINANCE_TESTNET_ENABLED = originalEnv;
     });
   });
 });

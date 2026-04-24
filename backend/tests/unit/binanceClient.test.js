@@ -84,26 +84,26 @@ vi.mock('binance', () => ({
 describe('Binance Client', () => {
   beforeEach(() => {
     // Reset environment variables
-    process.env.BINANCE_TESTNET_ENABLED = 'true';
-    process.env.BINANCE_TESTNET_API_KEY = 'test_api_key';
-    process.env.BINANCE_TESTNET_SECRET_KEY = 'test_secret_key';
+    process.env.BINANCE_ENABLED = 'true';
+    process.env.BINANCE_API_KEY = 'test_api_key';
+    process.env.BINANCE_API_SECRET = 'test_secret_key';
   });
 
   describe('initTestnetClient', () => {
     it('should return null when testnet is disabled', () => {
-      process.env.BINANCE_TESTNET_ENABLED = 'false';
+      process.env.BINANCE_ENABLED = 'false';
       const client = initTestnetClient();
       expect(client).toBeNull();
     });
 
     it('should return null when API key is missing', () => {
-      process.env.BINANCE_TESTNET_API_KEY = '';
+      process.env.BINANCE_API_KEY = '';
       const client = initTestnetClient();
       expect(client).toBeNull();
     });
 
     it('should return null when secret key is missing', () => {
-      process.env.BINANCE_TESTNET_SECRET_KEY = '';
+      process.env.BINANCE_API_SECRET = '';
       const client = initTestnetClient();
       expect(client).toBeNull();
     });

@@ -339,7 +339,7 @@ async function runMethodAnalysis(methodId) {
         }
         
         // Step 5: Testnet auto-entry (if enabled)
-        if (process.env.BINANCE_TESTNET_ENABLED === 'true') {
+        if (process.env.BINANCE_ENABLED === 'true') {
           try {
             const { openTestnetPosition } = await import('./services/testnetEngine.js');
             const { getOrCreateTestnetAccount, getTestnetPositions } = await import('./db/testnetDatabase.js');
@@ -367,11 +367,11 @@ async function runMethodAnalysis(methodId) {
             console.error(`[Scheduler][${method.name}] Testnet error stack:`, testnetError.stack);
           }
         } else {
-          console.log(`[Scheduler][${method.name}] Testnet execution skipped: BINANCE_TESTNET_ENABLED=${process.env.BINANCE_TESTNET_ENABLED}`);
+          console.log(`[Scheduler][${method.name}] Testnet execution skipped: BINANCE_ENABLED=${process.env.BINANCE_ENABLED}`);
         }
         
         // Step 6: Testnet position decisions (if enabled)
-        if (process.env.BINANCE_TESTNET_ENABLED === 'true' && analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
+        if (process.env.BINANCE_ENABLED === 'true' && analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
           try {
             const { closeTestnetPositionEngine, updateTestnetPositionSL } = await import('./services/testnetEngine.js');
             const { getTestnetPosition } = await import('./db/testnetDatabase.js');

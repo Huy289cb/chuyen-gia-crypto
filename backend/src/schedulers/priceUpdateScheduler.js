@@ -19,7 +19,7 @@ export async function initPriceUpdateScheduler(database, enabled) {
   dbEnabled = enabled;
   
   // Check if testnet is enabled
-  testnetEnabled = process.env.BINANCE_TESTNET_ENABLED === 'true';
+  testnetEnabled = process.env.BINANCE_ENABLED === 'true';
   
   if (!dbEnabled) {
     console.log('[PriceScheduler] Database not enabled, price updates skipped');

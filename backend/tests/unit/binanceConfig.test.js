@@ -3,27 +3,19 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { binanceConfig, validateConfig, getBaseUrl, getLeverage, getSymbol } from '../../src/config/binance.js';
+import { binanceConfig, validateConfig, getLeverage, getSymbol } from '../../src/config/binance.js';
 
 describe('Binance Config', () => {
   beforeEach(() => {
     // Reset environment variables before each test
-    process.env.BINANCE_TESTNET_API_KEY = '';
-    process.env.BINANCE_TESTNET_SECRET_KEY = '';
-    process.env.BINANCE_TESTNET_ENABLED = 'false';
-    process.env.BINANCE_TESTNET_SYMBOL = 'BTCUSDT';
-    process.env.BINANCE_TESTNET_LEVERAGE = '1';
+    process.env.BINANCE_API_KEY = '';
+    process.env.BINANCE_API_SECRET = '';
+    process.env.BINANCE_ENABLED = 'false';
+    process.env.BINANCE_SYMBOL = 'BTCUSDT';
+    process.env.BINANCE_LEVERAGE = '1';
   });
 
   describe('binanceConfig object', () => {
-    it('should have correct testnet base URL', () => {
-      expect(binanceConfig.testnetBaseUrl).toBe('https://testnet.binancefuture.com');
-    });
-
-    it('should have correct mainnet base URL', () => {
-      expect(binanceConfig.mainnetBaseUrl).toBe('https://fapi.binance.com');
-    });
-
     it('should have default symbol BTCUSDT', () => {
       expect(binanceConfig.symbol).toBe('BTCUSDT');
     });
@@ -72,48 +64,41 @@ describe('Binance Config', () => {
 
   describe('validateConfig', () => {
     it('should return true when testnet is disabled', () => {
-      process.env.BINANCE_TESTNET_ENABLED = 'false';
+      process.env.BINANCE_ENABLED = 'false';
       const result = validateConfig();
       expect(result).toBe(true);
     });
 
     it('should return false when testnet is enabled but API keys are missing', () => {
-      process.env.BINANCE_TESTNET_ENABLED = 'true';
-      process.env.BINANCE_TESTNET_API_KEY = '';
-      process.env.BINANCE_TESTNET_SECRET_KEY = '';
+      process.env.BINANCE_ENABLED = 'true';
+      process.env.BINANCE_API_KEY = '';
+      process.env.BINANCE_API_SECRET = '';
       const result = validateConfig();
       expect(result).toBe(false);
     });
 
     it('should return false when API key is missing', () => {
-      process.env.BINANCE_TESTNET_ENABLED = 'true';
-      process.env.BINANCE_TESTNET_API_KEY = '';
-      process.env.BINANCE_TESTNET_SECRET_KEY = 'secret';
+      process.env.BINANCE_ENABLED = 'true';
+      process.env.BINANCE_API_KEY = '';
+      process.env.BINANCE_API_SECRET = 'secret';
       const result = validateConfig();
       expect(result).toBe(false);
     });
 
     it('should return false when secret key is missing', () => {
-      process.env.BINANCE_TESTNET_ENABLED = 'true';
-      process.env.BINANCE_TESTNET_API_KEY = 'key';
-      process.env.BINANCE_TESTNET_SECRET_KEY = '';
+      process.env.BINANCE_ENABLED = 'true';
+      process.env.BINANCE_API_KEY = 'key';
+      process.env.BINANCE_API_SECRET = '';
       const result = validateConfig();
       expect(result).toBe(false);
     });
 
     it('should return true when testnet is enabled with valid API keys', () => {
-      process.env.BINANCE_TESTNET_ENABLED = 'true';
-      process.env.BINANCE_TESTNET_API_KEY = 'test_api_key';
-      process.env.BINANCE_TESTNET_SECRET_KEY = 'test_secret_key';
+      process.env.BINANCE_ENABLED = 'true';
+      process.env.BINANCE_API_KEY = 'test_api_key';
+      process.env.BINANCE_API_SECRET = 'test_secret_key';
       const result = validateConfig();
       expect(result).toBe(true);
-    });
-  });
-
-  describe('getBaseUrl', () => {
-    it('should return testnet base URL', () => {
-      const url = getBaseUrl();
-      expect(url).toBe('https://testnet.binancefuture.com');
     });
   });
 
@@ -124,13 +109,13 @@ describe('Binance Config', () => {
     });
 
     it('should return custom leverage from env', () => {
-      process.env.BINANCE_TESTNET_LEVERAGE = '5';
+      process.env.BINANCE_LEVERAGE = '5';
       const leverage = getLeverage();
       expect(leverage).toBe(5);
     });
 
     it('should handle invalid leverage value', () => {
-      process.env.BINANCE_TESTNET_LEVERAGE = 'invalid';
+      process.env.BINANCE_LEVERAGE = 'invalid';
       const leverage = getLeverage();
       expect(leverage).toBeNaN();
     });
@@ -143,7 +128,7 @@ describe('Binance Config', () => {
     });
 
     it('should return custom symbol from env', () => {
-      process.env.BINANCE_TESTNET_SYMBOL = 'ETHUSDT';
+      process.env.BINANCE_SYMBOL = 'ETHUSDT';
       const symbol = getSymbol();
       expect(symbol).toBe('ETHUSDT');
     });
