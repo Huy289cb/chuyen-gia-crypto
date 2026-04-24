@@ -182,7 +182,53 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     });
     
     console.log(`[TestnetEngine] Opened testnet position: ${positionId} (${side} ${symbol} @ ${entry_price})`);
-    
+
+    // After opening position, check if we need to cancel pending orders
+    // Market orders may have filled the volume limit
+    try {
+      const { getTestnetPendingOrders, cancelTestnetPendingOrder } = await import('../db/testnetDatabase.js');
+
+      // Get current open positions volume after opening this position
+      const { getTestnetPositions } = await import('../db/testnetDatabase.js');
+      const updatedOpenPositions = await getTestnetPositions(db, { symbol: symbol, method_id: methodId, status: 'open' });
+      const totalOpenVolume = updatedOpenPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
+
+      // Get pending orders for this symbol and method
+      const pendingOrders = await getTestnetPendingOrders(db, { symbol: symbol, method_id: methodId, status: 'pending' });
+
+      if (pendingOrders.length > 0) {
+        const maxVolume = positionData.maxVolumePerAccount || 2000;
+
+        // Calculate total pending volume
+        const totalPendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
+        const totalVolume = totalOpenVolume + totalPendingVolume;
+
+        // If market volume already at limit, cancel all pending orders
+        if (totalOpenVolume >= maxVolume) {
+          console.log(`[TestnetEngine] Cancelling all pending orders for ${symbol}/${methodId}: market volume $${totalOpenVolume.toFixed(2)} already at limit $${maxVolume}`);
+          for (const order of pendingOrders) {
+            await cancelTestnetPendingOrder(db, order.order_id, 'volume_limit_reached', order.binance_order_id);
+            console.log(`[TestnetEngine] Cancelled pending order ${order.order_id} due to volume limit`);
+          }
+        }
+        // If market + pending would exceed limit, cancel pending orders
+        else if (totalVolume > maxVolume) {
+          console.log(`[TestnetEngine] Cancelling all pending orders for ${symbol}/${methodId}: market ($${totalOpenVolume.toFixed(2)}) + pending ($${totalPendingVolume.toFixed(2)}) would exceed limit $${maxVolume}`);
+          for (const order of pendingOrders) {
+            await cancelTestnetPendingOrder(db, order.order_id, 'volume_limit_reached', order.binance_order_id);
+            console.log(`[TestnetEngine] Cancelled pending order ${order.order_id} due to volume limit`);
+          }
+        }
+        // If total volume still under limit, keep pending orders
+        else {
+          console.log(`[TestnetEngine] Keeping ${pendingOrders.length} pending orders for ${symbol}/${methodId}: total volume $${totalVolume.toFixed(2)} <= $${maxVolume}`);
+        }
+      }
+    } catch (error) {
+      console.error('[TestnetEngine] Error checking/cancelling pending orders after opening position:', error.message);
+      // Don't throw error, position was successfully opened
+    }
+
     return newPosition;
   } catch (error) {
     console.error('[TestnetEngine] Failed to open testnet position:', error.message);

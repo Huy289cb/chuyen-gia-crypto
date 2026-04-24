@@ -243,12 +243,52 @@ Each position opened is linked to a specific prediction timeframe for outcome tr
 }
 ```
 
-## Volume Management (Updated 23/04/2026)
+## Volume Management (Updated 24/04/2026)
 
 ### Total Volume Calculation
 - Total volume = open positions volume + pending orders volume
 - Maximum limit: 2k USD per account
 - System checks both open positions and pending orders before creating new orders
+
+### Automatic Volume Management (New - 24/04/2026)
+
+The system automatically manages volume limits at two critical points:
+
+#### 1. Before Executing Pending Orders
+When a pending order is about to execute (price hits entry level):
+- Check current market volume (open positions)
+- If market volume >= limit (2k): Cancel pending order
+- If market volume + pending order volume > limit: Cancel pending order
+- If market volume + pending order volume <= limit: Execute order
+- **Rationale**: Prevents pending orders from executing when market orders have already filled the volume limit
+
+#### 2. After Opening Market Positions
+When a market order is executed:
+- Check total volume after opening position
+- If market volume >= limit (2k): Cancel all remaining pending orders
+- If market volume + pending orders volume > limit: Cancel all pending orders
+- If market volume + pending orders volume <= limit: Keep pending orders
+- **Rationale**: Automatically cleans up pending orders when market orders fill the volume limit
+
+### Example Scenarios
+
+**Scenario 1: Pending Order Execution Check**
+- Current open positions: $1,800
+- Pending order volume: $300
+- Total would be: $2,100 > $2,000 limit
+- **Action**: Cancel pending order with reason "volume_limit_reached"
+
+**Scenario 2: Market Order Fills Limit**
+- Before market order: Open $1,700, Pending $400
+- Market order executes: $300
+- After market order: Open $2,000 (at limit)
+- **Action**: Cancel all pending orders ($400) to prevent exceeding limit
+
+**Scenario 3: Keep Pending Orders**
+- After market order: Open $1,500
+- Pending orders: $400
+- Total: $1,900 < $2,000 limit
+- **Action**: Keep pending orders (still room for $100 more)
 
 ### Strategic Entry Validation
 When total volume reaches 2k limit (or 90% of limit):
@@ -256,7 +296,7 @@ When total volume reaches 2k limit (or 90% of limit):
 - Tolerance: ±0.5% from SL/TP levels
 - Prevents over-leveraging while allowing strategic position additions
 
-### Example
+### Example (Strategic Entry)
 - Current open positions: $1,800 (2 positions)
 - Existing pending orders: $150 (1 order)
 - Total volume: $1,950

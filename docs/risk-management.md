@@ -200,7 +200,7 @@ For auto-entry, the system checks alignment on **main timeframes only**:
 - Reduces overtrading during drawdowns
 - Forces review of recent performance
 
-## Volume Management (Updated 23/04/2026)
+## Volume Management (Updated 24/04/2026)
 
 ### Individual Position/Order Size Limits (Updated 23/04/2026)
 - **Position Size Limit**: 2k USD per individual position
@@ -213,13 +213,53 @@ For auto-entry, the system checks alignment on **main timeframes only**:
 - **Calculation**: Open positions + Pending orders
 - **Rationale**: Prevents over-leveraging across both active and waiting positions
 
+### Automatic Volume Management (New - 24/04/2026)
+
+The system automatically manages volume limits at two critical points:
+
+#### 1. Before Executing Pending Orders
+When a pending order is about to execute (price hits entry level):
+- Check current market volume (open positions)
+- If market volume >= limit (2k): Cancel pending order
+- If market volume + pending order volume > limit: Cancel pending order
+- If market volume + pending order volume <= limit: Execute order
+- **Rationale**: Prevents pending orders from executing when market orders have already filled the volume limit
+
+#### 2. After Opening Market Positions
+When a market order is executed:
+- Check total volume after opening position
+- If market volume >= limit (2k): Cancel all remaining pending orders
+- If market volume + pending orders volume > limit: Cancel all pending orders
+- If market volume + pending orders volume <= limit: Keep pending orders
+- **Rationale**: Automatically cleans up pending orders when market orders fill the volume limit
+
+### Example Scenarios
+
+**Scenario 1: Pending Order Execution Check**
+- Current open positions: $1,800
+- Pending order volume: $300
+- Total would be: $2,100 > $2,000 limit
+- **Action**: Cancel pending order with reason "volume_limit_reached"
+
+**Scenario 2: Market Order Fills Limit**
+- Before market order: Open $1,700, Pending $400
+- Market order executes: $300
+- After market order: Open $2,000 (at limit)
+- **Action**: Cancel all pending orders ($400) to prevent exceeding limit
+
+**Scenario 3: Keep Pending Orders**
+- After market order: Open $1,500
+- Pending orders: $400
+- Total: $1,900 < $2,000 limit
+- **Action**: Keep pending orders (still room for $100 more)
+
 ### Strategic Entry Validation
 When volume reaches limit:
 - New pending orders only allowed at strategic levels
 - Entry must align with SL or TP of existing positions (±0.5% tolerance)
 - Ensures new positions add to existing strategy rather than diversifying randomly
 
-### Example Scenario
+### Example Scenario (Strategic Entry)
 - 2 open positions: $1,000 each = $2,000 total
 - Volume at limit
 - New analysis suggests entry at $76,500

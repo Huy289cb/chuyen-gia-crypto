@@ -260,6 +260,51 @@ export async function openPosition(db, account, suggestion, linkedPredictionId =
     size_usd: suggestion.size_usd
   });
 
+  // After opening position, check if we need to cancel pending orders
+  // Market orders may have filled the volume limit
+  try {
+    const { getPendingOrders, cancelPendingOrder } = await import('../db/database.js');
+    
+    // Get current open positions volume after opening this position
+    const updatedOpenPositions = await getPositions(db, { account_id: account.id, status: 'open' });
+    const totalOpenVolume = updatedOpenPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
+    
+    // Get pending orders for this account
+    const pendingOrders = await getPendingOrders(db, { account_id: account.id, status: 'pending' });
+    
+    if (pendingOrders.length > 0) {
+      const maxVolume = suggestion.maxVolumePerAccount || 2000;
+      
+      // Calculate total pending volume
+      const totalPendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
+      const totalVolume = totalOpenVolume + totalPendingVolume;
+      
+      // If market volume already at limit, cancel all pending orders
+      if (totalOpenVolume >= maxVolume) {
+        console.log(`[PaperTrading] Cancelling all pending orders for account ${account.id}: market volume $${totalOpenVolume.toFixed(2)} already at limit $${maxVolume}`);
+        for (const order of pendingOrders) {
+          await cancelPendingOrder(db, order.id, 'volume_limit_reached');
+          console.log(`[PaperTrading] Cancelled pending order ${order.id} due to volume limit`);
+        }
+      }
+      // If market + pending would exceed limit, cancel pending orders
+      else if (totalVolume > maxVolume) {
+        console.log(`[PaperTrading] Cancelling all pending orders for account ${account.id}: market ($${totalOpenVolume.toFixed(2)}) + pending ($${totalPendingVolume.toFixed(2)}) would exceed limit $${maxVolume}`);
+        for (const order of pendingOrders) {
+          await cancelPendingOrder(db, order.id, 'volume_limit_reached');
+          console.log(`[PaperTrading] Cancelled pending order ${order.id} due to volume limit`);
+        }
+      }
+      // If total volume still under limit, keep pending orders
+      else {
+        console.log(`[PaperTrading] Keeping ${pendingOrders.length} pending orders for account ${account.id}: total volume $${totalVolume.toFixed(2)} <= $${maxVolume}`);
+      }
+    }
+  } catch (error) {
+    console.error('[PaperTrading] Error checking/cancelling pending orders after opening position:', error.message);
+    // Don't throw error, position was successfully opened
+  }
+
   return position;
 }
 
