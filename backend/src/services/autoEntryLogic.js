@@ -804,7 +804,7 @@ async function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY
     return null;
   }
   
-  const sizeQty = riskAmount / riskDistance;
+  let sizeQty = riskAmount / riskDistance;
   let sizeUsd = sizeQty * suggestedEntry;
 
   // Cap position size at account balance * leverage (for futures trading)
