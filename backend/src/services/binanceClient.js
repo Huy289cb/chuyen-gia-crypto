@@ -5,7 +5,7 @@
  * with error handling, retry logic, and rate limiting
  */
 
-import { Futures } from '@binance/futures-connector';
+import { UMFutures } from 'binance-connector-js';
 import { binanceConfig, getBaseUrl } from '../config/binance.js';
 
 // Retry configuration
@@ -32,12 +32,12 @@ export function initTestnetClient() {
   }
 
   try {
-    const client = new Futures(
+    const client = new UMFutures(
       binanceConfig.apiKey,
       binanceConfig.secretKey,
       { baseURL: getBaseUrl() }
     );
-    
+
     console.log('[BinanceClient] Testnet client initialized successfully');
     return client;
   } catch (error) {
