@@ -322,20 +322,36 @@ Thêm vào `backend/src/routes.js` hoặc `backend/src/index.js`
 
 ## 3.2. Frontend Integration
 
-### 3.2.1 Tạo Testnet Components
-File: `frontend/app/components/TestnetPanel.tsx`
+### 3.2.1 Testnet Components ✅ COMPLETED
+File: `frontend/app/components/crypto/TestnetPanel.tsx`
 - Display testnet account info (balance, equity, PnL)
-- List open testnet positions
+- List open testnet positions with close button
 - Show testnet trade history
+- Display pending orders with cancel button
 - Sync button để manual sync với Binance
+- Reset button để reset account về 100U
 
-### 3.2.2 Comparison Dashboard
-File: `frontend/app/sections/ComparisonDashboard.tsx`
+### 3.2.2 Comparison Dashboard ✅ COMPLETED
+File: `frontend/app/components/crypto/ComparisonDashboard.tsx`
 - Side-by-side comparison: Paper Trading vs Testnet
 - Metrics: Balance, Equity, Win Rate, Profit Factor, Max Drawdown
-- Equity curve chart (both systems)
+- Equity curve chart (both systems) với lightweight-charts
 - Trade history table (both systems)
 - Performance summary table
+- Position comparison cards
+
+### 3.2.3 useTestnet Hook ✅ COMPLETED
+File: `frontend/app/hooks/useTestnet.ts`
+- Fetch account, positions, pending orders, performance, equity curve, trade history
+- Auto-refresh every 1 minute
+- Functions: syncAccount, resetAccount, closePosition, cancelPendingOrder
+- Type definitions: TestnetAccount, TestnetPosition, TestnetPendingOrder, TestnetPerformance, TestnetSnapshot
+
+### 3.2.4 Main Dashboard Integration ✅ COMPLETED
+File: `frontend/app/page.tsx`
+- Tab navigation: Paper Trading | Binance Testnet | Comparison
+- TestnetPanel hiển thị khi tab "Binance Testnet" được chọn
+- ComparisonDashboard hiển thị khi tab "Comparison" được chosen
 
 ### 3.2.3 Update Main Dashboard
 File: `frontend/app/page.tsx`

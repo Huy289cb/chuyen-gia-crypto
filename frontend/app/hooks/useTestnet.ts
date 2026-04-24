@@ -53,6 +53,35 @@ export interface TestnetPosition {
   binance_tp_order_id: string | null;
 }
 
+export interface TestnetPendingOrder {
+  id: number;
+  order_id: string;
+  account_id: number;
+  symbol: string;
+  side: 'long' | 'short';
+  entry_price: number;
+  stop_loss: number;
+  take_profit: number;
+  size_usd: number;
+  size_qty: number;
+  risk_usd: number;
+  risk_percent: number;
+  expected_rr: number;
+  linked_prediction_id: number | null;
+  invalidation_level: number | null;
+  status: 'pending' | 'executed' | 'cancelled';
+  created_at: string;
+  executed_at: string | null;
+  executed_price: number | null;
+  executed_size_qty: number | null;
+  executed_size_usd: number | null;
+  realized_pnl: number | null;
+  realized_pnl_percent: number | null;
+  close_reason: string | null;
+  method_id: string;
+  binance_order_id: string | null;
+}
+
 export interface TestnetPerformance {
   id: number;
   current_balance: number;
@@ -84,6 +113,7 @@ export interface ApiResponse<T> {
 export function useTestnet() {
   const [account, setAccount] = useState<TestnetAccount | null>(null);
   const [positions, setPositions] = useState<TestnetPosition[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<TestnetPendingOrder[]>([]);
   const [performance, setPerformance] = useState<TestnetPerformance | null>(null);
   const [equityCurve, setEquityCurve] = useState<TestnetSnapshot[]>([]);
   const [tradeHistory, setTradeHistory] = useState<TestnetPosition[]>([]);
@@ -158,12 +188,28 @@ export function useTestnet() {
     }
   }, [account]);
 
+  const fetchPendingOrders = useCallback(async (status?: string) => {
+    try {
+      const url = status 
+        ? `${API_BASE}/testnet/pending-orders?status=${status}`
+        : `${API_BASE}/testnet/pending-orders`;
+      const response = await fetch(url);
+      const data: ApiResponse<TestnetPendingOrder[]> = await response.json();
+      if (data.success && data.data) {
+        setPendingOrders(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching testnet pending orders:', err);
+    }
+  }, []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       await fetchAccount();
       await fetchPositions('open');
+      await fetchPendingOrders('pending');
       await fetchPerformance();
       await fetchEquityCurve();
       await fetchTradeHistory();
@@ -172,7 +218,7 @@ export function useTestnet() {
     } finally {
       setLoading(false);
     }
-  }, [fetchAccount, fetchPositions, fetchPerformance, fetchEquityCurve, fetchTradeHistory]);
+  }, [fetchAccount, fetchPositions, fetchPendingOrders, fetchPerformance, fetchEquityCurve, fetchTradeHistory]);
 
   useEffect(() => {
     fetchData();
@@ -240,9 +286,29 @@ export function useTestnet() {
     }
   }, [fetchData]);
 
+  const cancelPendingOrder = useCallback(async (orderId: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/testnet/pending-orders/${orderId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'manual' }),
+      });
+      const data: ApiResponse<void> = await response.json();
+      
+      if (data.success) {
+        await fetchData();
+        return { success: true };
+      }
+      return { success: false, error: data.error };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }, [fetchData]);
+
   return {
     account,
     positions,
+    pendingOrders,
     performance,
     equityCurve,
     tradeHistory,
@@ -254,5 +320,6 @@ export function useTestnet() {
     syncAccount,
     resetAccount,
     closePosition,
+    cancelPendingOrder,
   };
 }

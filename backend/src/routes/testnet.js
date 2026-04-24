@@ -420,4 +420,96 @@ router.post('/positions/:id/close', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/testnet/pending-orders - List testnet pending orders
+ */
+router.get('/pending-orders', async (req, res) => {
+  const { db, dbEnabled } = req;
+  
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+  
+  const { status, account_id } = req.query;
+  const filters = {};
+  
+  if (status) filters.status = status;
+  if (account_id) filters.account_id = account_id;
+  
+  try {
+    const { getTestnetPendingOrders } = await import('../db/testnetDatabase.js');
+    const orders = await getTestnetPendingOrders(db, filters);
+    
+    res.json({
+      success: true,
+      data: orders,
+      meta: { count: orders.length, filters }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/testnet/pending-orders/:id/cancel - Cancel a pending order
+ */
+router.post('/pending-orders/:id/cancel', async (req, res) => {
+  const { db, dbEnabled } = req;
+  
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+  
+  const { id } = req.params;
+  const { reason = 'manual' } = req.body;
+  
+  try {
+    const { getTestnetPendingOrders } = await import('../db/testnetDatabase.js');
+    const { cancelTestnetPendingOrder } = await import('../db/testnetDatabase.js');
+    
+    const orders = await getTestnetPendingOrders(db, { order_id: id });
+    const order = orders[0];
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Pending order not found'
+      });
+    }
+    
+    if (order.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: 'Order is not pending'
+      });
+    }
+    
+    // Cancel order (including Binance limit order if exists)
+    await cancelTestnetPendingOrder(db, id, reason, order.binance_order_id);
+    
+    res.json({
+      success: true,
+      message: 'Pending order cancelled successfully',
+      data: {
+        order_id: id,
+        cancel_reason: reason
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

@@ -5,13 +5,14 @@ import { RefreshCw, DollarSign, TrendingUp, TrendingDown, PlayCircle, XCircle } 
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import { useTestnet, type TestnetAccount, type TestnetPosition } from '@/app/hooks/useTestnet';
+import { useTestnet, type TestnetAccount, type TestnetPosition, type TestnetPendingOrder } from '@/app/hooks/useTestnet';
 import { cn, formatPrice, formatVietnamTime } from '@/lib/utils';
 
 export function TestnetPanel() {
   const {
     account,
     positions,
+    pendingOrders,
     performance,
     tradeHistory,
     loading,
@@ -22,6 +23,7 @@ export function TestnetPanel() {
     syncAccount,
     resetAccount,
     closePosition,
+    cancelPendingOrder,
   } = useTestnet();
 
   if (loading && !account) {
@@ -158,6 +160,26 @@ export function TestnetPanel() {
         </div>
       </Card>
 
+      {/* Pending Orders */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Pending Orders</h3>
+          <Badge variant="neutral">{pendingOrders.length}</Badge>
+        </div>
+
+        {pendingOrders.length === 0 ? (
+          <div className="text-center py-8 text-foreground-tertiary">
+            <p>No pending orders</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pendingOrders.map((order) => (
+              <PendingOrderCard key={order.order_id} order={order} onCancel={cancelPendingOrder} />
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* Open Positions */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
@@ -273,6 +295,93 @@ function PositionCard({ position, onClose }: { position: TestnetPosition; onClos
         >
           <XCircle className="w-4 h-4" />
           {closing ? 'Closing...' : 'Close Position'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PendingOrderCard({ order, onCancel }: { order: TestnetPendingOrder; onCancel: (id: string) => Promise<any> }) {
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    await onCancel(order.order_id);
+    setCancelling(false);
+  };
+
+  const isLong = order.side === 'long';
+  const priceDistance = order.entry_price > 0 ? ((order.entry_price - order.stop_loss) / order.entry_price) * 100 : 0;
+
+  return (
+    <div className="p-4 bg-surface-1 rounded-lg border border-surface-2">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Badge variant={isLong ? 'success' : 'danger'} className="text-xs">
+            {isLong ? 'LONG' : 'SHORT'}
+          </Badge>
+          <span className="font-medium">{order.symbol}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {order.binance_order_id && (
+            <Badge variant="info" className="text-xs">
+              Binance: {order.binance_order_id.slice(0, 8)}...
+            </Badge>
+          )}
+          <Badge variant="neutral" className="text-xs">
+            {formatVietnamTime(order.created_at)}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div>
+          <p className="text-foreground-tertiary text-xs">Entry Price</p>
+          <p className="font-medium">${formatPrice(order.entry_price)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">Stop Loss</p>
+          <p className="font-medium text-danger">${formatPrice(order.stop_loss)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">Take Profit</p>
+          <p className="font-medium text-success">${formatPrice(order.take_profit)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">Size</p>
+          <p className="font-medium">${formatPrice(order.size_usd)}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-2">
+        <div>
+          <p className="text-foreground-tertiary text-xs">Risk</p>
+          <p className="font-medium text-danger">${formatPrice(order.risk_usd)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">Risk %</p>
+          <p className="font-medium">{order.risk_percent.toFixed(1)}%</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">R:R Ratio</p>
+          <p className="font-medium">{order.expected_rr.toFixed(2)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">SL Distance</p>
+          <p className="font-medium">{priceDistance.toFixed(2)}%</p>
+        </div>
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-surface-2 flex justify-end">
+        <Button
+          onClick={handleCancel}
+          disabled={cancelling}
+          variant="secondary"
+          size="sm"
+          className="gap-2 text-danger"
+        >
+          <XCircle className="w-4 h-4" />
+          {cancelling ? 'Cancelling...' : 'Cancel Order'}
         </Button>
       </div>
     </div>
