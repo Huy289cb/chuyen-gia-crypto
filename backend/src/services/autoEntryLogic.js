@@ -457,11 +457,11 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
       const isStrategicEntry = validateStrategicEntry(suggestedEntry, openPositions);
       
       if (!isStrategicEntry) {
-        console.log(`[AutoEntry] Check 3.6 FAILED: Volume at limit ($${projectedVolume.toFixed(2)} / $${config.maxVolumePerAccount}), entry $${suggestedEntry.toFixed(2)} not at strategic level (SL/TP of existing positions)`);
+        console.log(`[AutoEntry] Check 3.6 FAILED: Volume at limit ($${projectedVolume.toFixed(2)} / $${config.maxVolumePerAccount}), entry $${suggestedEntry?.toFixed(2) || 'N/A'} not at strategic level (SL/TP of existing positions)`);
         decision.reason = `Volume at limit, entry not at strategic level (must align with SL/TP of existing positions)`;
         return decision;
       }
-      console.log(`[AutoEntry] Check 3.6 PASSED: Volume at limit but entry $${suggestedEntry.toFixed(2)} is at strategic level`);
+      console.log(`[AutoEntry] Check 3.6 PASSED: Volume at limit but entry $${suggestedEntry?.toFixed(2) || 'N/A'} is at strategic level`);
     }
   }
 

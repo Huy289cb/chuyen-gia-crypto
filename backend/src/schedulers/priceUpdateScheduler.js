@@ -260,12 +260,12 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
 
           // If market + pending would exceed limit, cancel pending order
           if (totalVolume > maxVolume) {
-            console.log(`[PriceScheduler] Cancelling pending order ${order.id}: market ($${totalOpenVolume.toFixed(2)}) + pending ($${pendingOrderVolume.toFixed(2)}) would exceed limit $${maxVolume}`);
+            console.log(`[PriceScheduler] Cancelling pending order ${order.id}: market ($${totalOpenVolume.toFixed(2)}) + pending ($${pendingOrderVolume?.toFixed(2) || 'N/A'}) would exceed limit $${maxVolume}`);
             await cancelPendingOrder(db, order.id, 'volume_limit_reached');
             continue;
           }
 
-          console.log(`[PriceScheduler] Volume check passed for pending order ${order.id}: $${totalVolume.toFixed(2)} <= $${maxVolume}`);
+          console.log(`[PriceScheduler] Volume check passed for pending order ${order.id}: $${totalVolume?.toFixed(2) || 'N/A'} <= $${maxVolume}`);
           
           // Execute the order (convert to actual position)
           // Use entry_price as the execution price since that's where the limit was hit
@@ -376,12 +376,12 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
 
           // If market + pending would exceed limit, cancel pending order
           if (totalVolume > maxVolume) {
-            console.log(`[PriceScheduler] Cancelling testnet pending order ${order.order_id}: market ($${totalOpenVolume.toFixed(2)}) + pending ($${pendingOrderVolume.toFixed(2)}) would exceed limit $${maxVolume}`);
+            console.log(`[PriceScheduler] Cancelling testnet pending order ${order.order_id}: market ($${totalOpenVolume.toFixed(2)}) + pending ($${pendingOrderVolume?.toFixed(2) || 'N/A'}) would exceed limit $${maxVolume}`);
             await cancelTestnetPendingOrder(db, order.order_id, 'volume_limit_reached', order.binance_order_id);
             continue;
           }
 
-          console.log(`[PriceScheduler] Volume check passed for testnet pending order ${order.order_id}: $${totalVolume.toFixed(2)} <= $${maxVolume}`);
+          console.log(`[PriceScheduler] Volume check passed for testnet pending order ${order.order_id}: $${totalVolume?.toFixed(2) || 'N/A'} <= $${maxVolume}`);
 
           // Cancel Binance limit order before executing as market order
           if (order.binance_order_id) {

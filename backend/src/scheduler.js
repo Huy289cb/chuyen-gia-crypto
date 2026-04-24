@@ -355,7 +355,7 @@ async function runMethodAnalysis(methodId) {
               const maxPendingOrderSize = method.autoEntry.maxPendingOrderSize || 2000;
               
               if (orderSizeUsd > maxPendingOrderSize) {
-                console.log(`[Scheduler][${method.name}] Pending order size $${orderSizeUsd.toFixed(2)} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
+                console.log(`[Scheduler][${method.name}] Pending order size $${orderSizeUsd?.toFixed(2) || 'N/A'} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
                 orderSizeUsd = maxPendingOrderSize;
                 // Recalculate sizeQty based on capped sizeUsd
                 orderSizeQty = orderSizeUsd / position.entry_price;
@@ -422,7 +422,7 @@ async function runMethodAnalysis(methodId) {
                 const maxPendingOrderSize = method.autoEntry.maxPendingOrderSize || 2000;
 
                 if (orderSizeUsd > maxPendingOrderSize) {
-                  console.log(`[Scheduler][${method.name}] Testnet pending order size $${orderSizeUsd.toFixed(2)} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
+                  console.log(`[Scheduler][${method.name}] Testnet pending order size $${orderSizeUsd?.toFixed(2) || 'N/A'} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
                   orderSizeUsd = maxPendingOrderSize;
                   orderSizeQty = orderSizeUsd / position.entry_price;
                 }
@@ -467,7 +467,7 @@ async function runMethodAnalysis(methodId) {
                   method_id: methodId,
                   binance_order_id: binanceOrderId
                 });
-                console.log(`[Scheduler][${method.name}] Testnet limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd.toFixed(2)}, binance_order_id: ${binanceOrderId}`);
+                console.log(`[Scheduler][${method.name}] Testnet limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd?.toFixed(2) || 'N/A'}, binance_order_id: ${binanceOrderId}`);
               }
             }
           } catch (testnetError) {
@@ -660,7 +660,7 @@ async function runMethodAnalysis(methodId) {
           }
         }
         
-        console.log(`[Scheduler][${method.name}] Analysis complete - Account: ${account.id}, Balance: $${account.current_balance.toFixed(2)}`);
+        console.log(`[Scheduler][${method.name}] Analysis complete - Account: ${account.id}, Balance: $${account.current_balance?.toFixed(2) || 'N/A'}`);
       } catch (dbError) {
         console.error(`[Scheduler][${method.name}] Database save error:`, dbError.message);
       }

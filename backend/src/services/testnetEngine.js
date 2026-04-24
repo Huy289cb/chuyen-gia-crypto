@@ -305,7 +305,7 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
       close_order_id: closeOrder.orderId,
     });
     
-    console.log(`[TestnetEngine] Closed testnet position ${position.position_id} at ${currentPrice} (${closeReason}), PnL: ${realizedPnl.toFixed(2)}`);
+    console.log(`[TestnetEngine] Closed testnet position ${position.position_id} at ${currentPrice} (${closeReason}), PnL: ${realizedPnl?.toFixed(2) || 'N/A'}`);
     
     return { realizedPnl, isWin };
   } catch (error) {
@@ -500,7 +500,7 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
       close_order_id: closeOrder.orderId,
     });
     
-    console.log(`[TestnetEngine] Partial TP ${tpLevel} executed for position ${position.position_id}: closed ${closeQty} @ ${currentPrice}, PnL: ${partialPnl.toFixed(2)}`);
+    console.log(`[TestnetEngine] Partial TP ${tpLevel} executed for position ${position.position_id}: closed ${closeQty} @ ${currentPrice}, PnL: ${partialPnl?.toFixed(2) || 'N/A'}`);
     
     return { partialPnl, closeQty };
   } catch (error) {
