@@ -1,0 +1,22 @@
+{
+  "name": "crypto-migration-scripts",
+  "version": "1.0.0",
+  "description": "Data migration scripts for SQLite to PostgreSQL migration",
+  "type": "module",
+  "scripts": {
+    "migrate": "node migrate.js",
+    "validate-pre": "node pre-migration-validation.js",
+    "export": "node export-data.js",
+    "transform": "node transform-data.js",
+    "import": "node import-data.js",
+    "validate-post": "node post-migration-validation.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.3",
+    "pg": "^8.11.3",
+    "sqlite3": "^5.1.7"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

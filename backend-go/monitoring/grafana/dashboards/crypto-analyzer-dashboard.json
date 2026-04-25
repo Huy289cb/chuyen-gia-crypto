@@ -1,0 +1,128 @@
+{
+  "dashboard": {
+    "title": "Crypto Analyzer - Production Dashboard",
+    "uid": "crypto-analyzer-prod",
+    "panels": [
+      {
+        "title": "HTTP Requests",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}} - {{status}}"
+          }
+        ]
+      },
+      {
+        "title": "HTTP Request Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ]
+      },
+      {
+        "title": "Database Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "db_connections_active"
+          }
+        ]
+      },
+      {
+        "title": "Database Query Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(db_query_duration_seconds_sum[5m]) / rate(db_query_duration_seconds_count[5m])",
+            "legendFormat": "{{operation}} {{table}}"
+          }
+        ]
+      },
+      {
+        "title": "Analysis Runs",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(analysis_total[5m])",
+            "legendFormat": "{{method}} {{symbol}} {{timeframe}}"
+          }
+        ]
+      },
+      {
+        "title": "Open Positions",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(positions_open)"
+          }
+        ]
+      },
+      {
+        "title": "Total PnL",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(pnl_total) by (method, symbol)",
+            "legendFormat": "{{method}} {{symbol}}"
+          }
+        ]
+      },
+      {
+        "title": "Scheduler Runs",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(scheduler_runs_total[5m])",
+            "legendFormat": "{{scheduler}}"
+          }
+        ]
+      },
+      {
+        "title": "Goroutines",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "go_goroutines"
+          }
+        ]
+      },
+      {
+        "title": "Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "go_memstats_alloc_bytes / 1024 / 1024",
+            "legendFormat": "Allocated MB"
+          }
+        ]
+      },
+      {
+        "title": "Groq API Requests",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(groq_requests_total[5m])",
+            "legendFormat": "{{endpoint}} {{status}}"
+          }
+        ]
+      },
+      {
+        "title": "Binance API Requests",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(binance_requests_total[5m])",
+            "legendFormat": "{{endpoint}} {{status}}"
+          }
+        ]
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 27,
+    "version": 1
+  }
+}
