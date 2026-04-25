@@ -18,6 +18,9 @@ func SetupRoutes(r *gin.Engine) {
 	// Apply CORS middleware
 	r.Use(middleware.CORS())
 
+	// Apply rate limiting middleware
+	r.Use(middleware.RateLimit())
+
 	// API v1 routes
 	v1 := r.Group("/api")
 	{

@@ -13,6 +13,7 @@ import (
 	"github.com/chuyen-gia-crypto/backend/internal/db"
 	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
 	"github.com/chuyen-gia-crypto/backend/internal/handlers"
+	"github.com/chuyen-gia-crypto/backend/internal/middleware"
 	"github.com/chuyen-gia-crypto/backend/internal/schedulers"
 	"github.com/chuyen-gia-crypto/backend/internal/services/groq"
 	"github.com/chuyen-gia-crypto/backend/internal/services/testnet"
@@ -35,6 +36,9 @@ func main() {
 	defer logger.Sync()
 
 	logger.Info("Starting Crypto Analyzer Backend...")
+
+	// Initialize rate limiter
+	middleware.InitRateLimiter(100, time.Minute) // 100 requests per minute
 
 	// Initialize database
 	ctx := context.Background()
