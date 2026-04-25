@@ -40,6 +40,9 @@ func main() {
 	// Initialize rate limiter
 	middleware.InitRateLimiter(100, time.Minute) // 100 requests per minute
 
+	// Initialize WebSocket hub
+	handlers.InitHub()
+
 	// Initialize database
 	ctx := context.Background()
 	if err := db.Init(ctx); err != nil {

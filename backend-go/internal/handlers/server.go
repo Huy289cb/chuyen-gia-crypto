@@ -60,6 +60,9 @@ func SetupRoutes(r *gin.Engine) {
 		})
 	})
 
+	// WebSocket endpoint
+	r.GET("/ws", HandleWebSocket)
+
 	// Root endpoint
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
