@@ -77,6 +77,8 @@ func main() {
 	if db.Client != nil {
 		analyzer := analyzers.NewAnalyzer(groqClient, repository.NewAnalysisRepository(db.Client), repository.NewPredictionRepository(db.Client))
 		schedulers.Init(groqClient, repository.NewAnalysisRepository(db.Client), repository.NewPredictionRepository(db.Client))
+		schedulers.InitAccountRepo(repository.NewAccountRepository(db.Client))
+		schedulers.InitAccountSnapshotRepo(repository.NewAccountSnapshotRepository(db.Client))
 		handlers.SetAnalyzer(analyzer)
 		logger.Info("Scheduler dependencies initialized")
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/chuyen-gia-crypto/backend/internal/analyzers"
 	"github.com/chuyen-gia-crypto/backend/internal/config"
+	"github.com/chuyen-gia-crypto/backend/internal/db/ent"
 	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
 	"github.com/chuyen-gia-crypto/backend/internal/services/groq"
 	"github.com/chuyen-gia-crypto/backend/internal/services/papertrading"
@@ -17,11 +18,13 @@ import (
 )
 
 var (
-	cronScheduler *cron.Cron
-	ctx           context.Context
-	cancel        context.CancelFunc
-	analyzer      *analyzers.Analyzer
-	paperEngine   *papertrading.Engine
+	cronScheduler       *cron.Cron
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	analyzer            *analyzers.Analyzer
+	paperEngine         *papertrading.Engine
+	accountRepo         *repository.AccountRepository
+	accountSnapshotRepo *repository.AccountSnapshotRepository
 )
 
 // Init initializes the analyzer with dependencies
@@ -34,6 +37,18 @@ func Init(groqClient *groq.Client, analysisRepo *repository.AnalysisRepository, 
 func InitPaperTrading(engine *papertrading.Engine) {
 	paperEngine = engine
 	logger.Info("Paper trading engine initialized in scheduler")
+}
+
+// InitAccountSnapshotRepo initializes the account snapshot repository
+func InitAccountSnapshotRepo(repo *repository.AccountSnapshotRepository) {
+	accountSnapshotRepo = repo
+	logger.Info("Account snapshot repository initialized in scheduler")
+}
+
+// InitAccountRepo initializes the account repository
+func InitAccountRepo(repo *repository.AccountRepository) {
+	accountRepo = repo
+	logger.Info("Account repository initialized in scheduler")
 }
 
 // Start initializes and starts all schedulers
@@ -226,8 +241,30 @@ func runPriceUpdate() {
 		// For now, skip this step
 
 		// Update account snapshots
-		// This requires database integration with AccountSnapshotRepository
-		// For now, skip this step
+		if accountSnapshotRepo != nil && accountRepo != nil {
+			accounts, err := accountRepo.GetAll(ctx)
+			if err != nil {
+				logger.Error("Failed to get accounts for snapshot creation", zap.Error(err))
+			} else {
+				for _, account := range accounts {
+					snapshot := &ent.AccountSnapshot{
+						AccountID:     account.ID,
+						Balance:       account.CurrentBalance,
+						Equity:        account.Equity,
+						UnrealizedPnl: account.UnrealizedPnl,
+						OpenPositions: 0, // TODO: Count open positions
+						Timestamp:     time.Now(),
+					}
+					_, err := accountSnapshotRepo.Create(ctx, snapshot)
+					if err != nil {
+						logger.Error("Failed to create account snapshot",
+							zap.Int("account_id", account.ID),
+							zap.Error(err))
+					}
+				}
+				logger.Info("Account snapshots created", zap.Int("count", len(accounts)))
+			}
+		}
 	}
 
 	duration := time.Since(startTime)
