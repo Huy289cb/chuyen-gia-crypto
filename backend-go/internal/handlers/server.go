@@ -38,6 +38,13 @@ func SetupRoutes(r *gin.Engine) {
 		v1.GET("/performance/metrics", GetPerformanceMetrics)
 		v1.GET("/performance/equity-curve", GetEquityCurve)
 		v1.GET("/performance/trades", GetTradeHistory)
+
+		// Testnet routes
+		v1.GET("/testnet/positions", GetTestnetPositions)
+		v1.POST("/testnet/positions", CreateTestnetPosition)
+		v1.GET("/testnet/positions/:id", GetTestnetPosition)
+		v1.GET("/testnet/accounts", GetTestnetAccounts)
+		v1.POST("/testnet/accounts/reset", ResetTestnetAccount)
 	}
 
 	// Metrics endpoint
@@ -56,13 +63,17 @@ func SetupRoutes(r *gin.Engine) {
 			"name":    "Crypto Trend Analyzer API",
 			"version": "2.0.0",
 			"endpoints": gin.H{
-				"/api/analysis":            "Get current trend analysis",
-				"/api/analysis/trigger":    "Trigger manual analysis",
-				"/api/positions":           "Get/Create positions",
-				"/api/accounts":            "Get/Reset accounts",
-				"/api/performance/metrics": "Get performance metrics",
-				"/metrics":                 "Prometheus metrics",
-				"/health":                  "Health check",
+				"/api/analysis":                 "Get current trend analysis",
+				"/api/analysis/trigger":         "Trigger manual analysis",
+				"/api/positions":                "Get/Create positions",
+				"/api/accounts":                 "Get/Reset accounts",
+				"/api/performance/metrics":      "Get performance metrics",
+				"/api/performance/equity-curve": "Get equity curve",
+				"/api/performance/trades":       "Get trade history",
+				"/api/testnet/positions":        "Get/Create testnet positions",
+				"/api/testnet/accounts":         "Get/Reset testnet accounts",
+				"/metrics":                      "Prometheus metrics",
+				"/health":                       "Health check",
 			},
 		})
 	})

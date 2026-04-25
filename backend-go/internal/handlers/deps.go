@@ -1,0 +1,34 @@
+package handlers
+
+import (
+	"github.com/chuyen-gia-crypto/backend/internal/db/ent"
+	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
+)
+
+// Dependencies holds all handler dependencies
+type Dependencies struct {
+	DB             *ent.Client
+	AccountRepo    *repository.AccountRepository
+	PositionRepo   *repository.PositionRepository
+	AnalysisRepo   *repository.AnalysisRepository
+	PredictionRepo *repository.PredictionRepository
+}
+
+// NewDependencies creates a new dependencies struct
+func NewDependencies(client *ent.Client) *Dependencies {
+	return &Dependencies{
+		DB:             client,
+		AccountRepo:    repository.NewAccountRepository(client),
+		PositionRepo:   repository.NewPositionRepository(client),
+		AnalysisRepo:   repository.NewAnalysisRepository(client),
+		PredictionRepo: repository.NewPredictionRepository(client),
+	}
+}
+
+// Global dependencies instance
+var Deps *Dependencies
+
+// InitDependencies initializes the global dependencies
+func InitDependencies(client *ent.Client) {
+	Deps = NewDependencies(client)
+}

@@ -39,6 +39,10 @@ func main() {
 	if err := db.Init(ctx); err != nil {
 		logger.Error("Failed to initialize database")
 		// Continue without database for now
+	} else {
+		// Initialize handler dependencies
+		handlers.InitDependencies(db.Client)
+		logger.Info("Handler dependencies initialized")
 	}
 	defer db.Close()
 
