@@ -4,7 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/chuyen-gia-crypto/backend/internal/analyzers"
 	"github.com/chuyen-gia-crypto/backend/internal/config"
+	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
+	"github.com/chuyen-gia-crypto/backend/internal/services/groq"
+	"github.com/chuyen-gia-crypto/backend/internal/services/pricefetcher"
 	"github.com/chuyen-gia-crypto/backend/pkg/errors"
 	"github.com/chuyen-gia-crypto/backend/pkg/logger"
 	"github.com/robfig/cron/v3"
@@ -15,7 +19,14 @@ var (
 	cronScheduler *cron.Cron
 	ctx           context.Context
 	cancel        context.CancelFunc
+	analyzer      *analyzers.Analyzer
 )
+
+// Init initializes the analyzer with dependencies
+func Init(groqClient *groq.Client, analysisRepo *repository.AnalysisRepository, predictionRepo *repository.PredictionRepository) {
+	analyzer = analyzers.NewAnalyzer(groqClient, analysisRepo, predictionRepo)
+	logger.Info("Analyzer initialized in scheduler")
+}
 
 // Start initializes and starts all schedulers
 func Start(parentCtx context.Context) error {
@@ -95,8 +106,16 @@ func runKimNghiaAnalysis() {
 		zap.Time("start_time", startTime),
 	)
 
-	// TODO: Implement Kim Nghia analysis logic
-	// This will call the analyzer to fetch prices, run AI analysis, and process results
+	if analyzer == nil {
+		logger.Error("[KimNghia] Analyzer not initialized")
+		return
+	}
+
+	// Analyze BTC (BTC-only mode during migration)
+	_, err := analyzer.RunKimNghiaAnalysis(ctx, "BTC")
+	if err != nil {
+		logger.Error("[KimNghia] Analysis failed", zap.Error(err))
+	}
 
 	duration := time.Since(startTime)
 	logger.Info("[KimNghia] Analysis completed",
@@ -111,8 +130,16 @@ func runICTAnalysis() {
 		zap.Time("start_time", startTime),
 	)
 
-	// TODO: Implement ICT analysis logic
-	// This will call the analyzer to fetch prices, run AI analysis, and process results
+	if analyzer == nil {
+		logger.Error("[ICT] Analyzer not initialized")
+		return
+	}
+
+	// Analyze BTC (BTC-only mode during migration)
+	_, err := analyzer.RunICTAnalysis(ctx, "BTC")
+	if err != nil {
+		logger.Error("[ICT] Analysis failed", zap.Error(err))
+	}
 
 	duration := time.Since(startTime)
 	logger.Info("[ICT] Analysis completed",
@@ -163,12 +190,22 @@ func runPriceUpdate() {
 	startTime := time.Now()
 	logger.Info("Running price update...")
 
-	// TODO: Implement price update logic
-	// 1. Fetch real-time prices from Binance
-	// 2. Update open positions PnL
-	// 3. Check SL/TP with candle data
-	// 4. Execute pending orders if triggered
-	// 5. Update account snapshots
+	// Fetch real-time prices from Binance
+	realTimePrices, err := pricefetcher.FetchRealTimePrices()
+	if err != nil {
+		logger.Error("Failed to fetch real-time prices", zap.Error(err))
+		return
+	}
+
+	logger.Info("Real-time prices fetched",
+		zap.Float64("btc_price", realTimePrices.BTC.Price),
+		zap.Float64("eth_price", realTimePrices.ETH.Price),
+	)
+
+	// TODO: Update open positions PnL
+	// TODO: Check SL/TP with candle data
+	// TODO: Execute pending orders if triggered
+	// TODO: Update account snapshots
 
 	duration := time.Since(startTime)
 	logger.Info("Price update completed",

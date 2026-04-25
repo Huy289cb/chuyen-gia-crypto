@@ -11,8 +11,10 @@ import (
 
 	"github.com/chuyen-gia-crypto/backend/internal/config"
 	"github.com/chuyen-gia-crypto/backend/internal/db"
+	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
 	"github.com/chuyen-gia-crypto/backend/internal/handlers"
 	"github.com/chuyen-gia-crypto/backend/internal/schedulers"
+	"github.com/chuyen-gia-crypto/backend/internal/services/groq"
 	"github.com/chuyen-gia-crypto/backend/internal/services/testnet"
 	"github.com/chuyen-gia-crypto/backend/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -49,6 +51,15 @@ func main() {
 	// Initialize testnet client
 	if err := testnet.Init(); err != nil {
 		logger.Error("Failed to initialize testnet client")
+	}
+
+	// Initialize Groq client
+	groqClient := groq.NewClient(groq.GetAPIKeys())
+
+	// Initialize scheduler with dependencies
+	if db.Client != nil {
+		schedulers.Init(groqClient, repository.NewAnalysisRepository(db.Client), repository.NewPredictionRepository(db.Client))
+		logger.Info("Scheduler dependencies initialized")
 	}
 
 	// Initialize schedulers

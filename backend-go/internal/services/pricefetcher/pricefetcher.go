@@ -272,8 +272,8 @@ func FetchFromBinance() (*MarketData, error) {
 	}
 
 	// Fetch OHLC data for sparklines (optional, can be used for sparkline data)
-	_, _ = fetchOHLCFromBinance("BTCUSDT", "15m", 672)
-	_, _ = fetchOHLCFromBinance("ETHUSDT", "15m", 672)
+	_, _ = FetchOHLCFromBinance("BTCUSDT", "15m", 672)
+	_, _ = FetchOHLCFromBinance("ETHUSDT", "15m", 672)
 
 	// Fetch Fear & Greed Index
 	fearGreed, err := fetchFearGreedIndex()
@@ -324,8 +324,8 @@ func FetchFromBinance() (*MarketData, error) {
 	}, nil
 }
 
-// fetchOHLCFromBinance fetches OHLC data from Binance
-func fetchOHLCFromBinance(symbol, interval string, limit int) ([]PriceData, error) {
+// FetchOHLCFromBinance fetches OHLC data from Binance
+func FetchOHLCFromBinance(symbol, interval string, limit int) ([]PriceData, error) {
 	client := NewHTTPClient()
 
 	url := fmt.Sprintf("%s/klines?symbol=%s&interval=%s&limit=%d", BinanceAPI, symbol, interval, limit)
