@@ -117,9 +117,7 @@ services:
 
   # Go Application
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: huy289cb/crypto-analyzer-backend:latest
     container_name: crypto-analyzer-app-prod
     environment:
       # Database (use pgBouncer)
