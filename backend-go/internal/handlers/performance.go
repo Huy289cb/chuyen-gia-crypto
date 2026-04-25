@@ -101,6 +101,16 @@ func GetEquityCurve(c *gin.Context) {
 		return
 	}
 
+	// Check if account exists
+	if account == nil {
+		logger.Warn("Account not found", zap.String("symbol", symbol), zap.String("method_id", methodID))
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Account not found",
+		})
+		return
+	}
+
 	// Get snapshots for the account
 	snapshots, err := Deps.AccountSnapshotRepo.GetByAccountID(c.Request.Context(), account.ID, limit)
 	if err != nil {
