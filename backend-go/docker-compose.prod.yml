@@ -117,7 +117,7 @@ services:
 
   # Go Application
   app:
-    image: huy289cb/crypto-backend-go:latest
+    image: huy289cb/crypto-analyzer-backend:latest
     container_name: crypto-analyzer-app-prod
     environment:
       # Database (use pgBouncer)
