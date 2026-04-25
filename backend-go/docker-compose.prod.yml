@@ -120,9 +120,9 @@ services:
     image: huy289cb/crypto-analyzer-backend:latest
     container_name: crypto-analyzer-app-prod
     environment:
-      # Database (use pgBouncer)
-      DB_HOST: pgbouncer
-      DB_PORT: 6432
+      # Database (connect directly to PostgreSQL)
+      DB_HOST: postgres
+      DB_PORT: 5432
       DB_USER: ${DB_USER:-crypto_user}
       DB_PASSWORD: ${DB_PASSWORD:-crypto_password}
       DB_NAME: ${DB_NAME:-crypto_analyzer}
