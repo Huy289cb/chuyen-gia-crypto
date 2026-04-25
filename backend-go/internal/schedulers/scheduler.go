@@ -2,6 +2,7 @@ package schedulers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/chuyen-gia-crypto/backend/internal/analyzers"
@@ -26,6 +27,7 @@ var (
 	accountRepo         *repository.AccountRepository
 	accountSnapshotRepo *repository.AccountSnapshotRepository
 	pendingOrderRepo    *repository.PendingOrderRepository
+	positionRepo        *repository.PositionRepository
 )
 
 // Init initializes the analyzer with dependencies
@@ -56,6 +58,12 @@ func InitAccountRepo(repo *repository.AccountRepository) {
 func InitPendingOrderRepo(repo *repository.PendingOrderRepository) {
 	pendingOrderRepo = repo
 	logger.Info("Pending order repository initialized in scheduler")
+}
+
+// InitPositionRepo initializes the position repository
+func InitPositionRepo(repo *repository.PositionRepository) {
+	positionRepo = repo
+	logger.Info("Position repository initialized in scheduler")
 }
 
 // Start initializes and starts all schedulers
@@ -233,86 +241,160 @@ func runPriceUpdate() {
 	)
 
 	// Update open positions PnL if paper engine is initialized
-	if paperEngine != nil {
+	if paperEngine != nil && positionRepo != nil {
 		// Get open positions from database
-		// TODO: Implement GetOpenPositions from repository
-		// For now, skip this step as it requires database integration
+		openPositions, err := positionRepo.GetOpenPositions(ctx)
+		if err != nil {
+			logger.Error("Failed to get open positions", zap.Error(err))
+		} else {
+			// Convert ent.Position to papertrading.Position
+			paperPositions := make([]*papertrading.Position, 0, len(openPositions))
+			for _, pos := range openPositions {
+				paperPos := &papertrading.Position{
+					ID:           fmt.Sprintf("%d", pos.ID),
+					Symbol:       pos.Symbol,
+					Side:         pos.Side,
+					EntryPrice:   pos.EntryPrice,
+					CurrentPrice: pos.CurrentPrice,
+					StopLoss:     pos.StopLoss,
+					TakeProfit:   pos.TakeProfit,
+					SizeUSD:      pos.SizeUsd,
+					SizeQty:      pos.SizeQty,
+					RiskUSD:      pos.RiskUsd,
+					RiskPercent:  pos.RiskPercent,
+					ExpectedRR:   pos.ExpectedRr,
+					MethodID:     pos.MethodID,
+					Status:       pos.Status,
+				}
+				paperPositions = append(paperPositions, paperPos)
+			}
 
-		// Check SL/TP with candle data
-		// TODO: Fetch 1-minute candle data for SL/TP detection
-		// TODO: Check if any positions hit SL or TP
-		// TODO: Close positions that hit SL/TP
-
-		// Execute pending orders if triggered
-		if pendingOrderRepo != nil {
-			pendingOrders, err := pendingOrderRepo.GetByStatus(ctx, "pending")
-			if err != nil {
-				logger.Error("Failed to get pending orders", zap.Error(err))
-			} else {
-				for _, order := range pendingOrders {
-					// Check if price hits entry level
-					var currentPrice float64
-					if order.Symbol == "BTC" {
-						currentPrice = realTimePrices.BTC.Price
-					} else if order.Symbol == "ETH" {
-						currentPrice = realTimePrices.ETH.Price
-					} else {
-						continue // Skip unsupported symbols
+			// Update PnL for each symbol
+			if len(paperPositions) > 0 {
+				// Update BTC positions
+				btcPrice := realTimePrices.BTC.Price
+				btcPositions := make([]*papertrading.Position, 0)
+				for _, pos := range paperPositions {
+					if pos.Symbol == "BTC" {
+						btcPositions = append(btcPositions, pos)
 					}
-
-					// Check if order should be executed
-					shouldExecute := false
-					if order.Side == "BUY" && currentPrice <= order.EntryPrice {
-						shouldExecute = true
-					} else if order.Side == "SELL" && currentPrice >= order.EntryPrice {
-						shouldExecute = true
+				}
+				if len(btcPositions) > 0 {
+					err := paperEngine.UpdateUnrealizedPnL(ctx, btcPositions, btcPrice)
+					if err != nil {
+						logger.Error("Failed to update BTC positions PnL", zap.Error(err))
 					}
+				}
 
-					if shouldExecute {
-						// Execute the order
-						err := pendingOrderRepo.ExecuteOrder(ctx, order.ID, currentPrice, order.SizeQty, order.SizeUsd)
-						if err != nil {
-							logger.Error("Failed to execute pending order",
-								zap.Int("order_id", order.ID),
-								zap.Error(err))
-						} else {
-							logger.Info("Pending order executed",
-								zap.Int("order_id", order.ID),
-								zap.String("symbol", order.Symbol),
-								zap.Float64("executed_price", currentPrice))
-
-							// TODO: Create position from executed order
-							// This requires paperEngine to have a method to create position from order
-						}
+				// Update ETH positions
+				ethPrice := realTimePrices.ETH.Price
+				ethPositions := make([]*papertrading.Position, 0)
+				for _, pos := range paperPositions {
+					if pos.Symbol == "ETH" {
+						ethPositions = append(ethPositions, pos)
+					}
+				}
+				if len(ethPositions) > 0 {
+					err := paperEngine.UpdateUnrealizedPnL(ctx, ethPositions, ethPrice)
+					if err != nil {
+						logger.Error("Failed to update ETH positions PnL", zap.Error(err))
 					}
 				}
 			}
 		}
+	}
 
-		// Update account snapshots
-		if accountSnapshotRepo != nil && accountRepo != nil {
-			accounts, err := accountRepo.GetAll(ctx)
-			if err != nil {
-				logger.Error("Failed to get accounts for snapshot creation", zap.Error(err))
-			} else {
-				for _, account := range accounts {
-					snapshot := &ent.AccountSnapshot{
-						AccountID:     account.ID,
-						Balance:       account.CurrentBalance,
-						Equity:        account.Equity,
-						UnrealizedPnl: account.UnrealizedPnl,
-						OpenPositions: 0, // TODO: Count open positions
-						Timestamp:     time.Now(),
-					}
-					_, err := accountSnapshotRepo.Create(ctx, snapshot)
+	// Check SL/TP with candle data
+	// TODO: Fetch 1-minute candle data for SL/TP detection
+	// TODO: Check if any positions hit SL or TP
+	// TODO: Close positions that hit SL/TP
+
+	// Execute pending orders if triggered
+	if pendingOrderRepo != nil {
+		pendingOrders, err := pendingOrderRepo.GetByStatus(ctx, "pending")
+		if err != nil {
+			logger.Error("Failed to get pending orders", zap.Error(err))
+		} else {
+			for _, order := range pendingOrders {
+				// Check if price hits entry level
+				var currentPrice float64
+				if order.Symbol == "BTC" {
+					currentPrice = realTimePrices.BTC.Price
+				} else if order.Symbol == "ETH" {
+					currentPrice = realTimePrices.ETH.Price
+				} else {
+					continue // Skip unsupported symbols
+				}
+
+				// Check if order should be executed
+				shouldExecute := false
+				if order.Side == "BUY" && currentPrice <= order.EntryPrice {
+					shouldExecute = true
+				} else if order.Side == "SELL" && currentPrice >= order.EntryPrice {
+					shouldExecute = true
+				}
+
+				if shouldExecute {
+					// Execute the order
+					err := pendingOrderRepo.ExecuteOrder(ctx, order.ID, currentPrice, order.SizeQty, order.SizeUsd)
 					if err != nil {
-						logger.Error("Failed to create account snapshot",
-							zap.Int("account_id", account.ID),
+						logger.Error("Failed to execute pending order",
+							zap.Int("order_id", order.ID),
 							zap.Error(err))
+					} else {
+						logger.Info("Pending order executed",
+							zap.Int("order_id", order.ID),
+							zap.String("symbol", order.Symbol),
+							zap.Float64("executed_price", currentPrice))
+
+						// TODO: Create position from executed order
+						// This requires paperEngine to have a method to create position from order
 					}
 				}
-				logger.Info("Account snapshots created", zap.Int("count", len(accounts)))
 			}
+		}
+	}
+
+	// Update account snapshots
+	if accountSnapshotRepo != nil && accountRepo != nil {
+		accounts, err := accountRepo.GetAll(ctx)
+		if err != nil {
+			logger.Error("Failed to get accounts for snapshot creation", zap.Error(err))
+		} else {
+			for _, account := range accounts {
+				// Count open positions for this account
+				openPositionsCount := 0
+				if positionRepo != nil {
+					accountPositions, err := positionRepo.GetByAccountID(ctx, account.ID)
+					if err != nil {
+						logger.Error("Failed to get positions for account",
+							zap.Int("account_id", account.ID),
+							zap.Error(err))
+					} else {
+						for _, pos := range accountPositions {
+							if pos.Status == "open" {
+								openPositionsCount++
+							}
+						}
+					}
+				}
+
+				snapshot := &ent.AccountSnapshot{
+					AccountID:     account.ID,
+					Balance:       account.CurrentBalance,
+					Equity:        account.Equity,
+					UnrealizedPnl: account.UnrealizedPnl,
+					OpenPositions: openPositionsCount,
+					Timestamp:     time.Now(),
+				}
+				_, err := accountSnapshotRepo.Create(ctx, snapshot)
+				if err != nil {
+					logger.Error("Failed to create account snapshot",
+						zap.Int("account_id", account.ID),
+						zap.Error(err))
+				}
+			}
+			logger.Info("Account snapshots created", zap.Int("count", len(accounts)))
 		}
 	}
 
