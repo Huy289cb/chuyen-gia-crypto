@@ -18,7 +18,7 @@ export function useTrends(method: string = 'kim_nghia') {
       const result: ApiResponse<TrendsData> = await response.json();
       
       if (result.success) {
-        setData(result.data);
+        setData(result.data ?? null);
         setError(null);
       } else {
         setError(result.message || 'Data not available');
