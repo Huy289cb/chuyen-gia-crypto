@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chuyen-gia-crypto/backend/internal/analyzers"
 	"github.com/chuyen-gia-crypto/backend/internal/config"
 	"github.com/chuyen-gia-crypto/backend/internal/db"
 	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
@@ -16,6 +17,7 @@ import (
 	"github.com/chuyen-gia-crypto/backend/internal/middleware"
 	"github.com/chuyen-gia-crypto/backend/internal/schedulers"
 	"github.com/chuyen-gia-crypto/backend/internal/services/groq"
+	"github.com/chuyen-gia-crypto/backend/internal/services/papertrading"
 	"github.com/chuyen-gia-crypto/backend/internal/services/testnet"
 	"github.com/chuyen-gia-crypto/backend/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -63,9 +65,19 @@ func main() {
 	// Initialize Groq client
 	groqClient := groq.NewClient(groq.GetAPIKeys())
 
+	// Initialize paper trading engine
+	var paperEngine *papertrading.Engine
+	if db.Client != nil {
+		paperEngine = papertrading.NewEngine(db.Client)
+		schedulers.InitPaperTrading(paperEngine)
+		logger.Info("Paper trading engine initialized")
+	}
+
 	// Initialize scheduler with dependencies
 	if db.Client != nil {
+		analyzer := analyzers.NewAnalyzer(groqClient, repository.NewAnalysisRepository(db.Client), repository.NewPredictionRepository(db.Client))
 		schedulers.Init(groqClient, repository.NewAnalysisRepository(db.Client), repository.NewPredictionRepository(db.Client))
+		handlers.SetAnalyzer(analyzer)
 		logger.Info("Scheduler dependencies initialized")
 	}
 

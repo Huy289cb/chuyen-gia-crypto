@@ -2,8 +2,10 @@ package papertrading
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/chuyen-gia-crypto/backend/internal/config"
@@ -226,9 +228,57 @@ func (e *Engine) ClosePosition(ctx context.Context, position *Position, currentP
 	now := time.Now()
 	position.ExitTime = &now
 
-	// TODO: Update position in database
-	// TODO: Update account with realized PnL
-	// TODO: Record trade event
+	// Update position in database
+	positionID, err := strconv.Atoi(position.ID)
+	if err != nil {
+		logger.Error("Failed to parse position ID", zap.Error(err))
+		return errors.NewValidationError("invalid position ID")
+	}
+
+	err = e.positionRepo.ClosePosition(ctx, positionID, currentPrice, reason, now)
+	if err != nil {
+		logger.Error("Failed to close position in database", zap.Error(err))
+		return errors.NewAPIError("failed to close position", err)
+	}
+
+	// Update account with realized PnL
+	account, err := e.accountRepo.GetBySymbolAndMethod(ctx, position.Symbol, position.MethodID)
+	if err != nil {
+		logger.Error("Failed to get account", zap.Error(err))
+	} else {
+		account.CurrentBalance += realizedPnL
+		account.RealizedPnl += realizedPnL
+		account.TotalTrades++
+		if realizedPnL > 0 {
+			account.WinningTrades++
+		} else {
+			account.LosingTrades++
+		}
+		_, err = e.accountRepo.Update(ctx, account)
+		if err != nil {
+			logger.Error("Failed to update account", zap.Error(err))
+		}
+	}
+
+	// Record trade event
+	eventData := map[string]interface{}{
+		"realized_pnl": realizedPnL,
+		"close_price":  currentPrice,
+		"close_reason": reason,
+	}
+	eventDataJSON, _ := json.Marshal(eventData)
+
+	tradeEvent := &ent.TradeEvent{
+		PositionID: positionID,
+		EventType:  "position_closed",
+		EventData:  string(eventDataJSON),
+		Timestamp:  time.Now(),
+	}
+
+	_, err = e.tradeEventRepo.Create(ctx, tradeEvent)
+	if err != nil {
+		logger.Error("Failed to record trade event", zap.Error(err))
+	}
 
 	logger.Info("Position closed successfully",
 		zap.String("position_id", position.ID),
@@ -292,8 +342,45 @@ func (e *Engine) UpdateStopLoss(ctx context.Context, position *Position, newSL f
 
 	position.StopLoss = newSL
 
-	// TODO: Update position in database
-	// TODO: Record trade event
+	// Update position in database
+	positionID, err := strconv.Atoi(position.ID)
+	if err != nil {
+		logger.Error("Failed to parse position ID", zap.Error(err))
+		return errors.NewValidationError("invalid position ID")
+	}
+
+	entPosition, err := e.positionRepo.GetByID(ctx, positionID)
+	if err != nil {
+		logger.Error("Failed to get position from database", zap.Error(err))
+		return errors.NewAPIError("failed to get position", err)
+	}
+
+	entPosition.StopLoss = newSL
+	_, err = e.positionRepo.Update(ctx, entPosition)
+	if err != nil {
+		logger.Error("Failed to update position in database", zap.Error(err))
+		return errors.NewAPIError("failed to update position", err)
+	}
+
+	// Record trade event
+	eventData := map[string]interface{}{
+		"old_sl": position.StopLoss,
+		"new_sl": newSL,
+		"reason": reason,
+	}
+	eventDataJSON, _ := json.Marshal(eventData)
+
+	tradeEvent := &ent.TradeEvent{
+		PositionID: positionID,
+		EventType:  "stop_loss_updated",
+		EventData:  string(eventDataJSON),
+		Timestamp:  time.Now(),
+	}
+
+	_, err = e.tradeEventRepo.Create(ctx, tradeEvent)
+	if err != nil {
+		logger.Error("Failed to record trade event", zap.Error(err))
+	}
 
 	logger.Info("Stop loss updated successfully",
 		zap.String("position_id", position.ID),
@@ -336,7 +423,17 @@ func (e *Engine) UpdateUnrealizedPnL(ctx context.Context, positions []*Position,
 		position.CurrentPrice = currentPrice
 		position.UnrealizedPnL = e.calculateUnrealizedPnL(position, currentPrice)
 
-		// TODO: Update position in database
+		// Update position in database
+		positionID, err := strconv.Atoi(position.ID)
+		if err != nil {
+			logger.Error("Failed to parse position ID", zap.Error(err))
+			continue
+		}
+
+		err = e.positionRepo.UpdateCurrentPrice(ctx, positionID, currentPrice, position.UnrealizedPnL)
+		if err != nil {
+			logger.Error("Failed to update position current price", zap.Error(err))
+		}
 	}
 
 	return nil

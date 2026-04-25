@@ -8,6 +8,7 @@ import (
 	"github.com/chuyen-gia-crypto/backend/internal/config"
 	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
 	"github.com/chuyen-gia-crypto/backend/internal/services/groq"
+	"github.com/chuyen-gia-crypto/backend/internal/services/papertrading"
 	"github.com/chuyen-gia-crypto/backend/internal/services/pricefetcher"
 	"github.com/chuyen-gia-crypto/backend/pkg/errors"
 	"github.com/chuyen-gia-crypto/backend/pkg/logger"
@@ -20,12 +21,19 @@ var (
 	ctx           context.Context
 	cancel        context.CancelFunc
 	analyzer      *analyzers.Analyzer
+	paperEngine   *papertrading.Engine
 )
 
 // Init initializes the analyzer with dependencies
 func Init(groqClient *groq.Client, analysisRepo *repository.AnalysisRepository, predictionRepo *repository.PredictionRepository) {
 	analyzer = analyzers.NewAnalyzer(groqClient, analysisRepo, predictionRepo)
 	logger.Info("Analyzer initialized in scheduler")
+}
+
+// InitPaperTrading initializes the paper trading engine
+func InitPaperTrading(engine *papertrading.Engine) {
+	paperEngine = engine
+	logger.Info("Paper trading engine initialized in scheduler")
 }
 
 // Start initializes and starts all schedulers
@@ -202,10 +210,25 @@ func runPriceUpdate() {
 		zap.Float64("eth_price", realTimePrices.ETH.Price),
 	)
 
-	// TODO: Update open positions PnL
-	// TODO: Check SL/TP with candle data
-	// TODO: Execute pending orders if triggered
-	// TODO: Update account snapshots
+	// Update open positions PnL if paper engine is initialized
+	if paperEngine != nil {
+		// Get open positions from database
+		// TODO: Implement GetOpenPositions from repository
+		// For now, skip this step as it requires database integration
+
+		// Check SL/TP with candle data
+		// TODO: Fetch 1-minute candle data for SL/TP detection
+		// TODO: Check if any positions hit SL or TP
+		// TODO: Close positions that hit SL/TP
+
+		// Execute pending orders if triggered
+		// TODO: Get pending orders from database
+		// TODO: Check if price hits entry level
+		// TODO: Execute orders that are triggered
+
+		// Update account snapshots
+		// TODO: Create account snapshots for all accounts
+	}
 
 	duration := time.Since(startTime)
 	logger.Info("Price update completed",

@@ -78,11 +78,55 @@ func GetPerformanceMetrics(c *gin.Context) {
 func GetEquityCurve(c *gin.Context) {
 	logger.Info("GET /api/performance/equity-curve called")
 
-	// TODO: Implement equity curve retrieval from account_snapshots
+	symbol := c.DefaultQuery("symbol", "BTC")
+	methodID := c.DefaultQuery("method_id", "kim_nghia")
+	limit := 100 // Default limit for snapshots
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"success": false,
-		"error":   "Equity curve not yet implemented",
+	if Deps == nil || Deps.AccountRepo == nil || Deps.AccountSnapshotRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "Database not initialized",
+		})
+		return
+	}
+
+	// Get account by symbol and method
+	account, err := Deps.AccountRepo.GetBySymbolAndMethod(c.Request.Context(), symbol, methodID)
+	if err != nil {
+		logger.Error("Failed to get account", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to get account",
+		})
+		return
+	}
+
+	// Get snapshots for the account
+	snapshots, err := Deps.AccountSnapshotRepo.GetByAccountID(c.Request.Context(), account.ID, limit)
+	if err != nil {
+		logger.Error("Failed to get account snapshots", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to get equity curve data",
+		})
+		return
+	}
+
+	// Convert snapshots to response format
+	equityCurve := make([]map[string]interface{}, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		equityCurve = append(equityCurve, map[string]interface{}{
+			"timestamp":      snapshot.Timestamp,
+			"balance":        snapshot.Balance,
+			"equity":         snapshot.Equity,
+			"unrealized_pnl": snapshot.UnrealizedPnl,
+			"open_positions": snapshot.OpenPositions,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    equityCurve,
 	})
 }
 
