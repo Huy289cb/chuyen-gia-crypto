@@ -17,7 +17,7 @@ export function useTrends(method: string = 'kim_nghia') {
       const response = await fetch(`${API_URL}/analysis?method=${method}`);
       const result: ApiResponse<TrendsData> = await response.json();
       
-      if (result.success && result.data) {
+      if (result.success) {
         setData(result.data);
         setError(null);
       } else {
