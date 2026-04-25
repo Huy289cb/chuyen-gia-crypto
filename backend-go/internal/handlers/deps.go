@@ -14,6 +14,7 @@ type Dependencies struct {
 	AnalysisRepo        *repository.AnalysisRepository
 	PredictionRepo      *repository.PredictionRepository
 	AccountSnapshotRepo *repository.AccountSnapshotRepository
+	PendingOrderRepo    *repository.PendingOrderRepository
 	Analyzer            *analyzers.Analyzer
 }
 
@@ -26,6 +27,7 @@ func NewDependencies(client *ent.Client) *Dependencies {
 		AnalysisRepo:        repository.NewAnalysisRepository(client),
 		PredictionRepo:      repository.NewPredictionRepository(client),
 		AccountSnapshotRepo: repository.NewAccountSnapshotRepository(client),
+		PendingOrderRepo:    repository.NewPendingOrderRepository(client),
 	}
 }
 

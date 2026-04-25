@@ -222,12 +222,12 @@ func runPriceUpdate() {
 		// TODO: Close positions that hit SL/TP
 
 		// Execute pending orders if triggered
-		// TODO: Get pending orders from database
-		// TODO: Check if price hits entry level
-		// TODO: Execute orders that are triggered
+		// This requires database integration with PendingOrderRepository
+		// For now, skip this step
 
 		// Update account snapshots
-		// TODO: Create account snapshots for all accounts
+		// This requires database integration with AccountSnapshotRepository
+		// For now, skip this step
 	}
 
 	duration := time.Since(startTime)
