@@ -1,0 +1,404 @@
+openapi: 3.0.0
+info:
+  title: Crypto Trend Analyzer API
+  version: 2.0.0
+  description: API for crypto trend analysis and paper trading
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.example.com
+    description: Production server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the API is running
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  /:
+    get:
+      summary: API information
+      description: Get API information and available endpoints
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  endpoints:
+                    type: object
+
+  /api/analysis:
+    get:
+      summary: Get current trend analysis
+      description: Retrieve the latest trend analysis for crypto assets
+      responses:
+        '200':
+          description: Analysis retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  coin:
+                    type: string
+                  bias:
+                    type: string
+                  action:
+                    type: string
+                  confidence:
+                    type: number
+                  narrative:
+                    type: string
+        '500':
+          description: Internal server error
+        '503':
+          description: Service unavailable
+
+  /api/analysis/trigger:
+    post:
+      summary: Trigger manual analysis
+      description: Manually trigger a new analysis
+      responses:
+        '200':
+          description: Analysis triggered successfully
+        '500':
+          description: Internal server error
+        '501':
+          description: Not implemented
+
+  /api/positions:
+    get:
+      summary: Get all positions
+      description: Retrieve all trading positions
+      responses:
+        '200':
+          description: Positions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    symbol:
+                      type: string
+                    side:
+                      type: string
+                    entry_price:
+                      type: number
+                    current_price:
+                      type: number
+                    stop_loss:
+                      type: number
+                    take_profit:
+                      type: number
+                    status:
+                      type: string
+        '500':
+          description: Internal server error
+        '503':
+          description: Service unavailable
+    post:
+      summary: Create a new position
+      description: Create a new trading position
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - symbol
+                - side
+                - entry_price
+                - stop_loss
+                - take_profit
+                - size_usd
+              properties:
+                symbol:
+                  type: string
+                  example: BTC
+                side:
+                  type: string
+                  enum: [BUY, SELL]
+                entry_price:
+                  type: number
+                stop_loss:
+                  type: number
+                take_profit:
+                  type: number
+                size_usd:
+                  type: number
+      responses:
+        '201':
+          description: Position created successfully
+        '500':
+          description: Internal server error
+        '501':
+          description: Not implemented
+
+  /api/positions/{id}:
+    get:
+      summary: Get position by ID
+      description: Retrieve a specific position by its ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Position retrieved successfully
+        '404':
+          description: Position not found
+        '500':
+          description: Internal server error
+
+  /api/accounts:
+    get:
+      summary: Get all accounts
+      description: Retrieve all trading accounts
+      responses:
+        '200':
+          description: Accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    symbol:
+                      type: string
+                    method_id:
+                      type: string
+                    current_balance:
+                      type: number
+                    equity:
+                      type: number
+        '500':
+          description: Internal server error
+        '503':
+          description: Service unavailable
+
+  /api/accounts/reset:
+    post:
+      summary: Reset account
+      description: Reset an account to initial state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - symbol
+                - method_id
+              properties:
+                symbol:
+                  type: string
+                  example: BTC
+                method_id:
+                  type: string
+                  example: ict
+      responses:
+        '200':
+          description: Account reset successfully
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+
+  /api/performance/metrics:
+    get:
+      summary: Get performance metrics
+      description: Retrieve overall performance metrics
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_trades:
+                    type: integer
+                  winning_trades:
+                    type: integer
+                  losing_trades:
+                    type: integer
+                  win_rate:
+                    type: number
+                  profit_factor:
+                    type: number
+                  max_drawdown:
+                    type: number
+        '500':
+          description: Internal server error
+        '501':
+          description: Not implemented
+        '503':
+          description: Service unavailable
+
+  /api/performance/equity-curve:
+    get:
+      summary: Get equity curve
+      description: Retrieve equity curve data
+      responses:
+        '200':
+          description: Equity curve retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    timestamp:
+                      type: string
+                      format: date-time
+                    equity:
+                      type: number
+        '500':
+          description: Internal server error
+        '501':
+          description: Not implemented
+        '503':
+          description: Service unavailable
+
+  /api/performance/trades:
+    get:
+      summary: Get trade history
+      description: Retrieve complete trade history
+      responses:
+        '200':
+          description: Trade history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    symbol:
+                      type: string
+                    side:
+                      type: string
+                    entry_price:
+                      type: number
+                    exit_price:
+                      type: number
+                    pnl:
+                      type: number
+                    status:
+                      type: string
+        '500':
+          description: Internal server error
+        '501':
+          description: Not implemented
+        '503':
+          description: Service unavailable
+
+  /api/testnet/positions:
+    get:
+      summary: Get testnet positions
+      description: Retrieve positions from Binance testnet
+      responses:
+        '200':
+          description: Testnet positions retrieved successfully
+        '501':
+          description: Not implemented
+
+  /api/testnet/positions/{id}:
+    get:
+      summary: Get testnet position by ID
+      description: Retrieve a specific testnet position
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Testnet position retrieved successfully
+        '404':
+          description: Position not found
+        '501':
+          description: Not implemented
+
+  /api/testnet/accounts:
+    get:
+      summary: Get testnet accounts
+      description: Retrieve account information from Binance testnet
+      responses:
+        '200':
+          description: Testnet account retrieved successfully
+        '501':
+          description: Not implemented
+
+  /api/testnet/accounts/reset:
+    post:
+      summary: Reset testnet account
+      description: Reset testnet account to initial state
+      responses:
+        '200':
+          description: Testnet account reset successfully
+        '501':
+          description: Not implemented
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Get Prometheus metrics for monitoring
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /ws:
+    get:
+      summary: WebSocket connection
+      description: Establish WebSocket connection for real-time updates
+      responses:
+        '101':
+          description: WebSocket connection established
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
