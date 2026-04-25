@@ -169,20 +169,8 @@ var (
 		[]string{"endpoint"},
 	)
 
-	// System metrics
-	goroutines = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "go_goroutines",
-			Help: "Number of goroutines",
-		},
-	)
-
-	memoryAllocated = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "go_memstats_alloc_bytes",
-			Help: "Number of bytes allocated and still in use",
-		},
-	)
+	// System metrics are provided by Prometheus Go collector
+	// No need to define custom goroutines and memory metrics
 
 	// AI Position Management metrics
 	aiPositionActionsTotal = promauto.NewCounterVec(
@@ -282,15 +270,6 @@ func RecordBinanceRequest(endpoint, status string) {
 
 func ObserveBinanceRequestDuration(endpoint string, duration float64) {
 	binanceRequestDuration.WithLabelValues(endpoint).Observe(duration)
-}
-
-// System Metrics
-func SetGoroutines(count float64) {
-	goroutines.Set(count)
-}
-
-func SetMemoryAllocated(bytes float64) {
-	memoryAllocated.Set(bytes)
 }
 
 // AI Position Management Metrics
