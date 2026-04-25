@@ -103,12 +103,36 @@ func GetEquityCurve(c *gin.Context) {
 
 	// Check if account exists
 	if account == nil {
-		logger.Warn("Account not found", zap.String("symbol", symbol), zap.String("method_id", methodID))
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Account not found",
-		})
-		return
+		logger.Warn("Account not found, creating new account", zap.String("symbol", symbol), zap.String("method_id", methodID))
+
+		// Auto-create account with default balance
+		newAccount := &ent.Account{
+			Symbol:            symbol,
+			MethodID:          methodID,
+			StartingBalance:   100.0,
+			CurrentBalance:    100.0,
+			Equity:            100.0,
+			UnrealizedPnl:     0,
+			RealizedPnl:       0,
+			TotalTrades:       0,
+			WinningTrades:     0,
+			LosingTrades:      0,
+			MaxDrawdown:       0,
+			ConsecutiveLosses: 0,
+		}
+
+		created, err := Deps.AccountRepo.Create(c.Request.Context(), newAccount)
+		if err != nil {
+			logger.Error("Failed to create account", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to create account",
+			})
+			return
+		}
+
+		account = created
+		logger.Info("Account created successfully", zap.String("symbol", symbol), zap.String("method_id", methodID))
 	}
 
 	// Get snapshots for the account
