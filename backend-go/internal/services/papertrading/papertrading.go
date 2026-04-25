@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/chuyen-gia-crypto/backend/internal/config"
+	"github.com/chuyen-gia-crypto/backend/internal/db/ent"
+	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
 	"github.com/chuyen-gia-crypto/backend/pkg/errors"
 	"github.com/chuyen-gia-crypto/backend/pkg/logger"
 	"go.uber.org/zap"
@@ -40,7 +42,7 @@ type Position struct {
 
 // Account represents a paper trading account
 type Account struct {
-	ID             string    `json:"id"`
+	ID             int       `json:"id"`
 	Symbol         string    `json:"symbol"`
 	MethodID       string    `json:"method_id"`
 	Balance        float64   `json:"balance"`
@@ -80,12 +82,22 @@ type AutoEntryDecision struct {
 
 // Engine represents the paper trading engine
 type Engine struct {
-	// TODO: Add database client when schema is ready
+	dbClient       *ent.Client
+	accountRepo    *repository.AccountRepository
+	positionRepo   *repository.PositionRepository
+	snapshotRepo   *repository.AccountSnapshotRepository
+	tradeEventRepo *repository.TradeEventRepository
 }
 
 // NewEngine creates a new paper trading engine
-func NewEngine() *Engine {
-	return &Engine{}
+func NewEngine(dbClient *ent.Client) *Engine {
+	return &Engine{
+		dbClient:       dbClient,
+		accountRepo:    repository.NewAccountRepository(dbClient),
+		positionRepo:   repository.NewPositionRepository(dbClient),
+		snapshotRepo:   repository.NewAccountSnapshotRepository(dbClient),
+		tradeEventRepo: repository.NewTradeEventRepository(dbClient),
+	}
 }
 
 // OpenPosition opens a new position
@@ -112,7 +124,7 @@ func (e *Engine) OpenPosition(ctx context.Context, account *Account, suggestion 
 	// Create position
 	position := &Position{
 		ID:                 generateID(),
-		AccountID:          account.ID,
+		AccountID:          fmt.Sprintf("%d", account.ID),
 		Symbol:             "BTC", // BTC-only mode
 		Side:               suggestion.Side,
 		EntryPrice:         suggestion.EntryPrice,
@@ -132,8 +144,56 @@ func (e *Engine) OpenPosition(ctx context.Context, account *Account, suggestion 
 		LinkedPredictionID: predictionID,
 	}
 
-	// TODO: Save position to database
-	// TODO: Update account balance
+	// Save position to database
+	entPosition := &ent.Position{
+		PositionID:    position.ID,
+		AccountID:     account.ID,
+		Symbol:        position.Symbol,
+		Side:          position.Side,
+		EntryPrice:    position.EntryPrice,
+		CurrentPrice:  position.CurrentPrice,
+		StopLoss:      position.StopLoss,
+		TakeProfit:    position.TakeProfit,
+		SizeUsd:       position.SizeUSD,
+		SizeQty:       position.SizeQty,
+		RiskUsd:       position.RiskUSD,
+		RiskPercent:   position.RiskPercent,
+		ExpectedRr:    position.ExpectedRR,
+		Status:        position.Status,
+		EntryTime:     position.EntryTime,
+		UnrealizedPnl: position.UnrealizedPnL,
+		MethodID:      position.MethodID,
+	}
+
+	// Set nullable fields
+	if position.InvalidationLevel > 0 {
+		entPosition.InvalidationLevel = &position.InvalidationLevel
+	}
+	if predictionID != "" {
+		predID := 0 // Parse predictionID to int if needed
+		entPosition.LinkedPredictionID = &predID
+	}
+
+	createdPosition, err := e.positionRepo.Create(ctx, entPosition)
+	if err != nil {
+		logger.Error("Failed to save position to database", zap.Error(err))
+		return nil, errors.NewAPIError("failed to save position", err)
+	}
+	position.ID = createdPosition.PositionID
+
+	// Update account balance
+	account.Balance -= position.SizeUSD
+	entAccount := &ent.Account{
+		ID:             account.ID,
+		Symbol:         account.Symbol,
+		MethodID:       account.MethodID,
+		CurrentBalance: account.Balance,
+		Equity:         account.Balance,
+	}
+	_, err = e.accountRepo.Update(ctx, entAccount)
+	if err != nil {
+		logger.Error("Failed to update account balance", zap.Error(err))
+	}
 
 	logger.Info("Position opened successfully",
 		zap.String("position_id", position.ID),
