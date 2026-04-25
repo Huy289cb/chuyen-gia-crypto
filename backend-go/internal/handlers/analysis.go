@@ -36,9 +36,11 @@ func GetAnalysis(c *gin.Context) {
 	}
 
 	if analysis == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "No analysis found",
+		// Return 200 with null data instead of 404
+		// This allows frontend to handle "no analysis" state gracefully
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data":    nil,
 		})
 		return
 	}
