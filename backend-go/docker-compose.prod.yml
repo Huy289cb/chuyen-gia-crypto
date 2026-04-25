@@ -204,11 +204,6 @@ services:
     networks:
       - backend-network
       - monitoring-network
-    logging:
-      driver: loki
-      options:
-        loki-url: "http://loki:3100/loki/api/v1/push"
-        loki-retries: "5"
 
 networks:
   backend-network:
