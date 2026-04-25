@@ -21,6 +21,7 @@ import (
 	"github.com/chuyen-gia-crypto/backend/internal/services/testnet"
 	"github.com/chuyen-gia-crypto/backend/pkg/logger"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -45,11 +46,25 @@ func main() {
 	// Initialize WebSocket hub
 	handlers.InitHub()
 
-	// Initialize database
+	// Initialize database with retry logic
 	ctx := context.Background()
-	if err := db.Init(ctx); err != nil {
-		logger.Error("Failed to initialize database")
-		// Continue without database for now
+	var dbErr error
+	for i := 0; i < 5; i++ {
+		dbErr = db.Init(ctx)
+		if dbErr == nil {
+			break
+		}
+		logger.Error("Failed to initialize database, retrying...",
+			zap.Int("attempt", i+1),
+			zap.Int("max_attempts", 5),
+			zap.Error(dbErr))
+		time.Sleep(time.Duration(i+1) * time.Second)
+	}
+
+	if dbErr != nil {
+		logger.Error("Failed to initialize database after retries",
+			zap.Error(dbErr))
+		logger.Error("Application will continue without database support")
 	} else {
 		// Initialize handler dependencies
 		handlers.InitDependencies(db.Client)
