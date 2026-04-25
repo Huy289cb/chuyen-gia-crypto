@@ -79,6 +79,7 @@ func main() {
 		schedulers.Init(groqClient, repository.NewAnalysisRepository(db.Client), repository.NewPredictionRepository(db.Client))
 		schedulers.InitAccountRepo(repository.NewAccountRepository(db.Client))
 		schedulers.InitAccountSnapshotRepo(repository.NewAccountSnapshotRepository(db.Client))
+		schedulers.InitPendingOrderRepo(repository.NewPendingOrderRepository(db.Client))
 		handlers.SetAnalyzer(analyzer)
 		logger.Info("Scheduler dependencies initialized")
 	}

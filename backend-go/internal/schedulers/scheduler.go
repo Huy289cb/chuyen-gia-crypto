@@ -25,6 +25,7 @@ var (
 	paperEngine         *papertrading.Engine
 	accountRepo         *repository.AccountRepository
 	accountSnapshotRepo *repository.AccountSnapshotRepository
+	pendingOrderRepo    *repository.PendingOrderRepository
 )
 
 // Init initializes the analyzer with dependencies
@@ -49,6 +50,12 @@ func InitAccountSnapshotRepo(repo *repository.AccountSnapshotRepository) {
 func InitAccountRepo(repo *repository.AccountRepository) {
 	accountRepo = repo
 	logger.Info("Account repository initialized in scheduler")
+}
+
+// InitPendingOrderRepo initializes the pending order repository
+func InitPendingOrderRepo(repo *repository.PendingOrderRepository) {
+	pendingOrderRepo = repo
+	logger.Info("Pending order repository initialized in scheduler")
 }
 
 // Start initializes and starts all schedulers
@@ -237,8 +244,50 @@ func runPriceUpdate() {
 		// TODO: Close positions that hit SL/TP
 
 		// Execute pending orders if triggered
-		// This requires database integration with PendingOrderRepository
-		// For now, skip this step
+		if pendingOrderRepo != nil {
+			pendingOrders, err := pendingOrderRepo.GetByStatus(ctx, "pending")
+			if err != nil {
+				logger.Error("Failed to get pending orders", zap.Error(err))
+			} else {
+				for _, order := range pendingOrders {
+					// Check if price hits entry level
+					var currentPrice float64
+					if order.Symbol == "BTC" {
+						currentPrice = realTimePrices.BTC.Price
+					} else if order.Symbol == "ETH" {
+						currentPrice = realTimePrices.ETH.Price
+					} else {
+						continue // Skip unsupported symbols
+					}
+
+					// Check if order should be executed
+					shouldExecute := false
+					if order.Side == "BUY" && currentPrice <= order.EntryPrice {
+						shouldExecute = true
+					} else if order.Side == "SELL" && currentPrice >= order.EntryPrice {
+						shouldExecute = true
+					}
+
+					if shouldExecute {
+						// Execute the order
+						err := pendingOrderRepo.ExecuteOrder(ctx, order.ID, currentPrice, order.SizeQty, order.SizeUsd)
+						if err != nil {
+							logger.Error("Failed to execute pending order",
+								zap.Int("order_id", order.ID),
+								zap.Error(err))
+						} else {
+							logger.Info("Pending order executed",
+								zap.Int("order_id", order.ID),
+								zap.String("symbol", order.Symbol),
+								zap.Float64("executed_price", currentPrice))
+
+							// TODO: Create position from executed order
+							// This requires paperEngine to have a method to create position from order
+						}
+					}
+				}
+			}
+		}
 
 		// Update account snapshots
 		if accountSnapshotRepo != nil && accountRepo != nil {
