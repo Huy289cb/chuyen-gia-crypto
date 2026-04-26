@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"regexp"
 	"syscall"
 	"time"
 
@@ -25,61 +23,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
-
-// fixTimeFormatMiddleware fixes invalid time.Time format in JSON responses
-func fixTimeFormatMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Use a custom writer to intercept the response
-		writer := &responseWriter{ResponseWriter: c.Writer, buffer: bytes.NewBuffer(nil)}
-		c.Writer = writer
-		c.Next()
-
-		// Fix time format in the response body
-		if writer.status == 0 || writer.status == http.StatusOK {
-			body := writer.buffer.Bytes()
-			fixedBody := fixTimeInJSON(body)
-			c.Data(writer.status, "application/json", fixedBody)
-		}
-	}
-}
-
-// responseWriter wraps gin.ResponseWriter to capture response body
-type responseWriter struct {
-	gin.ResponseWriter
-	buffer *bytes.Buffer
-	status int
-}
-
-func (w *responseWriter) Write(b []byte) (int, error) {
-	w.buffer.Write(b)
-	return w.ResponseWriter.Write(b)
-}
-
-func (w *responseWriter) WriteHeader(statusCode int) {
-	w.status = statusCode
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-
-// fixTimeInJSON fixes invalid time format like Z25200 to +07:00
-func fixTimeInJSON(data []byte) []byte {
-	// Regex to match pattern like 2026-04-26T00:45:00Z25200
-	re := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})Z(\d{4})`)
-
-	// Replace with correct format: 2026-04-26T00:45:00+07:00
-	fixed := re.ReplaceAllFunc(data, func(match []byte) []byte {
-		// Extract the offset digits
-		offsetStr := string(re.FindSubmatch(match)[2])
-		if len(offsetStr) == 4 {
-			hours := offsetStr[:2]
-			minutes := offsetStr[2:]
-			// Reconstruct with + separator
-			return []byte(string(re.FindSubmatch(match)[1]) + "+" + hours + ":" + minutes)
-		}
-		return match
-	})
-
-	return fixed
-}
 
 func main() {
 	// Load configuration
@@ -194,8 +137,11 @@ func setupHTTPServer() *http.Server {
 	// Create Gin router
 	r := gin.Default()
 
-	// Apply time format fix middleware globally
-	r.Use(fixTimeFormatMiddleware())
+	// Configure JSON encoder to use UTC time format
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+		c.Next()
+	})
 
 	// Setup routes
 	handlers.SetupRoutes(r)
