@@ -274,7 +274,30 @@ make test-coverage
 
 ## Deployment
 
-The application is deployed using Docker and PM2. See deployment documentation for details.
+The application is deployed using Docker. See `DEPLOYMENT.md` for details.
+
+### Production Setup
+
+Production uses Docker Compose with:
+- PostgreSQL 16 (direct connection, no pgBouncer)
+- Prometheus for metrics
+- Grafana for visualization
+- Loki for log aggregation
+- Promtail for log collection
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+## Version History
+
+### v2.4.1 (2026-04-26)
+- Fixed CreatePosition handler (was returning 501)
+- Fixed CreateTestnetPosition handler (was returning 501)
+- Fixed scheduler cron expressions (6-field format for seconds precision)
+- Added detailed logging for scheduler initialization
+- Removed pgBouncer from production (direct PostgreSQL connection)
+- Fixed database field types for position entities (Tp1Hit, RMultiple as int/float64)
 
 ## License
 

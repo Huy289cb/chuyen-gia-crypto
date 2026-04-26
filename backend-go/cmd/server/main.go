@@ -102,7 +102,9 @@ func main() {
 
 	// Initialize schedulers
 	if err := schedulers.Start(ctx); err != nil {
-		logger.Error("Failed to start schedulers")
+		logger.Error("Failed to start schedulers", zap.Error(err))
+	} else {
+		logger.Info("Schedulers started successfully")
 	}
 	defer schedulers.Stop()
 

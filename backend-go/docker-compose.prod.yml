@@ -21,30 +21,6 @@ services:
     networks:
       - backend-network
 
-  # pgBouncer for connection pooling
-  pgbouncer:
-    image: edoburu/pgbouncer:latest
-    container_name: crypto-analyzer-pgbouncer
-    environment:
-      DATABASES_HOST: postgres
-      DATABASES_PORT: 5432
-      DATABASES_DBNAME: ${DB_NAME:-crypto_analyzer}
-      DATABASES_USER: ${DB_USER:-crypto_user}
-      DATABASES_PASSWORD: ${DB_PASSWORD:-crypto_password}
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: 100
-      DEFAULT_POOL_SIZE: 25
-      SERVER_LIFETIME: 3600
-      SERVER_IDLE_TIMEOUT: 600
-    ports:
-      - "6432:6432"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - backend-network
-
   # Prometheus for metrics collection
   prometheus:
     image: prom/prometheus:latest
@@ -190,8 +166,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      pgbouncer:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s

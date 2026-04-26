@@ -77,41 +77,51 @@ func Start(parentCtx context.Context) error {
 
 	// Kim Nghia Method - Runs at 0m, 15m, 30m, 45m (every 15 minutes)
 	if config.AppConfig.Scheduler.EnableKimNghiaScheduler {
-		_, err := cronScheduler.AddFunc("0,15,30,45 * * * *", runKimNghiaAnalysis)
+		_, err := cronScheduler.AddFunc("0 0,15,30,45 * * * *", runKimNghiaAnalysis)
 		if err != nil {
+			logger.Error("Failed to add Kim Nghia scheduler", zap.Error(err))
 			return errors.NewSchedulerError("failed to add Kim Nghia scheduler", err)
 		}
-		logger.Info("Kim Nghia scheduler registered: 0,15,30,45 * * * *")
+		logger.Info("Kim Nghia scheduler registered: 0 0,15,30,45 * * * *")
+	} else {
+		logger.Info("Kim Nghia scheduler disabled by configuration")
 	}
 
 	// ICT Method - TEMPORARILY DISABLED
 	// ICT Method - Runs at 0m, 15m, 30m, 45m (every 15 minutes)
 	if config.AppConfig.Scheduler.EnableICTScheduler {
-		_, err := cronScheduler.AddFunc("*/15 * * * *", runICTAnalysis)
+		_, err := cronScheduler.AddFunc("0 */15 * * * *", runICTAnalysis)
 		if err != nil {
+			logger.Error("Failed to add ICT scheduler", zap.Error(err))
 			return errors.NewSchedulerError("failed to add ICT scheduler", err)
 		}
-		logger.Info("ICT scheduler registered: */15 * * * *")
+		logger.Info("ICT scheduler registered: 0 */15 * * * *")
+	} else {
+		logger.Info("ICT scheduler disabled by configuration")
 	}
 
 	// Validate expired predictions every hour
-	_, err := cronScheduler.AddFunc("0 * * * *", validateExpiredPredictions)
+	_, err := cronScheduler.AddFunc("0 0 * * * *", validateExpiredPredictions)
 	if err != nil {
+		logger.Error("Failed to add validation scheduler", zap.Error(err))
 		return errors.NewSchedulerError("failed to add validation scheduler", err)
 	}
-	logger.Info("Validation scheduler registered: 0 * * * *")
+	logger.Info("Validation scheduler registered: 0 0 * * * *")
 
 	// Run data retention daily at 3 AM
-	_, err = cronScheduler.AddFunc("0 3 * * *", runDataRetention)
+	_, err = cronScheduler.AddFunc("0 0 3 * * *", runDataRetention)
 	if err != nil {
+		logger.Error("Failed to add data retention scheduler", zap.Error(err))
 		return errors.NewSchedulerError("failed to add data retention scheduler", err)
 	}
-	logger.Info("Data retention scheduler registered: 0 3 * * *")
+	logger.Info("Data retention scheduler registered: 0 0 3 * * *")
 
 	// Start price update scheduler (30-second intervals)
 	if config.AppConfig.Scheduler.EnablePriceUpdateScheduler {
 		go startPriceUpdateScheduler()
 		logger.Info("Price update scheduler started (30-second intervals)")
+	} else {
+		logger.Info("Price update scheduler disabled by configuration")
 	}
 
 	// Start the cron scheduler
