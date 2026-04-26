@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -380,7 +381,5 @@ func GetAPIKeys() []string {
 
 // getEnv gets environment variable (helper function)
 func getEnv(key string) string {
-	// This would typically use os.Getenv, but we'll use config package
-	// For now, return empty as config package handles this
-	return ""
+	return os.Getenv(key)
 }
