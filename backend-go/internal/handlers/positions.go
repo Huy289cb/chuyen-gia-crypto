@@ -35,9 +35,42 @@ func GetPositions(c *gin.Context) {
 		return
 	}
 
+	// Convert to DTO with proper time formatting
+	result := make([]gin.H, len(positions))
+	for i, pos := range positions {
+		result[i] = gin.H{
+			"id":                   pos.ID,
+			"position_id":          pos.PositionID,
+			"account_id":           pos.AccountID,
+			"symbol":               pos.Symbol,
+			"side":                 pos.Side,
+			"entry_price":          pos.EntryPrice,
+			"current_price":        pos.CurrentPrice,
+			"stop_loss":            pos.StopLoss,
+			"take_profit":          pos.TakeProfit,
+			"entry_time":           formatTime(pos.EntryTime),
+			"status":               pos.Status,
+			"size_usd":             pos.SizeUsd,
+			"size_qty":             pos.SizeQty,
+			"risk_usd":             pos.RiskUsd,
+			"risk_percent":         pos.RiskPercent,
+			"expected_rr":          pos.ExpectedRr,
+			"realized_pnl":         pos.RealizedPnl,
+			"unrealized_pnl":       pos.UnrealizedPnl,
+			"close_price":          pos.ClosePrice,
+			"close_time":           formatTimePtr(pos.CloseTime),
+			"close_reason":         pos.CloseReason,
+			"linked_prediction_id": pos.LinkedPredictionID,
+			"invalidation_level":   pos.InvalidationLevel,
+			"tp1_hit":              pos.Tp1Hit,
+			"ict_strategy":         pos.IctStrategy,
+			"tp_levels":            pos.TpLevels,
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    positions,
+		"data":    result,
 	})
 }
 

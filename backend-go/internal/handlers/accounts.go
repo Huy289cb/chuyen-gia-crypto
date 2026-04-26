@@ -30,9 +30,33 @@ func GetAccounts(c *gin.Context) {
 		return
 	}
 
+	// Convert to DTO with proper time formatting
+	result := make([]gin.H, len(accounts))
+	for i, acc := range accounts {
+		result[i] = gin.H{
+			"id":                 acc.ID,
+			"symbol":             acc.Symbol,
+			"method_id":          acc.MethodID,
+			"starting_balance":   acc.StartingBalance,
+			"current_balance":    acc.CurrentBalance,
+			"equity":             acc.Equity,
+			"unrealized_pnl":     acc.UnrealizedPnl,
+			"realized_pnl":       acc.RealizedPnl,
+			"total_trades":       acc.TotalTrades,
+			"winning_trades":     acc.WinningTrades,
+			"losing_trades":      acc.LosingTrades,
+			"max_drawdown":       acc.MaxDrawdown,
+			"consecutive_losses": acc.ConsecutiveLosses,
+			"last_trade_time":    formatTimePtr(acc.LastTradeTime),
+			"cooldown_until":     formatTimePtr(acc.CooldownUntil),
+			"created_at":         formatTime(acc.CreatedAt),
+			"updated_at":         formatTime(acc.UpdatedAt),
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    accounts,
+		"data":    result,
 	})
 }
 
@@ -69,8 +93,29 @@ func ResetAccount(c *gin.Context) {
 		return
 	}
 
+	// Convert to DTO with proper time formatting
+	result := gin.H{
+		"id":                 account.ID,
+		"symbol":             account.Symbol,
+		"method_id":          account.MethodID,
+		"starting_balance":   account.StartingBalance,
+		"current_balance":    account.CurrentBalance,
+		"equity":             account.Equity,
+		"unrealized_pnl":     account.UnrealizedPnl,
+		"realized_pnl":       account.RealizedPnl,
+		"total_trades":       account.TotalTrades,
+		"winning_trades":     account.WinningTrades,
+		"losing_trades":      account.LosingTrades,
+		"max_drawdown":       account.MaxDrawdown,
+		"consecutive_losses": account.ConsecutiveLosses,
+		"last_trade_time":    formatTimePtr(account.LastTradeTime),
+		"cooldown_until":     formatTimePtr(account.CooldownUntil),
+		"created_at":         formatTime(account.CreatedAt),
+		"updated_at":         formatTime(account.UpdatedAt),
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    account,
+		"data":    result,
 	})
 }

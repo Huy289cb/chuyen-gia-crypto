@@ -54,9 +54,22 @@ func GetOHLC(c *gin.Context) {
 		return
 	}
 
+	// Convert to DTO with proper time formatting (Unix timestamp for charts)
+	result := make([]gin.H, len(data))
+	for i, candle := range data {
+		result[i] = gin.H{
+			"time":   formatTimeUnix(candle.Time),
+			"open":   candle.Open,
+			"high":   candle.High,
+			"low":    candle.Low,
+			"close":  candle.Price,
+			"volume": candle.Volume,
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    data,
+		"data":    result,
 		"meta": gin.H{
 			"symbol":    symbol,
 			"timeframe": timeframe,

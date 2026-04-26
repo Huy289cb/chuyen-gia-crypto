@@ -78,9 +78,40 @@ func GetPredictions(c *gin.Context) {
 		filteredPredictions = filteredPredictions[start:end]
 	}
 
+	// Convert to DTO with proper time formatting
+	result := make([]gin.H, len(filteredPredictions))
+	for i, pred := range filteredPredictions {
+		result[i] = gin.H{
+			"id":                    pred.ID,
+			"coin":                  pred.Coin,
+			"timeframe":             pred.Timeframe,
+			"direction":             pred.Direction,
+			"target_price":          pred.TargetPrice,
+			"confidence":            pred.Confidence,
+			"predicted_at":          formatTime(pred.PredictedAt),
+			"expires_at":            formatTime(pred.ExpiresAt),
+			"actual_price":          pred.ActualPrice,
+			"accuracy":              pred.Accuracy,
+			"is_correct":            pred.IsCorrect,
+			"outcome":               pred.Outcome,
+			"pnl":                   pred.Pnl,
+			"hit_tp":                pred.HitTp,
+			"hit_sl":                pred.HitSl,
+			"linked_position_id":    pred.LinkedPositionID,
+			"suggested_entry":       pred.SuggestedEntry,
+			"suggested_stop_loss":   pred.SuggestedStopLoss,
+			"suggested_take_profit": pred.SuggestedTakeProfit,
+			"expected_rr":           pred.ExpectedRr,
+			"invalidation_level":    pred.InvalidationLevel,
+			"reason_summary":        pred.ReasonSummary,
+			"model_version":         pred.ModelVersion,
+			"method_id":             pred.MethodID,
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    filteredPredictions,
+		"data":    result,
 		"meta": gin.H{
 			"symbol": symbol,
 			"method": method,
