@@ -135,6 +135,11 @@ func (c *Client) Analyze(ctx context.Context, systemPrompt, userPrompt string, t
 		return nil, errors.NewAPIError("Groq client is not initialized", nil)
 	}
 
+	// Create a new context with longer timeout for API calls
+	// This prevents context cancellation from HTTP request timeout
+	apiCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	// Rate limiting protection
 	callMutex.Lock()
 	timeSinceLastCall := time.Since(lastCallTime)
@@ -187,7 +192,7 @@ func (c *Client) Analyze(ctx context.Context, systemPrompt, userPrompt string, t
 					zap.Int("max_retries", MaxRetries+1),
 				)
 
-				response, err := c.sendRequest(ctx, requestBody)
+				response, err := c.sendRequest(apiCtx, requestBody)
 				if err != nil {
 					lastError = err
 					logger.Error("Model attempt failed",
