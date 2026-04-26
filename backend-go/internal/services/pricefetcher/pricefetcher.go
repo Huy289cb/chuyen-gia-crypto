@@ -21,7 +21,7 @@ const (
 	CoinGeckoMinDelay = 2 * time.Second
 	MaxRetries        = 3
 	RetryDelay        = 1 * time.Second
-	RequestTimeout    = 10 * time.Second
+	RequestTimeout    = 30 * time.Second
 )
 
 var (
