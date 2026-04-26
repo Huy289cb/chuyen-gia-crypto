@@ -137,6 +137,12 @@ func setupHTTPServer() *http.Server {
 	// Create Gin router
 	r := gin.Default()
 
+	// Configure JSON encoder to use UTC time format
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+		c.Next()
+	})
+
 	// Setup routes
 	handlers.SetupRoutes(r)
 
