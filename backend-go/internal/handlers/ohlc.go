@@ -56,11 +56,11 @@ func GetOHLC(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data": gin.H{
+		"data":    data,
+		"meta": gin.H{
 			"symbol":    symbol,
 			"timeframe": timeframe,
 			"limit":     limit,
-			"ohlc":      data,
 		},
 	})
 }

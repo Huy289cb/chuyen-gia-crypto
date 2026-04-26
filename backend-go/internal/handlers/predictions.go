@@ -80,13 +80,13 @@ func GetPredictions(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data": gin.H{
-			"symbol":  symbol,
-			"method":  method,
-			"limit":   limit,
-			"page":    page,
-			"total":   len(predictions),
-			"results": filteredPredictions,
+		"data":    filteredPredictions,
+		"meta": gin.H{
+			"symbol": symbol,
+			"method": method,
+			"limit":  limit,
+			"page":   page,
+			"total":  len(predictions),
 		},
 	})
 }
