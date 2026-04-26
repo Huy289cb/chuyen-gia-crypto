@@ -22,7 +22,7 @@ const (
 	GroqAPIURL      = "https://api.groq.com/openai/v1/chat/completions"
 	MinCallInterval = 2 * time.Second
 	RequestTimeout  = 30 * time.Second
-	MaxRetries      = 5
+	MaxRetries      = 2
 	RateLimitDelay  = 60 * time.Second
 )
 
@@ -176,7 +176,7 @@ func (c *Client) Analyze(ctx context.Context, systemPrompt, userPrompt string, t
 					{Role: "user", Content: userPrompt},
 				},
 				Temperature: temperature,
-				MaxTokens:   1024,
+				MaxTokens:   2048,
 			}
 
 			// Retry loop for this model
