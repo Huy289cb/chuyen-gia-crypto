@@ -45,6 +45,38 @@ func GetPerformanceMetrics(c *gin.Context) {
 		return
 	}
 
+	// Auto-create account if it doesn't exist
+	if account == nil && symbol != "" && methodID != "" {
+		logger.Warn("Account not found, creating new account", zap.String("symbol", symbol), zap.String("method_id", methodID))
+
+		newAccount := &ent.Account{
+			Symbol:            symbol,
+			MethodID:          methodID,
+			StartingBalance:   100.0,
+			CurrentBalance:    100.0,
+			Equity:            100.0,
+			UnrealizedPnl:     0,
+			RealizedPnl:       0,
+			TotalTrades:       0,
+			WinningTrades:     0,
+			LosingTrades:      0,
+			MaxDrawdown:       0,
+			ConsecutiveLosses: 0,
+		}
+
+		account, err = Deps.AccountRepo.Create(c.Request.Context(), newAccount)
+		if err != nil {
+			logger.Error("Failed to create account", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to create account",
+			})
+			return
+		}
+
+		logger.Info("Account created successfully", zap.String("symbol", symbol), zap.String("method_id", methodID))
+	}
+
 	if account == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
