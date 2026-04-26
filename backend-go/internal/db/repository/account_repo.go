@@ -38,6 +38,23 @@ func (r *AccountRepository) GetBySymbolAndMethod(ctx context.Context, symbol, me
 	return acc, nil
 }
 
+// GetByID retrieves an account by ID
+func (r *AccountRepository) GetByID(ctx context.Context, id int) (*ent.Account, error) {
+	acc, err := r.client.Account.Query().
+		Where(account.ID(id)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, nil
+		}
+		logger.Error("Failed to get account by ID",
+			zap.Int("id", id),
+			zap.Error(err))
+		return nil, fmt.Errorf("failed to get account by ID: %w", err)
+	}
+	return acc, nil
+}
+
 // GetAll retrieves all accounts
 func (r *AccountRepository) GetAll(ctx context.Context) ([]*ent.Account, error) {
 	accounts, err := r.client.Account.Query().All(ctx)
