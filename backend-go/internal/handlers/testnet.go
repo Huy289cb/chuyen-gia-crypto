@@ -14,14 +14,16 @@ import (
 )
 
 var (
-	testnetAccountRepo  *repository.TestnetAccountRepository
-	testnetPositionRepo *repository.TestnetPositionRepository
+	testnetAccountRepo      *repository.TestnetAccountRepository
+	testnetPositionRepo     *repository.TestnetPositionRepository
+	testnetPendingOrderRepo *repository.TestnetPendingOrderRepository
 )
 
 // InitTestnetHandlers initializes testnet handlers with repositories
-func InitTestnetHandlers(accountRepo *repository.TestnetAccountRepository, positionRepo *repository.TestnetPositionRepository) {
+func InitTestnetHandlers(accountRepo *repository.TestnetAccountRepository, positionRepo *repository.TestnetPositionRepository, pendingOrderRepo *repository.TestnetPendingOrderRepository) {
 	testnetAccountRepo = accountRepo
 	testnetPositionRepo = positionRepo
+	testnetPendingOrderRepo = pendingOrderRepo
 	logger.Info("Testnet handlers initialized")
 }
 
@@ -248,6 +250,54 @@ func CreateTestnetPosition(c *gin.Context) {
 // generateTestnetPositionID generates a unique testnet position ID
 func generateTestnetPositionID() string {
 	return fmt.Sprintf("testnet_pos_%d", time.Now().UnixNano())
+}
+
+// GetTestnetPendingOrders handles GET /api/testnet/pending-orders
+func GetTestnetPendingOrders(c *gin.Context) {
+	logger.Info("GET /api/testnet/pending-orders called")
+
+	if testnetPendingOrderRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "Testnet pending order repository not initialized",
+		})
+		return
+	}
+
+	symbol := c.Query("symbol")
+	status := c.Query("status")
+	methodID := c.Query("method_id")
+
+	var orders interface{}
+	var err error
+
+	if symbol != "" && methodID != "" {
+		orders, err = testnetPendingOrderRepo.GetBySymbolAndMethod(c.Request.Context(), symbol, methodID)
+	} else if symbol != "" && status != "" {
+		// Filter by both symbol and status - need to implement in repo
+		// For now, just filter by symbol
+		orders, err = testnetPendingOrderRepo.GetBySymbol(c.Request.Context(), symbol)
+	} else if symbol != "" {
+		orders, err = testnetPendingOrderRepo.GetBySymbol(c.Request.Context(), symbol)
+	} else if status != "" {
+		orders, err = testnetPendingOrderRepo.GetByStatus(c.Request.Context(), status)
+	} else {
+		orders, err = testnetPendingOrderRepo.GetAll(c.Request.Context(), "", "", "")
+	}
+
+	if err != nil {
+		logger.Error("Failed to get testnet pending orders", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to retrieve testnet pending orders",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    orders,
+	})
 }
 
 // GetTestnetPosition handles GET /api/testnet/positions/:id

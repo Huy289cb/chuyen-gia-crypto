@@ -8,30 +8,32 @@ import (
 
 // Dependencies holds all handler dependencies
 type Dependencies struct {
-	DB                  *ent.Client
-	AccountRepo         *repository.AccountRepository
-	PositionRepo        *repository.PositionRepository
-	AnalysisRepo        *repository.AnalysisRepository
-	PredictionRepo      *repository.PredictionRepository
-	AccountSnapshotRepo *repository.AccountSnapshotRepository
-	PendingOrderRepo    *repository.PendingOrderRepository
-	TestnetAccountRepo  *repository.TestnetAccountRepository
-	TestnetPositionRepo *repository.TestnetPositionRepository
-	Analyzer            *analyzers.Analyzer
+	DB                      *ent.Client
+	AccountRepo             *repository.AccountRepository
+	PositionRepo            *repository.PositionRepository
+	AnalysisRepo            *repository.AnalysisRepository
+	PredictionRepo          *repository.PredictionRepository
+	AccountSnapshotRepo     *repository.AccountSnapshotRepository
+	PendingOrderRepo        *repository.PendingOrderRepository
+	TestnetAccountRepo      *repository.TestnetAccountRepository
+	TestnetPositionRepo     *repository.TestnetPositionRepository
+	TestnetPendingOrderRepo *repository.TestnetPendingOrderRepository
+	Analyzer                *analyzers.Analyzer
 }
 
 // NewDependencies creates a new dependencies struct
 func NewDependencies(client *ent.Client) *Dependencies {
 	return &Dependencies{
-		DB:                  client,
-		AccountRepo:         repository.NewAccountRepository(client),
-		PositionRepo:        repository.NewPositionRepository(client),
-		AnalysisRepo:        repository.NewAnalysisRepository(client),
-		PredictionRepo:      repository.NewPredictionRepository(client),
-		AccountSnapshotRepo: repository.NewAccountSnapshotRepository(client),
-		PendingOrderRepo:    repository.NewPendingOrderRepository(client),
-		TestnetAccountRepo:  repository.NewTestnetAccountRepository(client),
-		TestnetPositionRepo: repository.NewTestnetPositionRepository(client),
+		DB:                      client,
+		AccountRepo:             repository.NewAccountRepository(client),
+		PositionRepo:            repository.NewPositionRepository(client),
+		AnalysisRepo:            repository.NewAnalysisRepository(client),
+		PredictionRepo:          repository.NewPredictionRepository(client),
+		AccountSnapshotRepo:     repository.NewAccountSnapshotRepository(client),
+		PendingOrderRepo:        repository.NewPendingOrderRepository(client),
+		TestnetAccountRepo:      repository.NewTestnetAccountRepository(client),
+		TestnetPositionRepo:     repository.NewTestnetPositionRepository(client),
+		TestnetPendingOrderRepo: repository.NewTestnetPendingOrderRepository(client),
 	}
 }
 
@@ -42,7 +44,7 @@ var Deps *Dependencies
 func InitDependencies(client *ent.Client) {
 	Deps = NewDependencies(client)
 	// Initialize testnet handlers with repositories
-	InitTestnetHandlers(Deps.TestnetAccountRepo, Deps.TestnetPositionRepo)
+	InitTestnetHandlers(Deps.TestnetAccountRepo, Deps.TestnetPositionRepo, Deps.TestnetPendingOrderRepo)
 }
 
 // SetAnalyzer sets the analyzer in dependencies

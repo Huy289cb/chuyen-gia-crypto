@@ -58,6 +58,7 @@ func SetupRoutes(r *gin.Engine) {
 		v1.GET("/testnet/positions/:id", GetTestnetPosition)
 		v1.GET("/testnet/accounts", GetTestnetAccounts)
 		v1.POST("/testnet/accounts/reset", ResetTestnetAccount)
+		v1.GET("/testnet/pending-orders", GetTestnetPendingOrders)
 	}
 
 	// Metrics endpoint
