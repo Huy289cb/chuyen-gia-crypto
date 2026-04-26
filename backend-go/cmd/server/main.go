@@ -35,6 +35,9 @@ func fixTimeFormatMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// Store original writer
+		originalWriter := c.Writer
+
 		// Use a custom writer to intercept the response
 		writer := &responseWriter{ResponseWriter: c.Writer, buffer: bytes.NewBuffer(nil)}
 		c.Writer = writer
@@ -50,9 +53,9 @@ func fixTimeFormatMiddleware() gin.HandlerFunc {
 			if len(body) > 0 {
 				fixedBody := fixTimeInJSON(body)
 				// Write the fixed body directly to the original writer
-				c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(fixedBody)))
-				c.Writer.WriteHeader(writer.status)
-				c.Writer.Write(fixedBody)
+				originalWriter.Header().Set("Content-Length", fmt.Sprintf("%d", len(fixedBody)))
+				originalWriter.WriteHeader(writer.status)
+				originalWriter.Write(fixedBody)
 			}
 		}
 	}
@@ -72,6 +75,7 @@ func (w *responseWriter) Write(b []byte) (int, error) {
 
 func (w *responseWriter) WriteHeader(statusCode int) {
 	w.status = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
 }
 
 // fixTimeInJSON fixes invalid time format like Z25200 to +07:00
