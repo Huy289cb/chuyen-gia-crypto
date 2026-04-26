@@ -38,9 +38,19 @@ func SetupRoutes(r *gin.Engine) {
 		v1.POST("/accounts/reset", ResetAccount)
 
 		// Performance routes
+		v1.GET("/performance", GetPerformance)
 		v1.GET("/performance/metrics", GetPerformanceMetrics)
 		v1.GET("/performance/equity-curve", GetEquityCurve)
 		v1.GET("/performance/trades", GetTradeHistory)
+
+		// OHLC routes
+		v1.GET("/ohlc/:symbol", GetOHLC)
+
+		// Pending orders routes
+		v1.GET("/pending-orders", GetPendingOrders)
+
+		// Predictions routes
+		v1.GET("/predictions/:symbol", GetPredictions)
 
 		// Testnet routes
 		v1.GET("/testnet/positions", GetTestnetPositions)
@@ -67,15 +77,19 @@ func SetupRoutes(r *gin.Engine) {
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"name":    "Crypto Trend Analyzer API",
-			"version": "2.0.0",
+			"version": "2.9.0",
 			"endpoints": gin.H{
 				"/api/analysis":                 "Get current trend analysis",
 				"/api/analysis/trigger":         "Trigger manual analysis",
 				"/api/positions":                "Get/Create positions",
 				"/api/accounts":                 "Get/Reset accounts",
+				"/api/performance":              "Get performance data",
 				"/api/performance/metrics":      "Get performance metrics",
 				"/api/performance/equity-curve": "Get equity curve",
 				"/api/performance/trades":       "Get trade history",
+				"/api/ohlc/:symbol":             "Get OHLC data for BTC/ETH",
+				"/api/pending-orders":           "Get pending orders",
+				"/api/predictions/:symbol":      "Get predictions for symbol",
 				"/api/testnet/positions":        "Get/Create testnet positions",
 				"/api/testnet/accounts":         "Get/Reset testnet accounts",
 				"/metrics":                      "Prometheus metrics",

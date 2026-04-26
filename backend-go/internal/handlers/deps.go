@@ -15,6 +15,8 @@ type Dependencies struct {
 	PredictionRepo      *repository.PredictionRepository
 	AccountSnapshotRepo *repository.AccountSnapshotRepository
 	PendingOrderRepo    *repository.PendingOrderRepository
+	TestnetAccountRepo  *repository.TestnetAccountRepository
+	TestnetPositionRepo *repository.TestnetPositionRepository
 	Analyzer            *analyzers.Analyzer
 }
 
@@ -28,6 +30,8 @@ func NewDependencies(client *ent.Client) *Dependencies {
 		PredictionRepo:      repository.NewPredictionRepository(client),
 		AccountSnapshotRepo: repository.NewAccountSnapshotRepository(client),
 		PendingOrderRepo:    repository.NewPendingOrderRepository(client),
+		TestnetAccountRepo:  repository.NewTestnetAccountRepository(client),
+		TestnetPositionRepo: repository.NewTestnetPositionRepository(client),
 	}
 }
 
@@ -37,6 +41,8 @@ var Deps *Dependencies
 // InitDependencies initializes the global dependencies
 func InitDependencies(client *ent.Client) {
 	Deps = NewDependencies(client)
+	// Initialize testnet handlers with repositories
+	InitTestnetHandlers(Deps.TestnetAccountRepo, Deps.TestnetPositionRepo)
 }
 
 // SetAnalyzer sets the analyzer in dependencies

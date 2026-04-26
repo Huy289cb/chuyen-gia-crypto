@@ -300,14 +300,30 @@ func runPriceUpdate() {
 						logger.Error("Failed to update ETH positions PnL", zap.Error(err))
 					}
 				}
+
+				// Check SL/TP with candle data
+				// Check BTC positions SL/TP with candle data
+				if len(btcPositions) > 0 {
+					closedBTC, err := paperEngine.CheckSLTP(ctx, btcPositions, realTimePrices.BTC.High, realTimePrices.BTC.Low)
+					if err != nil {
+						logger.Error("Failed to check BTC positions SL/TP", zap.Error(err))
+					} else if len(closedBTC) > 0 {
+						logger.Info("BTC positions closed by SL/TP", zap.Int("count", len(closedBTC)))
+					}
+				}
+
+				// Check ETH positions SL/TP with candle data
+				if len(ethPositions) > 0 {
+					closedETH, err := paperEngine.CheckSLTP(ctx, ethPositions, realTimePrices.ETH.High, realTimePrices.ETH.Low)
+					if err != nil {
+						logger.Error("Failed to check ETH positions SL/TP", zap.Error(err))
+					} else if len(closedETH) > 0 {
+						logger.Info("ETH positions closed by SL/TP", zap.Int("count", len(closedETH)))
+					}
+				}
 			}
 		}
 	}
-
-	// Check SL/TP with candle data
-	// TODO: Fetch 1-minute candle data for SL/TP detection
-	// TODO: Check if any positions hit SL or TP
-	// TODO: Close positions that hit SL/TP
 
 	// Execute pending orders if triggered
 	if pendingOrderRepo != nil {
@@ -347,8 +363,66 @@ func runPriceUpdate() {
 							zap.String("symbol", order.Symbol),
 							zap.Float64("executed_price", currentPrice))
 
-						// TODO: Create position from executed order
-						// This requires paperEngine to have a method to create position from order
+						// Create position from executed order
+						if paperEngine != nil && accountRepo != nil {
+							// Get account for this order
+							account, err := accountRepo.GetByID(ctx, order.AccountID)
+							if err != nil {
+								logger.Error("Failed to get account for order",
+									zap.Int("order_id", order.ID),
+									zap.Int("account_id", order.AccountID),
+									zap.Error(err))
+							} else {
+								// Convert account to papertrading.Account
+								paperAccount := &papertrading.Account{
+									ID:             account.ID,
+									Symbol:         account.Symbol,
+									MethodID:       account.MethodID,
+									Balance:        account.CurrentBalance,
+									InitialBalance: account.StartingBalance,
+									TotalPnL:       account.RealizedPnl,
+									WinCount:       account.WinningTrades,
+									LossCount:      account.LosingTrades,
+									WinRate:        0, // Will be calculated
+									ProfitFactor:   0, // Will be calculated
+									MaxDrawdown:    0, // Will be calculated
+									CreatedAt:      account.CreatedAt,
+									UpdatedAt:      account.UpdatedAt,
+								}
+
+								// Create position suggestion from order
+								side := "long"
+								if order.Side == "SELL" {
+									side = "short"
+								}
+
+								suggestion := &papertrading.PositionSuggestion{
+									Side:              side,
+									EntryPrice:        currentPrice,
+									StopLoss:          order.StopLoss,
+									TakeProfit:        order.TakeProfit,
+									SizeUSD:           order.SizeUsd,
+									SizeQty:           order.SizeQty,
+									RiskUSD:           order.RiskUsd,
+									RiskPercent:       order.RiskPercent,
+									ExpectedRR:        order.ExpectedRr,
+									InvalidationLevel: 0, // Not available in order
+								}
+
+								// Open position
+								_, err := paperEngine.OpenPosition(ctx, paperAccount, suggestion, "", order.MethodID)
+								if err != nil {
+									logger.Error("Failed to create position from executed order",
+										zap.Int("order_id", order.ID),
+										zap.Error(err))
+								} else {
+									logger.Info("Position created from executed order",
+										zap.Int("order_id", order.ID),
+										zap.String("symbol", order.Symbol),
+										zap.String("side", side))
+								}
+							}
+						}
 					}
 				}
 			}

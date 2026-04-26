@@ -9,24 +9,25 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Groq     GroqConfig
-	Binance  BinanceConfig
-	Analysis AnalysisConfig
-	Trading  TradingConfig
-	Scheduler SchedulerConfig
-	Timezone TimezoneConfig
+	Server       ServerConfig
+	Database     DatabaseConfig
+	Groq         GroqConfig
+	Binance      BinanceConfig
+	Analysis     AnalysisConfig
+	Trading      TradingConfig
+	Scheduler    SchedulerConfig
+	Timezone     TimezoneConfig
 	PaperTrading PaperTradingConfig
-	Testnet TestnetConfig
-	Cache CacheConfig
-	RateLimit RateLimitConfig
-	Logging LoggingConfig
+	Testnet      TestnetConfig
+	Cache        CacheConfig
+	RateLimit    RateLimitConfig
+	Logging      LoggingConfig
+	Auth         AuthConfig
 }
 
 type ServerConfig struct {
-	Port int
-	Host string
+	Port    int
+	Host    string
 	GinMode string
 }
 
@@ -51,27 +52,27 @@ type BinanceConfig struct {
 }
 
 type AnalysisConfig struct {
-	ICTConfidenceThreshold         float64
-	KimNghiaConfidenceThreshold    float64
-	AutoEntryConfidenceThreshold   float64
+	ICTConfidenceThreshold       float64
+	KimNghiaConfidenceThreshold  float64
+	AutoEntryConfidenceThreshold float64
 }
 
 type TradingConfig struct {
-	RiskPercent    float64
-	MinRRRatio     float64
-	MinSLDistance  float64
-	CooldownHours  int
+	RiskPercent   float64
+	MinRRRatio    float64
+	MinSLDistance float64
+	CooldownHours int
 }
 
 type SchedulerConfig struct {
-	EnableKimNghiaScheduler       bool
-	EnableICTScheduler            bool
-	EnablePriceUpdateScheduler    bool
+	EnableKimNghiaScheduler    bool
+	EnableICTScheduler         bool
+	EnablePriceUpdateScheduler bool
 }
 
 type TimezoneConfig struct {
-	Timezone         string
-	DisplayTimezone  string
+	Timezone        string
+	DisplayTimezone string
 }
 
 type PaperTradingConfig struct {
@@ -90,13 +91,18 @@ type CacheConfig struct {
 }
 
 type RateLimitConfig struct {
-	Enabled               bool
-	RequestsPerMinute     int
+	Enabled           bool
+	RequestsPerMinute int
 }
 
 type LoggingConfig struct {
 	Level  string
 	Format string
+}
+
+type AuthConfig struct {
+	JWTSecret string
+	APIKeys   []string
 }
 
 var AppConfig *Config
@@ -118,8 +124,8 @@ func Load() error {
 
 	AppConfig = &Config{
 		Server: ServerConfig{
-			Port: getEnvAsInt("SERVER_PORT", 3000),
-			Host: getEnv("SERVER_HOST", "0.0.0.0"),
+			Port:    getEnvAsInt("SERVER_PORT", 3000),
+			Host:    getEnv("SERVER_HOST", "0.0.0.0"),
 			GinMode: getEnv("GIN_MODE", "debug"),
 		},
 		Database: DatabaseConfig{
@@ -179,6 +185,10 @@ func Load() error {
 			Level:  getEnv("LOG_LEVEL", "info"),
 			Format: getEnv("LOG_FORMAT", "json"),
 		},
+		Auth: AuthConfig{
+			JWTSecret: getEnv("JWT_SECRET", ""),
+			APIKeys:   getEnvAsSlice("API_KEYS", []string{}),
+		},
 	}
 
 	return nil
@@ -214,6 +224,13 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 		if boolVal, err := strconv.ParseBool(value); err == nil {
 			return boolVal
 		}
+	}
+	return defaultValue
+}
+
+func getEnvAsSlice(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		return []string{value}
 	}
 	return defaultValue
 }

@@ -1,4 +1,4 @@
-# Crypto Trend Analyzer (v2.8.0)
+# Crypto Trend Analyzer (v2.9.0)
 
 MVP web app phân tích xu hướng BTC/ETH sử dụng **Kim Nghia (SMC + Volume + Fibonacci)** với AI và **Paper Trading**.
 

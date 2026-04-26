@@ -226,14 +226,22 @@ Tables:
 - `GET /api/positions/:id` - Get position details
 - `GET /api/accounts` - Get accounts
 - `POST /api/accounts/reset` - Reset account
+- `GET /api/performance` - Get performance data (general)
 - `GET /api/performance/metrics` - Get performance metrics
 - `GET /api/performance/equity-curve` - Get equity curve
 - `GET /api/performance/trades` - Get trade history
 
+### Data Endpoints
+- `GET /api/ohlc/:symbol` - Get OHLC data for BTC/ETH (timeframe, limit params)
+- `GET /api/pending-orders` - Get pending orders (method, symbol params)
+- `GET /api/predictions/:symbol` - Get predictions for symbol (method, limit, page params)
+
 ### Testnet
 - `GET /api/testnet/positions` - Get testnet positions
 - `POST /api/testnet/positions` - Create testnet position
+- `GET /api/testnet/positions/:id` - Get testnet position details
 - `GET /api/testnet/accounts` - Get testnet accounts
+- `POST /api/testnet/accounts/reset` - Reset testnet account
 
 ## Timezone Handling
 

@@ -4,24 +4,66 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/chuyen-gia-crypto/backend/internal/db/repository"
 	"github.com/chuyen-gia-crypto/backend/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
+var (
+	testnetAccountRepo  *repository.TestnetAccountRepository
+	testnetPositionRepo *repository.TestnetPositionRepository
+)
+
+// InitTestnetHandlers initializes testnet handlers with repositories
+func InitTestnetHandlers(accountRepo *repository.TestnetAccountRepository, positionRepo *repository.TestnetPositionRepository) {
+	testnetAccountRepo = accountRepo
+	testnetPositionRepo = positionRepo
+	logger.Info("Testnet handlers initialized")
+}
+
 // GetTestnetPositions handles GET /api/testnet/positions
 func GetTestnetPositions(c *gin.Context) {
 	logger.Info("GET /api/testnet/positions called")
 
-	_ = c.Query("symbol")
-	_ = c.Query("status")
+	if testnetPositionRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "Testnet position repository not initialized",
+		})
+		return
+	}
 
-	// TODO: Implement testnet positions retrieval
-	// This should fetch testnet positions from database with optional filters
+	symbol := c.Query("symbol")
+	status := c.Query("status")
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"success": false,
-		"error":   "Testnet positions not yet implemented",
+	var positions interface{}
+	var err error
+
+	if symbol != "" && status != "" {
+		// Filter by both symbol and status - need to implement this in repo
+		// For now, just filter by symbol
+		positions, err = testnetPositionRepo.GetBySymbol(c.Request.Context(), symbol)
+	} else if symbol != "" {
+		positions, err = testnetPositionRepo.GetBySymbol(c.Request.Context(), symbol)
+	} else if status != "" {
+		positions, err = testnetPositionRepo.GetByStatus(c.Request.Context(), status)
+	} else {
+		positions, err = testnetPositionRepo.GetAll(c.Request.Context())
+	}
+
+	if err != nil {
+		logger.Error("Failed to get testnet positions", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to retrieve testnet positions",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    positions,
 	})
 }
 
@@ -29,12 +71,20 @@ func GetTestnetPositions(c *gin.Context) {
 func CreateTestnetPosition(c *gin.Context) {
 	logger.Info("POST /api/testnet/positions called")
 
-	// TODO: Implement testnet position creation
-	// This should create a new testnet position from request body
+	if testnetPositionRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "Testnet position repository not initialized",
+		})
+		return
+	}
+
+	// TODO: Parse request body and create position
+	// This requires request body struct definition
 
 	c.JSON(http.StatusNotImplemented, gin.H{
 		"success": false,
-		"error":   "Testnet position creation not yet implemented",
+		"error":   "Testnet position creation requires request body parsing",
 	})
 }
 
@@ -42,6 +92,14 @@ func CreateTestnetPosition(c *gin.Context) {
 func GetTestnetPosition(c *gin.Context) {
 	idStr := c.Param("id")
 	logger.Info("GET /api/testnet/positions/:id called", zap.String("id", idStr))
+
+	if testnetPositionRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "Testnet position repository not initialized",
+		})
+		return
+	}
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -52,12 +110,27 @@ func GetTestnetPosition(c *gin.Context) {
 		return
 	}
 
-	// TODO: Implement single testnet position retrieval
+	position, err := testnetPositionRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		logger.Error("Failed to get testnet position", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to retrieve testnet position",
+		})
+		return
+	}
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"success": false,
-		"error":   "Testnet position detail not yet implemented",
-		"data":    gin.H{"id": id},
+	if position == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Testnet position not found",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    position,
 	})
 }
 
@@ -65,17 +138,41 @@ func GetTestnetPosition(c *gin.Context) {
 func GetTestnetAccounts(c *gin.Context) {
 	logger.Info("GET /api/testnet/accounts called")
 
-	// TODO: Implement testnet accounts retrieval
+	if testnetAccountRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "Testnet account repository not initialized",
+		})
+		return
+	}
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"success": false,
-		"error":   "Testnet accounts not yet implemented",
+	accounts, err := testnetAccountRepo.GetAll(c.Request.Context())
+	if err != nil {
+		logger.Error("Failed to get testnet accounts", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to retrieve testnet accounts",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    accounts,
 	})
 }
 
 // ResetTestnetAccount handles POST /api/testnet/accounts/reset
 func ResetTestnetAccount(c *gin.Context) {
 	logger.Info("POST /api/testnet/accounts/reset called")
+
+	if testnetAccountRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "Testnet account repository not initialized",
+		})
+		return
+	}
 
 	symbol := c.Query("symbol")
 	methodID := c.Query("method_id")
@@ -88,10 +185,18 @@ func ResetTestnetAccount(c *gin.Context) {
 		return
 	}
 
-	// TODO: Implement testnet account reset
+	account, err := testnetAccountRepo.Reset(c.Request.Context(), symbol, methodID)
+	if err != nil {
+		logger.Error("Failed to reset testnet account", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to reset testnet account",
+		})
+		return
+	}
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"success": false,
-		"error":   "Testnet account reset not yet implemented",
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    account,
 	})
 }
