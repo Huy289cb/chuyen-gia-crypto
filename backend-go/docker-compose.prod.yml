@@ -95,6 +95,8 @@ services:
   app:
     image: huy289cb/crypto-analyzer-backend:latest
     container_name: crypto-analyzer-app-prod
+    env_file:
+      - .env
     environment:
       # Database (connect directly to PostgreSQL)
       DB_HOST: postgres
