@@ -113,7 +113,7 @@ CRITICAL SL/TP PLACEMENT:
       minSLDistancePercent: 0.0075, // Minimum SL distance as percentage of entry price (0.75% for ICT)
       requireConfluence: true,
       minConfluenceCount: 3,
-      requireHighLiquiditySession: true,
+      requireHighLiquiditySession: false,
       requireMarketStructure: true
     }
   },
@@ -235,7 +235,7 @@ CRITICAL SL/TP PLACEMENT:
       minSLDistancePercent: 0.004, // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
       requireConfluence: true,
       minConfluenceCount: 3,
-      requireHighLiquiditySession: true,
+      requireHighLiquiditySession: false,
       requireMarketStructure: true
     }
   }
