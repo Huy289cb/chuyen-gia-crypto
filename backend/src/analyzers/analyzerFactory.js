@@ -714,6 +714,15 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
       breakout_retest: coinData?.breakout_retest || null,
       volume_analysis: coinData?.volume_analysis || null,
       structure: coinData?.structure || null,
+      // Confluence fields for auto-entry logic (Kim Nghia method)
+      volume: coinData?.volume,
+      avgVolume: coinData?.avgVolume,
+      liquidity_sweep_detected: coinData?.liquidity_sweep_detected,
+      order_block_distance: coinData?.order_block_distance,
+      fvg_distance: coinData?.fvg_distance,
+      break_of_structure: coinData?.break_of_structure,
+      change_of_character: coinData?.change_of_character,
+      range_width: coinData?.range_width,
       // Method-specific indicators for chart visualization
       indicators: methodId === 'kim_nghia' ? {
         fibonacci: kimNghiaFibonacci?.[coin] || {
