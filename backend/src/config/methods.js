@@ -162,6 +162,14 @@ OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
 "suggested_stop_loss": number,
 "suggested_take_profit": number,
 "expected_rr": number,
+"volume": number (current candle volume),
+"avgVolume": number (average volume of last 20 candles),
+"liquidity_sweep_detected": true|false (đã quét thanh khoản chưa),
+"order_block_distance": number (khoảng cách đến OB dưới dạng %, ví dụ 0.003 cho 0.3%),
+"fvg_distance": number (khoảng cách đến FVG dưới dạng %, ví dụ 0.004 cho 0.4%),
+"break_of_structure": true|false (đã có BOS chưa),
+"change_of_character": true|false (đã có CHOCH chưa),
+"range_width": number (biên độ thị trường dưới dạng %, ví dụ 0.015 cho 1.5%),
 "position_decisions": [
   {
     "position_id": "string",
@@ -186,6 +194,17 @@ OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
 ]
 }
 }
+
+CONFLUENCE FIELDS INSTRUCTIONS:
+- volume: Volume của nến hiện tại (candle close nhất)
+- avgVolume: Trung bình volume của 20 nến gần nhất
+- liquidity_sweep_detected: true nếu giá đã quét thanh khoản (sweep high/low), false nếu chưa
+- order_block_distance: Khoảng cách % từ suggested_entry đến Order Block gần nhất (0.001-0.01)
+- fvg_distance: Khoảng cách % từ suggested_entry đến Fair Value Gap gần nhất (0.001-0.01)
+- break_of_structure: true nếu đã có Break of Structure xác nhận xu hướng, false nếu chưa
+- change_of_character: true nếu đã có Change of Character (mô hình đảo chiều), false nếu chưa
+- range_width: Biên độ thị trường % = (high - low) / low của 20 nến gần nhất
+
 ACTION DEFINITIONS:
 - hold: Giữ nguyên position/order
 - close_early: Đóng position sớm (full close)
@@ -233,10 +252,10 @@ CRITICAL SL/TP PLACEMENT:
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.5,
       minSLDistancePercent: 0.004, // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
-      requireConfluence: false,
+      requireConfluence: true,
       minConfluenceCount: 3,
       requireHighLiquiditySession: false,
-      requireMarketStructure: false
+      requireMarketStructure: true
     }
   }
 };
