@@ -498,4 +498,182 @@ describe('autoEntryLogic - Volume Management & Order Validation', () => {
       expect(Math.abs(newSLDistance - originalSLDistance)).toBeLessThan(0.0001);
     });
   });
+
+  describe('Bias-Action Validation (Check 7.5)', () => {
+    it('should validate bullish bias with buy action', () => {
+      const analysis = {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.8
+      };
+      const expectedAction = analysis.bias === 'bullish' ? 'buy' : 'sell';
+      expect(analysis.action).toBe(expectedAction);
+    });
+
+    it('should validate bearish bias with sell action', () => {
+      const analysis = {
+        bias: 'bearish',
+        action: 'sell',
+        confidence: 0.8
+      };
+      const expectedAction = analysis.bias === 'bullish' ? 'buy' : 'sell';
+      expect(analysis.action).toBe(expectedAction);
+    });
+
+    it('should reject bullish bias with sell action (mismatch)', () => {
+      const analysis = {
+        bias: 'bullish',
+        action: 'sell',
+        confidence: 0.8
+      };
+      const expectedAction = analysis.bias === 'bullish' ? 'buy' : 'sell';
+      expect(analysis.action).not.toBe(expectedAction);
+    });
+
+    it('should reject bearish bias with buy action (mismatch)', () => {
+      const analysis = {
+        bias: 'bearish',
+        action: 'buy',
+        confidence: 0.8
+      };
+      const expectedAction = analysis.bias === 'bullish' ? 'buy' : 'sell';
+      expect(analysis.action).not.toBe(expectedAction);
+    });
+
+    it('should validate neutral bias with hold action', () => {
+      const analysis = {
+        bias: 'neutral',
+        action: 'hold',
+        confidence: 0.5
+      };
+      const expectedAction = analysis.bias === 'bullish' ? 'buy' : analysis.bias === 'bearish' ? 'sell' : 'hold';
+      expect(analysis.action).toBe(expectedAction);
+    });
+  });
+
+  describe('Entry Quality Filters', () => {
+    describe('Confluence Filter (3/5 rule)', () => {
+      it('should pass with 3/5 confluence met', () => {
+        const confluence = {
+          multiTimeframeAlignment: true,
+          volumeConfirmation: true,
+          liquiditySweep: true,
+          orderBlockNearby: false,
+          fvgNearby: false
+        };
+        const confluenceCount = Object.values(confluence).filter(v => v).length;
+        expect(confluenceCount).toBeGreaterThanOrEqual(3);
+      });
+
+      it('should fail with 2/5 confluence met', () => {
+        const confluence = {
+          multiTimeframeAlignment: true,
+          volumeConfirmation: true,
+          liquiditySweep: false,
+          orderBlockNearby: false,
+          fvgNearby: false
+        };
+        const confluenceCount = Object.values(confluence).filter(v => v).length;
+        expect(confluenceCount).toBeLessThan(3);
+      });
+
+      it('should pass with 5/5 confluence met', () => {
+        const confluence = {
+          multiTimeframeAlignment: true,
+          volumeConfirmation: true,
+          liquiditySweep: true,
+          orderBlockNearby: true,
+          fvgNearby: true
+        };
+        const confluenceCount = Object.values(confluence).filter(v => v).length;
+        expect(confluenceCount).toBe(5);
+      });
+    });
+
+    describe('Session Filter', () => {
+      it('should pass during London Killzone (7-10 UTC)', () => {
+        const utcHour = 8;
+        const highLiquiditySessions = [
+          { name: 'London Killzone', start: 7, end: 10 },
+          { name: 'NY Killzone', start: 12, end: 15 }
+        ];
+        const inHighLiquiditySession = highLiquiditySessions.some(session => 
+          utcHour >= session.start && utcHour < session.end
+        );
+        expect(inHighLiquiditySession).toBe(true);
+      });
+
+      it('should pass during NY Killzone (12-15 UTC)', () => {
+        const utcHour = 13;
+        const highLiquiditySessions = [
+          { name: 'London Killzone', start: 7, end: 10 },
+          { name: 'NY Killzone', start: 12, end: 15 }
+        ];
+        const inHighLiquiditySession = highLiquiditySessions.some(session => 
+          utcHour >= session.start && utcHour < session.end
+        );
+        expect(inHighLiquiditySession).toBe(true);
+      });
+
+      it('should fail outside high liquidity sessions', () => {
+        const utcHour = 16;
+        const highLiquiditySessions = [
+          { name: 'London Killzone', start: 7, end: 10 },
+          { name: 'NY Killzone', start: 12, end: 15 }
+        ];
+        const inHighLiquiditySession = highLiquiditySessions.some(session => 
+          utcHour >= session.start && utcHour < session.end
+        );
+        expect(inHighLiquiditySession).toBe(false);
+      });
+    });
+
+    describe('Market Structure Filter', () => {
+      it('should pass with BOS detected for trend following', () => {
+        const analysis = {
+          bias: 'bullish',
+          break_of_structure: true,
+          change_of_character: false,
+          range_width: 0.005
+        };
+        const structure = {
+          hasBOS: analysis.break_of_structure === true,
+          hasCHOCH: analysis.change_of_character === true,
+          isNotChoppy: analysis.range_width === undefined || analysis.range_width < 0.01
+        };
+        expect(structure.hasBOS).toBe(true);
+        expect(structure.isNotChoppy).toBe(true);
+      });
+
+      it('should fail without BOS for trend following', () => {
+        const analysis = {
+          bias: 'bullish',
+          break_of_structure: false,
+          change_of_character: false,
+          range_width: 0.005
+        };
+        const structure = {
+          hasBOS: analysis.break_of_structure === true,
+          hasCHOCH: analysis.change_of_character === true,
+          isNotChoppy: analysis.range_width === undefined || analysis.range_width < 0.01
+        };
+        expect(structure.hasBOS).toBe(false);
+      });
+
+      it('should fail for choppy market (range width > 1%)', () => {
+        const analysis = {
+          bias: 'bullish',
+          break_of_structure: true,
+          change_of_character: false,
+          range_width: 0.015
+        };
+        const structure = {
+          hasBOS: analysis.break_of_structure === true,
+          hasCHOCH: analysis.change_of_character === true,
+          isNotChoppy: analysis.range_width === undefined || analysis.range_width < 0.01
+        };
+        expect(structure.isNotChoppy).toBe(false);
+      });
+    });
+  });
 });

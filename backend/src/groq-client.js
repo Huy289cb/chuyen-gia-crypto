@@ -80,6 +80,44 @@ function fixJSONSyntax(jsonString) {
   }
 }
 
+// Validate AI response for consistency and correctness
+function validateAIResponse(response, symbol) {
+  if (!response || !symbol) return true;
+  
+  const analysis = response[symbol.toLowerCase()];
+  if (!analysis) return true;
+  
+  // Check bias-action consistency
+  if (analysis.bias === 'bullish' && analysis.action !== 'buy') {
+    throw new Error('Invalid AI response: bullish requires buy action');
+  }
+  if (analysis.bias === 'bearish' && analysis.action !== 'sell') {
+    throw new Error('Invalid AI response: bearish requires sell action');
+  }
+  if (analysis.bias === 'neutral' && analysis.action !== 'hold') {
+    throw new Error('Invalid AI response: neutral requires hold action');
+  }
+  
+  // Check SL/TP placement
+  if (analysis.bias === 'bullish') {
+    if (analysis.suggested_stop_loss >= analysis.suggested_entry) {
+      throw new Error('Invalid AI response: LONG SL must be below entry');
+    }
+    if (analysis.suggested_take_profit <= analysis.suggested_entry) {
+      throw new Error('Invalid AI response: LONG TP must be above entry');
+    }
+  } else if (analysis.bias === 'bearish') {
+    if (analysis.suggested_stop_loss <= analysis.suggested_entry) {
+      throw new Error('Invalid AI response: SHORT SL must be above entry');
+    }
+    if (analysis.suggested_take_profit >= analysis.suggested_entry) {
+      throw new Error('Invalid AI response: SHORT TP must be below entry');
+    }
+  }
+  
+  return true;
+}
+
 // Fetch with timeout to prevent hanging in production
 async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   const controller = new AbortController();

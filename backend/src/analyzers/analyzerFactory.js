@@ -71,6 +71,43 @@ export function createAnalyzer(methodConfig) {
           maxRetries: 2
         });
 
+        // Validate AI response for consistency
+        try {
+          const { validateAIResponse } = await import('../groq-client.js');
+          validateAIResponse(response, 'btc');
+          validateAIResponse(response, 'eth');
+        } catch (validationError) {
+          console.error(`[${methodConfig.name}] AI response validation failed:`, validationError.message);
+          // Return neutral response on validation failure
+          return {
+            btc: {
+              bias: 'neutral',
+              action: 'hold',
+              confidence: 0,
+              narrative: `AI response validation failed: ${validationError.message}`,
+              current_price: priceData.btc?.price || 0,
+              suggested_entry: null,
+              suggested_stop_loss: null,
+              suggested_take_profit: null,
+              expected_rr: null
+            },
+            eth: {
+              bias: 'neutral',
+              action: 'hold',
+              confidence: 0,
+              narrative: `AI response validation failed: ${validationError.message}`,
+              current_price: priceData.eth?.price || 0,
+              suggested_entry: null,
+              suggested_stop_loss: null,
+              suggested_take_profit: null,
+              expected_rr: null
+            },
+            error: validationError.message,
+            raw_question: fullRequest,
+            raw_answer: JSON.stringify(response, null, 2)
+          };
+        }
+
         // Capture raw response as JSON string
         const rawResponse = JSON.stringify(response, null, 2);
 

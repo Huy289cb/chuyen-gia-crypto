@@ -524,7 +524,20 @@ export async function closePartialPosition(db, position, currentPrice, closeSize
     throw new Error(`Account not found for symbol ${position.symbol}`);
   }
   
-  const newBalance = account.balance + partialPnl;
+  const newBalance = account.current_balance + partialPnl;
+  
+  // Validate balance after update
+  if (newBalance < 0) {
+    console.error('[PaperTrading] Negative balance detected:', newBalance);
+    throw new Error('Negative balance is not allowed');
+  }
+  
+  const lossPercent = ((newBalance - account.starting_balance) / account.starting_balance) * 100;
+  if (lossPercent < -100) {
+    console.error('[PaperTrading] Loss > 100% detected:', lossPercent);
+    throw new Error('Loss > 100% detected - check calculation logic');
+  }
+  
   try {
     await updateAccount(db, account.id, { balance: newBalance });
   } catch (error) {
@@ -633,6 +646,19 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   const isLoss = realizedPnl < 0;
   
   const newBalance = account.current_balance + realizedPnl;
+  
+  // Validate balance after update
+  if (newBalance < 0) {
+    console.error('[PaperTrading] Negative balance detected:', newBalance);
+    throw new Error('Negative balance is not allowed');
+  }
+  
+  const lossPercent = ((newBalance - account.starting_balance) / account.starting_balance) * 100;
+  if (lossPercent < -100) {
+    console.error('[PaperTrading] Loss > 100% detected:', lossPercent);
+    throw new Error('Loss > 100% detected - check calculation logic');
+  }
+  
   const newEquity = newBalance + newUnrealizedPnl;
   
   const updates = {

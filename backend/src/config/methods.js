@@ -79,7 +79,21 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
 - Nếu bias=bullish và position=long → action nên là hold (KHÔNG close_early).
 - Nếu bias=bearish và position=short → action nên là hold (KHÔNG close_early).
 - Chỉ dùng close_early khi: (1) bias đã đảo chiều, HOẶC (2) cấu trúc thị trường đã thay đổi hoàn toàn (structure break), HOẶC (3) position đã đạt mục tiêu TP gần nhất.
-- Nếu vi phạm quy tắc này, quyết định sẽ bị từ chối.`,
+- Nếu vi phạm quy tắc này, quyết định sẽ bị từ chối.
+
+CRITICAL BIAS-ACTION CONSISTENCY:
+- If bias is 'bullish', action MUST be 'buy'
+- If bias is 'bearish', action MUST be 'sell'
+- If bias is 'neutral', action MUST be 'hold'
+- NEVER return inconsistent bias-action combinations
+- If you cannot determine a consistent direction, return bias='neutral' and action='hold'
+
+CRITICAL SL/TP PLACEMENT:
+- For LONG: entry > current price, SL < entry, TP > entry
+- For SHORT: entry < current price, SL > entry, TP < entry
+- SL distance should be at least 0.5% from entry
+- R:R ratio should be at least 2:1
+- Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
       minConfidence: 70,
       minRRRatio: 2.0,
@@ -96,7 +110,11 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1d'],
       minAlignment: 0.5,
-      minSLDistancePercent: 0.0075 // Minimum SL distance as percentage of entry price (0.75% for ICT)
+      minSLDistancePercent: 0.0075, // Minimum SL distance as percentage of entry price (0.75% for ICT)
+      requireConfluence: true,
+      minConfluenceCount: 3,
+      requireHighLiquiditySession: true,
+      requireMarketStructure: true
     }
   },
 
@@ -183,7 +201,21 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
 - Nếu bias=bullish và position=long → action nên là hold (KHÔNG close_early).
 - Nếu bias=bearish và position=short → action nên là hold (KHÔNG close_early).
 - Chỉ dùng close_early khi: (1) bias đã đảo chiều, HOẶC (2) cấu trúc thị trường đã thay đổi hoàn toàn (structure break), HOẶC (3) position đã đạt mục tiêu TP gần nhất.
-- Nếu vi phạm quy tắc này, quyết định sẽ bị từ chối.`,
+- Nếu vi phạm quy tắc này, quyết định sẽ bị từ chối.
+
+CRITICAL BIAS-ACTION CONSISTENCY:
+- If bias is 'bullish', action MUST be 'buy'
+- If bias is 'bearish', action MUST be 'sell'
+- If bias is 'neutral', action MUST be 'hold'
+- NEVER return inconsistent bias-action combinations
+- If you cannot determine a consistent direction, return bias='neutral' and action='hold'
+
+CRITICAL SL/TP PLACEMENT:
+- For LONG: entry > current price, SL < entry, TP > entry
+- For SHORT: entry < current price, SL > entry, TP < entry
+- SL distance should be at least 0.5% from entry
+- R:R ratio should be at least 2.5 for Kim Nghia
+- Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
       minConfidence: 75,
       minRRRatio: 2.5,
@@ -200,7 +232,11 @@ CRITICAL CONSISTENCY RULE (BẮT BUỘC):
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.5,
-      minSLDistancePercent: 0.004 // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
+      minSLDistancePercent: 0.004, // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
+      requireConfluence: true,
+      minConfluenceCount: 3,
+      requireHighLiquiditySession: true,
+      requireMarketStructure: true
     }
   }
 };

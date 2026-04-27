@@ -2,6 +2,133 @@
 
 All notable changes to the project will be documented in this file.
 
+## [27/04/2026] - v1.2.0 - Backend Improvements: Bug Fixes & Entry Quality
+
+### Bug Fixes (Priority 1)
+
+**Issue 1: Bias-Action Mismatch**
+- **Problem**: System opened positions in wrong direction when AI returned inconsistent bias/action data (e.g., bearish bias with buy action)
+- **Root Cause**: Auto-entry logic only validated action was 'buy'/'sell' but didn't check consistency with bias
+- **Fix**:
+  - Added Check 7.5 in autoEntryLogic.js to validate bias-action consistency
+  - Added validateAIResponse() function in groq-client.js to check bias-action and SL/TP placement
+  - Integrated validation in analyzerFactory.js to reject invalid AI responses
+- **Impact**: Prevents wrong-direction entries, expected to increase win rate by 5-10%
+- **Files**: `backend/src/services/autoEntryLogic.js`, `backend/src/groq-client.js`, `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 2: >100% Loss Display Bug**
+- **Problem**: System displayed loss >100% which is impossible in proper trading system
+- **Root Cause**: closePartialPosition() used `account.balance` (starting balance) instead of `account.current_balance`
+- **Fix**:
+  - Changed line 527 in paperTradingEngine.js from `account.balance` to `account.current_balance`
+  - Added balance validation in both closePartialPosition() and closePosition()
+  - Added checks for negative balance and loss >100%
+- **Impact**: Accurate balance tracking and loss percentage display
+- **Files**: `backend/src/services/paperTradingEngine.js`
+
+**Issue 3: AI Response Validation**
+- **Problem**: No validation of AI responses for consistency and correctness
+- **Fix**:
+  - Added validateAIResponse() function to check bias-action consistency
+  - Added SL/TP placement validation (LONG: SL<entry<TP, SHORT: SL>entry>TP)
+  - Returns neutral response on validation failure instead of crashing
+- **Impact**: Catches invalid AI responses early, prevents invalid trades
+- **Files**: `backend/src/groq-client.js`, `backend/src/analyzers/analyzerFactory.js`
+
+**Issue 4: System Prompt Consistency**
+- **Problem**: AI prompts didn't explicitly require bias-action consistency
+- **Fix**:
+  - Added CRITICAL BIAS-ACTION CONSISTENCY section to both ICT and Kim Nghia prompts
+  - Added CRITICAL SL/TP PLACEMENT requirements
+  - Specified exact decimal places (2) for numerical values
+- **Impact**: Reduces AI model inconsistencies at source
+- **Files**: `backend/src/config/methods.js`
+
+### New Features (Priority 2)
+
+**Feature 1: Confluence Filters (3/5 Rule)**
+- **Problem**: Entry quality was low due to insufficient confluence confirmation
+- **Solution**: Added Check 9 requiring at least 3/5 confluence conditions:
+  - Multi-timeframe alignment (>=1 timeframe)
+  - Volume confirmation (>1.2x average)
+  - Liquidity sweep detected
+  - Order block nearby (<0.5%)
+  - FVG nearby (<0.5%)
+- **Impact**: Higher quality entries, expected to increase win rate by 10-15%
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Feature 2: Session Filtering**
+- **Problem**: Trading during low-liquidity sessions resulted in poor entries
+- **Solution**: Added Check 10 to only allow trades during high-liquidity sessions:
+  - London Killzone (7-10 UTC)
+  - NY Killzone (12-15 UTC)
+- **Impact**: Trading when liquidity is high, expected to increase win rate by 5-8%
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Feature 3: Market Structure Filter**
+- **Problem**: Entries in choppy markets or without clear structure had low success rate
+- **Solution**: Added Check 11 for market structure validation:
+  - Requires Break of Structure (BOS) for trend following entries
+  - Rejects choppy markets (range width >1%)
+- **Impact**: Avoids choppy markets, expected to increase win rate by 8-12%
+- **Files**: `backend/src/services/autoEntryLogic.js`
+
+**Feature 4: Method Configuration Updates**
+- **Problem**: New filters needed configuration options
+- **Solution**: Added config options to both methods:
+  - requireConfluence: true
+  - minConfluenceCount: 3
+  - requireHighLiquiditySession: true
+  - requireMarketStructure: true
+- **Impact**: Configurable entry quality filters per method
+- **Files**: `backend/src/config/methods.js`
+
+### Testing
+
+**Unit Tests Added**
+- Bias-action validation tests (5 tests)
+- Balance validation tests (4 tests)
+- Confluence filter tests (3 tests)
+- Session filter tests (3 tests)
+- Market structure filter tests (3 tests)
+- **Total**: 18 new unit tests
+- **Files**: `backend/tests/unit/autoEntryLogic.test.js`, `backend/tests/unit/paperTradingEngine.test.js`
+
+### Version Update
+
+**Issue 5: Version Bump to 1.2.0**
+- Updated backend version from 1.1.0 to 1.2.0
+- **Impact**: Reflects Priority 1 and 2 implementations
+- **Files**: `backend/package.json`
+
+### Expected Impact
+
+Based on the feedback analysis documents:
+- **Priority 1 fixes**: Expected to increase win rate from 11% to 20-25%
+- **Priority 2 improvements**: Expected to increase win rate to 30-35%
+- **Combined impact**: Win rate improvement of 19-24 percentage points
+
+### Pending (Not Implemented in This Release)
+
+**Priority 3: Adaptive Risk Management** (Week 5-6)
+- Dynamic risk calculation based on recent performance
+- Kelly criterion position sizing
+- getRecentTrades helper function
+
+**Priority 4: Exit Strategy Improvements** (Week 7-8)
+- Adaptive trailing stop
+- Early exit conditions
+
+**Priority 5: Multi-Method Enhancement** (Week 9-10)
+- Method performance tracking
+- Ensemble voting system
+- ETH re-enable with conditions
+
+**Priority 6: AI Model Improvements** (Week 11-12)
+- Enhanced system prompts
+- Retry logic for invalid responses
+- Response logging
+
 ## [25/04/2026] - v2.9.0 - Go Backend Migration Phase 2
 
 ### New Features

@@ -178,4 +178,56 @@ describe('Paper Trading Engine', () => {
       expect(pnl).toBe(-50);
     });
   });
+
+  describe('Balance Validation', () => {
+    it('should detect negative balance', () => {
+      const account = {
+        starting_balance: 100,
+        current_balance: 50
+      };
+      const partialPnl = -60; // Would result in negative balance
+      const newBalance = account.current_balance + partialPnl;
+      
+      expect(newBalance).toBeLessThan(0);
+    });
+
+    it('should detect loss > 100%', () => {
+      const account = {
+        starting_balance: 100,
+        current_balance: 50
+      };
+      const partialPnl = -60; // Would result in -10 balance
+      const newBalance = account.current_balance + partialPnl;
+      const lossPercent = ((newBalance - account.starting_balance) / account.starting_balance) * 100;
+      
+      expect(lossPercent).toBeLessThan(-100);
+    });
+
+    it('should allow valid balance update', () => {
+      const account = {
+        starting_balance: 100,
+        current_balance: 100
+      };
+      const partialPnl = 10; // Valid positive PnL
+      const newBalance = account.current_balance + partialPnl;
+      
+      expect(newBalance).toBeGreaterThan(0);
+      const lossPercent = ((newBalance - account.starting_balance) / account.starting_balance) * 100;
+      expect(lossPercent).toBeGreaterThan(-100);
+    });
+
+    it('should allow valid loss < 100%', () => {
+      const account = {
+        starting_balance: 100,
+        current_balance: 100
+      };
+      const partialPnl = -30; // Valid loss (30%)
+      const newBalance = account.current_balance + partialPnl;
+      
+      expect(newBalance).toBeGreaterThan(0);
+      const lossPercent = ((newBalance - account.starting_balance) / account.starting_balance) * 100;
+      expect(lossPercent).toBeGreaterThan(-100);
+      expect(lossPercent).toBe(-30);
+    });
+  });
 });

@@ -510,6 +510,16 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 7 PASSED: AI action is ${analysis.action}`);
 
+  // Check 7.5: AI action must match bias
+  const expectedAction = analysis.bias === 'bullish' ? 'buy' : 'sell';
+  console.log(`[AutoEntry] Check 7.5: AI action '${analysis.action}' vs expected '${expectedAction}' for bias '${analysis.bias}'`);
+  if (analysis.action !== expectedAction) {
+    console.log(`[AutoEntry] Check 7.5 FAILED: AI action '${analysis.action}' does not match bias '${analysis.bias}' (expected '${expectedAction}')`);
+    decision.reason = `AI action '${analysis.action}' does not match bias '${analysis.bias}' (expected '${expectedAction}')`;
+    return decision;
+  }
+  console.log(`[AutoEntry] Check 7.5 PASSED: AI action matches bias`);
+
   // Check 8: Expected R:R ratio from analysis
   const expectedRR = analysis.expected_rr || 2.0;
   console.log(`[AutoEntry] Check 8: Expected R:R ${expectedRR.toFixed(1)} vs threshold ${config.minRRRatio}`);
@@ -519,6 +529,74 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     return decision;
   }
   console.log(`[AutoEntry] Check 8 PASSED: R:R ${expectedRR.toFixed(1)} >= ${config.minRRRatio}`);
+
+  // Check 9: Confluence filters (3/5 rule)
+  const confluence = {
+    multiTimeframeAlignment: alignment.alignedCount >= 1,
+    volumeConfirmation: analysis.volume > (analysis.avgVolume || 0) * 1.2,
+    liquiditySweep: analysis.liquidity_sweep_detected === true,
+    orderBlockNearby: analysis.order_block_distance !== undefined && analysis.order_block_distance < 0.005,
+    fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance < 0.005
+  };
+
+  const confluenceCount = Object.values(confluence).filter(v => v).length;
+  console.log(`[AutoEntry] Check 9: Confluence ${confluenceCount}/5 met`, confluence);
+
+  if (confluenceCount < 3) {
+    decision.reason = `Insufficient confluence (${confluenceCount}/5 met, minimum 3 required)`;
+    console.log(`[AutoEntry] Check 9 FAILED: ${decision.reason}`);
+    return decision;
+  }
+  console.log(`[AutoEntry] Check 9 PASSED: Confluence sufficient`);
+
+  // Check 10: Trading session filter (high liquidity only)
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+
+  const highLiquiditySessions = [
+    { name: 'London Killzone', start: 7, end: 10 },
+    { name: 'NY Killzone', start: 12, end: 15 }
+  ];
+
+  const inHighLiquiditySession = highLiquiditySessions.some(session => 
+    utcHour >= session.start && utcHour < session.end
+  );
+
+  console.log(`[AutoEntry] Check 10: Current UTC hour ${utcHour}, in high liquidity session: ${inHighLiquiditySession}`);
+
+  if (!inHighLiquiditySession) {
+    decision.reason = 'Outside high liquidity trading sessions (London/NY killzones)';
+    console.log(`[AutoEntry] Check 10 FAILED: ${decision.reason}`);
+    return decision;
+  }
+  console.log(`[AutoEntry] Check 10 PASSED: In high liquidity session`);
+
+  // Check 11: Market structure filter
+  const structure = {
+    hasBOS: analysis.break_of_structure === true,
+    hasCHOCH: analysis.change_of_character === true,
+    isNotChoppy: analysis.range_width === undefined || analysis.range_width < 0.01
+  };
+
+  console.log(`[AutoEntry] Check 11: Market structure`, structure);
+
+  // For trend following: require BOS
+  if (analysis.bias === 'bullish' || analysis.bias === 'bearish') {
+    if (!structure.hasBOS) {
+      decision.reason = 'No Break of Structure detected for trend following entry';
+      console.log(`[AutoEntry] Check 11 FAILED: ${decision.reason}`);
+      return decision;
+    }
+  }
+
+  // Reject if market is choppy
+  if (!structure.isNotChoppy) {
+    decision.reason = 'Market is choppy (range width > 1%), no clear trend';
+    console.log(`[AutoEntry] Check 11 FAILED: ${decision.reason}`);
+    return decision;
+  }
+
+  console.log(`[AutoEntry] Check 11 PASSED: Market structure valid`);
 
   // All checks passed - suggest entry
   decision.shouldEnter = true;
