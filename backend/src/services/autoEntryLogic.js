@@ -530,33 +530,59 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 8 PASSED: R:R ${expectedRR.toFixed(1)} >= ${config.minRRRatio}`);
 
-  // Check 9: Confluence filters (3/5 rule) - Optional if fields missing
-  const confluence = {
-    multiTimeframeAlignment: alignment.alignedCount >= 1,
-    volumeConfirmation: analysis.volume && analysis.avgVolume ? analysis.volume > analysis.avgVolume * 1.2 : null,
-    liquiditySweep: analysis.liquidity_sweep_detected === true,
-    orderBlockNearby: analysis.order_block_distance !== undefined && analysis.order_block_distance < 0.005,
-    fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance < 0.005
-  };
+  // Check 9: Confluence filters - Method-specific rules
+  let confluence;
+  let confluenceRequired;
+  let confluenceMinMet;
+
+  if (methodId === 'kim_nghia') {
+    // Kim Nghia method: No multi-timeframe alignment requirement, looser thresholds
+    confluence = {
+      volumeConfirmation: analysis.volume && analysis.avgVolume ? analysis.volume > analysis.avgVolume * 1.2 : null,
+      liquiditySweep: analysis.liquidity_sweep_detected === true,
+      orderBlockNearby: analysis.order_block_distance !== undefined && analysis.order_block_distance <= 0.01,
+      fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance <= 0.01
+    };
+    confluenceRequired = true;
+    confluenceMinMet = 2; // 2/4 met for Kim Nghia
+  } else {
+    // ICT method: Multi-timeframe alignment required, stricter thresholds
+    confluence = {
+      multiTimeframeAlignment: alignment.alignedCount >= 1,
+      volumeConfirmation: analysis.volume && analysis.avgVolume ? analysis.volume > analysis.avgVolume * 1.2 : null,
+      liquiditySweep: analysis.liquidity_sweep_detected === true,
+      orderBlockNearby: analysis.order_block_distance !== undefined && analysis.order_block_distance < 0.005,
+      fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance < 0.005
+    };
+    confluenceRequired = config.requireConfluence;
+    confluenceMinMet = 3; // 3/5 met for ICT
+  }
 
   // Log each field for debugging
-  console.log(`[AutoEntry] Check 9: Confluence field values:`);
-  console.log(`  - multiTimeframeAlignment: ${confluence.multiTimeframeAlignment} (alignment.alignedCount=${alignment.alignedCount})`);
-  console.log(`  - volumeConfirmation: ${confluence.volumeConfirmation} (volume=${analysis.volume}, avgVolume=${analysis.avgVolume})`);
-  console.log(`  - liquiditySweep: ${confluence.liquiditySweep} (liquidity_sweep_detected=${analysis.liquidity_sweep_detected})`);
-  console.log(`  - orderBlockNearby: ${confluence.orderBlockNearby} (order_block_distance=${analysis.order_block_distance})`);
-  console.log(`  - fvgNearby: ${confluence.fvgNearby} (fvg_distance=${analysis.fvg_distance})`);
+  console.log(`[AutoEntry] Check 9: Confluence field values (${methodId}):`);
+  if (methodId === 'kim_nghia') {
+    console.log(`  - volumeConfirmation: ${confluence.volumeConfirmation} (volume=${analysis.volume}, avgVolume=${analysis.avgVolume})`);
+    console.log(`  - liquiditySweep: ${confluence.liquiditySweep} (liquidity_sweep_detected=${analysis.liquidity_sweep_detected})`);
+    console.log(`  - orderBlockNearby: ${confluence.orderBlockNearby} (order_block_distance=${analysis.order_block_distance}, threshold=0.01)`);
+    console.log(`  - fvgNearby: ${confluence.fvgNearby} (fvg_distance=${analysis.fvg_distance}, threshold=0.01)`);
+  } else {
+    console.log(`  - multiTimeframeAlignment: ${confluence.multiTimeframeAlignment} (alignment.alignedCount=${alignment.alignedCount})`);
+    console.log(`  - volumeConfirmation: ${confluence.volumeConfirmation} (volume=${analysis.volume}, avgVolume=${analysis.avgVolume})`);
+    console.log(`  - liquiditySweep: ${confluence.liquiditySweep} (liquidity_sweep_detected=${analysis.liquidity_sweep_detected})`);
+    console.log(`  - orderBlockNearby: ${confluence.orderBlockNearby} (order_block_distance=${analysis.order_block_distance}, threshold=0.005)`);
+    console.log(`  - fvgNearby: ${confluence.fvgNearby} (fvg_distance=${analysis.fvg_distance}, threshold=0.005)`);
+  }
 
   // Only count non-null values
   const confluenceValues = Object.values(confluence).filter(v => v !== null);
   const confluenceCount = confluenceValues.filter(v => v).length;
   const confluenceTotal = confluenceValues.length;
   
-  console.log(`[AutoEntry] Check 9: Confluence ${confluenceCount}/${confluenceTotal} met`);
+  console.log(`[AutoEntry] Check 9: Confluence ${confluenceCount}/${confluenceTotal} met (min required: ${confluenceMinMet})`);
 
-  // Only enforce if we have at least 3 available checks
-  if (confluenceTotal >= 3 && confluenceCount < Math.min(3, confluenceTotal)) {
-    decision.reason = `Insufficient confluence (${confluenceCount}/${confluenceTotal} met, minimum ${Math.min(3, confluenceTotal)} required)`;
+  // Only enforce if method requires confluence and we have enough checks
+  if (confluenceRequired && confluenceTotal >= 2 && confluenceCount < confluenceMinMet) {
+    decision.reason = `Insufficient confluence (${confluenceCount}/${confluenceTotal} met, minimum ${confluenceMinMet} required)`;
     console.log(`[AutoEntry] Check 9 FAILED: ${decision.reason}`);
     return decision;
   }
