@@ -233,10 +233,10 @@ CRITICAL SL/TP PLACEMENT:
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.5,
       minSLDistancePercent: 0.004, // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
-      requireConfluence: true,
+      requireConfluence: false,
       minConfluenceCount: 3,
       requireHighLiquiditySession: false,
-      requireMarketStructure: true
+      requireMarketStructure: false
     }
   }
 };
