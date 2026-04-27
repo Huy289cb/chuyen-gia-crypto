@@ -271,7 +271,7 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
                     timeframe,
                     pred.direction || 'neutral',
                     pred.target || 0,
-                    pred.confidence || 0,
+                    coinData.confidence || 0,
                     expiresAt.toISOString(),
                     coinData.suggested_entry || null,
                     coinData.suggested_stop_loss || null,
