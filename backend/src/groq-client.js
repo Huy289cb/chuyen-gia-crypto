@@ -81,7 +81,7 @@ function fixJSONSyntax(jsonString) {
 }
 
 // Validate AI response for consistency and correctness
-function validateAIResponse(response, symbol) {
+export function validateAIResponse(response, symbol) {
   if (!response || !symbol) return true;
   
   const analysis = response[symbol.toLowerCase()];
