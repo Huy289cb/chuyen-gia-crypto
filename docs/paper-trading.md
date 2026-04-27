@@ -98,17 +98,30 @@ Each trading method has its own independent paper trading accounts:
 - `ETH - ICT Method`: 100U starting balance (trading disabled)
 - `ETH - Kim Nghia Method`: 100U starting balance (trading disabled)
 
-## Auto-Entry Criteria (Updated 18/04/2026)
+## Auto-Entry Criteria (Updated 27/04/2026)
 
 A position is suggested when ALL of the following conditions are met:
 
 1. **Symbol Enablement**: Symbol must be in enabled list (currently only BTC)
 2. **Confidence >= 70%**: AI confidence score must be at least 70% (updated from 80%)
 3. **Clear Bias**: Bias must be bullish or bearish (not neutral)
-4. **Multi-Timeframe Alignment**: Majority of 1h and 4h timeframes must align with bias (1h primary)
-5. **Risk/Reward >= 2.0**: Expected R:R ratio must be at least 1:2
-6. **No Cooldown**: Account must not be in cooldown period
-7. **Position Limit**: Less than 6 concurrent positions per symbol open
+4. **Bias-Action Consistency**: AI action must match bias (bullish→buy, bearish→sell) - **NEW v1.2.0**
+5. **Multi-Timeframe Alignment**: Majority of 1h and 4h timeframes must align with bias (1h primary)
+6. **Risk/Reward >= 2.0**: Expected R:R ratio must be at least 1:2
+7. **Confluence Filter (3/5 Rule)**: At least 3 of 5 confluence conditions must be met - **NEW v1.2.0**
+   - Multi-timeframe alignment (>=1 timeframe)
+   - Volume confirmation (>1.2x average)
+   - Liquidity sweep detected
+   - Order block nearby (<0.5%)
+   - FVG nearby (<0.5%)
+8. **Session Filter**: Trade only during high-liquidity sessions - **NEW v1.2.0**
+   - London Killzone (7-10 UTC)
+   - NY Killzone (12-15 UTC)
+9. **Market Structure Filter**: Valid market structure required - **NEW v1.2.0**
+   - Break of Structure (BOS) required for trend following
+   - Reject choppy markets (range width >1%)
+10. **No Cooldown**: Account must not be in cooldown period
+11. **Position Limit**: Less than 6 concurrent positions per symbol open
 
 ## Order Types
 

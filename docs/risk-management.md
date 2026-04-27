@@ -197,6 +197,41 @@ For auto-entry, the system checks alignment on **main timeframes only**:
 
 - Prevents emotional trading after losses
 - Allows market conditions to potentially change
+
+## Balance Validation (NEW - v1.2.0)
+
+### Negative Balance Protection
+
+**Implementation**: Added validation in both `closePartialPosition()` and `closePosition()` functions
+
+**Checks**:
+- Balance must never go negative
+- Loss must never exceed 100% of starting balance
+- Throws error if validation fails
+
+**Rationale**:
+- Prevents calculation errors from propagating
+- Catches bugs early before they affect account
+- Ensures paper trading system integrity
+- Prevents impossible trading scenarios (>100% loss)
+
+**Example**:
+```javascript
+// Validate balance after update
+if (newBalance < 0) {
+  throw new Error('Negative balance is not allowed');
+}
+
+const lossPercent = ((newBalance - account.starting_balance) / account.starting_balance) * 100;
+if (lossPercent < -100) {
+  throw new Error('Loss > 100% detected - check calculation logic');
+}
+```
+
+**Bug Fix (v1.2.0)**:
+- Fixed `closePartialPosition()` to use `account.current_balance` instead of `account.balance`
+- Previous bug used starting balance for PnL calculation, causing incorrect loss percentages
+- This fix ensures accurate balance tracking throughout partial closes
 - Reduces overtrading during drawdowns
 - Forces review of recent performance
 
