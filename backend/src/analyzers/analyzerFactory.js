@@ -573,7 +573,7 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
     const validatePriceLevel = (price, currentPrice, type, bias = null, suggestedEntry = null) => {
       if (!price || isNaN(price)) return null;
       
-      const p = parseFloat(price);
+      let p = parseFloat(price);
       
       // For entry prices: validate within reasonable range based on current price
       if (type === 'entry') {
