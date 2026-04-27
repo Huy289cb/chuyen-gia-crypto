@@ -539,12 +539,20 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance < 0.005
   };
 
+  // Log each field for debugging
+  console.log(`[AutoEntry] Check 9: Confluence field values:`);
+  console.log(`  - multiTimeframeAlignment: ${confluence.multiTimeframeAlignment} (alignment.alignedCount=${alignment.alignedCount})`);
+  console.log(`  - volumeConfirmation: ${confluence.volumeConfirmation} (volume=${analysis.volume}, avgVolume=${analysis.avgVolume})`);
+  console.log(`  - liquiditySweep: ${confluence.liquiditySweep} (liquidity_sweep_detected=${analysis.liquidity_sweep_detected})`);
+  console.log(`  - orderBlockNearby: ${confluence.orderBlockNearby} (order_block_distance=${analysis.order_block_distance})`);
+  console.log(`  - fvgNearby: ${confluence.fvgNearby} (fvg_distance=${analysis.fvg_distance})`);
+
   // Only count non-null values
   const confluenceValues = Object.values(confluence).filter(v => v !== null);
   const confluenceCount = confluenceValues.filter(v => v).length;
   const confluenceTotal = confluenceValues.length;
   
-  console.log(`[AutoEntry] Check 9: Confluence ${confluenceCount}/${confluenceTotal} met`, confluence);
+  console.log(`[AutoEntry] Check 9: Confluence ${confluenceCount}/${confluenceTotal} met`);
 
   // Only enforce if we have at least 3 available checks
   if (confluenceTotal >= 3 && confluenceCount < Math.min(3, confluenceTotal)) {
