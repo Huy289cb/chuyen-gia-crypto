@@ -615,8 +615,20 @@ async function formatAnalysisResponse(rawResponse, priceData, methodId, db) {
         const distance = Math.abs(p - suggestedEntry);
         const minDistance = suggestedEntry * 0.005; // 0.5% minimum (matches prompt)
         if (distance < minDistance) {
-          console.log(`[AnalyzerFactory][${methodId}] Stop loss ${p} too close to entry ${suggestedEntry} (distance ${distance.toFixed(2)} < minimum ${minDistance.toFixed(2)}), rejecting`);
-          return null;
+          console.log(`[AnalyzerFactory][${methodId}] Stop loss ${p} too close to entry ${suggestedEntry} (distance ${distance.toFixed(2)} < minimum ${minDistance.toFixed(2)}), adjusting to minimum`);
+          // Adjust SL to minimum distance on the correct side
+          if (bias === 'bullish') {
+            // For long: SL should be below entry
+            p = suggestedEntry - minDistance;
+          } else if (bias === 'bearish') {
+            // For short: SL should be above entry
+            p = suggestedEntry + minDistance;
+          } else {
+            // Unknown bias, reject
+            console.log(`[AnalyzerFactory][${methodId}] Unknown bias ${bias}, rejecting SL`);
+            return null;
+          }
+          console.log(`[AnalyzerFactory][${methodId}] Adjusted stop loss to ${p} (distance ${minDistance.toFixed(2)})`);
         }
 
         // Validate SL is on correct side of entry based on bias
