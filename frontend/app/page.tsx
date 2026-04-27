@@ -29,7 +29,7 @@ export default function Home() {
 
 function HomeContent() {
   const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends('kim_nghia');
-  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading('kim_nghia');
+  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition, refresh: refreshPaperTrading } = usePaperTrading('kim_nghia');
   const [activeTab, setActiveTab] = useState<'paper' | 'testnet' | 'comparison'>('paper');
   const [isTriggering, setIsTriggering] = useState(false);
 
@@ -40,6 +40,7 @@ function HomeContent() {
 
   const handleRefresh = () => {
     refetch();
+    refreshPaperTrading();
   };
 
   const handleTriggerAnalysis = async () => {
