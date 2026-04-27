@@ -530,20 +530,25 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 8 PASSED: R:R ${expectedRR.toFixed(1)} >= ${config.minRRRatio}`);
 
-  // Check 9: Confluence filters (3/5 rule)
+  // Check 9: Confluence filters (3/5 rule) - Optional if fields missing
   const confluence = {
     multiTimeframeAlignment: alignment.alignedCount >= 1,
-    volumeConfirmation: analysis.volume > (analysis.avgVolume || 0) * 1.2,
+    volumeConfirmation: analysis.volume && analysis.avgVolume ? analysis.volume > analysis.avgVolume * 1.2 : null,
     liquiditySweep: analysis.liquidity_sweep_detected === true,
     orderBlockNearby: analysis.order_block_distance !== undefined && analysis.order_block_distance < 0.005,
     fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance < 0.005
   };
 
-  const confluenceCount = Object.values(confluence).filter(v => v).length;
-  console.log(`[AutoEntry] Check 9: Confluence ${confluenceCount}/5 met`, confluence);
+  // Only count non-null values
+  const confluenceValues = Object.values(confluence).filter(v => v !== null);
+  const confluenceCount = confluenceValues.filter(v => v).length;
+  const confluenceTotal = confluenceValues.length;
+  
+  console.log(`[AutoEntry] Check 9: Confluence ${confluenceCount}/${confluenceTotal} met`, confluence);
 
-  if (confluenceCount < 3) {
-    decision.reason = `Insufficient confluence (${confluenceCount}/5 met, minimum 3 required)`;
+  // Only enforce if we have at least 3 available checks
+  if (confluenceTotal >= 3 && confluenceCount < Math.min(3, confluenceTotal)) {
+    decision.reason = `Insufficient confluence (${confluenceCount}/${confluenceTotal} met, minimum ${Math.min(3, confluenceTotal)} required)`;
     console.log(`[AutoEntry] Check 9 FAILED: ${decision.reason}`);
     return decision;
   }
@@ -571,7 +576,7 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 10 PASSED: In high liquidity session`);
 
-  // Check 11: Market structure filter
+  // Check 11: Market structure filter - Optional if fields missing
   const structure = {
     hasBOS: analysis.break_of_structure === true,
     hasCHOCH: analysis.change_of_character === true,
@@ -580,8 +585,8 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
 
   console.log(`[AutoEntry] Check 11: Market structure`, structure);
 
-  // For trend following: require BOS
-  if (analysis.bias === 'bullish' || analysis.bias === 'bearish') {
+  // For trend following: require BOS only if field exists
+  if ((analysis.bias === 'bullish' || analysis.bias === 'bearish') && analysis.break_of_structure !== undefined) {
     if (!structure.hasBOS) {
       decision.reason = 'No Break of Structure detected for trend following entry';
       console.log(`[AutoEntry] Check 11 FAILED: ${decision.reason}`);
@@ -589,8 +594,8 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     }
   }
 
-  // Reject if market is choppy
-  if (!structure.isNotChoppy) {
+  // Reject if market is choppy only if range_width is provided
+  if (analysis.range_width !== undefined && !structure.isNotChoppy) {
     decision.reason = 'Market is choppy (range width > 1%), no clear trend';
     console.log(`[AutoEntry] Check 11 FAILED: ${decision.reason}`);
     return decision;
