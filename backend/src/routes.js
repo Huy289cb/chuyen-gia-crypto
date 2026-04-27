@@ -294,8 +294,8 @@ router.post('/analysis/run', async (req, res) => {
     // Fetch prices
     const priceData = await fetchPrices(db);
 
-    // Run analysis (defaults to ICT method)
-    const methodConfig = getMethodConfig('ict');
+    // Run analysis (use Kim Nghia method for manual trigger)
+    const methodConfig = getMethodConfig('kim_nghia');
     const analyzer = createAnalyzer(methodConfig);
     const analysis = await analyzer.analyze(priceData, db);
     
