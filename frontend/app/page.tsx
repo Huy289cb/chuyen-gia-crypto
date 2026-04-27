@@ -31,6 +31,7 @@ function HomeContent() {
   const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends('kim_nghia');
   const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition } = usePaperTrading('kim_nghia');
   const [activeTab, setActiveTab] = useState<'paper' | 'testnet' | 'comparison'>('paper');
+  const [isTriggering, setIsTriggering] = useState(false);
 
   const prices = data?.prices;
   const analysis = data?.analysis;
@@ -39,6 +40,31 @@ function HomeContent() {
 
   const handleRefresh = () => {
     refetch();
+  };
+
+  const handleTriggerAnalysis = async () => {
+    setIsTriggering(true);
+    try {
+      const response = await fetch('/api/analysis/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to trigger analysis');
+      }
+      
+      // Wait a moment for the analysis to complete, then refresh
+      setTimeout(() => {
+        refetch();
+        setIsTriggering(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Error triggering analysis:', error);
+      setIsTriggering(false);
+    }
   };
 
   // Initial loading state
@@ -76,6 +102,8 @@ function HomeContent() {
     <div className="min-h-screen bg-bg-primary">
       <Header
         onRefresh={handleRefresh}
+        onTriggerAnalysis={handleTriggerAnalysis}
+        isTriggering={isTriggering}
         isLoading={trendsLoading}
         lastPriceUpdate={lastPriceUpdate}
         lastAnalysisUpdate={lastAnalysisUpdate}

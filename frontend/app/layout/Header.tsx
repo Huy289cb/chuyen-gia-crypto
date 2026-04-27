@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Zap, RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen } from 'lucide-react';
+import { Zap, RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen, Play } from 'lucide-react';
 import { getTimeSince, cn } from '@/lib/utils';
 import { useTheme } from '../components/ThemeProvider';
 import { useSearchParams } from 'next/navigation';
@@ -9,12 +9,14 @@ import { APP_VERSION } from '@/lib/version';
 
 interface HeaderProps {
   onRefresh: () => void;
+  onTriggerAnalysis?: () => void;
+  isTriggering?: boolean;
   isLoading: boolean;
   lastPriceUpdate?: string;
   lastAnalysisUpdate?: string;
 }
 
-export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpdate }: HeaderProps) {
+export function Header({ onRefresh, onTriggerAnalysis, isTriggering, isLoading, lastPriceUpdate, lastAnalysisUpdate }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const priceFreshness = getTimeSince(lastPriceUpdate);
   const analysisFreshness = getTimeSince(lastAnalysisUpdate);
@@ -106,6 +108,24 @@ export function Header({ onRefresh, isLoading, lastPriceUpdate, lastAnalysisUpda
             >
               {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </button>
+
+            {/* Trigger Analysis Button */}
+            {onTriggerAnalysis && (
+              <button
+                onClick={onTriggerAnalysis}
+                disabled={isTriggering || isLoading}
+                className={cn(
+                  'p-2 rounded-lg transition-all duration-200',
+                  'bg-accent-primary hover:bg-accent-secondary',
+                  'border border-accent-primary hover:border-accent-secondary',
+                  'text-bg-primary',
+                  (isTriggering || isLoading) && 'opacity-50 cursor-not-allowed'
+                )}
+                title="Trigger AI analysis"
+              >
+                <Play className={cn('w-4 h-4', isTriggering && 'animate-pulse')} />
+              </button>
+            )}
 
             {/* Refresh Button */}
             <button
