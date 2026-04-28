@@ -35,7 +35,7 @@ import {
   updateTestnetAccountStats,
   createTestnetAccountSnapshot,
 } from '../db/testnetDatabase.js';
-import { getCurrentPosition } from './binance/account.js';
+import { getCurrentPosition as getBinancePosition } from './binance/account.js';
 
 // Global client instance
 let testnetClient = null;
@@ -625,7 +625,7 @@ async function syncTestnetPositions(db, account) {
     const symbol = getSymbol();
     
     // Get current position from Binance
-    const binancePosition = await getCurrentPosition(symbol);
+    const binancePosition = await getBinancePosition(symbol);
     
     // Get open positions from database
     const dbPositions = await getTestnetPositions(db, { account_id: account.id, status: 'open' });
