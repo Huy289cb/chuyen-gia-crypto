@@ -253,4 +253,36 @@ router.post('/close/:id', async (req, res) => {
   }
 });
 
+// GET /api/positions/:id/predictions - Get predictions for a position with pagination
+router.get('/:id/predictions', async (req, res) => {
+  const db = req.db;
+  const dbEnabled = req.dbEnabled;
+
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  const { id } = req.params;
+  const { limit = 5, page = 1 } = req.query;
+
+  try {
+    const { getPredictionsByPositionId } = await import('../db/database.js');
+    const result = await getPredictionsByPositionId(db, id, parseInt(limit), parseInt(page));
+    
+    res.json({
+      success: true,
+      data: result.data,
+      meta: result.pagination
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

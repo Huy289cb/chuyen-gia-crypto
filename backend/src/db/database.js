@@ -1436,6 +1436,54 @@ export async function updatePrediction(db, predictionId, updates) {
   });
 }
 
+// Get predictions by linked position ID with pagination
+export async function getPredictionsByPositionId(db, positionId, limit = 5, page = 1) {
+  return new Promise((resolve, reject) => {
+    const offset = (page - 1) * limit;
+    
+    // Get total count first
+    db.get(
+      `SELECT COUNT(*) as total FROM predictions WHERE linked_position_id = ?`,
+      [positionId],
+      (countErr, countRow) => {
+        if (countErr) {
+          reject(countErr);
+          return;
+        }
+        
+        const total = countRow.total;
+        
+        // Get paginated results
+        db.all(
+          `SELECT p.*, ah.current_price as entry_price, ah.bias, ah.action as analysis_action
+           FROM predictions p
+           JOIN analysis_history ah ON p.analysis_id = ah.id
+           WHERE p.linked_position_id = ?
+           ORDER BY p.predicted_at DESC
+           LIMIT ? OFFSET ?`,
+          [positionId, limit, offset],
+          (err, rows) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            
+            resolve({
+              data: rows,
+              pagination: {
+                total,
+                limit,
+                page,
+                totalPages: Math.ceil(total / limit)
+              }
+            });
+          }
+        );
+      }
+    );
+  });
+}
+
 // Close position
 export async function closePosition(db, positionId, closePrice, closeReason) {
   return new Promise((resolve, reject) => {
