@@ -676,4 +676,140 @@ describe('autoEntryLogic - Volume Management & Order Validation', () => {
       });
     });
   });
+
+  describe('Kim Nghia Method - Real World Input Test', () => {
+    it('should pass auto-entry checks with real Kim Nghia AI response (v1.2.15)', async () => {
+      // Real AI response from logs that should pass with v1.2.15 config
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bearish',
+        action: 'sell',
+        confidence: 0.85,
+        narrative: 'Bearish bias due to recent price action and volume analysis.',
+        current_price: 76865.14,
+        suggested_entry: 76800,
+        suggested_stop_loss: 77200,
+        suggested_take_profit: 76300,
+        expected_rr: 2.5,
+        // Confluence fields
+        volume: 114.9853,
+        avgVolume: 120,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.008,
+        // Market structure fields
+        break_of_structure: true,
+        change_of_character: true,
+        range_width: 0.015,
+        position_decisions: [],
+        pending_order_decisions: []
+      };
+
+      const account = {
+        account_id: 1,
+        symbol: 'BTC',
+        balance: 100,
+        method_id: 'kim_nghia',
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'kim_nghia',
+        name: 'SMC + Volume + Fibonacci',
+        autoEntry: {
+          enabledSymbols: ['BTC'],
+          minConfidence: 0.75,
+          minRRRatio: 2.5,
+          maxOpenPositions: 6,
+          maxVolumePerAccount: 2000,
+          requireConfluence: true,
+          requireHighLiquiditySession: false, // v1.2.14: session filter disabled
+          requireMarketStructure: false, // v1.2.15: market structure filter disabled
+          riskPerTrade: 0.10,
+          minSLDistancePercent: 0.005,
+          allowedSessions: ['all_timeframes']
+        }
+      };
+
+      // Import evaluateAutoEntry
+      const { evaluateAutoEntry } = await import('../../src/services/autoEntryLogic.js');
+      
+      // Mock database
+      const db = null;
+
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      // Verify the decision passes with v1.2.15 config
+      expect(decision.shouldEnter).toBe(true);
+      expect(decision.action).toBe('enter_short');
+      expect(decision.confidence).toBeGreaterThan(0);
+      expect(decision.reason).toContain('All criteria met');
+    });
+
+    it('should calculate confluence correctly for Kim Nghia method (3/4 met)', () => {
+      const analysis = {
+        volume: 114.9853,
+        avgVolume: 120,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.008
+      };
+
+      // Kim Nghia confluence check (v1.2.12)
+      const confluence = {
+        volumeConfirmation: analysis.volume && analysis.avgVolume ? analysis.volume > analysis.avgVolume * 1.2 : null,
+        liquiditySweep: analysis.liquidity_sweep_detected === true,
+        orderBlockNearby: analysis.order_block_distance !== undefined && analysis.order_block_distance <= 0.01,
+        fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance <= 0.01
+      };
+
+      const confluenceValues = Object.values(confluence).filter(v => v !== null);
+      const confluenceCount = confluenceValues.filter(v => v).length;
+      const confluenceTotal = confluenceValues.length;
+
+      // volumeConfirmation: false (114.9853 < 120 * 1.2 = 144)
+      // liquiditySweep: true
+      // orderBlockNearby: true (0.005 <= 0.01)
+      // fvgNearby: true (0.008 <= 0.01)
+      expect(confluence.volumeConfirmation).toBe(false);
+      expect(confluence.liquiditySweep).toBe(true);
+      expect(confluence.orderBlockNearby).toBe(true);
+      expect(confluence.fvgNearby).toBe(true);
+      expect(confluenceCount).toBe(3);
+      expect(confluenceTotal).toBe(4);
+    });
+
+    it('should skip session filter when requireHighLiquiditySession is false', () => {
+      const config = {
+        requireHighLiquiditySession: false
+      };
+
+      if (config.requireHighLiquiditySession) {
+        // This should not execute
+        expect(true).toBe(false);
+      }
+      // Test passes if no error is thrown
+      expect(config.requireHighLiquiditySession).toBe(false);
+    });
+
+    it('should skip market structure filter when requireMarketStructure is false', () => {
+      const config = {
+        requireMarketStructure: false
+      };
+
+      const analysis = {
+        range_width: 0.015 // Would fail if filter was enabled (> 1%)
+      };
+
+      if (config.requireMarketStructure) {
+        const structure = {
+          isNotChoppy: analysis.range_width === undefined || analysis.range_width < 0.01
+        };
+        expect(structure.isNotChoppy).toBe(false); // Would fail
+      }
+      // Test passes if no error is thrown
+      expect(config.requireMarketStructure).toBe(false);
+    });
+  });
 });

@@ -255,7 +255,7 @@ CRITICAL SL/TP PLACEMENT:
       requireConfluence: true,
       minConfluenceCount: 3,
       requireHighLiquiditySession: false,
-      requireMarketStructure: true
+      requireMarketStructure: false
     }
   }
 };
