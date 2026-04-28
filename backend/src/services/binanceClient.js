@@ -69,16 +69,23 @@ export async function getCurrentPosition(client, symbol) {
 /**
  * Place market order
  */
-export async function placeMarketOrder(client, symbol, side, quantity) {
+export async function placeMarketOrder(client, symbol, side, quantity, positionSide = null) {
   try {
-    const response = await placeOrderAPI({
+    const params = {
       symbol,
       side,
       type: 'MARKET',
       quantity: quantity.toString(),
-    });
+    };
     
-    console.log(`[BinanceClient] Market order placed: ${side} ${quantity} ${symbol}`);
+    // Add positionSide for hedge mode (dual position side)
+    if (positionSide) {
+      params.positionSide = positionSide;
+    }
+    
+    const response = await placeOrderAPI(params);
+    
+    console.log(`[BinanceClient] Market order placed: ${side} ${quantity} ${symbol}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
     return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place market order:', error.message);
@@ -111,18 +118,25 @@ export async function placeLimitOrder(client, symbol, side, quantity, price) {
 /**
  * Place stop loss order (STOP_MARKET)
  */
-export async function placeStopLossOrder(client, symbol, side, quantity, stopPrice) {
+export async function placeStopLossOrder(client, symbol, side, quantity, stopPrice, positionSide = null) {
   try {
-    const response = await placeOrderAPI({
+    const params = {
       symbol,
       side,
       type: 'STOP_MARKET',
       quantity: quantity.toString(),
       stopPrice: stopPrice.toString(),
       reduceOnly: true, // Close position on trigger
-    });
+    };
     
-    console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}`);
+    // Add positionSide for hedge mode (dual position side)
+    if (positionSide) {
+      params.positionSide = positionSide;
+    }
+    
+    const response = await placeOrderAPI(params);
+    
+    console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
     return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place stop loss order:', error.message);
@@ -133,18 +147,25 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
 /**
  * Place take profit order (TAKE_PROFIT_MARKET)
  */
-export async function placeTakeProfitOrder(client, symbol, side, quantity, price) {
+export async function placeTakeProfitOrder(client, symbol, side, quantity, price, positionSide = null) {
   try {
-    const response = await placeOrderAPI({
+    const params = {
       symbol,
       side,
       type: 'TAKE_PROFIT_MARKET',
       quantity: quantity.toString(),
       stopPrice: price.toString(),
       reduceOnly: true, // Close position on trigger
-    });
+    };
     
-    console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
+    // Add positionSide for hedge mode (dual position side)
+    if (positionSide) {
+      params.positionSide = positionSide;
+    }
+    
+    const response = await placeOrderAPI(params);
+    
+    console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
     return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place take profit order:', error.message);

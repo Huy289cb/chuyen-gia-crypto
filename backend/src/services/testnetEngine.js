@@ -20,6 +20,7 @@ import {
   setLeverage,
   setMarginType,
 } from './binanceClient.js';
+import { setPositionMode } from './binance/trading.js';
 import { binanceConfig, getLeverage, getSymbol, validateConfig } from '../config/binance.js';
 import {
   createTestnetPosition,
@@ -81,6 +82,20 @@ export async function initTestnetEngine() {
     } else {
       console.error('[TestnetEngine] Failed to set margin type: Invalid API-key permissions. Please enable "Enable Futures" for your API key.', error.message);
       return null; // Stop initialization if futures permissions are missing
+    }
+  }
+
+  // Set position mode to dual (hedge mode) - allows both LONG and SHORT positions simultaneously
+  try {
+    await setPositionMode(true);
+    console.log('[TestnetEngine] Position mode set to dual (hedge mode)');
+  } catch (error) {
+    // Ignore if already set
+    if (error.message.includes('No need to change position side')) {
+      console.log('[TestnetEngine] Position mode already set to dual');
+    } else {
+      console.error('[TestnetEngine] Failed to set position mode:', error.message);
+      // Continue anyway - might already be set
     }
   }
 
@@ -154,15 +169,18 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
     const binanceSide = side === 'long' ? 'BUY' : 'SELL';
     
+    // Convert internal side to positionSide for hedge mode (LONG/SHORT)
+    const positionSide = side === 'long' ? 'LONG' : 'SHORT';
+    
     // Place market order
-    const order = await placeMarketOrder(testnetClient, symbol, binanceSide, finalQty);
+    const order = await placeMarketOrder(testnetClient, symbol, binanceSide, finalQty, positionSide);
     
     // Place SL order (opposite side)
     const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-    const slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, stop_loss);
+    const slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, stop_loss, positionSide);
     
     // Place TP order (opposite side)
-    const tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, take_profit);
+    const tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, take_profit, positionSide);
     
     // Save position to database
     const newPosition = await createTestnetPosition(db, {
