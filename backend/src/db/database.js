@@ -241,9 +241,47 @@ export async function saveAnalysis(db, coin, priceData, analysis, methodId = 'ic
         // Collect prediction IDs for linking with positions
         const predictionIds = {};
         const savePredictions = async () => {
-          // Skip prediction saving for Kim Nghia method (it uses price_prediction instead of timeframe predictions)
+          // For Kim Nghia method, create a single prediction with '15m' timeframe
           if (methodId === 'kim_nghia') {
-            console.log(`[Database] Skipping prediction saving for Kim Nghia method`);
+            const coinData = analysis[coin.toLowerCase()];
+            if (coinData && coinData.bias) {
+              const direction = coinData.bias === 'bullish' ? 'up' : coinData.bias === 'bearish' ? 'down' : 'neutral';
+              const predictionId = await new Promise((res, rej) => {
+                const expiresAt = new Date();
+                expiresAt.setHours(expiresAt.getHours() + 4); // 4 hour expiration for Kim Nghia
+                
+                db.run(
+                  `INSERT INTO predictions
+                   (analysis_id, coin, timeframe, direction, target_price, confidence, predicted_at, expires_at,
+                    suggested_entry, suggested_stop_loss, suggested_take_profit, expected_rr,
+                    invalidation_level, reason_summary, model_version, method_id)
+                   VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    analysisId,
+                    coin,
+                    '15m', // Kim Nghia uses 15m timeframe
+                    direction,
+                    coinData.suggested_take_profit || null,
+                    coinData.confidence || 0.75,
+                    expiresAt.toISOString(),
+                    coinData.suggested_entry || null,
+                    coinData.suggested_stop_loss || null,
+                    coinData.suggested_take_profit || null,
+                    coinData.expected_rr || null,
+                    coinData.invalidation_level || null,
+                    coinData.reason_summary || coinData.narrative || null,
+                    'kim_nghia_v1',
+                    methodId
+                  ],
+                  function(err) {
+                    if (err) rej(err);
+                    else res(this.lastID);
+                  }
+                );
+              });
+              predictionIds['15m'] = predictionId;
+              console.log(`[Database] Saved Kim Nghia prediction #${predictionId} for ${coin}`);
+            }
             return;
           }
 
