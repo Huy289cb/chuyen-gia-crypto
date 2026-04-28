@@ -4,7 +4,7 @@ import { XCircle, Target, TrendingUp, TrendingDown } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { cn, formatPrice } from '@/lib/utils';
+import { cn, formatPrice, formatVietnamTime } from '@/lib/utils';
 import type { Position } from '../types';
 
 interface PositionsSectionProps {
@@ -79,12 +79,20 @@ function PositionCard({ position, onClose }: { position: Position; onClose: (id:
       </button>
 
       {/* Header */}
-      <div className="flex items-center gap-3 mb-3 pr-10">
-        <Badge variant={isLong ? 'success' : 'danger'}>
-          {isLong ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-          {position.side.toUpperCase()}
-        </Badge>
-        <span className="font-bold text-foreground text-lg">{position.symbol}</span>
+      <div className="flex items-center justify-between mb-3 pr-10">
+        <div className="flex items-center gap-3">
+          <Badge variant={isLong ? 'success' : 'danger'}>
+            {isLong ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {position.side.toUpperCase()}
+          </Badge>
+          <span className="font-bold text-foreground text-lg">{position.symbol}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-foreground-tertiary text-xs">Opened</span>
+          <Badge variant="neutral" className="text-xs">
+            {formatVietnamTime(position.opened_at)}
+          </Badge>
+        </div>
       </div>
 
       {/* PnL */}
