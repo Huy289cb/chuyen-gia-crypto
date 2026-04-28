@@ -112,8 +112,8 @@ export interface Position {
   realized_pnl: number | null;
   risk_percent: number;
   expected_rr: number;
-  opened_at: string;
-  closed_at: string | null;
+  entry_time: string;
+  close_time: string | null;
   close_reason: string | null;
   prediction_id: string | null;
 }

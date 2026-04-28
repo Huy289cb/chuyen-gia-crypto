@@ -90,7 +90,7 @@ function PositionCard({ position, onClose }: { position: Position; onClose: (id:
         <div className="flex items-center gap-2">
           <span className="text-foreground-tertiary text-xs">Opened</span>
           <Badge variant="neutral" className="text-xs">
-            {formatVietnamTime(position.opened_at)}
+            {formatVietnamTime(position.entry_time)}
           </Badge>
         </div>
       </div>
