@@ -14,7 +14,7 @@ Comprehensive migration plan to transition the entire backend system from Node.j
   - Prediction validation: `0 * * * *` (hourly)
   - Data retention: `0 3 * * *` (daily at 3 AM)
   - ICT method: Currently disabled (code preserved for future multi-method support)
-- **Price Update Scheduler** (`priceUpdateScheduler.js`): Runs every 1 minute
+- **Price Update Scheduler** (`priceUpdateScheduler.js`): Runs every 10 seconds
   - Updates position PnL with 1-minute candle data
   - Checks SL/TP using candle high/low for accurate detection
   - Executes pending orders when price hits entry level

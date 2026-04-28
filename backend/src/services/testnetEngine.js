@@ -305,7 +305,8 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
     // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
     const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
     const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-    const closeOrder = await placeMarketOrder(testnetClient, position.symbol, closeSide, position.size_qty);
+    const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
+    const closeOrder = await placeMarketOrder(testnetClient, position.symbol, closeSide, position.size_qty, positionSide);
     
     // Calculate realized PnL
     const priceDiff = closeSide === 'SELL' 
@@ -488,7 +489,8 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
     }
     
     // Place partial close market order
-    const closeOrder = await placeMarketOrder(testnetClient, symbol, closeSide, closeQty);
+    const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
+    const closeOrder = await placeMarketOrder(testnetClient, symbol, closeSide, closeQty, positionSide);
     
     // Calculate partial PnL
     const priceDiff = closeSide === 'SELL' 

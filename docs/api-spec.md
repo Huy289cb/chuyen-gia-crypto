@@ -262,7 +262,7 @@ Get prediction history for a coin with pagination and raw AI data.
 | choch | string | Change of Character levels (Vietnamese) |
 
 ## Rate Limits
-- Frontend auto-refresh: every 1 minute
+- Frontend auto-refresh: every 10 seconds
 - Cache TTL: 20 minutes
 - Cron schedule: 15 minutes
 
@@ -282,6 +282,6 @@ Get prediction history for a coin with pagination and raw AI data.
 3. **Database** (cached data, last resort)
 
 ### Update Frequencies
-- Paper Trading: 1 minute (Binance 1-minute candle API for accurate SL/TP detection)
+- Paper Trading: 10 seconds (Binance 1-minute candle API for accurate SL/TP detection)
 - Analysis: 15 minutes (Binance API)
 - Manual Operations: On-demand (Binance API)

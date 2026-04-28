@@ -140,7 +140,7 @@ When AI suggests entry price that is **already hit** by current market price:
 When AI suggests entry price that **has not been hit** yet:
 - **LONG**: Pending when `current_price > entry_price` (waiting for price to drop to entry)
 - **SHORT**: Pending when `current_price < entry_price` (waiting for price to rise to entry)
-- Order stored as **pending** and monitored every 1 minute using 1-minute candle data
+- Order stored as **pending** and monitored every 10 seconds using 1-minute candle data
 - Entry price validated to be within 10% of current price (realistic range)
 - **AI Analysis**: AI evaluates pending orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Manual Cancellation**: Users can cancel pending orders via UI
@@ -191,9 +191,9 @@ Position Size = (Account Balance × Risk%) / |Entry Price - Stop Loss|
 
 This prevents overtrading during drawdown periods.
 
-## Price Updates (Updated 20/04/2026)
+## Price Updates (Updated 28/04/2026)
 
-- **Frequency**: Every 1 minute (changed from 30 seconds)
+- **Frequency**: Every 10 seconds (changed from 1 minute)
 - **Data Source**: 1-minute candle OHLC data from Binance (open, high, low, close, volume)
 - **Actions**:
   - **Check pending orders**: Execute limit orders when candle high/low crosses entry level
@@ -327,7 +327,7 @@ When total volume reaches 2k limit (or 90% of limit):
 2. **Order Classification** (Direction-Based):
    - **LONG**: Market order when `current_price <= entry_price`, Limit order when `current_price > entry_price`
    - **SHORT**: Market order when `current_price >= entry_price`, Limit order when `current_price < entry_price`
-3. **Monitoring**: Every 1 minute using 1-minute candle data, system checks all pending orders
+3. **Monitoring**: Every 10 seconds using 1-minute candle data, system checks all pending orders
 4. **Execution**: When candle high/low crosses entry level, position opened automatically
 
 ### Pending Order Lifecycle
@@ -484,7 +484,7 @@ Positions can have the following statuses:
 - **Educational Purpose**: Designed for learning and evaluating AI performance.
 - **No Financial Advice**: All suggestions are for educational purposes only.
 - **API Limitations**: Analysis runs every 15 minutes due to free Groq API limits.
-- **Data Freshness**: Price updates every 1 minute using 1-minute candle data for accurate SL/TP detection.
+- **Data Freshness**: Price updates every 10 seconds using 1-minute candle data for accurate SL/TP detection.
 
 ## Order Logic Validation (Updated 23/04/2026)
 
@@ -532,7 +532,7 @@ All orders (market and pending) must have logically correct SL/TP placement:
    - Best for when setup is already active
 
 3. **Limit Order (Pending) Execution**
-   - Order stored as **pending** and monitored every 1 minute using 1-minute candle data
+   - Order stored as **pending** and monitored every 10 seconds using 1-minute candle data
    - Automatic execution when candle high/low crosses entry level
    - Full SL/TP management once position is opened
 

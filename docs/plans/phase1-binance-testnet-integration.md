@@ -285,7 +285,7 @@ File: `backend/src/services/testnetEngine.js`
 ## 2.3. SL/TP Monitoring
 
 ### 2.3.1 Real-time SL/TP Check
-- Check SL/TP trên mỗi price update (30s)
+- Check SL/TP trên mỗi price update (10s)
 - Auto-close position khi hit
 - Handle partial TP (nếu có)
 - Send notifications khi SL/TP hit
@@ -343,7 +343,7 @@ File: `frontend/app/components/crypto/ComparisonDashboard.tsx`
 ### 3.2.3 useTestnet Hook ✅ COMPLETED
 File: `frontend/app/hooks/useTestnet.ts`
 - Fetch account, positions, pending orders, performance, equity curve, trade history
-- Auto-refresh every 1 minute
+- Auto-refresh every 10 seconds
 - Functions: syncAccount, resetAccount, closePosition, cancelPendingOrder
 - Type definitions: TestnetAccount, TestnetPosition, TestnetPendingOrder, TestnetPerformance, TestnetSnapshot
 

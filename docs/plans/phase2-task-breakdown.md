@@ -40,7 +40,7 @@
 - [ ] Document database schema with all 16 tables
 - [ ] Document foreign key relationships
 - [ ] Document indexes and constraints
-- [ ] Document scheduler intervals (Kim Nghia: 15m, Price Update: 1m, etc.)
+- [ ] Document scheduler intervals (Kim Nghia: 15m, Price Update: 10s, etc.)
 - [ ] Document scheduler job logic and dependencies
 - [ ] Document error handling patterns
 - [ ] Document timezone handling (UTC storage, Vietnam time display)
@@ -185,7 +185,7 @@
 - [ ] Create analysis scheduler
 - [ ] Implement Kim Nghia analysis (0,15,30,45 * * * *)
 - [ ] Implement ICT analysis (disabled but preserved)
-- [ ] Create price update scheduler (* * * * *)
+- [ ] Create price update scheduler (every 10 seconds using setInterval)
 - [ ] Implement position PnL updates
 - [ ] Implement SL/TP checking with candle data
 - [ ] Implement pending order execution
