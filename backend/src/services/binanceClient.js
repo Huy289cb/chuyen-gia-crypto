@@ -10,7 +10,7 @@ import { getServerTime } from './binance/market.js';
 import { getBalance } from './binance/account.js';
 import { getCurrentPosition as getCurrentPositionAPI, getPositionRisk as getPositionRiskAPI } from './binance/account.js';
 import { placeOrder as placeOrderAPI, testOrder, cancelOrder as cancelOrderAPI, cancelAllOrders as cancelAllOrdersAPI, getOpenOrders as getOpenOrdersAPI } from './binance/trading.js';
-import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeAlgoOrder as placeAlgoOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI } from './binance/trading.js';
+import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeStopMarketOrder as placeStopMarketOrderAPI, placeTakeProfitMarketOrder as placeTakeProfitMarketOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI } from './binance/trading.js';
 
 /**
  * Initialize Binance Client
@@ -124,28 +124,28 @@ export async function placeLimitOrder(client, symbol, side, quantity, price, pos
 
 /**
  * Place stop loss order (STOP_MARKET)
- * Uses Algo Order API when positionSide is set (hedge mode)
+ * Uses specific Algo Order API endpoints when positionSide is set (hedge mode)
  */
 export async function placeStopLossOrder(client, symbol, side, quantity, stopPrice, positionSide = null) {
   try {
     const params = {
       symbol,
       side,
-      type: 'STOP_MARKET',
       quantity: quantity.toString(),
       stopPrice: stopPrice.toString(),
     };
-    
+
     // Add positionSide for hedge mode (dual position side)
     if (positionSide) {
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
-      // Use Algo Order API for hedge mode
-      const response = await placeAlgoOrderAPI(params);
+      // Use specific stop-market order API for hedge mode
+      const response = await placeStopMarketOrderAPI(params);
       console.log(`[BinanceClient] Stop loss algo order placed: ${side} ${quantity} ${symbol} @ ${stopPrice} (positionSide: ${positionSide})`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
+      params.type = 'STOP_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
       console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}`);
@@ -159,28 +159,28 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
 
 /**
  * Place take profit order (TAKE_PROFIT_MARKET)
- * Uses Algo Order API when positionSide is set (hedge mode)
+ * Uses specific Algo Order API endpoints when positionSide is set (hedge mode)
  */
 export async function placeTakeProfitOrder(client, symbol, side, quantity, price, positionSide = null) {
   try {
     const params = {
       symbol,
       side,
-      type: 'TAKE_PROFIT_MARKET',
       quantity: quantity.toString(),
       stopPrice: price.toString(),
     };
-    
+
     // Add positionSide for hedge mode (dual position side)
     if (positionSide) {
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
-      // Use Algo Order API for hedge mode
-      const response = await placeAlgoOrderAPI(params);
+      // Use specific take-profit-market order API for hedge mode
+      const response = await placeTakeProfitMarketOrderAPI(params);
       console.log(`[BinanceClient] Take profit algo order placed: ${side} ${quantity} ${symbol} @ ${price} (positionSide: ${positionSide})`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
+      params.type = 'TAKE_PROFIT_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
       console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}`);

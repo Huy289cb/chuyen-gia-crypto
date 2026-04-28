@@ -83,32 +83,30 @@ export async function setPositionMode(dual) {
 }
 
 /**
- * Place a new algo order (STOP_MARKET, TAKE_PROFIT_MARKET for hedge mode)
+ * Place a new stop-market order (for hedge mode SL/TP)
  * @param {object} params - Order parameters
  * @param {string} params.symbol - Trading symbol
  * @param {string} params.side - BUY or SELL
- * @param {string} params.type - Order type (STOP_MARKET, TAKE_PROFIT_MARKET, etc.)
  * @param {string} params.quantity - Order quantity
  * @param {string} params.stopPrice - Stop/trigger price
- * @param {string} [params.price] - Order price (for LIMIT orders)
- * @param {string} [params.timeInForce] - Time in force (GTC, IOC, FOK, GTX)
  * @param {string} [params.positionSide] - Position side (LONG, SHORT) - required for hedge mode
  * @param {boolean} [params.closePosition] - Close position flag (true to close position)
  * @param {boolean} [params.reduceOnly] - Reduce only flag
+ * @param {string} [params.timeInForce] - Time in force (GTC, IOC, FOK, GTX)
  * @returns {Promise<object>} Order response
  */
-export async function placeAlgoOrder(params) {
+export async function placeStopMarketOrder(params) {
   try {
-    const response = await post(endpoints.ALGO_ORDER, params, true);
-    
-    console.log(`[BinanceTrading] Algo order placed: ${params.side} ${params.quantity} ${params.symbol} (${params.type})${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
-    
+    const response = await post(endpoints.STOP_MARKET_ORDER, params, true);
+
+    console.log(`[BinanceTrading] Stop-market order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
+
     return {
       orderId: response.orderId,
       clientOrderId: response.clientOrderId,
       symbol: response.symbol,
       side: response.side,
-      type: response.type,
+      type: 'STOP_MARKET',
       price: response.price ? parseFloat(response.price) : null,
       stopPrice: response.stopPrice ? parseFloat(response.stopPrice) : null,
       origQty: parseFloat(response.origQty),
@@ -120,8 +118,65 @@ export async function placeAlgoOrder(params) {
       updateTime: response.updateTime,
     };
   } catch (error) {
-    console.error('[BinanceTrading] Failed to place algo order:', error.message);
+    console.error('[BinanceTrading] Failed to place stop-market order:', error.message);
     throw error;
+  }
+}
+
+/**
+ * Place a new take-profit-market order (for hedge mode SL/TP)
+ * @param {object} params - Order parameters
+ * @param {string} params.symbol - Trading symbol
+ * @param {string} params.side - BUY or SELL
+ * @param {string} params.quantity - Order quantity
+ * @param {string} params.stopPrice - Take profit/trigger price
+ * @param {string} [params.positionSide] - Position side (LONG, SHORT) - required for hedge mode
+ * @param {boolean} [params.closePosition] - Close position flag (true to close position)
+ * @param {boolean} [params.reduceOnly] - Reduce only flag
+ * @param {string} [params.timeInForce] - Time in force (GTC, IOC, FOK, GTX)
+ * @returns {Promise<object>} Order response
+ */
+export async function placeTakeProfitMarketOrder(params) {
+  try {
+    const response = await post(endpoints.TAKE_PROFIT_MARKET_ORDER, params, true);
+
+    console.log(`[BinanceTrading] Take-profit-market order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
+
+    return {
+      orderId: response.orderId,
+      clientOrderId: response.clientOrderId,
+      symbol: response.symbol,
+      side: response.side,
+      type: 'TAKE_PROFIT_MARKET',
+      price: response.price ? parseFloat(response.price) : null,
+      stopPrice: response.stopPrice ? parseFloat(response.stopPrice) : null,
+      origQty: parseFloat(response.origQty),
+      executedQty: parseFloat(response.executedQty),
+      cummulativeQuoteQty: parseFloat(response.cummulativeQuoteQty),
+      status: response.status,
+      timeInForce: response.timeInForce,
+      transactTime: response.transactTime,
+      updateTime: response.updateTime,
+    };
+  } catch (error) {
+    console.error('[BinanceTrading] Failed to place take-profit-market order:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Place a new algo order (STOP_MARKET, TAKE_PROFIT_MARKET for hedge mode) - DEPRECATED
+ * Use placeStopMarketOrder or placeTakeProfitMarket instead
+ * @deprecated
+ */
+export async function placeAlgoOrder(params) {
+  // For backward compatibility, route to the correct function based on type
+  if (params.type === 'STOP_MARKET') {
+    return placeStopMarketOrder(params);
+  } else if (params.type === 'TAKE_PROFIT_MARKET') {
+    return placeTakeProfitMarketOrder(params);
+  } else {
+    throw new Error(`Unsupported algo order type: ${params.type}`);
   }
 }
 
