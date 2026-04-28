@@ -31,6 +31,11 @@ export const endpoints = {
   POSITION_MODE: '/fapi/v1/positionSide/dual',
   POSITION_MARGIN: '/fapi/v1/positionMargin',
   
+  // Algo Order API (SIGNED) - for SL/TP in hedge mode
+  ALGO_ORDER: '/fapi/v1/order',
+  CANCEL_ALGO_ORDER: '/fapi/v1/order',
+  CANCEL_ALL_ALGO_ORDERS: '/fapi/v1/allOpenOrders',
+  
   // User Data Stream (SIGNED)
   LISTEN_KEY: '/fapi/v1/listenKey',
 };

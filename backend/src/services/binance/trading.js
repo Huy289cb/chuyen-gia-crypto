@@ -78,6 +78,99 @@ export async function setPositionMode(dual) {
 }
 
 /**
+ * Place a new algo order (STOP_MARKET, TAKE_PROFIT_MARKET for hedge mode)
+ * @param {object} params - Order parameters
+ * @param {string} params.symbol - Trading symbol
+ * @param {string} params.side - BUY or SELL
+ * @param {string} params.type - Order type (STOP_MARKET, TAKE_PROFIT_MARKET, etc.)
+ * @param {string} params.quantity - Order quantity
+ * @param {string} params.stopPrice - Stop/trigger price
+ * @param {string} [params.price] - Order price (for LIMIT orders)
+ * @param {string} [params.timeInForce] - Time in force (GTC, IOC, FOK, GTX)
+ * @param {string} [params.positionSide] - Position side (LONG, SHORT) - required for hedge mode
+ * @param {boolean} [params.closePosition] - Close position flag (true to close position)
+ * @param {boolean} [params.reduceOnly] - Reduce only flag
+ * @returns {Promise<object>} Order response
+ */
+export async function placeAlgoOrder(params) {
+  try {
+    const response = await post(endpoints.ALGO_ORDER, params, true);
+    
+    console.log(`[BinanceTrading] Algo order placed: ${params.side} ${params.quantity} ${params.symbol} (${params.type})${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
+    
+    return {
+      orderId: response.orderId,
+      clientOrderId: response.clientOrderId,
+      symbol: response.symbol,
+      side: response.side,
+      type: response.type,
+      price: response.price ? parseFloat(response.price) : null,
+      stopPrice: response.stopPrice ? parseFloat(response.stopPrice) : null,
+      origQty: parseFloat(response.origQty),
+      executedQty: parseFloat(response.executedQty),
+      cummulativeQuoteQty: parseFloat(response.cummulativeQuoteQty),
+      status: response.status,
+      timeInForce: response.timeInForce,
+      transactTime: response.transactTime,
+      updateTime: response.updateTime,
+    };
+  } catch (error) {
+    console.error('[BinanceTrading] Failed to place algo order:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Cancel an algo order
+ * @param {string} symbol - Trading symbol
+ * @param {number} orderId - Order ID
+ * @param {string} [origClientOrderId] - Original client order ID
+ * @returns {Promise<object>} Cancel response
+ */
+export async function cancelAlgoOrder(symbol, orderId, origClientOrderId = null) {
+  try {
+    const params = {
+      symbol,
+      orderId: orderId.toString(),
+    };
+    
+    if (origClientOrderId) {
+      params.origClientOrderId = origClientOrderId;
+    }
+    
+    const response = await del(endpoints.CANCEL_ALGO_ORDER, params, true);
+    
+    console.log(`[BinanceTrading] Algo order cancelled: ${orderId} for ${symbol}`);
+    
+    return {
+      orderId: response.orderId,
+      clientOrderId: response.clientOrderId,
+      symbol: response.symbol,
+      status: response.status,
+    };
+  } catch (error) {
+    console.error('[BinanceTrading] Failed to cancel algo order:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Cancel all algo orders for a symbol
+ * @param {string} symbol - Trading symbol
+ * @returns {Promise<object>} Cancel response
+ */
+export async function cancelAllAlgoOrders(symbol) {
+  try {
+    const response = await del(endpoints.CANCEL_ALL_ALGO_ORDERS, { symbol }, true);
+    console.log(`[BinanceTrading] All algo orders cancelled for ${symbol}`);
+    return response;
+  } catch (error) {
+    console.error('[BinanceTrading] Failed to cancel all algo orders:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Place a new order
  * @param {object} params - Order parameters
  * @param {string} params.symbol - Trading symbol

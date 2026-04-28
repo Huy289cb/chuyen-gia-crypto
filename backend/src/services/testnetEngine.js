@@ -173,10 +173,17 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     // Convert internal side to positionSide for hedge mode (LONG/SHORT)
     const positionSide = side === 'long' ? 'LONG' : 'SHORT';
     
-    // Place market order only (SL/TP managed via internal monitoring)
+    // Place market order
     const order = await placeMarketOrder(testnetClient, symbol, binanceSide, finalQty, positionSide);
     
-    // Save position to database (SL/TP managed internally, not via Binance orders)
+    // Place SL order (opposite side) using Algo Order API for hedge mode
+    const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
+    const slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, stop_loss, positionSide);
+    
+    // Place TP order (opposite side) using Algo Order API for hedge mode
+    const tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, take_profit, positionSide);
+    
+    // Save position to database (SL/TP now managed via Binance Algo Orders)
     const newPosition = await createTestnetPosition(db, {
       position_id: positionId,
       account_id: account.id,
@@ -192,13 +199,15 @@ export async function openTestnetPosition(db, account, positionData, predictionI
       expected_rr: expected_rr,
       linked_prediction_id: predictionId,
       binance_order_id: order.orderId.toString(),
-      binance_sl_order_id: null, // SL managed internally
-      binance_tp_order_id: null, // TP managed internally
+      binance_sl_order_id: slOrder.orderId.toString(),
+      binance_tp_order_id: tpOrder.orderId.toString(),
     });
     
     // Record trade event
     await recordTestnetTradeEvent(db, positionId, 'position_opened', {
       order_id: order.orderId,
+      sl_order_id: slOrder.orderId,
+      tp_order_id: tpOrder.orderId,
       entry_price: entry_price,
       size_qty: finalQty,
     });
@@ -499,10 +508,16 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
     // Update account balance with partial PnL
     await updateTestnetAccountBalance(db, position.account_id, null, partialPnl);
     
-    // SL/TP managed via internal monitoring, not Binance orders (hedge mode limitation)
-    // If there's remaining position, continue monitoring for SL/TP hits
+    // If there's remaining position, place new TP order using Algo Order API
     if (remainingQty > 0.001) {
-      console.log(`[TestnetEngine] Remaining ${remainingQty} qty - SL/TP will be monitored internally`);
+      const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
+      const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, closeSide, remainingQty, position.take_profit, positionSide);
+      
+      await updateTestnetPosition(db, position.position_id, {
+        binance_tp_order_id: newTPOrder.orderId.toString(),
+      });
+      
+      console.log(`[TestnetEngine] Placed new TP order for remaining ${remainingQty} qty`);
     }
     
     // Record trade event
@@ -619,14 +634,36 @@ async function syncTestnetPositions(db, account) {
         const slOrder = binanceOrders.find(o => o.orderId.toString() === position.binance_sl_order_id);
         
         if (!slOrder) {
-          // SL order not found on Binance - managed internally in hedge mode
-          console.log(`[TestnetEngine] SL managed internally for position ${position.position_id} (hedge mode)`);
+          // SL order not found on Binance - might have been filled or cancelled
+          console.warn(`[TestnetEngine] SL order ${position.binance_sl_order_id} not found on Binance for position ${position.position_id}`);
           
           // Record order status event
           await recordTestnetTradeEvent(db, position.position_id, 'sl_order_missing', {
             order_id: position.binance_sl_order_id,
-            reason: 'managed_internally_hedge_mode',
+            reason: 'order_not_found_on_binance',
           });
+          
+          // Re-place SL order if position is still open using Algo Order API
+          try {
+            // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+            const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+            const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
+            const newSLOrder = await placeStopLossOrder(testnetClient, symbol, slSide, position.size_qty, position.stop_loss, position.side === 'long' ? 'LONG' : 'SHORT');
+            
+            await updateTestnetPosition(db, position.position_id, {
+              binance_sl_order_id: newSLOrder.orderId.toString(),
+            });
+            
+            await recordTestnetTradeEvent(db, position.position_id, 'sl_order_replaced', {
+              old_order_id: position.binance_sl_order_id,
+              new_order_id: newSLOrder.orderId,
+              reason: 'order_missing',
+            });
+            
+            console.log(`[TestnetEngine] Replaced SL order for position ${position.position_id}`);
+          } catch (replaceError) {
+            console.error(`[TestnetEngine] Failed to replace SL order:`, replaceError.message);
+          }
         } else if (slOrder.status === 'FILLED') {
           // SL order was filled - position should be closed
           console.log(`[TestnetEngine] SL order ${position.binance_sl_order_id} was filled for position ${position.position_id}`);
@@ -643,13 +680,35 @@ async function syncTestnetPositions(db, account) {
         const tpOrder = binanceOrders.find(o => o.orderId.toString() === position.binance_tp_order_id);
         
         if (!tpOrder) {
-          // TP order not found on Binance - managed internally in hedge mode
-          console.log(`[TestnetEngine] TP managed internally for position ${position.position_id} (hedge mode)`);
+          // TP order not found on Binance
+          console.warn(`[TestnetEngine] TP order ${position.binance_tp_order_id} not found on Binance for position ${position.position_id}`);
           
           await recordTestnetTradeEvent(db, position.position_id, 'tp_order_missing', {
             order_id: position.binance_tp_order_id,
-            reason: 'managed_internally_hedge_mode',
+            reason: 'order_not_found_on_binance',
           });
+          
+          // Re-place TP order if position is still open using Algo Order API
+          try {
+            // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+            const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+            const tpSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
+            const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, tpSide, position.size_qty, position.take_profit, position.side === 'long' ? 'LONG' : 'SHORT');
+            
+            await updateTestnetPosition(db, position.position_id, {
+              binance_tp_order_id: newTPOrder.orderId.toString(),
+            });
+            
+            await recordTestnetTradeEvent(db, position.position_id, 'tp_order_replaced', {
+              old_order_id: position.binance_tp_order_id,
+              new_order_id: newTPOrder.orderId,
+              reason: 'order_missing',
+            });
+            
+            console.log(`[TestnetEngine] Replaced TP order for position ${position.position_id}`);
+          } catch (replaceError) {
+            console.error(`[TestnetEngine] Failed to replace TP order:`, replaceError.message);
+          }
         } else if (tpOrder.status === 'FILLED') {
           // TP order was filled - position should be closed
           console.log(`[TestnetEngine] TP order ${position.binance_tp_order_id} was filled for position ${position.position_id}`);

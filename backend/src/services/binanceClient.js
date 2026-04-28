@@ -10,7 +10,7 @@ import { getServerTime } from './binance/market.js';
 import { getBalance } from './binance/account.js';
 import { getCurrentPosition as getCurrentPositionAPI, getPositionRisk as getPositionRiskAPI } from './binance/account.js';
 import { placeOrder as placeOrderAPI, testOrder, cancelOrder as cancelOrderAPI, cancelAllOrders as cancelAllOrdersAPI, getOpenOrders as getOpenOrdersAPI } from './binance/trading.js';
-import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI } from './binance/trading.js';
+import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeAlgoOrder as placeAlgoOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI } from './binance/trading.js';
 
 /**
  * Initialize Binance Client
@@ -117,6 +117,7 @@ export async function placeLimitOrder(client, symbol, side, quantity, price) {
 
 /**
  * Place stop loss order (STOP_MARKET)
+ * Uses Algo Order API when positionSide is set (hedge mode)
  */
 export async function placeStopLossOrder(client, symbol, side, quantity, stopPrice, positionSide = null) {
   try {
@@ -131,16 +132,18 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
     // Add positionSide for hedge mode (dual position side)
     if (positionSide) {
       params.positionSide = positionSide;
-      // In hedge mode, reduceOnly is not required when positionSide is specified
+      params.closePosition = true; // Close position when triggered
+      // Use Algo Order API for hedge mode
+      const response = await placeAlgoOrderAPI(params);
+      console.log(`[BinanceClient] Stop loss algo order placed: ${side} ${quantity} ${symbol} @ ${stopPrice} (positionSide: ${positionSide})`);
+      return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.reduceOnly = true;
+      const response = await placeOrderAPI(params);
+      console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}`);
+      return response;
     }
-    
-    const response = await placeOrderAPI(params);
-    
-    console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
-    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place stop loss order:', error.message);
     throw error;
@@ -149,6 +152,7 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
 
 /**
  * Place take profit order (TAKE_PROFIT_MARKET)
+ * Uses Algo Order API when positionSide is set (hedge mode)
  */
 export async function placeTakeProfitOrder(client, symbol, side, quantity, price, positionSide = null) {
   try {
@@ -163,16 +167,18 @@ export async function placeTakeProfitOrder(client, symbol, side, quantity, price
     // Add positionSide for hedge mode (dual position side)
     if (positionSide) {
       params.positionSide = positionSide;
-      // In hedge mode, reduceOnly is not required when positionSide is specified
+      params.closePosition = true; // Close position when triggered
+      // Use Algo Order API for hedge mode
+      const response = await placeAlgoOrderAPI(params);
+      console.log(`[BinanceClient] Take profit algo order placed: ${side} ${quantity} ${symbol} @ ${price} (positionSide: ${positionSide})`);
+      return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.reduceOnly = true;
+      const response = await placeOrderAPI(params);
+      console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
+      return response;
     }
-    
-    const response = await placeOrderAPI(params);
-    
-    console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
-    return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place take profit order:', error.message);
     throw error;
