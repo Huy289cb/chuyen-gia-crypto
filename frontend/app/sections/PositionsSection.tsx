@@ -1,6 +1,7 @@
 'use client';
 
-import { XCircle, Target, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState } from 'react';
+import { XCircle, Target, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Brain } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -12,9 +13,59 @@ interface PositionsSectionProps {
   onClosePosition: (positionId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
 }
 
+interface Prediction {
+  id: number;
+  timeframe: string;
+  direction: string;
+  target_price: number;
+  confidence: number;
+  predicted_at: string;
+  reason_summary: string;
+  suggested_entry: number;
+  suggested_stop_loss: number;
+  suggested_take_profit: number;
+  expected_rr: number;
+}
+
 export function PositionsSection({ positions, onClosePosition }: PositionsSectionProps) {
   // Filter out ETH positions - only show BTC positions
   const btcPositions = positions.filter(position => position.symbol === 'BTC');
+  
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [predictionPage, setPredictionPage] = useState(1);
+  const [totalPredictions, setTotalPredictions] = useState(0);
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
+  
+  const fetchPredictions = async (positionId: string, page: number = 1) => {
+    setLoadingPredictions(true);
+    try {
+      const response = await fetch(`/api/positions/${positionId}/predictions?limit=5&page=${page}`);
+      const data = await response.json();
+      if (data.success) {
+        setPredictions(data.data);
+        setTotalPredictions(data.meta.total);
+        setPredictionPage(page);
+      }
+    } catch (error) {
+      console.error('Failed to fetch predictions:', error);
+    } finally {
+      setLoadingPredictions(false);
+    }
+  };
+  
+  const handlePositionClick = (position: Position) => {
+    setSelectedPosition(position);
+    setPredictionPage(1);
+    fetchPredictions(position.id, 1);
+  };
+  
+  const closePredictionsModal = () => {
+    setSelectedPosition(null);
+    setPredictions([]);
+    setPredictionPage(1);
+    setTotalPredictions(0);
+  };
   
   if (btcPositions.length === 0) {
     return (
@@ -46,14 +97,123 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
             key={position.id} 
             position={position} 
             onClose={onClosePosition}
+            onClick={() => handlePositionClick(position)}
           />
         ))}
       </div>
+      
+      {/* Predictions Modal */}
+      {selectedPosition && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold">AI Predictions</h3>
+                <p className="text-sm text-foreground-tertiary">
+                  {selectedPosition.symbol} - {selectedPosition.side.toUpperCase()} @ ${formatPrice(selectedPosition.entry_price)}
+                </p>
+              </div>
+              <button
+                onClick={closePredictionsModal}
+                className="p-2 rounded-lg hover:bg-surface-2 transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {loadingPredictions ? (
+              <div className="text-center py-8 text-foreground-tertiary">
+                Loading predictions...
+              </div>
+            ) : predictions.length === 0 ? (
+              <div className="text-center py-8 text-foreground-tertiary">
+                No predictions found for this position
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 mb-4">
+                  {predictions.map((prediction, index) => (
+                    <div key={prediction.id} className="bg-surface-1 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="neutral" className="text-xs">
+                            {prediction.timeframe}
+                          </Badge>
+                          <Badge 
+                            variant={prediction.direction === 'up' ? 'success' : 'danger'} 
+                            className="text-xs"
+                          >
+                            {prediction.direction.toUpperCase()}
+                          </Badge>
+                          <Badge variant="neutral" className="text-xs">
+                            {prediction.confidence.toFixed(0)}%
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-foreground-tertiary">
+                          {formatVietnamTime(prediction.predicted_at)}
+                        </span>
+                      </div>
+                      
+                      {prediction.reason_summary && (
+                        <p className="text-sm text-foreground-tertiary mb-2">
+                          {prediction.reason_summary}
+                        </p>
+                      )}
+                      
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <span className="text-foreground-tertiary block">Entry</span>
+                          <span className="font-mono">${formatPrice(prediction.suggested_entry)}</span>
+                        </div>
+                        <div>
+                          <span className="text-foreground-tertiary block">SL</span>
+                          <span className="font-mono text-danger">${formatPrice(prediction.suggested_stop_loss)}</span>
+                        </div>
+                        <div>
+                          <span className="text-foreground-tertiary block">TP</span>
+                          <span className="font-mono text-success">${formatPrice(prediction.suggested_take_profit)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Pagination */}
+                {totalPredictions > 5 && (
+                  <div className="flex items-center justify-between pt-4 border-t border-border-default">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => fetchPredictions(selectedPosition.id, predictionPage - 1)}
+                      disabled={predictionPage === 1}
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-foreground-tertiary">
+                      Page {predictionPage} of {Math.ceil(totalPredictions / 5)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => fetchPredictions(selectedPosition.id, predictionPage + 1)}
+                      disabled={predictionPage >= Math.ceil(totalPredictions / 5)}
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </Card>
+        </div>
+      )}
     </section>
   );
 }
 
-function PositionCard({ position, onClose }: { position: Position; onClose: (id: string) => Promise<{ success: boolean }> }) {
+function PositionCard({ position, onClose, onClick }: { position: Position; onClose: (id: string) => Promise<{ success: boolean }>; onClick: () => void }) {
   const isLong = position.side === 'long';
   const pnlPercent = position.size_usd > 0 ? ((position.unrealized_pnl || 0) / position.size_usd) * 100 : 0;
   const isProfitable = pnlPercent >= 0;
@@ -68,10 +228,13 @@ function PositionCard({ position, onClose }: { position: Position; onClose: (id:
   const progressPercent = totalDistance > 0 ? (currentDistance / totalDistance) * 100 : 0;
 
   return (
-    <Card className="relative">
+    <div className="relative cursor-pointer hover:border-foreground/30 transition-colors rounded-lg border border-border-default bg-surface-0 p-4" onClick={onClick}>
       {/* Close Button */}
       <button
-        onClick={() => onClose(position.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose(position.id);
+        }}
         className="absolute top-3 right-3 p-1.5 rounded-lg text-foreground-tertiary hover:text-danger hover:bg-danger-dim transition-colors"
         title="Close position"
       >
@@ -154,6 +317,6 @@ function PositionCard({ position, onClose }: { position: Position; onClose: (id:
         <span>Risk: {position.risk_percent}%</span>
         <span>R:R {position.expected_rr?.toFixed(1)}</span>
       </div>
-    </Card>
+    </div>
   );
 }
