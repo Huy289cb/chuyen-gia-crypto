@@ -1,11 +1,10 @@
-import dotenv from 'dotenv';
-import { initDatabase } from '../src/db/database.js';
-import { getTestnetAccount } from '../src/db/testnetDatabase.js';
-import { initTestnetEngine, cleanupTestnetAccountState } from '../src/services/testnetEngine.js';
-
-dotenv.config();
+import 'dotenv/config';
 
 async function main() {
+  const { initDatabase } = await import('../src/db/database.js');
+  const { getTestnetAccount } = await import('../src/db/testnetDatabase.js');
+  const { initTestnetEngine, cleanupTestnetAccountState } = await import('../src/services/testnetEngine.js');
+
   const db = await initDatabase();
   const account = await getTestnetAccount(db, 'BTC', 'kim_nghia');
 
