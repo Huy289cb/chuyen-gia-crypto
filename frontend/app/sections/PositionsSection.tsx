@@ -53,7 +53,7 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
       setLoadingPredictions(false);
     }
   };
-  
+
   const handlePositionClick = (position: Position) => {
     setSelectedPosition(position);
     setPredictionPage(1);
@@ -104,8 +104,8 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
       
       {/* Predictions Modal */}
       {selectedPosition && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto bg-bg-primary border border-border-default rounded-xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-bold">AI Predictions</h3>
@@ -206,7 +206,7 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
                 )}
               </>
             )}
-          </Card>
+          </div>
         </div>
       )}
     </section>
