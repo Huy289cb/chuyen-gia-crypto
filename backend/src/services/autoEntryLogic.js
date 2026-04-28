@@ -591,27 +591,31 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 9 PASSED: Confluence sufficient`);
 
-  // Check 10: Trading session filter (high liquidity only)
-  const now = new Date();
-  const utcHour = now.getUTCHours();
+  // Check 10: Trading session filter (high liquidity only) - if required by config
+  if (config.requireHighLiquiditySession) {
+    const now = new Date();
+    const utcHour = now.getUTCHours();
 
-  const highLiquiditySessions = [
-    { name: 'London Killzone', start: 7, end: 10 },
-    { name: 'NY Killzone', start: 12, end: 15 }
-  ];
+    const highLiquiditySessions = [
+      { name: 'London Killzone', start: 7, end: 10 },
+      { name: 'NY Killzone', start: 12, end: 15 }
+    ];
 
-  const inHighLiquiditySession = highLiquiditySessions.some(session => 
-    utcHour >= session.start && utcHour < session.end
-  );
+    const inHighLiquiditySession = highLiquiditySessions.some(session => 
+      utcHour >= session.start && utcHour < session.end
+    );
 
-  console.log(`[AutoEntry] Check 10: Current UTC hour ${utcHour}, in high liquidity session: ${inHighLiquiditySession}`);
+    console.log(`[AutoEntry] Check 10: Current UTC hour ${utcHour}, in high liquidity session: ${inHighLiquiditySession}`);
 
-  if (!inHighLiquiditySession) {
-    decision.reason = 'Outside high liquidity trading sessions (London/NY killzones)';
-    console.log(`[AutoEntry] Check 10 FAILED: ${decision.reason}`);
-    return decision;
+    if (!inHighLiquiditySession) {
+      decision.reason = 'Outside high liquidity trading sessions (London/NY killzones)';
+      console.log(`[AutoEntry] Check 10 FAILED: ${decision.reason}`);
+      return decision;
+    }
+    console.log(`[AutoEntry] Check 10 PASSED: In high liquidity session`);
+  } else {
+    console.log(`[AutoEntry] Check 10 SKIPPED: Session filter disabled for this method`);
   }
-  console.log(`[AutoEntry] Check 10 PASSED: In high liquidity session`);
 
   // Check 11: Market structure filter - Optional if fields missing
   const structure = {
