@@ -13,6 +13,28 @@ import { config } from './config.js';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
+const NON_RETRIABLE_ERROR_CODES = new Set([
+  -5000, // Invalid request path/contract
+  -2015, // Invalid API key or permissions
+  -2022, // ReduceOnly order rejected
+  -4046, // Margin type already set
+  -4059, // Position mode already set
+]);
+
+const RETRIABLE_ERROR_CODES = new Set([
+  -1008, // Too many requests
+  -1021, // Timestamp outside recvWindow
+]);
+
+function createBinanceApiError(code, msg) {
+  const error = new Error(`Binance API Error ${code}: ${msg}`);
+  error.code = code;
+  error.binanceCode = code;
+  error.retriable = RETRIABLE_ERROR_CODES.has(code);
+  error.nonRetriable = NON_RETRIABLE_ERROR_CODES.has(code);
+  return error;
+}
+
 /**
  * Make a request to Binance Futures API
  * @param {string} method - HTTP method (GET, POST, DELETE)
@@ -52,6 +74,7 @@ export async function request(method, path, params = {}, signed = false) {
     if (error.response) {
       // Binance API error
       const { code, msg } = error.response.data;
+      const apiError = createBinanceApiError(code, msg);
       
       // Handle specific error codes that are expected/normal
       if (code === -1021) {
@@ -66,28 +89,31 @@ export async function request(method, path, params = {}, signed = false) {
       } else if (code === -4046) {
         // No need to change margin type (already set) - expected
         console.log('[BinanceClient] Margin type already set');
-        throw new Error(`Margin type already set: ${msg}`);
+        throw apiError;
       } else if (code === -4059) {
         // No need to change position side (already set) - expected
         console.log('[BinanceClient] Position mode already set');
-        throw new Error(`Position mode already set: ${msg}`);
+        throw apiError;
       } else if (code === -2022) {
         // ReduceOnly order rejected (no position to reduce) - expected
         console.log('[BinanceClient] ReduceOnly order rejected (no position to reduce)');
-        throw new Error(`ReduceOnly order rejected: ${msg}`);
+        throw apiError;
       } else {
         // Other errors
         console.error(`[BinanceClient] API Error ${code}: ${msg}`);
       }
       
-      throw new Error(`Binance API Error ${code}: ${msg}`);
+      throw apiError;
     } else if (error.request) {
       // Request made but no response
       console.error('[BinanceClient] No response from server');
-      throw new Error('No response from Binance server');
+      const requestError = new Error('No response from Binance server');
+      requestError.retriable = true;
+      throw requestError;
     } else {
       // Request setup error
       console.error('[BinanceClient] Request setup error:', error.message);
+      error.retriable = false;
       throw error;
     }
   }
@@ -110,16 +136,13 @@ export async function requestWithRetry(method, path, params = {}, signed = false
     } catch (error) {
       lastError = error;
 
-      // Don't retry certain error codes (expected/normal errors)
-      if (error.message.includes('-4046') || 
-          error.message.includes('-4059') || 
-          error.message.includes('-2022')) {
-        // Margin type already set, position mode already set, or ReduceOnly rejected
+      if (error.nonRetriable || error.retriable === false) {
         throw error;
       }
       
       if (attempt < MAX_RETRIES) {
-        console.warn(`[BinanceClient] Request failed (attempt ${attempt}/${MAX_RETRIES}), retrying in ${RETRY_DELAY_MS}ms...`);
+        const errorType = error.retriable ? 'transient' : 'unknown';
+        console.warn(`[BinanceClient] Request failed (${errorType}, attempt ${attempt}/${MAX_RETRIES}), retrying in ${RETRY_DELAY_MS}ms...`);
         await delay(RETRY_DELAY_MS);
       }
     }

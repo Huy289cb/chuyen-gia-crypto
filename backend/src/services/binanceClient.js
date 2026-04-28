@@ -139,16 +139,15 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
     if (positionSide) {
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
-      // Use specific stop-market order API for hedge mode
       const response = await placeStopMarketOrderAPI(params);
-      console.log(`[BinanceClient] Stop loss algo order placed: ${side} ${quantity} ${symbol} @ ${stopPrice} (positionSide: ${positionSide})`);
+      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=STOP_MARKET stopPrice=${stopPrice}`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.type = 'STOP_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] Stop loss order placed: ${side} ${quantity} ${symbol} @ ${stopPrice}`);
+      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} type=STOP_MARKET stopPrice=${stopPrice}`);
       return response;
     }
   } catch (error) {
@@ -174,16 +173,15 @@ export async function placeTakeProfitOrder(client, symbol, side, quantity, price
     if (positionSide) {
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
-      // Use specific take-profit-market order API for hedge mode
       const response = await placeTakeProfitMarketOrderAPI(params);
-      console.log(`[BinanceClient] Take profit algo order placed: ${side} ${quantity} ${symbol} @ ${price} (positionSide: ${positionSide})`);
+      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=TAKE_PROFIT_MARKET stopPrice=${price}`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.type = 'TAKE_PROFIT_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] Take profit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
+      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} type=TAKE_PROFIT_MARKET stopPrice=${price}`);
       return response;
     }
   } catch (error) {
@@ -278,4 +276,3 @@ export async function setMarginType(client, symbol, marginType) {
     throw error;
   }
 }
-

@@ -95,6 +95,9 @@ async function runTestMigrations(db) {
             binance_order_id TEXT,
             binance_sl_order_id TEXT,
             binance_tp_order_id TEXT,
+            tp_levels TEXT,
+            tp_hit_count INTEGER DEFAULT 0,
+            partial_closed REAL DEFAULT 0,
             FOREIGN KEY (account_id) REFERENCES testnet_accounts(id)
           )
         `, (err) => {

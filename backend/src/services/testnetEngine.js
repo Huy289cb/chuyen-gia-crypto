@@ -40,6 +40,35 @@ import { getCurrentPosition as getBinancePosition } from './binance/account.js';
 // Global client instance
 let testnetClient = null;
 
+function normalizeTradeSide(side) {
+  if (side === 'long' || side === 'BUY') {
+    return 'long';
+  }
+
+  if (side === 'short' || side === 'SELL') {
+    return 'short';
+  }
+
+  throw new Error(`Unsupported trade side: ${side}`);
+}
+
+function toBinanceSide(side) {
+  return side === 'long' ? 'BUY' : 'SELL';
+}
+
+function toPositionSide(side) {
+  return side === 'long' ? 'LONG' : 'SHORT';
+}
+
+async function closeRecoveredEntry(testnetClientInstance, symbol, side, quantity, positionSide, reason) {
+  const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
+  const recoveryOrder = await placeMarketOrder(testnetClientInstance, symbol, closeSide, quantity, positionSide);
+
+  console.warn(`[TestnetEngine] Recovered unprotected entry for ${symbol}: closeSide=${closeSide} positionSide=${positionSide} reason=${reason}`);
+
+  return recoveryOrder;
+}
+
 /**
  * Initialize testnet client on startup
  */
@@ -119,7 +148,7 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   } = positionData;
 
   const symbol = getSymbol();
-  const leverage = getLeverage();
+  const normalizedSide = normalizeTradeSide(side);
 
   // Cap position size to maxVolumePerAccount (from method config, default 2000)
   const maxOrderSize = maxVolumePerAccount;
@@ -157,30 +186,67 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   const positionId = `testnet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   try {
-    // Record event: position opening started
-    
-    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
-    const binanceSide = side === 'long' ? 'BUY' : 'SELL';
-    
-    // Convert internal side to positionSide for hedge mode (LONG/SHORT)
-    const positionSide = side === 'long' ? 'LONG' : 'SHORT';
+    const binanceSide = toBinanceSide(normalizedSide);
+    const positionSide = toPositionSide(normalizedSide);
     
     // Place market order
     const order = await placeMarketOrder(testnetClient, symbol, binanceSide, finalQty, positionSide);
-    
-    // Place SL order (opposite side) using Algo Order API for hedge mode
+
     const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-    const slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, stop_loss, positionSide);
+    let slOrder;
+    let tpOrder;
+
+    try {
+      slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, stop_loss, positionSide);
+      tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, take_profit, positionSide);
+    } catch (protectionError) {
+      let recoveryOrder = null;
+
+      try {
+        recoveryOrder = await closeRecoveredEntry(
+          testnetClient,
+          symbol,
+          binanceSide,
+          finalQty,
+          positionSide,
+          protectionError.message
+        );
+      } catch (recoveryError) {
+        await recordTestnetTradeEvent(db, positionId, 'entry_protection_failed', {
+          order_id: order.orderId,
+          sl_order_id: slOrder?.orderId || null,
+          tp_order_id: tpOrder?.orderId || null,
+          error: protectionError.message,
+          recovery_error: recoveryError.message,
+          recovery_order_id: null,
+        });
+
+        throw new Error(`Failed to place SL/TP protection after entry and recovery close also failed: ${protectionError.message}; recovery: ${recoveryError.message}`);
+      }
+
+      await recordTestnetTradeEvent(db, positionId, 'entry_protection_failed', {
+        order_id: order.orderId,
+        sl_order_id: slOrder?.orderId || null,
+        tp_order_id: tpOrder?.orderId || null,
+        error: protectionError.message,
+        recovery_order_id: recoveryOrder.orderId,
+      });
+
+      await recordTestnetTradeEvent(db, positionId, 'recovery_close', {
+        recovery_order_id: recoveryOrder.orderId,
+        side: slSide,
+        quantity: finalQty,
+        symbol,
+      });
+
+      throw new Error(`Failed to place SL/TP protection after entry: ${protectionError.message}`);
+    }
     
-    // Place TP order (opposite side) using Algo Order API for hedge mode
-    const tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, take_profit, positionSide);
-    
-    // Save position to database (SL/TP now managed via Binance Algo Orders)
     const newPosition = await createTestnetPosition(db, {
       position_id: positionId,
       account_id: account.id,
       symbol: symbol,
-      side: side,
+      side: normalizedSide,
       entry_price: entry_price,
       stop_loss: stop_loss,
       take_profit: take_profit,
@@ -292,9 +358,10 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
     const positionExists = binancePosition && parseFloat(binancePosition.positionAmt) !== 0;
 
     // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
-    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+    const normalizedSide = normalizeTradeSide(position.side);
+    const binanceSide = toBinanceSide(normalizedSide);
     const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-    const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
+    const positionSide = toPositionSide(normalizedSide);
 
     let closeOrder = null;
     if (positionExists) {
@@ -322,7 +389,7 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
     // Update account balance
     const newBalance = position.account_id ? await getAccountBalance(testnetClient) : null;
     if (newBalance) {
-      await updateTestnetAccountBalance(db, position.account_id, newBalance.availableBalance, realizedPnl);
+      await updateTestnetAccountBalance(db, position.account_id, newBalance.walletBalance, realizedPnl);
     }
     
     // Update account stats
@@ -350,8 +417,8 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
  */
 export async function closeTestnetPositionInDBOnly(db, position, currentPrice, closeReason) {
   try {
-    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
-    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+    const normalizedSide = normalizeTradeSide(position.side);
+    const binanceSide = toBinanceSide(normalizedSide);
     const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
 
     // Calculate realized PnL
@@ -372,7 +439,7 @@ export async function closeTestnetPositionInDBOnly(db, position, currentPrice, c
     // Update account balance (fetch from Binance to get current state)
     if (testnetClient && position.account_id) {
       const newBalance = await getAccountBalance(testnetClient);
-      await updateTestnetAccountBalance(db, position.account_id, newBalance.availableBalance, realizedPnl);
+      await updateTestnetAccountBalance(db, position.account_id, newBalance.walletBalance, realizedPnl);
     }
 
     // Update account stats
@@ -513,7 +580,8 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
   try {
     const symbol = getSymbol();
     // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
-    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+    const normalizedSide = normalizeTradeSide(position.side);
+    const binanceSide = toBinanceSide(normalizedSide);
     const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
     
     // Calculate partial close ratio (e.g., 50% for 2 TP levels, 33% for 3 TP levels)
@@ -530,7 +598,7 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
     }
     
     // Place partial close market order
-    const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
+    const positionSide = toPositionSide(normalizedSide);
     const closeOrder = await placeMarketOrder(testnetClient, symbol, closeSide, closeQty, positionSide);
     
     // Calculate partial PnL
@@ -554,7 +622,7 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
     
     // If there's remaining position, place new TP order using Algo Order API
     if (remainingQty > 0.001) {
-      const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
+      const positionSide = toPositionSide(normalizedSide);
       const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, closeSide, remainingQty, position.take_profit, positionSide);
       
       await updateTestnetPosition(db, position.position_id, {
@@ -594,34 +662,31 @@ export async function syncTestnetAccount(db, account) {
     // Fetch real balance from Binance
     const balance = await getAccountBalance(testnetClient);
 
-    // Calculate correct equity: availableBalance + totalUnrealizedProfit
-    // totalWalletBalance includes margin which should NOT be part of equity
-    const correctEquity = balance.availableBalance + balance.totalUnrealizedProfit;
+    const correctBalance = balance.walletBalance;
+    const correctEquity = balance.walletBalance + balance.totalUnrealizedProfit;
 
-    // Detect discrepancies
-    // Use availableBalance for balance comparison (USDT only)
-    // Use correct equity for equity comparison
-    const balanceDiff = Math.abs(balance.availableBalance - account.current_balance);
+    // Detect discrepancies using wallet balance, not available balance.
+    const balanceDiff = Math.abs(correctBalance - account.current_balance);
     const equityDiff = Math.abs(correctEquity - account.equity);
 
     // Skip auto-correction if Binance balance is 0 (unfunded testnet account)
     // Keep DB balance for paper trading
-    if (balance.availableBalance < 1) {
+    if (balance.walletBalance < 1) {
       // Still update equity with unrealized PnL from positions (if any)
       await updateTestnetAccountEquity(db, account.id, balance.totalUnrealizedProfit);
     } else if (balanceDiff > 0.01 || equityDiff > 0.01) {
       console.warn(`[TestnetEngine] Balance discrepancy detected for account ${account.id}:`);
-      console.warn(`  DB balance: ${account.current_balance}, Binance balance: ${balance.availableBalance} (diff: ${balanceDiff.toFixed(2)})`);
+      console.warn(`  DB balance: ${account.current_balance}, Binance balance: ${correctBalance} (diff: ${balanceDiff.toFixed(2)})`);
       console.warn(`  DB equity: ${account.equity}, Binance equity: ${correctEquity} (diff: ${equityDiff.toFixed(2)})`);
 
       // Auto-correct: update database with Binance values
-      await updateTestnetAccountBalance(db, account.id, balance.availableBalance, 0);
+      await updateTestnetAccountBalance(db, account.id, correctBalance, 0);
       await updateTestnetAccountEquityDirect(db, account.id, correctEquity);
 
       // Record sync event
       await recordTestnetTradeEvent(db, `account_${account.id}`, 'balance_sync', {
         old_balance: account.current_balance,
-        new_balance: balance.availableBalance,
+        new_balance: correctBalance,
         old_equity: account.equity,
         new_equity: correctEquity,
         reason: 'discrepancy_detected',
@@ -671,6 +736,33 @@ async function syncTestnetPositions(db, account) {
     
     // Get open positions from database
     const dbPositions = await getTestnetPositions(db, { account_id: account.id, status: 'open' });
+
+    if (binancePosition && dbPositions.length === 0) {
+      const normalizedSide = parseFloat(binancePosition.positionAmt) >= 0 ? 'long' : 'short';
+      const closeSide = normalizedSide === 'long' ? 'SELL' : 'BUY';
+      const positionQty = Math.abs(parseFloat(binancePosition.positionAmt));
+      const positionSide = binancePosition.positionSide && binancePosition.positionSide !== 'BOTH'
+        ? binancePosition.positionSide
+        : toPositionSide(normalizedSide);
+
+      await recordTestnetTradeEvent(db, `account_${account.id}`, 'orphan_binance_position_detected', {
+        symbol,
+        position_amt: binancePosition.positionAmt,
+        position_side: binancePosition.positionSide,
+        entry_price: binancePosition.entryPrice,
+      });
+
+      await placeMarketOrder(testnetClient, symbol, closeSide, positionQty, positionSide);
+
+      await recordTestnetTradeEvent(db, `account_${account.id}`, 'orphan_binance_position_closed', {
+        symbol,
+        position_amt: binancePosition.positionAmt,
+        position_side: positionSide,
+        close_side: closeSide,
+      });
+
+      return;
+    }
     
     // If Binance has no position but DB has open positions, close them in DB
     if (!binancePosition && dbPositions.length > 0) {
@@ -713,10 +805,10 @@ async function syncTestnetPositions(db, account) {
           
           // Re-place SL order if position is still open using Algo Order API
           try {
-            // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
-            const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+            const normalizedSide = normalizeTradeSide(position.side);
+            const binanceSide = toBinanceSide(normalizedSide);
             const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-            const newSLOrder = await placeStopLossOrder(testnetClient, symbol, slSide, position.size_qty, position.stop_loss, position.side === 'long' ? 'LONG' : 'SHORT');
+            const newSLOrder = await placeStopLossOrder(testnetClient, symbol, slSide, position.size_qty, position.stop_loss, toPositionSide(normalizedSide));
             
             await updateTestnetPosition(db, position.position_id, {
               binance_sl_order_id: newSLOrder.orderId.toString(),
@@ -774,10 +866,10 @@ async function syncTestnetPositions(db, account) {
           
           // Re-place TP order if position is still open using Algo Order API
           try {
-            // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
-            const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+            const normalizedSide = normalizeTradeSide(position.side);
+            const binanceSide = toBinanceSide(normalizedSide);
             const tpSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-            const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, tpSide, position.size_qty, position.take_profit, position.side === 'long' ? 'LONG' : 'SHORT');
+            const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, tpSide, position.size_qty, position.take_profit, toPositionSide(normalizedSide));
             
             await updateTestnetPosition(db, position.position_id, {
               binance_tp_order_id: newTPOrder.orderId.toString(),
@@ -890,6 +982,46 @@ async function getTestnetAccounts(db) {
  */
 export function getTestnetClient() {
   return testnetClient;
+}
+
+export async function cleanupTestnetAccountState(db, account) {
+  if (!testnetClient) {
+    console.error('[TestnetEngine] Testnet client not initialized');
+    throw new Error('Testnet client not initialized');
+  }
+
+  const symbol = getSymbol();
+  const { getTestnetPendingOrders } = await import('../db/testnetDatabase.js');
+
+  const dbPositions = await getTestnetPositions(db, { account_id: account.id, status: 'open' });
+  const pendingOrders = await getTestnetPendingOrders(db, { symbol, method_id: account.method_id, status: 'pending' });
+  const trackedOrderIds = new Set();
+
+  for (const position of dbPositions) {
+    if (position.binance_sl_order_id) trackedOrderIds.add(position.binance_sl_order_id.toString());
+    if (position.binance_tp_order_id) trackedOrderIds.add(position.binance_tp_order_id.toString());
+  }
+
+  for (const order of pendingOrders) {
+    if (order.binance_order_id) trackedOrderIds.add(order.binance_order_id.toString());
+  }
+
+  const openOrders = await getOpenOrders(testnetClient, symbol);
+  const cancelledOrderIds = [];
+
+  for (const order of openOrders) {
+    if (!trackedOrderIds.has(order.orderId.toString())) {
+      await cancelOrder(testnetClient, symbol, order.orderId);
+      cancelledOrderIds.push(order.orderId.toString());
+    }
+  }
+
+  const balance = await syncTestnetAccount(db, account);
+
+  return {
+    cancelledOrderIds,
+    balance,
+  };
 }
 
 // Re-export Binance client functions for use in scheduler

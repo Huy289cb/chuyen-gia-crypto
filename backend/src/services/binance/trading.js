@@ -97,7 +97,10 @@ export async function setPositionMode(dual) {
  */
 export async function placeStopMarketOrder(params) {
   try {
-    const response = await post(endpoints.STOP_MARKET_ORDER, params, true);
+    const response = await post(endpoints.ORDER, {
+      ...params,
+      type: 'STOP_MARKET',
+    }, true);
 
     console.log(`[BinanceTrading] Stop-market order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 
@@ -138,7 +141,10 @@ export async function placeStopMarketOrder(params) {
  */
 export async function placeTakeProfitMarketOrder(params) {
   try {
-    const response = await post(endpoints.TAKE_PROFIT_MARKET_ORDER, params, true);
+    const response = await post(endpoints.ORDER, {
+      ...params,
+      type: 'TAKE_PROFIT_MARKET',
+    }, true);
 
     console.log(`[BinanceTrading] Take-profit-market order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 

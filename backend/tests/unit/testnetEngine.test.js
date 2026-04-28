@@ -20,6 +20,9 @@ import {
   getTestnetPosition,
 } from '../../src/db/testnetDatabase.js';
 
+const mockGetBinancePosition = vi.hoisted(() => vi.fn(() => Promise.resolve(null)));
+const mockSetPositionMode = vi.hoisted(() => vi.fn(() => Promise.resolve({ dualSidePosition: 'true' })));
+
 // Mock binance client
 vi.mock('../../src/services/binanceClient.js', () => ({
   initTestnetClient: vi.fn(() => ({ mockClient: true })),
@@ -93,6 +96,14 @@ vi.mock('../../src/services/binanceClient.js', () => ({
       status: 'NEW',
     },
   ])),
+}));
+
+vi.mock('../../src/services/binance/account.js', () => ({
+  getCurrentPosition: mockGetBinancePosition,
+}));
+
+vi.mock('../../src/services/binance/trading.js', () => ({
+  setPositionMode: mockSetPositionMode,
 }));
 
 // Mock binance config
@@ -180,6 +191,9 @@ async function runTestMigrations(db) {
             binance_order_id TEXT,
             binance_sl_order_id TEXT,
             binance_tp_order_id TEXT,
+            tp_levels TEXT,
+            tp_hit_count INTEGER DEFAULT 0,
+            partial_closed REAL DEFAULT 0,
             FOREIGN KEY (account_id) REFERENCES testnet_accounts(id)
           )
         `, (err) => {
@@ -232,6 +246,8 @@ describe('Testnet Engine', () => {
   let db;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
+    mockGetBinancePosition.mockResolvedValue(null);
     db = await createTestDb();
     await runTestMigrations(db);
   });
@@ -259,7 +275,7 @@ describe('Testnet Engine', () => {
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
       
       const positionData = {
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -272,7 +288,7 @@ describe('Testnet Engine', () => {
       const position = await openTestnetPosition(db, account, positionData, 1, 'kim_nghia');
       
       expect(position).not.toBeNull();
-      expect(position.side).toBe('BUY');
+      expect(position.side).toBe('long');
       expect(position.entry_price).toBe(50000);
       expect(position.status).toBe('open');
       expect(position.binance_order_id).toBe('12345');
@@ -283,7 +299,7 @@ describe('Testnet Engine', () => {
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
       
       const positionData = {
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -313,7 +329,7 @@ describe('Testnet Engine', () => {
       const updatedAccount = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
       
       const positionData = {
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -326,6 +342,49 @@ describe('Testnet Engine', () => {
       const result = await openTestnetPosition(db, updatedAccount, positionData, 1, 'kim_nghia');
       expect(result).toBeNull();
     });
+
+    it('should recover by closing entry when protection orders fail', async () => {
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+      const { placeStopLossOrder, placeMarketOrder } = await import('../../src/services/binanceClient.js');
+
+      vi.mocked(placeStopLossOrder).mockRejectedValueOnce(new Error('Binance API Error -5000: invalid stop order'));
+
+      const positionData = {
+        side: 'long',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+      };
+
+      await expect(openTestnetPosition(db, account, positionData, 1, 'kim_nghia')).rejects.toThrow('Failed to place SL/TP protection after entry');
+
+      expect(vi.mocked(placeMarketOrder)).toHaveBeenCalledTimes(2);
+
+      const positions = await new Promise((resolve, reject) => {
+        db.all('SELECT * FROM testnet_positions', (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+
+      expect(positions).toHaveLength(0);
+
+      const events = await new Promise((resolve, reject) => {
+        db.all('SELECT event_type FROM testnet_trade_events', (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows.map((row) => row.event_type));
+        });
+      });
+
+      expect(events).toContain('entry_protection_failed');
+      expect(events).toContain('recovery_close');
+      expect(events).toContain('position_open_failed');
+    });
   });
 
   describe('closeTestnetPositionEngine', () => {
@@ -337,7 +396,7 @@ describe('Testnet Engine', () => {
         position_id: 'test_pos_1',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -373,7 +432,7 @@ describe('Testnet Engine', () => {
         position_id: 'test_pos_1',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -402,7 +461,7 @@ describe('Testnet Engine', () => {
         position_id: 'test_pos_1',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -433,7 +492,7 @@ describe('Testnet Engine', () => {
         position_id: 'test_pos_1',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -464,7 +523,7 @@ describe('Testnet Engine', () => {
         position_id: 'test_pos_1',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -493,8 +552,8 @@ describe('Testnet Engine', () => {
       const balance = await syncTestnetAccount(db, account);
       
       expect(balance).not.toBeNull();
-      expect(balance.availableBalance).toBe(950);
-      expect(balance.totalWalletBalance).toBe(1000);
+      expect(balance.walletBalance).toBe(1000);
+      expect(balance.totalUnrealizedProfit).toBe(50);
     });
 
     it('should detect and auto-correct balance discrepancies', async () => {
@@ -506,7 +565,7 @@ describe('Testnet Engine', () => {
       
       const balance = await syncTestnetAccount(db, account);
       
-      expect(balance.availableBalance).toBe(950);
+      expect(balance.walletBalance).toBe(1000);
       
       // Verify database was auto-corrected
       const updatedAccount = await new Promise((resolve, reject) => {
@@ -516,7 +575,8 @@ describe('Testnet Engine', () => {
         });
       });
       
-      expect(updatedAccount.current_balance).toBe(950);
+      expect(updatedAccount.current_balance).toBe(1000);
+      expect(updatedAccount.equity).toBe(1050);
     });
 
     it('should not correct when discrepancy is within threshold', async () => {
@@ -524,11 +584,11 @@ describe('Testnet Engine', () => {
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
       
       // Set balance within 0.01 threshold
-      db.run('UPDATE testnet_accounts SET current_balance = 950.005, equity = 950.005 WHERE id = ?', [account.id]);
+      db.run('UPDATE testnet_accounts SET current_balance = 1000.005, equity = 1050.005 WHERE id = ?', [account.id]);
       
       const balance = await syncTestnetAccount(db, account);
       
-      expect(balance.availableBalance).toBe(950);
+      expect(balance.walletBalance).toBe(1000);
     });
 
     it('should sync positions and track order status', async () => {
@@ -540,7 +600,7 @@ describe('Testnet Engine', () => {
         position_id: 'test_pos_sync',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -564,6 +624,29 @@ describe('Testnet Engine', () => {
       expect(position.binance_sl_order_id).toBe('12346');
       expect(position.binance_tp_order_id).toBe('12347');
     });
+
+    it('should close orphan Binance positions when DB has no open position', async () => {
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+      const { placeMarketOrder } = await import('../../src/services/binanceClient.js');
+
+      mockGetBinancePosition.mockResolvedValueOnce({
+        symbol: 'BTCUSDT',
+        positionAmt: '0.002',
+        positionSide: 'LONG',
+        entryPrice: 50000,
+      });
+
+      await syncTestnetAccount(db, account);
+
+      expect(vi.mocked(placeMarketOrder)).toHaveBeenCalledWith(
+        expect.anything(),
+        'BTCUSDT',
+        'SELL',
+        0.002,
+        'LONG'
+      );
+    });
   });
 
   describe('updateTestnetPositionsPnL', () => {
@@ -575,7 +658,7 @@ describe('Testnet Engine', () => {
         position_id: 'test_pos_1',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,

@@ -298,8 +298,8 @@ router.get('/sync/:accountId', async (req, res) => {
       success: true,
       message: 'Testnet account synced successfully',
       data: {
-        balance: balance.availableBalance,
-        equity: balance.totalWalletBalance,
+        balance: balance.walletBalance,
+        equity: balance.walletBalance + balance.totalUnrealizedProfit,
         unrealized_pnl: balance.totalUnrealizedProfit,
         synced_at: new Date().toISOString()
       }
@@ -339,6 +339,53 @@ router.get('/balance', async (req, res) => {
         total_wallet_balance: balance.totalWalletBalance,
         total_unrealized_profit: balance.totalUnrealizedProfit,
         fetched_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/testnet/cleanup/:accountId - Cleanup orphan Binance state and snapshot account
+ */
+router.post('/cleanup/:accountId', async (req, res) => {
+  const { db, dbEnabled } = req;
+
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  try {
+    const { getTestnetAccount } = await import('../db/testnetDatabase.js');
+    const { cleanupTestnetAccountState } = await import('../services/testnetEngine.js');
+
+    const account = await getTestnetAccount(db, 'BTC', 'kim_nghia');
+
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        error: 'Testnet account not found'
+      });
+    }
+
+    const result = await cleanupTestnetAccountState(db, account);
+
+    res.json({
+      success: true,
+      message: 'Testnet cleanup completed successfully',
+      data: {
+        cancelled_order_ids: result.cancelledOrderIds,
+        wallet_balance: result.balance?.walletBalance ?? null,
+        equity: result.balance ? result.balance.walletBalance + result.balance.totalUnrealizedProfit : null,
+        unrealized_pnl: result.balance?.totalUnrealizedProfit ?? null,
+        cleaned_at: new Date().toISOString(),
       }
     });
   } catch (error) {

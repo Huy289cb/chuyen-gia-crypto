@@ -31,9 +31,9 @@ export const endpoints = {
   POSITION_MODE: '/fapi/v1/positionSide/dual',
   POSITION_MARGIN: '/fapi/v1/positionMargin',
   
-  // Algo Order API (SIGNED) - for SL/TP in hedge mode
-  STOP_MARKET_ORDER: '/fapi/v1/order/stopMarket',
-  TAKE_PROFIT_MARKET_ORDER: '/fapi/v1/order/takeProfitMarket',
+  // Conditional orders use the standard new-order endpoint with type=STOP_MARKET/TAKE_PROFIT_MARKET
+  STOP_MARKET_ORDER: '/fapi/v1/order',
+  TAKE_PROFIT_MARKET_ORDER: '/fapi/v1/order',
   CANCEL_ALGO_ORDER: '/fapi/v1/order',
   CANCEL_ALL_ALGO_ORDERS: '/fapi/v1/allOpenOrders',
   

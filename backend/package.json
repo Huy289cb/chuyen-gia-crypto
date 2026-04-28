@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "db:init": "node src/db/init.js",
     "setup:data": "node scripts/ensure-data-dir.js",
+    "testnet:cleanup": "node scripts/testnet-cleanup.js",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage"

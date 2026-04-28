@@ -7,6 +7,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sqlite3 from 'sqlite3';
 
+const mockGetBinancePosition = vi.hoisted(() => vi.fn(() => Promise.resolve(null)));
+const mockSetPositionMode = vi.hoisted(() => vi.fn(() => Promise.resolve({ dualSidePosition: 'true' })));
+
 // Mock binance client
 vi.mock('../../src/services/binanceClient.js', () => ({
   initTestnetClient: vi.fn(() => ({ mockClient: true })),
@@ -79,6 +82,14 @@ vi.mock('../../src/services/binanceClient.js', () => ({
       status: 'NEW',
     },
   ])),
+}));
+
+vi.mock('../../src/services/binance/account.js', () => ({
+  getCurrentPosition: mockGetBinancePosition,
+}));
+
+vi.mock('../../src/services/binance/trading.js', () => ({
+  setPositionMode: mockSetPositionMode,
 }));
 
 // Mock binance config
@@ -166,6 +177,9 @@ async function runTestMigrations(db) {
             binance_order_id TEXT,
             binance_sl_order_id TEXT,
             binance_tp_order_id TEXT,
+            tp_levels TEXT,
+            tp_hit_count INTEGER DEFAULT 0,
+            partial_closed REAL DEFAULT 0,
             FOREIGN KEY (account_id) REFERENCES testnet_accounts(id)
           )
         `, (err) => {
@@ -218,6 +232,8 @@ describe('Testnet Flow Integration', () => {
   let db;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
+    mockGetBinancePosition.mockResolvedValue(null);
     db = await createTestDb();
     await runTestMigrations(db);
   });
@@ -249,7 +265,7 @@ describe('Testnet Flow Integration', () => {
 
       // Simulate analysis result
       const positionData = {
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -263,7 +279,7 @@ describe('Testnet Flow Integration', () => {
       const position = await openTestnetPosition(db, account, positionData, 1, 'kim_nghia');
       
       expect(position).not.toBeNull();
-      expect(position.side).toBe('BUY');
+      expect(position.side).toBe('long');
       expect(position.entry_price).toBe(50000);
       expect(position.status).toBe('open');
       expect(position.binance_order_id).toBe('12345');
@@ -279,7 +295,7 @@ describe('Testnet Flow Integration', () => {
       });
 
       expect(savedPosition).not.toBeNull();
-      expect(savedPosition.side).toBe('BUY');
+      expect(savedPosition.side).toBe('long');
       expect(savedPosition.entry_price).toBe(50000);
 
       // Verify trade event was recorded
@@ -308,7 +324,7 @@ describe('Testnet Flow Integration', () => {
         position_id: 'test_pos_sl',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -345,7 +361,7 @@ describe('Testnet Flow Integration', () => {
         position_id: 'test_pos_tp',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -384,7 +400,7 @@ describe('Testnet Flow Integration', () => {
         position_id: 'test_pos_decision',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -402,7 +418,7 @@ describe('Testnet Flow Integration', () => {
       const result = await closeTestnetPositionEngine(db, position, 50500, 'ai_close_early');
 
       expect(result).not.toBeNull();
-      expect(result.realizedPnl).toBe(10); // (50500 - 50000) * 0.002 = 10
+      expect(result.realizedPnl).toBe(1);
       expect(result.isWin).toBe(true);
 
       const closedPosition = await getTestnetPosition(db, 'test_pos_decision');
@@ -422,7 +438,7 @@ describe('Testnet Flow Integration', () => {
         position_id: 'test_pos_sl_update',
         account_id: account.id,
         symbol: 'BTCUSDT',
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -462,7 +478,7 @@ describe('Testnet Flow Integration', () => {
       const balance = await syncTestnetAccount(db, account);
 
       expect(balance).not.toBeNull();
-      expect(balance.availableBalance).toBe(950);
+      expect(balance.walletBalance).toBe(1000);
 
       // Verify database was auto-corrected
       const updatedAccount = await new Promise((resolve, reject) => {
@@ -472,7 +488,8 @@ describe('Testnet Flow Integration', () => {
         });
       });
 
-      expect(updatedAccount.current_balance).toBe(950);
+      expect(updatedAccount.current_balance).toBe(1000);
+      expect(updatedAccount.equity).toBe(1050);
     });
 
     it('should create account snapshot on sync', async () => {
@@ -512,7 +529,7 @@ describe('Testnet Flow Integration', () => {
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
 
       const positionData = {
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
@@ -535,6 +552,42 @@ describe('Testnet Flow Integration', () => {
       expect(events.length).toBeGreaterThan(0);
     });
 
+    it('should recover and avoid saving orphan position when protection setup fails', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
+      const { openTestnetPosition } = await import('../../src/services/testnetEngine.js');
+      const { placeStopLossOrder, placeMarketOrder } = await import('../../src/services/binanceClient.js');
+
+      vi.mocked(placeStopLossOrder).mockRejectedValueOnce(new Error('Binance API Error -5000: invalid stop order'));
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      const positionData = {
+        side: 'long',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+      };
+
+      await expect(openTestnetPosition(db, account, positionData, 1, 'kim_nghia')).rejects.toThrow('Failed to place SL/TP protection after entry');
+
+      expect(vi.mocked(placeMarketOrder)).toHaveBeenCalledTimes(2);
+
+      const positions = await new Promise((resolve, reject) => {
+        db.all('SELECT * FROM testnet_positions', (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+
+      expect(positions).toHaveLength(0);
+    });
+
     it('should handle position size validation', async () => {
       const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
       const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
@@ -544,7 +597,7 @@ describe('Testnet Flow Integration', () => {
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
 
       const positionData = {
-        side: 'BUY',
+        side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,

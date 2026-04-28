@@ -88,12 +88,12 @@ export async function updateTestnetAccountBalance(db, accountId, newBalance, pnl
     
     db.run(
       `UPDATE testnet_accounts 
-       SET current_balance = ?, 
-           equity = current_balance + unrealized_pnl,
+       SET current_balance = COALESCE(?, current_balance), 
+           equity = COALESCE(?, current_balance) + unrealized_pnl,
            realized_pnl = realized_pnl + ?,
            updated_at = ?
        WHERE id = ?`,
-      [newBalance, pnl, now, accountId],
+      [newBalance, newBalance, pnl, now, accountId],
       function(err) {
         if (err) {
           console.error('[TestnetDB] Error updating testnet account balance:', err.message);
