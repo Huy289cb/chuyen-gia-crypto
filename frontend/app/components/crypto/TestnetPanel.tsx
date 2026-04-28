@@ -246,9 +246,12 @@ function PositionCard({ position, onClose }: { position: TestnetPosition; onClos
           </Badge>
           <span className="font-medium">{position.symbol}</span>
         </div>
-        <Badge variant="neutral" className="text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-foreground-tertiary text-xs">Opened</span>
+          <Badge variant="neutral" className="text-xs">
             {formatVietnamTime(position.entry_time)}
           </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
