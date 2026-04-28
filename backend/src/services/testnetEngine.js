@@ -277,7 +277,7 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
         console.error('[TestnetEngine] Failed to cancel SL order:', error.message);
       }
     }
-    
+
     if (position.binance_tp_order_id) {
       try {
         await cancelOrder(testnetClient, position.symbol, position.binance_tp_order_id);
@@ -285,17 +285,28 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
         console.error('[TestnetEngine] Failed to cancel TP order:', error.message);
       }
     }
-    
-    // Place opposite market order to close
+
+    // Check if position still exists on Binance before placing close order
+    // This prevents ReduceOnly errors when position was already closed by SL/TP algo orders
+    const binancePosition = await getBinancePosition(position.symbol);
+    const positionExists = binancePosition && parseFloat(binancePosition.positionAmt) !== 0;
+
     // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
     const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
     const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
     const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
-    const closeOrder = await placeMarketOrder(testnetClient, position.symbol, closeSide, position.size_qty, positionSide);
-    
+
+    let closeOrder = null;
+    if (positionExists) {
+      // Place opposite market order to close
+      closeOrder = await placeMarketOrder(testnetClient, position.symbol, closeSide, position.size_qty, positionSide);
+    } else {
+      console.log(`[TestnetEngine] Position ${position.position_id} already closed on Binance, skipping market order`);
+    }
+
     // Calculate realized PnL
-    const priceDiff = closeSide === 'SELL' 
-      ? currentPrice - position.entry_price 
+    const priceDiff = closeSide === 'SELL'
+      ? currentPrice - position.entry_price
       : position.entry_price - currentPrice;
     
     const realizedPnl = priceDiff * position.size_qty;
@@ -322,13 +333,64 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
       close_price: currentPrice,
       realized_pnl: realizedPnl,
       close_reason: closeReason,
-      close_order_id: closeOrder.orderId,
+      close_order_id: closeOrder?.orderId,
     });
-    
-    
+
+
     return { realizedPnl, isWin };
   } catch (error) {
     console.error('[TestnetEngine] Failed to close testnet position:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Close testnet position in database only (no Binance order placement)
+ * Used when position is already closed on Binance (e.g., by SL/TP algo orders)
+ */
+export async function closeTestnetPositionInDBOnly(db, position, currentPrice, closeReason) {
+  try {
+    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+    const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
+
+    // Calculate realized PnL
+    const priceDiff = closeSide === 'SELL'
+      ? currentPrice - position.entry_price
+      : position.entry_price - currentPrice;
+
+    const realizedPnl = priceDiff * position.size_qty;
+    const isWin = realizedPnl > 0;
+
+    // Update position status
+    await closeTestnetPosition(db, position.position_id, currentPrice, closeReason);
+    await updateTestnetPosition(db, position.position_id, {
+      realized_pnl: realizedPnl,
+      close_price: currentPrice,
+    });
+
+    // Update account balance (fetch from Binance to get current state)
+    if (testnetClient && position.account_id) {
+      const newBalance = await getAccountBalance(testnetClient);
+      await updateTestnetAccountBalance(db, position.account_id, newBalance.availableBalance, realizedPnl);
+    }
+
+    // Update account stats
+    if (position.account_id) {
+      await updateTestnetAccountStats(db, position.account_id, isWin);
+    }
+
+    // Record trade event (no close_order_id since no order was placed)
+    await recordTestnetTradeEvent(db, position.position_id, 'position_closed', {
+      close_price: currentPrice,
+      realized_pnl: realizedPnl,
+      close_reason: closeReason,
+      close_order_id: null,
+    });
+
+    return { realizedPnl, isWin };
+  } catch (error) {
+    console.error('[TestnetEngine] Failed to close testnet position in DB only:', error.message);
     throw error;
   }
 }
@@ -532,11 +594,15 @@ export async function syncTestnetAccount(db, account) {
     // Fetch real balance from Binance
     const balance = await getAccountBalance(testnetClient);
 
+    // Calculate correct equity: availableBalance + totalUnrealizedProfit
+    // totalWalletBalance includes margin which should NOT be part of equity
+    const correctEquity = balance.availableBalance + balance.totalUnrealizedProfit;
+
     // Detect discrepancies
     // Use availableBalance for balance comparison (USDT only)
-    // Use totalWalletBalance for equity comparison (includes unrealized PnL)
+    // Use correct equity for equity comparison
     const balanceDiff = Math.abs(balance.availableBalance - account.current_balance);
-    const equityDiff = Math.abs(balance.totalWalletBalance - account.equity);
+    const equityDiff = Math.abs(correctEquity - account.equity);
 
     // Skip auto-correction if Binance balance is 0 (unfunded testnet account)
     // Keep DB balance for paper trading
@@ -546,24 +612,24 @@ export async function syncTestnetAccount(db, account) {
     } else if (balanceDiff > 0.01 || equityDiff > 0.01) {
       console.warn(`[TestnetEngine] Balance discrepancy detected for account ${account.id}:`);
       console.warn(`  DB balance: ${account.current_balance}, Binance balance: ${balance.availableBalance} (diff: ${balanceDiff.toFixed(2)})`);
-      console.warn(`  DB equity: ${account.equity}, Binance equity: ${balance.totalWalletBalance} (diff: ${equityDiff.toFixed(2)})`);
+      console.warn(`  DB equity: ${account.equity}, Binance equity: ${correctEquity} (diff: ${equityDiff.toFixed(2)})`);
 
       // Auto-correct: update database with Binance values
       await updateTestnetAccountBalance(db, account.id, balance.availableBalance, 0);
-      await updateTestnetAccountEquityDirect(db, account.id, balance.totalWalletBalance);
+      await updateTestnetAccountEquityDirect(db, account.id, correctEquity);
 
       // Record sync event
       await recordTestnetTradeEvent(db, `account_${account.id}`, 'balance_sync', {
         old_balance: account.current_balance,
         new_balance: balance.availableBalance,
         old_equity: account.equity,
-        new_equity: balance.totalWalletBalance,
+        new_equity: correctEquity,
         reason: 'discrepancy_detected',
       });
 
     } else {
-      // No discrepancy, just update equity with latest totalWalletBalance (includes unrealized PnL)
-      await updateTestnetAccountEquityDirect(db, account.id, balance.totalWalletBalance);
+      // No discrepancy, just update equity with latest correct equity
+      await updateTestnetAccountEquityDirect(db, account.id, correctEquity);
     }
     
     // Sync positions with Binance
@@ -608,21 +674,21 @@ async function syncTestnetPositions(db, account) {
     
     // If Binance has no position but DB has open positions, close them in DB
     if (!binancePosition && dbPositions.length > 0) {
-      
+
       for (const position of dbPositions) {
-        
+
         // Record sync close event
         await recordTestnetTradeEvent(db, position.position_id, 'sync_closed', {
           reason: 'position_closed_on_binance',
           binance_position: null,
         });
-        
-        // Close position in database with current price
+
+        // Close position in database with current price (no Binance order needed)
         const { fetchRealTimePrices } = await import('../price-fetcher.js');
         const priceData = await fetchRealTimePrices(db);
         const currentPrice = priceData.btc?.price || priceData.eth?.price || position.current_price;
-        
-        await closeTestnetPositionEngine(db, position, currentPrice, 'sync_closed');
+
+        await closeTestnetPositionInDBOnly(db, position, currentPrice, 'sync_closed');
       }
       return;
     }
@@ -667,7 +733,7 @@ async function syncTestnetPositions(db, account) {
           }
         } else if (slOrder.status === 'FILLED') {
           // SL order was filled - position should be closed
-          
+
           // Record SL fill event with details
           await recordTestnetTradeEvent(db, position.position_id, 'sl_order_filled', {
             order_id: position.binance_sl_order_id,
@@ -675,10 +741,18 @@ async function syncTestnetPositions(db, account) {
             fill_qty: slOrder.executedQty,
             fill_time: slOrder.updateTime,
           });
-          
+
           // Check if position is still open in database
           if (position.status === 'open') {
-            await closeTestnetPositionEngine(db, position, position.stop_loss, 'stop_loss_filled');
+            // Check if position still exists on Binance before trying to close
+            const currentBinancePosition = await getBinancePosition(symbol);
+            if (!currentBinancePosition || parseFloat(currentBinancePosition.positionAmt) === 0) {
+              // Position already closed by algo order, just update DB
+              await closeTestnetPositionInDBOnly(db, position, position.stop_loss, 'stop_loss_filled');
+            } else {
+              // Position still exists, close it properly
+              await closeTestnetPositionEngine(db, position, position.stop_loss, 'stop_loss_filled');
+            }
           }
         } else {
           // SL order is still open - log status for traceability
@@ -720,7 +794,7 @@ async function syncTestnetPositions(db, account) {
           }
         } else if (tpOrder.status === 'FILLED') {
           // TP order was filled - position should be closed
-          
+
           // Record TP fill event with details
           await recordTestnetTradeEvent(db, position.position_id, 'tp_order_filled', {
             order_id: position.binance_tp_order_id,
@@ -728,9 +802,17 @@ async function syncTestnetPositions(db, account) {
             fill_qty: tpOrder.executedQty,
             fill_time: tpOrder.updateTime,
           });
-          
+
           if (position.status === 'open') {
-            await closeTestnetPositionEngine(db, position, position.take_profit, 'take_profit_filled');
+            // Check if position still exists on Binance before trying to close
+            const currentBinancePosition = await getBinancePosition(symbol);
+            if (!currentBinancePosition || parseFloat(currentBinancePosition.positionAmt) === 0) {
+              // Position already closed by algo order, just update DB
+              await closeTestnetPositionInDBOnly(db, position, position.take_profit, 'take_profit_filled');
+            } else {
+              // Position still exists, close it properly
+              await closeTestnetPositionEngine(db, position, position.take_profit, 'take_profit_filled');
+            }
           }
         } else {
           // TP order is still open - log status for traceability
