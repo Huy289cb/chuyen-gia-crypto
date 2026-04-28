@@ -22,8 +22,7 @@ export async function getOrCreateTestnetAccount(db, symbol, methodId) {
         }
         
         if (row) {
-          console.log(`[TestnetDB] Found existing testnet account: ${symbol}-${methodId}`);
-          resolve(row);
+            resolve(row);
           return;
         }
         
@@ -40,7 +39,6 @@ export async function getOrCreateTestnetAccount(db, symbol, methodId) {
               return;
             }
             
-            console.log(`[TestnetDB] Created new testnet account: ${symbol}-${methodId} with ${startingBalance}U`);
             
             // Fetch the newly created account
             db.get(
@@ -103,7 +101,6 @@ export async function updateTestnetAccountBalance(db, accountId, newBalance, pnl
           return;
         }
         
-        console.log(`[TestnetDB] Updated testnet account ${accountId}: balance=${newBalance}, pnl=${pnl}`);
         resolve(this.changes);
       }
     );
@@ -131,7 +128,6 @@ export async function updateTestnetAccountEquity(db, accountId, unrealizedPnl) {
           return;
         }
 
-        console.log(`[TestnetDB] Updated testnet account equity: account_id=${accountId}, unrealized_pnl=${unrealizedPnl}`);
         resolve();
       }
     );
@@ -160,7 +156,6 @@ export async function updateTestnetAccountEquityDirect(db, accountId, totalWalle
           return;
         }
 
-        console.log(`[TestnetDB] Updated testnet account equity directly: account_id=${accountId}, equity=${totalWalletBalance}`);
         resolve();
       }
     );
@@ -243,7 +238,6 @@ export async function createTestnetPosition(db, positionData) {
           return;
         }
         
-        console.log(`[TestnetDB] Created testnet position: ${position_id} (${side} ${symbol})`);
         
         // Fetch the newly created position
         db.get(
@@ -352,7 +346,6 @@ export async function updateTestnetPosition(db, positionId, updates) {
         return;
       }
       
-      console.log(`[TestnetDB] Updated testnet position ${positionId}`);
       resolve(this.changes);
     });
   });
@@ -380,7 +373,6 @@ export async function closeTestnetPosition(db, positionId, closePrice, closeReas
           return;
         }
         
-        console.log(`[TestnetDB] Closed testnet position ${positionId} at ${closePrice} (${closeReason})`);
         resolve(this.changes);
       }
     );
@@ -404,7 +396,6 @@ export async function recordTestnetTradeEvent(db, positionId, eventType, eventDa
           return;
         }
         
-        console.log(`[TestnetDB] Recorded testnet trade event: ${eventType} for ${positionId}`);
         resolve(this.lastID);
       }
     );
@@ -465,7 +456,6 @@ export async function createTestnetAccountSnapshot(db, accountId) {
                   return;
                 }
                 
-                console.log(`[TestnetDB] Created testnet account snapshot for account ${accountId}`);
                 resolve(this.lastID);
               }
             );
@@ -600,7 +590,6 @@ export async function resetTestnetAccount(db, accountId) {
           return;
         }
         
-        console.log(`[TestnetDB] Reset testnet account ${accountId}`);
         resolve(this.changes);
       }
     );
@@ -683,7 +672,6 @@ export async function cancelTestnetPendingOrder(db, orderId, reason = 'cancelled
       
       if (testnetClient) {
         await cancelOrder(testnetClient, getSymbol(), binanceOrderId);
-        console.log(`[TestnetDB] Cancelled Binance limit order ${binanceOrderId} for pending order ${orderId}`);
       }
     } catch (binanceError) {
       console.error(`[TestnetDB] Failed to cancel Binance limit order ${binanceOrderId}:`, binanceError.message);
@@ -732,7 +720,6 @@ export async function updateTestnetPendingOrder(db, orderId, updates) {
         return;
       }
       
-      console.log(`[TestnetDB] Updated testnet pending order ${orderId}`);
       resolve(this.changes);
     });
   });

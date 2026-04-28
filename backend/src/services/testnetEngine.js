@@ -45,7 +45,6 @@ let testnetClient = null;
  */
 export async function initTestnetEngine() {
   if (!binanceConfig.enabled) {
-    console.log('[TestnetEngine] Testnet is disabled, skipping initialization');
     return null;
   }
 
@@ -66,7 +65,6 @@ export async function initTestnetEngine() {
   // Set leverage for the symbol (optional - skip if fails)
   try {
     await setLeverage(testnetClient, getSymbol(), getLeverage());
-    console.log('[TestnetEngine] Leverage configured');
   } catch (error) {
     console.error('[TestnetEngine] Failed to set leverage: Invalid API-key permissions. Please enable "Enable Futures" for your API key.', error.message);
     return null; // Stop initialization if futures permissions are missing
@@ -75,11 +73,9 @@ export async function initTestnetEngine() {
   // Set margin type (optional - skip if fails or already set)
   try {
     await setMarginType(testnetClient, getSymbol(), 'ISOLATED');
-    console.log('[TestnetEngine] Margin type configured');
   } catch (error) {
     // Ignore "No need to change margin type" error - it means margin type is already correct
     if (error.message.includes('No need to change margin type')) {
-      console.log('[TestnetEngine] Margin type already set correctly');
     } else {
       console.error('[TestnetEngine] Failed to set margin type: Invalid API-key permissions. Please enable "Enable Futures" for your API key.', error.message);
       return null; // Stop initialization if futures permissions are missing
@@ -89,11 +85,9 @@ export async function initTestnetEngine() {
   // Set position mode to dual (hedge mode) - allows both LONG and SHORT positions simultaneously
   try {
     await setPositionMode(true);
-    console.log('[TestnetEngine] Position mode set to dual (hedge mode)');
   } catch (error) {
     // Ignore if already set (error -4059 or message contains specific text)
     if (error.message.includes('No need to change position side') || error.message.includes('-4059')) {
-      console.log('[TestnetEngine] Position mode already set to dual');
     } else {
       console.error('[TestnetEngine] Failed to set position mode:', error.message);
       // Continue anyway - might already be set
@@ -133,7 +127,6 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   let cappedSizeQty = size_usd / entry_price;
 
   if (size_usd > maxOrderSize) {
-    console.log(`[TestnetEngine] Position size $${size_usd.toFixed(2)} exceeds max $${maxOrderSize}, capping to $${maxOrderSize}`);
     cappedSizeUsd = maxOrderSize;
     cappedSizeQty = maxOrderSize / entry_price;
   }
@@ -148,7 +141,6 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   // Ensure minimum quantity (Binance minimum for BTCUSDT is 0.001)
   const finalQty = Math.max(roundedQty, 0.001);
   
-  console.log(`[TestnetEngine] Quantity calculation: size_usd=${cappedSizeUsd}, entry_price=${entry_price}, raw_qty=${size_qty}, rounded_qty=${finalQty}`);
 
   // Validate position size vs account balance
   if (cappedSizeUsd > account.current_balance) {
@@ -158,7 +150,6 @@ export async function openTestnetPosition(db, account, positionData, predictionI
 
   // Check cooldown
   if (account.cooldown_until && new Date(account.cooldown_until) > new Date()) {
-    console.log('[TestnetEngine] Account is in cooldown, skipping position open');
     return null;
   }
 
@@ -213,7 +204,6 @@ export async function openTestnetPosition(db, account, positionData, predictionI
       size_qty: finalQty,
     });
     
-    console.log(`[TestnetEngine] Opened testnet position: ${positionId} (${side} ${symbol} @ ${entry_price})`);
 
     // After opening position, check if we need to cancel pending orders
     // Market orders may have filled the volume limit
@@ -237,23 +227,18 @@ export async function openTestnetPosition(db, account, positionData, predictionI
 
         // If market volume already at limit, cancel all pending orders
         if (totalOpenVolume >= maxVolume) {
-          console.log(`[TestnetEngine] Cancelling all pending orders for ${symbol}/${methodId}: market volume $${totalOpenVolume.toFixed(2)} already at limit $${maxVolume}`);
           for (const order of pendingOrders) {
             await cancelTestnetPendingOrder(db, order.order_id, 'volume_limit_reached', order.binance_order_id);
-            console.log(`[TestnetEngine] Cancelled pending order ${order.order_id} due to volume limit`);
           }
         }
         // If market + pending would exceed limit, cancel pending orders
         else if (totalVolume > maxVolume) {
-          console.log(`[TestnetEngine] Cancelling all pending orders for ${symbol}/${methodId}: market ($${totalOpenVolume.toFixed(2)}) + pending ($${totalPendingVolume.toFixed(2)}) would exceed limit $${maxVolume}`);
           for (const order of pendingOrders) {
             await cancelTestnetPendingOrder(db, order.order_id, 'volume_limit_reached', order.binance_order_id);
-            console.log(`[TestnetEngine] Cancelled pending order ${order.order_id} due to volume limit`);
           }
         }
         // If total volume still under limit, keep pending orders
         else {
-          console.log(`[TestnetEngine] Keeping ${pendingOrders.length} pending orders for ${symbol}/${methodId}: total volume $${totalVolume.toFixed(2)} <= $${maxVolume}`);
         }
       }
     } catch (error) {
@@ -340,7 +325,6 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
       close_order_id: closeOrder.orderId,
     });
     
-    console.log(`[TestnetEngine] Closed testnet position ${position.position_id} at ${currentPrice} (${closeReason}), PnL: ${realizedPnl?.toFixed(2) || 'N/A'}`);
     
     return { realizedPnl, isWin };
   } catch (error) {
@@ -373,7 +357,6 @@ export async function updateTestnetPositionSL(db, position, newSL, reason) {
       reason: reason,
     });
     
-    console.log(`[TestnetEngine] Updated SL for position ${position.position_id}: ${position.stop_loss} -> ${newSL} (${reason}) - managed internally (hedge mode)`);
   } catch (error) {
     console.error('[TestnetEngine] Failed to update SL:', error.message);
     throw error;
@@ -395,7 +378,6 @@ export async function checkTestnetSLTP(db, position, currentPrice) {
   const slHit = isLong ? currentPrice <= position.stop_loss : currentPrice >= position.stop_loss;
   
   if (slHit) {
-    console.log(`[TestnetEngine] SL hit for position ${position.position_id} at ${currentPrice}`);
     await closeTestnetPositionEngine(db, position, currentPrice, 'stop_loss');
     return 'stop_loss';
   }
@@ -410,7 +392,6 @@ export async function checkTestnetSLTP(db, position, currentPrice) {
       // Fallback to simple TP
       const tpHit = isLong ? currentPrice >= position.take_profit : currentPrice <= position.take_profit;
       if (tpHit) {
-        console.log(`[TestnetEngine] Simple TP hit for position ${position.position_id} at ${currentPrice}`);
         await closeTestnetPositionEngine(db, position, currentPrice, 'take_profit');
         return 'take_profit';
       }
@@ -425,7 +406,6 @@ export async function checkTestnetSLTP(db, position, currentPrice) {
       const tpHit = isLong ? currentPrice >= tpLevel : currentPrice <= tpLevel;
       
       if (tpHit) {
-        console.log(`[TestnetEngine] TP Level ${i + 1} hit for position ${position.position_id} at ${currentPrice} (target: ${tpLevel})`);
         
         // Handle partial close
         const result = await handlePartialTP(db, position, currentPrice, i + 1, tpLevels.length);
@@ -482,7 +462,6 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
     if (position.binance_tp_order_id) {
       try {
         await cancelOrder(testnetClient, symbol, position.binance_tp_order_id);
-        console.log(`[TestnetEngine] Cancelled TP order ${position.binance_tp_order_id} for partial close`);
       } catch (error) {
         console.error('[TestnetEngine] Failed to cancel TP order:', error.message);
       }
@@ -520,7 +499,6 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
         binance_tp_order_id: newTPOrder.orderId.toString(),
       });
       
-      console.log(`[TestnetEngine] Placed new TP order for remaining ${remainingQty} qty`);
     }
     
     // Record trade event
@@ -532,7 +510,6 @@ async function handlePartialTP(db, position, currentPrice, tpLevel, totalTPLevel
       close_order_id: closeOrder.orderId,
     });
     
-    console.log(`[TestnetEngine] Partial TP ${tpLevel} executed for position ${position.position_id}: closed ${closeQty} @ ${currentPrice}, PnL: ${partialPnl?.toFixed(2) || 'N/A'}`);
     
     return { partialPnl, closeQty };
   } catch (error) {
@@ -564,7 +541,6 @@ export async function syncTestnetAccount(db, account) {
     // Skip auto-correction if Binance balance is 0 (unfunded testnet account)
     // Keep DB balance for paper trading
     if (balance.availableBalance < 1) {
-      console.log(`[TestnetEngine] Binance balance is ${balance.availableBalance} (unfunded), keeping DB balance ${account.current_balance} for paper trading`);
       // Still update equity with unrealized PnL from positions (if any)
       await updateTestnetAccountEquity(db, account.id, balance.totalUnrealizedProfit);
     } else if (balanceDiff > 0.01 || equityDiff > 0.01) {
@@ -585,7 +561,6 @@ export async function syncTestnetAccount(db, account) {
         reason: 'discrepancy_detected',
       });
 
-      console.log(`[TestnetEngine] Auto-corrected account ${account.id} with Binance values`);
     } else {
       // No discrepancy, just update equity with latest totalWalletBalance (includes unrealized PnL)
       await updateTestnetAccountEquityDirect(db, account.id, balance.totalWalletBalance);
@@ -597,7 +572,6 @@ export async function syncTestnetAccount(db, account) {
     // Create snapshot
     await createTestnetAccountSnapshot(db, account.id);
     
-    console.log(`[TestnetEngine] Synced testnet account ${account.id}: balance=${balance.availableBalance}, equity=${balance.totalWalletBalance}`);
     
     return balance;
   } catch (error) {
@@ -634,10 +608,8 @@ async function syncTestnetPositions(db, account) {
     
     // If Binance has no position but DB has open positions, close them in DB
     if (!binancePosition && dbPositions.length > 0) {
-      console.log(`[TestnetEngine] Binance has no open position but DB has ${dbPositions.length} open positions - closing them in DB`);
       
       for (const position of dbPositions) {
-        console.log(`[TestnetEngine] Closing position ${position.position_id} in DB (closed on Binance)`);
         
         // Record sync close event
         await recordTestnetTradeEvent(db, position.position_id, 'sync_closed', {
@@ -690,13 +662,11 @@ async function syncTestnetPositions(db, account) {
               reason: 'order_missing',
             });
             
-            console.log(`[TestnetEngine] Replaced SL order for position ${position.position_id}`);
           } catch (replaceError) {
             console.error(`[TestnetEngine] Failed to replace SL order:`, replaceError.message);
           }
         } else if (slOrder.status === 'FILLED') {
           // SL order was filled - position should be closed
-          console.log(`[TestnetEngine] SL order ${position.binance_sl_order_id} was filled for position ${position.position_id}`);
           
           // Record SL fill event with details
           await recordTestnetTradeEvent(db, position.position_id, 'sl_order_filled', {
@@ -712,7 +682,6 @@ async function syncTestnetPositions(db, account) {
           }
         } else {
           // SL order is still open - log status for traceability
-          console.log(`[TestnetEngine] SL order ${position.binance_sl_order_id} active: status=${slOrder.status}, price=${slOrder.stopPrice}`);
         }
       }
       
@@ -746,13 +715,11 @@ async function syncTestnetPositions(db, account) {
               reason: 'order_missing',
             });
             
-            console.log(`[TestnetEngine] Replaced TP order for position ${position.position_id}`);
           } catch (replaceError) {
             console.error(`[TestnetEngine] Failed to replace TP order:`, replaceError.message);
           }
         } else if (tpOrder.status === 'FILLED') {
           // TP order was filled - position should be closed
-          console.log(`[TestnetEngine] TP order ${position.binance_tp_order_id} was filled for position ${position.position_id}`);
           
           // Record TP fill event with details
           await recordTestnetTradeEvent(db, position.position_id, 'tp_order_filled', {
@@ -767,12 +734,10 @@ async function syncTestnetPositions(db, account) {
           }
         } else {
           // TP order is still open - log status for traceability
-          console.log(`[TestnetEngine] TP order ${position.binance_tp_order_id} active: status=${tpOrder.status}, price=${tpOrder.stopPrice}`);
         }
       }
     }
     
-    console.log(`[TestnetEngine] Synced ${dbPositions.length} testnet positions with Binance`);
   } catch (error) {
     console.error('[TestnetEngine] Failed to sync testnet positions:', error.message);
   }

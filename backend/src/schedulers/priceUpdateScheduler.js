@@ -83,8 +83,6 @@ async function runPriceUpdateJob() {
       await updateTestnetPositions(prices);
     }
     
-    const duration = Date.now() - startTime;
-    console.log(`[PriceScheduler] Completed in ${duration}ms`);
 
   } catch (error) {
     console.error('[PriceScheduler] Error in price update job:', error.message);
@@ -115,14 +113,10 @@ async function fetchCurrentPrices() {
 
         await saveLatestPrice(db, 'BTC', btcPrice, 0, 0, 0, 0);
         await saveLatestPrice(db, 'ETH', ethPrice, 0, 0, 0, 0);
-
-        console.log(`[PriceScheduler] Updated latest_prices - BTC: $${btcPrice}, ETH: $${ethPrice}`);
       } catch (saveError) {
         console.error('[PriceScheduler] Failed to update latest_prices:', saveError.message);
         console.error('[PriceScheduler] Error stack:', saveError.stack);
       }
-    } else {
-      console.log(`[PriceScheduler] Skipping DB update: db=${db ? 'OK' : 'NULL'}, priceData.btc=${priceData?.btc ? 'OK' : 'NULL'}, priceData.eth=${priceData?.eth ? 'OK' : 'NULL'}`);
     }
 
     return {
@@ -148,7 +142,6 @@ async function updateSymbolPositions(symbol, currentPrice, candle) {
     const { updateOpenPositions, calculateAccountEquity } = await import('../services/paperTradingEngine.js');
     const { getAllAccounts } = await import('../db/database.js');
 
-    console.log(`[PriceScheduler] Updating ${symbol} positions at $${currentPrice.toLocaleString()} (candle: O:${candle?.open} H:${candle?.high} L:${candle?.low} C:${candle?.close})`);
 
     // Check and execute pending orders first with candle data
     await checkAndExecutePendingOrders(symbol, currentPrice, candle);
@@ -159,7 +152,6 @@ async function updateSymbolPositions(symbol, currentPrice, candle) {
     // Update all open positions with candle data for SL/TP detection
     const result = await updateOpenPositions(db, symbol, currentPrice, candle);
     
-    console.log(`[PriceScheduler] ${symbol}: Updated ${result.updated} positions, closed ${result.closed.length}`);
     
     if (result.errors.length > 0) {
       console.error(`[PriceScheduler] ${symbol} errors:`, result.errors);
@@ -171,7 +163,6 @@ async function updateSymbolPositions(symbol, currentPrice, candle) {
     
     for (const account of symbolAccounts) {
       await calculateAccountEquity(db, account);
-      console.log(`[PriceScheduler] Updated equity for account ${account.id} (${account.method_id}): ${account.equity}`);
     }
     
   } catch (error) {
@@ -202,7 +193,6 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
 
     if (pendingOrders.length === 0) return;
 
-    console.log(`[PriceScheduler] Checking ${pendingOrders.length} pending orders for ${symbol} at $${currentPrice.toLocaleString()} (candle H:${candle?.high} L:${candle?.low})`);
 
     const previousPrice = previousPrices[symbol];
 
@@ -265,7 +255,6 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
             continue;
           }
 
-          console.log(`[PriceScheduler] Volume check passed for pending order ${order.id}: $${totalVolume?.toFixed(2) || 'N/A'} <= $${maxVolume}`);
           
           // Execute the order (convert to actual position)
           // Use entry_price as the execution price since that's where the limit was hit
@@ -294,7 +283,7 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
           await openPosition(db, account, positionData, order.linked_prediction_id);
           await executePendingOrder(db, order.id);
           
-          console.log(`[PriceScheduler] ${symbol} limit order executed: ${order.side} @ $${entryPrice.toLocaleString()} (prev: $${previousPrice?.toLocaleString()}, current: $${currentPrice.toLocaleString()})`);
+          console.log(`[PriceScheduler] ${symbol} limit order executed: ${order.side} @ $${entryPrice.toLocaleString()}`);
         } catch (execError) {
           console.error(`[PriceScheduler] Failed to execute pending order ${order.id}:`, execError.message);
         }
@@ -323,7 +312,6 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
 
     if (pendingOrders.length === 0) return;
 
-    console.log(`[PriceScheduler] Checking ${pendingOrders.length} testnet pending orders for ${symbol} at $${currentPrice.toLocaleString()} (candle H:${candle?.high} L:${candle?.low})`);
 
     for (const order of pendingOrders) {
       const isLong = order.side === 'long';
@@ -392,7 +380,6 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
             continue;
           }
 
-          console.log(`[PriceScheduler] Volume check passed for testnet pending order ${order.order_id}: $${totalVolume?.toFixed(2) || 'N/A'} <= $${maxVolume}`);
 
           // Cancel Binance limit order before executing as market order
           if (order.binance_order_id) {
@@ -403,7 +390,6 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
               
               if (testnetClient) {
                 await cancelOrder(testnetClient, getSymbol(), order.binance_order_id);
-                console.log(`[PriceScheduler] Cancelled Binance limit order ${order.binance_order_id} before executing as market order`);
               }
             } catch (cancelError) {
               console.error(`[PriceScheduler] Failed to cancel Binance limit order ${order.binance_order_id}:`, cancelError.message);
@@ -429,7 +415,6 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
           await openTestnetPosition(db, account, positionData, order.linked_prediction_id, order.method_id);
           await executeTestnetPendingOrder(db, order.order_id);
 
-          console.log(`[PriceScheduler] Testnet limit order executed: ${order.side} @ $${entryPrice.toLocaleString()}`);
         } catch (execError) {
           console.error(`[PriceScheduler] Failed to execute testnet pending order ${order.order_id}:`, execError.message);
         }
@@ -510,7 +495,6 @@ async function updateTestnetPositions(prices) {
       return;
     }
 
-    console.log(`[PriceScheduler] Updating testnet positions at $${currentPrice.toLocaleString()}`);
 
     // Update unrealized PnL and check SL/TP
     await updateTestnetPositionsPnL(db, currentPrice);
@@ -525,7 +509,6 @@ async function updateTestnetPositions(prices) {
       }
     }
 
-    console.log('[PriceScheduler] Testnet positions updated');
   } catch (error) {
     console.error('[PriceScheduler] Error updating testnet positions:', error.message);
   }
@@ -541,7 +524,6 @@ async function createTestnetAccountSnapshots() {
     const testnetAccount = await getTestnetAccount(db, 'BTC', 'kim_nghia');
     if (testnetAccount) {
       await createTestnetAccountSnapshot(db, testnetAccount.id);
-      console.log(`[PriceScheduler] Created testnet account snapshot for account ${testnetAccount.id}`);
     }
   } catch (error) {
     console.error('[PriceScheduler] Error creating testnet account snapshots:', error.message);
