@@ -2,6 +2,73 @@
 
 All notable changes to the project will be documented in this file.
 
+## [29/04/2026] - v1.2.38 - Binance Testnet Order Contract & Cleanup Fixes
+
+### Bug Fixes
+
+**Issue 1: Invalid Binance conditional order endpoint**
+- **Problem**: Testnet trading logged `Binance API Error -5000: Path /fapi/v1/order/stopMarket, Method POST is invalid`
+- **Root Cause**: Hedge-mode SL/TP orders were sent to non-standard REST paths instead of the standard Binance Futures new-order endpoint
+- **Fix**:
+  - Updated conditional order placement to use `POST /fapi/v1/order`
+  - `STOP_MARKET` and `TAKE_PROFIT_MARKET` are now passed via `type`
+  - Preserved hedge-mode requirements with `positionSide` and `closePosition=true`
+- **Impact**: SL/TP orders now match the official Binance Futures REST contract
+- **Files**: `backend/src/services/binance/endpoints.js`, `backend/src/services/binance/trading.js`, `backend/src/services/binanceClient.js`
+
+**Issue 2: Retry spam for non-retriable Binance request errors**
+- **Problem**: Invalid request-contract failures such as `-5000` were retried up to three times, polluting PM2 logs
+- **Fix**:
+  - Added retriable vs non-retriable error classification in Binance HTTP client
+  - Marked `-5000`, `-2015`, `-2022`, `-4046`, and `-4059` as non-retriable
+  - Kept retries only for transient conditions such as timestamp drift, rate limit, and no-response failures
+- **Impact**: PM2 logs no longer spam retries for bad Binance requests
+- **Files**: `backend/src/services/binance/client.js`
+
+**Issue 3: Orphan Binance positions after SL/TP placement failure**
+- **Problem**: A market entry could succeed on Binance while DB save failed because SL/TP placement failed afterward
+- **Fix**:
+  - Added recovery-close flow in `openTestnetPosition()`
+  - Recorded `entry_protection_failed` and `recovery_close` trade events
+  - Position is only saved to DB after entry and protection orders both succeed
+- **Impact**: Prevents hidden live Binance positions that are missing from the local database
+- **Files**: `backend/src/services/testnetEngine.js`
+
+**Issue 4: False balance discrepancy warnings**
+- **Problem**: Sync compared DB balance against `availableBalance`, which drops when margin is reserved or orders are open
+- **Fix**:
+  - Switched realized balance sync to `walletBalance`
+  - Kept equity sync as `walletBalance + totalUnrealizedProfit`
+  - Preserved `current_balance`, `unrealized_pnl`, and `equity` invariants in testnet account updates
+- **Impact**: Balance drift logs now represent real data mismatches instead of margin reservation noise
+- **Files**: `backend/src/services/testnetEngine.js`, `backend/src/db/testnetDatabase.js`, `backend/src/routes/testnet.js`
+
+**Issue 5: Missing cleanup flow for orphan Binance state**
+- **Problem**: There was no one-shot tool to clean untracked Binance orders/positions and resync snapshots
+- **Fix**:
+  - Added `cleanupTestnetAccountState()` service
+  - Added `POST /api/testnet/cleanup/:accountId`
+  - Added CLI script `npm run testnet:cleanup`
+  - Fixed CLI env loading so `.env` is loaded before Binance modules are imported
+- **Impact**: Operators can safely reconcile Binance testnet state after bad deploys or partial order failures
+- **Files**: `backend/src/services/testnetEngine.js`, `backend/src/routes/testnet.js`, `backend/scripts/testnet-cleanup.js`, `backend/package.json`
+
+### Testing
+
+- Added focused regression tests for:
+  - Binance HTTP retry policy
+  - Binance conditional order adapter
+  - Testnet engine recovery flow
+  - Testnet sync/orphan cleanup flow
+  - Testnet DB schema compatibility
+- Verified passing targeted suite:
+  - `tests/unit/binanceHttpClient.test.js`
+  - `tests/unit/binanceTrading.test.js`
+  - `tests/unit/binanceClient.test.js`
+  - `tests/unit/testnetDatabase.test.js`
+  - `tests/unit/testnetEngine.test.js`
+  - `tests/integration/testnetFlow.test.js`
+
 ## [27/04/2026] - v1.2.0 - Backend Improvements: Bug Fixes & Entry Quality
 
 ### Bug Fixes (Priority 1)

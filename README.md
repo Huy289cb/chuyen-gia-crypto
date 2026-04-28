@@ -65,11 +65,14 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **BTC-Only**: Currently supports BTCUSDT trading with Kim Nghia method
 - **Auto-Entry**: Automatic position opening based on Kim Nghia analysis (75% confidence threshold, R:R >= 2.5)
 - **Risk Management**: 10% risk per trade, SL/TP orders placed immediately, leverage support (default 20x)
-- **Account Sync**: Auto-sync with Binance every 5 minutes, manual sync available via API
+- **Conditional Orders**: Hedge-mode SL/TP uses the standard Binance Futures `POST /fapi/v1/order` endpoint with `STOP_MARKET` and `TAKE_PROFIT_MARKET`
+- **Account Sync**: Auto-sync with Binance every 5 minutes, manual sync available via API, wallet balance used as the source of truth for realized balance
 - **Position Management**: Open/close positions, update SL, partial TP support
+- **Recovery Logic**: If market entry succeeds but SL/TP placement fails, system immediately places a recovery close to avoid orphan Binance positions
 - **Trade Events**: Complete audit trail of all trading actions
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown
 - **API Endpoints**: Full REST API for accounts, positions, performance metrics
+- **Cleanup Tools**: Manual cleanup route and CLI script to cancel orphan open orders, close orphan Binance positions, and resync snapshots
 - **Environment Switch**: Switch between Demo and Mainnet by changing `BINANCE_BASE_URL`
 - See `docs/binance-testnet-integration.md` for detailed documentation
 
