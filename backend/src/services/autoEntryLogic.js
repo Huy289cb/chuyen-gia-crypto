@@ -617,32 +617,36 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     console.log(`[AutoEntry] Check 10 SKIPPED: Session filter disabled for this method`);
   }
 
-  // Check 11: Market structure filter - Optional if fields missing
-  const structure = {
-    hasBOS: analysis.break_of_structure === true,
-    hasCHOCH: analysis.change_of_character === true,
-    isNotChoppy: analysis.range_width === undefined || analysis.range_width < 0.01
-  };
+  // Check 11: Market structure filter - if required by config
+  if (config.requireMarketStructure) {
+    const structure = {
+      hasBOS: analysis.break_of_structure === true,
+      hasCHOCH: analysis.change_of_character === true,
+      isNotChoppy: analysis.range_width === undefined || analysis.range_width < 0.01
+    };
 
-  console.log(`[AutoEntry] Check 11: Market structure`, structure);
+    console.log(`[AutoEntry] Check 11: Market structure`, structure);
 
-  // For trend following: require BOS only if field exists
-  if ((analysis.bias === 'bullish' || analysis.bias === 'bearish') && analysis.break_of_structure !== undefined) {
-    if (!structure.hasBOS) {
-      decision.reason = 'No Break of Structure detected for trend following entry';
+    // For trend following: require BOS only if field exists
+    if ((analysis.bias === 'bullish' || analysis.bias === 'bearish') && analysis.break_of_structure !== undefined) {
+      if (!structure.hasBOS) {
+        decision.reason = 'No Break of Structure detected for trend following entry';
+        console.log(`[AutoEntry] Check 11 FAILED: ${decision.reason}`);
+        return decision;
+      }
+    }
+
+    // Reject if market is choppy only if range_width is provided
+    if (analysis.range_width !== undefined && !structure.isNotChoppy) {
+      decision.reason = 'Market is choppy (range width > 1%), no clear trend';
       console.log(`[AutoEntry] Check 11 FAILED: ${decision.reason}`);
       return decision;
     }
-  }
 
-  // Reject if market is choppy only if range_width is provided
-  if (analysis.range_width !== undefined && !structure.isNotChoppy) {
-    decision.reason = 'Market is choppy (range width > 1%), no clear trend';
-    console.log(`[AutoEntry] Check 11 FAILED: ${decision.reason}`);
-    return decision;
+    console.log(`[AutoEntry] Check 11 PASSED: Market structure valid`);
+  } else {
+    console.log(`[AutoEntry] Check 11 SKIPPED: Market structure filter disabled for this method`);
   }
-
-  console.log(`[AutoEntry] Check 11 PASSED: Market structure valid`);
 
   // All checks passed - suggest entry
   decision.shouldEnter = true;
