@@ -55,7 +55,10 @@ export function getTimeSince(timestamp: string | number | undefined): { text: st
 export function formatVietnamTime(timestamp: string | null | undefined): string {
   if (!timestamp) return '-';
   try {
-    const date = new Date(timestamp);
+    // SQLite datetime('now') returns UTC without timezone indicator
+    // Append 'Z' to make it ISO 8601 format with UTC indicator
+    const utcTimestamp = timestamp.includes('Z') ? timestamp : timestamp.replace(' ', 'T') + 'Z';
+    const date = new Date(utcTimestamp);
     return date.toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
       hour: '2-digit',
