@@ -126,12 +126,15 @@ export async function placeStopLossOrder(client, symbol, side, quantity, stopPri
       type: 'STOP_MARKET',
       quantity: quantity.toString(),
       stopPrice: stopPrice.toString(),
-      reduceOnly: true, // Close position on trigger
     };
     
     // Add positionSide for hedge mode (dual position side)
     if (positionSide) {
       params.positionSide = positionSide;
+      // In hedge mode, reduceOnly is not required when positionSide is specified
+    } else {
+      // In single position mode, use reduceOnly to close position
+      params.reduceOnly = true;
     }
     
     const response = await placeOrderAPI(params);
@@ -155,12 +158,15 @@ export async function placeTakeProfitOrder(client, symbol, side, quantity, price
       type: 'TAKE_PROFIT_MARKET',
       quantity: quantity.toString(),
       stopPrice: price.toString(),
-      reduceOnly: true, // Close position on trigger
     };
     
     // Add positionSide for hedge mode (dual position side)
     if (positionSide) {
       params.positionSide = positionSide;
+      // In hedge mode, reduceOnly is not required when positionSide is specified
+    } else {
+      // In single position mode, use reduceOnly to close position
+      params.reduceOnly = true;
     }
     
     const response = await placeOrderAPI(params);
