@@ -52,9 +52,8 @@ export async function request(method, path, params = {}, signed = false) {
     if (error.response) {
       // Binance API error
       const { code, msg } = error.response.data;
-      console.error(`[BinanceClient] API Error ${code}: ${msg}`);
       
-      // Handle specific error codes
+      // Handle specific error codes that are expected/normal
       if (code === -1021) {
         // Timestamp for this request is outside of the recvWindow
         console.error('[BinanceClient] Timestamp error - sync time with server');
@@ -65,10 +64,20 @@ export async function request(method, path, params = {}, signed = false) {
         // Too many requests
         console.error('[BinanceClient] Rate limit exceeded');
       } else if (code === -4046) {
-        // No need to change margin type (already set)
-        console.log('[BinanceClient] Margin type already set, skipping retry');
-        // Don't retry this error - it's already in the desired state
-        throw new Error(`Binance API Error ${code}: ${msg}`);
+        // No need to change margin type (already set) - expected
+        console.log('[BinanceClient] Margin type already set');
+        throw new Error(`Margin type already set: ${msg}`);
+      } else if (code === -4059) {
+        // No need to change position side (already set) - expected
+        console.log('[BinanceClient] Position mode already set');
+        throw new Error(`Position mode already set: ${msg}`);
+      } else if (code === -2022) {
+        // ReduceOnly order rejected (no position to reduce) - expected
+        console.log('[BinanceClient] ReduceOnly order rejected (no position to reduce)');
+        throw new Error(`ReduceOnly order rejected: ${msg}`);
+      } else {
+        // Other errors
+        console.error(`[BinanceClient] API Error ${code}: ${msg}`);
       }
       
       throw new Error(`Binance API Error ${code}: ${msg}`);
@@ -101,9 +110,11 @@ export async function requestWithRetry(method, path, params = {}, signed = false
     } catch (error) {
       lastError = error;
 
-      // Don't retry certain error codes
-      if (error.message.includes('-4046')) {
-        // Margin type already set - no need to retry
+      // Don't retry certain error codes (expected/normal errors)
+      if (error.message.includes('-4046') || 
+          error.message.includes('-4059') || 
+          error.message.includes('-2022')) {
+        // Margin type already set, position mode already set, or ReduceOnly rejected
         throw error;
       }
       
