@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { XCircle, Target, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Brain } from 'lucide-react';
+import { XCircle, Target, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Brain, Info } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -222,13 +222,13 @@ function PositionCard({ position, onClose, onClick }: { position: Position; onCl
   const slDistance = Math.abs(position.entry_price - position.stop_loss);
   const tpDistance = Math.abs(position.take_profit - position.entry_price);
   const totalDistance = slDistance + tpDistance;
-  const currentDistance = isLong 
+  const currentDistance = isLong
     ? position.current_price - position.stop_loss
     : position.stop_loss - position.current_price;
   const progressPercent = totalDistance > 0 ? (currentDistance / totalDistance) * 100 : 0;
 
   return (
-    <div className="relative cursor-pointer hover:border-foreground/30 transition-colors rounded-lg border border-border-default bg-surface-0 p-4" onClick={onClick}>
+    <div className="relative rounded-lg border border-border-default bg-surface-0 p-4">
       {/* Close Button */}
       <button
         onClick={(e) => {
@@ -289,7 +289,7 @@ function PositionCard({ position, onClose, onClick }: { position: Position; onCl
       </div>
 
       {/* SL/TP Progress */}
-      <div className="mb-3">
+      <div className="mb-4">
         <div className="flex justify-between text-xs text-foreground-tertiary mb-1">
           <span>SL</span>
           <span>Progress</span>
@@ -304,11 +304,32 @@ function PositionCard({ position, onClose, onClick }: { position: Position; onCl
             style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
           />
           {/* Entry marker */}
-          <div 
+          <div
             className="absolute top-0 w-0.5 h-full bg-foreground"
             style={{ left: `${(slDistance / totalDistance) * 100}%` }}
           />
         </div>
+      </div>
+
+      {/* View Predictions Button */}
+      <div className="mb-3">
+        <button
+          onClick={onClick}
+          className="group relative w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-accent-primary/20 to-accent-secondary/20 hover:from-accent-primary/30 hover:to-accent-secondary/30 border border-accent-primary/30 rounded-lg transition-all duration-200"
+        >
+          <Brain className="w-4 h-4 text-accent-primary group-hover:scale-110 transition-transform" />
+          <span className="text-sm font-medium text-accent-primary">View AI Predictions</span>
+
+          {/* Hover Tooltip */}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-surface-3 border border-border-default rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+            <div className="flex items-center gap-2 text-xs text-foreground">
+              <Info className="w-3 h-3 text-accent-primary" />
+              <span>Click to see AI analysis & predictions for this position</span>
+            </div>
+            {/* Arrow */}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-surface-3" />
+          </div>
+        </button>
       </div>
 
       {/* Meta */}
