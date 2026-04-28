@@ -120,13 +120,14 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     risk_usd,
     risk_percent,
     expected_rr,
+    maxVolumePerAccount = 2000,
   } = positionData;
 
   const symbol = getSymbol();
   const leverage = getLeverage();
 
-  // Cap position size to max 2000 USDT (same as paper trading)
-  const maxOrderSize = 2000;
+  // Cap position size to maxVolumePerAccount (from method config, default 2000)
+  const maxOrderSize = maxVolumePerAccount;
   let cappedSizeUsd = size_usd;
   let cappedSizeQty = size_usd / entry_price;
 

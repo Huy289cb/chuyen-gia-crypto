@@ -409,7 +409,11 @@ async function runMethodAnalysis(methodId) {
 
               if (testnetDecision.orderType === 'market') {
                 // Execute immediately as market order
-                await openTestnetPosition(db, testnetAccount, position, btcPredictionId, methodId);
+                const positionWithMaxVolume = {
+                  ...position,
+                  maxVolumePerAccount: method.autoEntry.maxVolumePerAccount || 2000,
+                };
+                await openTestnetPosition(db, testnetAccount, positionWithMaxVolume, btcPredictionId, methodId);
                 console.log(`[Scheduler][${method.name}] Testnet market order executed: ${position.side} @ ${position.entry_price}`);
               } else {
                 // Create pending limit order for testnet
