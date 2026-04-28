@@ -96,18 +96,25 @@ export async function placeMarketOrder(client, symbol, side, quantity, positionS
 /**
  * Place limit order
  */
-export async function placeLimitOrder(client, symbol, side, quantity, price) {
+export async function placeLimitOrder(client, symbol, side, quantity, price, positionSide = null) {
   try {
-    const response = await placeOrderAPI({
+    const params = {
       symbol,
       side,
       type: 'LIMIT',
       quantity: quantity.toString(),
       price: price.toString(),
       timeInForce: 'GTC',
-    });
+    };
     
-    console.log(`[BinanceClient] Limit order placed: ${side} ${quantity} ${symbol} @ ${price}`);
+    // Add positionSide for hedge mode (dual position side)
+    if (positionSide) {
+      params.positionSide = positionSide;
+    }
+    
+    const response = await placeOrderAPI(params);
+    
+    console.log(`[BinanceClient] Limit order placed: ${side} ${quantity} ${symbol} @ ${price}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
     return response;
   } catch (error) {
     console.error('[BinanceClient] Failed to place limit order:', error.message);

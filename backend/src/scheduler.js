@@ -286,12 +286,14 @@ async function runMethodAnalysis(methodId) {
                       const newQty = decision.new_entry ? (order.size_usd / newEntry) : order.size_qty;
                       // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
                       const binanceSide = order.side === 'long' ? 'BUY' : 'SELL';
+                      const positionSide = order.side === 'long' ? 'LONG' : 'SHORT';
                       const newLimitOrder = await placeLimitOrder(
                         testnetClient,
                         getSymbol(),
                         binanceSide,
                         newQty,
-                        newEntry
+                        newEntry,
+                        positionSide
                       );
                       const newBinanceOrderId = newLimitOrder.orderId.toString();
                       console.log(`[Scheduler][${method.name}] Placed new Binance limit order ${newBinanceOrderId}`);
@@ -440,12 +442,14 @@ async function runMethodAnalysis(methodId) {
                   if (testnetClient) {
                     // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
                     const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+                    const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
                     const limitOrder = await placeLimitOrder(
                       testnetClient,
                       getSymbol(),
                       binanceSide,
                       orderSizeQty,
-                      position.entry_price
+                      position.entry_price,
+                      positionSide
                     );
                     binanceOrderId = limitOrder.orderId.toString();
                     console.log(`[Scheduler][${method.name}] Binance limit order placed: ${binanceOrderId}`);
@@ -542,12 +546,14 @@ async function runMethodAnalysis(methodId) {
                         const newQty = decision.new_entry ? (order.size_usd / newEntry) : order.size_qty;
                         // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
                         const binanceSide = order.side === 'long' ? 'BUY' : 'SELL';
+                        const positionSide = order.side === 'long' ? 'LONG' : 'SHORT';
                         const newLimitOrder = await placeLimitOrder(
                           testnetClient,
                           getSymbol(),
                           binanceSide,
                           newQty,
-                          newEntry
+                          newEntry,
+                          positionSide
                         );
                         const newBinanceOrderId = newLimitOrder.orderId.toString();
                         console.log(`[Scheduler][${method.name}] Placed new Binance limit order ${newBinanceOrderId}`);
