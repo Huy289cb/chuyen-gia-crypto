@@ -361,11 +361,22 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
           // Check volume limit before executing testnet pending order
           // Market orders may have filled the volume limit before this pending order executes
           const { getTestnetPositions, cancelTestnetPendingOrder } = await import('../db/testnetDatabase.js');
+          const { getMethodConfig } = await import('../config/methods.js');
           const openPositions = await getTestnetPositions(db, { symbol: order.symbol, method_id: order.method_id, status: 'open' });
           const totalOpenVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
           const pendingOrderVolume = order.size_usd;
           const totalVolume = totalOpenVolume + pendingOrderVolume;
           const maxVolume = order.maxVolumePerAccount || 2000;
+
+          // Check max positions per symbol limit
+          const methodConfig = getMethodConfig(order.method_id || 'kim_nghia');
+          const maxPositionsPerSymbol = methodConfig?.autoEntry?.maxPositionsPerSymbol || 6;
+
+          if (openPositions.length >= maxPositionsPerSymbol) {
+            console.log(`[PriceScheduler] Cancelling testnet pending order ${order.order_id}: already have ${openPositions.length} open positions (max: ${maxPositionsPerSymbol})`);
+            await cancelTestnetPendingOrder(db, order.order_id, 'max_positions_reached', order.binance_order_id);
+            continue;
+          }
 
           // If market volume already at limit, cancel pending order
           if (totalOpenVolume >= maxVolume) {
