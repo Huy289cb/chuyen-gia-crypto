@@ -32,6 +32,7 @@ function HomeContent() {
   const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition, refresh: refreshPaperTrading } = usePaperTrading('kim_nghia');
   const [activeTab, setActiveTab] = useState<'paper' | 'testnet' | 'comparison'>('paper');
   const [isTriggering, setIsTriggering] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const prices = data?.prices;
   const analysis = data?.analysis;
@@ -41,6 +42,7 @@ function HomeContent() {
   const handleRefresh = () => {
     refetch();
     refreshPaperTrading();
+    setRefreshKey(prev => prev + 1);
   };
 
   const handleTriggerAnalysis = async () => {
@@ -123,13 +125,13 @@ function HomeContent() {
 
         {/* Trading System Tabs */}
         <div className="mb-6">
-          <div className="flex gap-2 border-b border-surface-2">
+          <div className="flex gap-2 border-b border-surface-2 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setActiveTab('paper')}
               className={cn(
-                'px-4 py-2 font-medium transition-colors',
-                activeTab === 'paper' 
-                  ? 'text-accent-primary border-b-2 border-accent-primary' 
+                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
+                activeTab === 'paper'
+                  ? 'text-accent-primary border-b-2 border-accent-primary'
                   : 'text-foreground-secondary hover:text-foreground'
               )}
             >
@@ -138,9 +140,9 @@ function HomeContent() {
             <button
               onClick={() => setActiveTab('testnet')}
               className={cn(
-                'px-4 py-2 font-medium transition-colors',
-                activeTab === 'testnet' 
-                  ? 'text-accent-primary border-b-2 border-accent-primary' 
+                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
+                activeTab === 'testnet'
+                  ? 'text-accent-primary border-b-2 border-accent-primary'
                   : 'text-foreground-secondary hover:text-foreground'
               )}
             >
@@ -149,9 +151,9 @@ function HomeContent() {
             <button
               onClick={() => setActiveTab('comparison')}
               className={cn(
-                'px-4 py-2 font-medium transition-colors',
-                activeTab === 'comparison' 
-                  ? 'text-accent-primary border-b-2 border-accent-primary' 
+                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
+                activeTab === 'comparison'
+                  ? 'text-accent-primary border-b-2 border-accent-primary'
                   : 'text-foreground-secondary hover:text-foreground'
               )}
             >
@@ -185,13 +187,14 @@ function HomeContent() {
         )}
 
         {/* Pending Orders - Only show on paper trading tab */}
-        {activeTab === 'paper' && <PendingOrdersSection method="kim_nghia" />}
+        {activeTab === 'paper' && <PendingOrdersSection method="kim_nghia" refreshKey={refreshKey} />}
 
         {/* Trade History - Only show on paper trading tab */}
         {activeTab === 'paper' && (
           <HistorySection
             symbol="BTC"
             method="kim_nghia"
+            refreshKey={refreshKey}
           />
         )}
 
@@ -200,6 +203,7 @@ function HomeContent() {
           <PredictionsSection
             symbol="BTC"
             method="kim_nghia"
+            refreshKey={refreshKey}
           />
         )}
 
@@ -208,6 +212,7 @@ function HomeContent() {
           <PerformanceSection
             symbol="BTC"
             method="kim_nghia"
+            refreshKey={refreshKey}
           />
         )}
       </main>

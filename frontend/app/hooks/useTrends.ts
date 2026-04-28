@@ -13,6 +13,7 @@ export function useTrends(method: string = 'kim_nghia') {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
       const response = await fetch(`${API_URL}/analysis?method=${method}`);
       const result: ApiResponse<TrendsData> = await response.json();

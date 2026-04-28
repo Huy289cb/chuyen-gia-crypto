@@ -12,9 +12,10 @@ import type { PendingOrder, ApiResponse } from '../types';
 interface PendingOrdersSectionProps {
   symbol?: string;
   method?: string;
+  refreshKey?: number;
 }
 
-export function PendingOrdersSection({ symbol, method = 'kim_nghia' }: PendingOrdersSectionProps) {
+export function PendingOrdersSection({ symbol, method = 'kim_nghia', refreshKey = 0 }: PendingOrdersSectionProps) {
   const [orders, setOrders] = useState<PendingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function PendingOrdersSection({ symbol, method = 'kim_nghia' }: PendingOr
 
   useEffect(() => {
     const fetchOrders = async () => {
+      setLoading(true);
       try {
         const params = new URLSearchParams();
         if (symbol) params.set('symbol', symbol);
@@ -48,7 +50,7 @@ export function PendingOrdersSection({ symbol, method = 'kim_nghia' }: PendingOr
     // Refresh every 10 seconds
     const interval = setInterval(fetchOrders, 10000);
     return () => clearInterval(interval);
-  }, [symbol, method, API_BASE]);
+  }, [symbol, method, API_BASE, refreshKey]);
 
   const cancelOrder = async (orderId: string) => {
     setCancellingId(orderId);

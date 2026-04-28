@@ -45,18 +45,20 @@ export function Header({ onRefresh, onTriggerAnalysis, isTriggering, isLoading, 
 
   return (
     <header className="sticky top-0 z-50 glass border-b border-border-default">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14 sm:h-16">
           {/* Logo + Navigation */}
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="relative p-2 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-xl animate-pulse-glow">
-                <Zap className="w-5 h-5 text-bg-primary" />
+          <div className="flex items-center gap-3 sm:gap-6">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="relative p-1.5 sm:p-2 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-xl animate-pulse-glow">
+                <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-bg-primary" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-foreground">
-                  Crypto<span className="text-gradient">Analyzer</span>
-                  <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded-full">v{APP_VERSION}</span>
+                <h1 className="text-base sm:text-lg font-bold text-foreground">
+                  <span className="hidden sm:inline">Crypto</span>
+                  <span className="sm:hidden">C</span>
+                  <span className="text-gradient">Analyzer</span>
+                  <span className="ml-1 sm:ml-2 px-1.5 sm:px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded-full">v{APP_VERSION}</span>
                 </h1>
                 <p className="text-xs text-foreground-tertiary hidden sm:block">
                   AI-Powered Trading Analysis
@@ -76,9 +78,9 @@ export function Header({ onRefresh, onTriggerAnalysis, isTriggering, isLoading, 
           </div>
 
           {/* Data Freshness + Refresh */}
-          <div className="flex items-center gap-4">
-            {/* Freshness Indicators */}
-            <div className="hidden sm:flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Freshness Indicators - Hidden on mobile, shown on md+ */}
+            <div className="hidden md:flex items-center gap-4 text-xs">
               <div className="flex items-center gap-1.5">
                 <PriceIcon size={12} className={cn(getFreshnessColor(priceFreshness.status))} />
                 <span className="text-foreground-tertiary">Price:</span>
@@ -92,6 +94,16 @@ export function Header({ onRefresh, onTriggerAnalysis, isTriggering, isLoading, 
                 <span className={cn('font-medium', getFreshnessColor(analysisFreshness.status))}>
                   {analysisFreshness.text}
                 </span>
+              </div>
+            </div>
+
+            {/* Mobile-only freshness icon (compact) */}
+            <div className="flex md:hidden items-center gap-2">
+              <div className="flex items-center gap-1" title={`Price: ${priceFreshness.text}`}>
+                <PriceIcon size={14} className={cn(getFreshnessColor(priceFreshness.status))} />
+              </div>
+              <div className="flex items-center gap-1" title={`Analysis: ${analysisFreshness.text}`}>
+                <AnalysisIcon size={14} className={cn(getFreshnessColor(analysisFreshness.status))} />
               </div>
             </div>
 

@@ -282,3 +282,15 @@ input:focus-visible {
   background: var(--accent-glow);
   color: var(--accent-primary);
 }
+
+/* ============================================
+   SCROLLBAR HIDE (for mobile tabs)
+   ============================================ */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

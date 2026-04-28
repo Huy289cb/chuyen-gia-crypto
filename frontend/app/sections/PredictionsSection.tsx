@@ -22,6 +22,7 @@ const biasLabels: Record<string, string> = {
 interface PredictionsSectionProps {
   symbol: string;
   method?: string;
+  refreshKey?: number;
 }
 
 // Extended prediction with analysis data
@@ -66,7 +67,7 @@ interface PredictionWithAnalysis extends PredictionHistory {
   };
 }
 
-export function PredictionsSection({ symbol, method = 'kim_nghia' }: PredictionsSectionProps) {
+export function PredictionsSection({ symbol, method = 'kim_nghia', refreshKey = 0 }: PredictionsSectionProps) {
   const [predictions, setPredictions] = useState<PredictionWithAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -75,6 +76,7 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
 
   useEffect(() => {
     const fetchPredictions = async () => {
+      setLoading(true);
       try {
         const API_BASE = process.env.NODE_ENV === 'development'
           ? 'http://localhost:3000/api'
@@ -128,7 +130,7 @@ export function PredictionsSection({ symbol, method = 'kim_nghia' }: Predictions
     };
 
     fetchPredictions();
-  }, [symbol, method, currentPage, itemsPerPage]);
+  }, [symbol, method, currentPage, itemsPerPage, refreshKey]);
 
   const handlePageChange = (newPage: number) => {
     console.log('[Pagination] handlePageChange called:', { currentPage, newPage, totalPages: pagination.totalPages });

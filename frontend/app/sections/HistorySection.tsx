@@ -27,9 +27,10 @@ const formatToGMT7 = (timestamp: string) => {
 interface HistorySectionProps {
   symbol?: string;
   method?: string;
+  refreshKey?: number;
 }
 
-export function HistorySection({ symbol = 'BTC', method = 'kim_nghia' }: HistorySectionProps) {
+export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKey = 0 }: HistorySectionProps) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -38,6 +39,7 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia' }: History
 
   useEffect(() => {
     const fetchTrades = async () => {
+      setLoading(true);
       try {
         const API_BASE = process.env.NODE_ENV === 'development'
           ? 'http://localhost:3000/api'
@@ -56,7 +58,7 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia' }: History
     };
 
     fetchTrades();
-  }, [symbol, method, currentPage, itemsPerPage]);
+  }, [symbol, method, currentPage, itemsPerPage, refreshKey]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= pagination.totalPages) {
