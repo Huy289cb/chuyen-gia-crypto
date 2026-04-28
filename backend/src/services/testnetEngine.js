@@ -35,6 +35,7 @@ import {
   updateTestnetAccountStats,
   createTestnetAccountSnapshot,
 } from '../db/testnetDatabase.js';
+import { getCurrentPosition } from './binance/account.js';
 
 // Global client instance
 let testnetClient = null;
@@ -613,6 +614,7 @@ export async function syncTestnetAccount(db, account) {
 /**
  * Sync testnet positions with Binance
  * Tracks order status for SL/TP orders and detects discrepancies
+ * Also syncs position status - if Binance has no position but DB does, close in DB
  */
 async function syncTestnetPositions(db, account) {
   if (!testnetClient) {
@@ -622,11 +624,37 @@ async function syncTestnetPositions(db, account) {
   try {
     const symbol = getSymbol();
     
-    // Get open orders from Binance
-    const binanceOrders = await getOpenOrders(testnetClient, symbol);
+    // Get current position from Binance
+    const binancePosition = await getCurrentPosition(symbol);
     
     // Get open positions from database
     const dbPositions = await getTestnetPositions(db, { account_id: account.id, status: 'open' });
+    
+    // If Binance has no position but DB has open positions, close them in DB
+    if (!binancePosition && dbPositions.length > 0) {
+      console.log(`[TestnetEngine] Binance has no open position but DB has ${dbPositions.length} open positions - closing them in DB`);
+      
+      for (const position of dbPositions) {
+        console.log(`[TestnetEngine] Closing position ${position.position_id} in DB (closed on Binance)`);
+        
+        // Record sync close event
+        await recordTestnetTradeEvent(db, position.position_id, 'sync_closed', {
+          reason: 'position_closed_on_binance',
+          binance_position: null,
+        });
+        
+        // Close position in database with current price
+        const { fetchRealTimePrices } = await import('../price-fetcher.js');
+        const priceData = await fetchRealTimePrices(db);
+        const currentPrice = priceData.btc?.price || priceData.eth?.price || position.current_price;
+        
+        await closeTestnetPositionEngine(db, position, currentPrice, 'sync_closed');
+      }
+      return;
+    }
+    
+    // Get open orders from Binance
+    const binanceOrders = await getOpenOrders(testnetClient, symbol);
     
     for (const position of dbPositions) {
       // Check SL order status
