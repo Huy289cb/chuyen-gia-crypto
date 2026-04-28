@@ -668,10 +668,21 @@ async function syncTestnetPositions(db, account) {
           // SL order was filled - position should be closed
           console.log(`[TestnetEngine] SL order ${position.binance_sl_order_id} was filled for position ${position.position_id}`);
           
+          // Record SL fill event with details
+          await recordTestnetTradeEvent(db, position.position_id, 'sl_order_filled', {
+            order_id: position.binance_sl_order_id,
+            fill_price: slOrder.avgPrice || slOrder.price,
+            fill_qty: slOrder.executedQty,
+            fill_time: slOrder.updateTime,
+          });
+          
           // Check if position is still open in database
           if (position.status === 'open') {
             await closeTestnetPositionEngine(db, position, position.stop_loss, 'stop_loss_filled');
           }
+        } else {
+          // SL order is still open - log status for traceability
+          console.log(`[TestnetEngine] SL order ${position.binance_sl_order_id} active: status=${slOrder.status}, price=${slOrder.stopPrice}`);
         }
       }
       
@@ -713,9 +724,20 @@ async function syncTestnetPositions(db, account) {
           // TP order was filled - position should be closed
           console.log(`[TestnetEngine] TP order ${position.binance_tp_order_id} was filled for position ${position.position_id}`);
           
+          // Record TP fill event with details
+          await recordTestnetTradeEvent(db, position.position_id, 'tp_order_filled', {
+            order_id: position.binance_tp_order_id,
+            fill_price: tpOrder.avgPrice || tpOrder.price,
+            fill_qty: tpOrder.executedQty,
+            fill_time: tpOrder.updateTime,
+          });
+          
           if (position.status === 'open') {
             await closeTestnetPositionEngine(db, position, position.take_profit, 'take_profit_filled');
           }
+        } else {
+          // TP order is still open - log status for traceability
+          console.log(`[TestnetEngine] TP order ${position.binance_tp_order_id} active: status=${tpOrder.status}, price=${tpOrder.stopPrice}`);
         }
       }
     }
@@ -728,6 +750,8 @@ async function syncTestnetPositions(db, account) {
 
 /**
  * Update unrealized PnL for open testnet positions
+ * SL/TP is now managed by Binance server-side via Algo Orders
+ * This function only updates PnL, order status is synced via syncTestnetPositions
  */
 export async function updateTestnetPositionsPnL(db, currentPrice) {
   if (!testnetClient) {
@@ -752,8 +776,9 @@ export async function updateTestnetPositionsPnL(db, currentPrice) {
         unrealized_pnl: unrealizedPnl,
       });
       
-      // Check SL/TP
-      await checkTestnetSLTP(db, { ...position, current_price: currentPrice, unrealized_pnl: unrealizedPnl }, currentPrice);
+      // SL/TP is now managed by Binance server-side via Algo Orders
+      // Order status is synced via syncTestnetPositions called in price update cycle
+      // No need for internal checkTestnetSLTP anymore
     }
     
     // Update account equity
