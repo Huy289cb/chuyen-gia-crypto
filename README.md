@@ -35,10 +35,10 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
 - **Volume Limit**: Tối đa 2k USD tổng volume positions per account (open positions + pending orders). Tối đa 2k USD cho từng position và pending order riêng lẻ. Khi volume đạt giới hạn, các pending order mới chỉ được phép nếu entry align với SL/TP của các position đang chạy (±0.5% tolerance)
 - **Order Validation**: Validation SL/TP placement đảm bảo logic hợp lý (LONG: SL<entry<TP, SHORT: SL>entry>TP)
-- **Real-time PnL**: Cập nhật PnL mỗi 1 phút với 1-minute candle data, auto-close khi hit SL/TP
+- **Real-time PnL**: Cập nhật PnL mỗi 10 giây với 1-minute candle data, auto-close khi hit SL/TP
 - **Cooldown System**: 4h cooldown sau 3 consecutive losses (updated from 8)
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown, average R multiple
-- **Price Updates**: Cập nhật giá và PnL mỗi 1 phút với 1-minute candle OHLC data từ Binance API
+- **Price Updates**: Cập nhật giá và PnL mỗi 10 giây với 1-minute candle OHLC data từ Binance API
 - **Prediction Timeline**: Hiển thị lịch sử dự báo theo thời gian với filter
 - **Performance Charts**: Equity curve, trade stats, trade history trong 1 component
 - **Advanced Metrics**: Accuracy by timeframe, accuracy by bias, average hold time
@@ -137,7 +137,7 @@ crypto-analyzer/
 │   │   │   ├── performance.js     # Performance metrics API
 │   │   │   └── testnet.js         # Testnet trading API
 │   │   ├── schedulers/            # Scheduler modules
-│   │   │   └── priceUpdateScheduler.js # 1m price updates with 1-minute candle data
+│   │   │   └── priceUpdateScheduler.js # 10s price updates with 1-minute candle data
 │   │   ├── services/              # Business logic
 │   │   │   ├── autoEntryLogic.js  # Auto-entry decision engine (multi-method support)
 │   │   │   ├── paperTradingEngine.js # Position management

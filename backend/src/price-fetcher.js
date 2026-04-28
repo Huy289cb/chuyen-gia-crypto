@@ -48,8 +48,6 @@ export async function fetchRealTimePrices(db = null) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[PriceFetcher] Fetching 1-minute candles from Binance (attempt ${attempt}/${maxRetries})...`);
-
       // Fetch 1-minute candle data from Binance klines API
       const btcRes = await fetchWithTimeout(`${BINANCE_API}/klines?symbol=BTCUSDT&interval=1m&limit=1`, {}, 10000);
       const ethRes = await fetchWithTimeout(`${BINANCE_API}/klines?symbol=ETHUSDT&interval=1m&limit=1`, {}, 10000);
@@ -83,8 +81,6 @@ export async function fetchRealTimePrices(db = null) {
         time: new Date(ethCandle[0]).toISOString()
       };
 
-      console.log(`[PriceFetcher] 1-minute candles - BTC: O:${btcData.open} H:${btcData.high} L:${btcData.low} C:${btcData.price}, ETH: O:${ethData.open} H:${ethData.high} L:${ethData.low} C:${ethData.price}`);
-
       return {
         timestamp: new Date().toISOString(),
         btc: btcData,
@@ -95,7 +91,6 @@ export async function fetchRealTimePrices(db = null) {
 
       // If not the last attempt, wait and retry
       if (attempt < maxRetries) {
-        console.log(`[PriceFetcher] Retrying in ${retryDelay}ms...`);
         await new Promise(resolve => setTimeout(resolve, retryDelay));
         continue;
       }
@@ -149,17 +144,13 @@ export async function fetchRealTimePrices(db = null) {
  */
 export async function fetchPrices(db = null) {
   try {
-    console.log('[PriceFetcher] Fetching prices...');
-    
     // ALWAYS try to fetch fresh data from Binance first (primary source)
     try {
-      console.log('[PriceFetcher] Fetching fresh data from Binance...');
       const binanceData = await fetchFromBinance();
       
       // Store fresh prices to database if available
       if (db && binanceData) {
         try {
-          console.log('[PriceFetcher] Saving fresh OHLC data from Binance...');
           const { saveOHLCCandleWithTimeframe, saveLatestPrice } = await import('./db/database.js');
           
           // Fetch and save OHLC data from Binance (15m granularity for detailed analysis)
@@ -176,7 +167,6 @@ export async function fetchPrices(db = null) {
                 console.error(`[PriceFetcher] Failed to save BTC candle at ${candle.timestamp}:`, saveError.message);
               }
             }
-            console.log(`[PriceFetcher] Saved ${savedCount}/${btcOHLC.length} BTC OHLC candles (15m) from Binance`);
           }
           
           if (ethOHLC.length > 0) {
@@ -189,14 +179,11 @@ export async function fetchPrices(db = null) {
                 console.error(`[PriceFetcher] Failed to save ETH candle at ${candle.timestamp}:`, saveError.message);
               }
             }
-            console.log(`[PriceFetcher] Saved ${savedCount}/${ethOHLC.length} ETH OHLC candles (15m) from Binance`);
           }
           
           // Save latest prices
           await saveLatestPrice(db, 'BTC', binanceData.btc.price, binanceData.btc.change24h, binanceData.btc.change7d, binanceData.btc.marketCap, binanceData.btc.volume24h);
           await saveLatestPrice(db, 'ETH', binanceData.eth.price, binanceData.eth.change24h, binanceData.eth.change7d, binanceData.eth.marketCap, binanceData.eth.volume24h);
-          
-          console.log('[PriceFetcher] Saved fresh prices to database - BTC: $' + binanceData.btc.price + ', ETH: $' + binanceData.eth.price);
         } catch (saveError) {
           console.log('[PriceFetcher] OHLC save failed:', saveError.message);
         }
@@ -204,13 +191,11 @@ export async function fetchPrices(db = null) {
       
       return binanceData;
     } catch (apiError) {
-      console.log('[PriceFetcher] Binance API failed:', apiError.message);
-      console.log('[PriceFetcher] Trying CoinGecko fallback...');
+      console.log('[PriceFetcher] Binance API failed, trying fallback...');
       
       // Try CoinGecko as secondary source before falling back to DB
       try {
         const coingeckoData = await fetchWithFallback(db);
-        console.log('[PriceFetcher] Using CoinGecko data as fallback');
         return coingeckoData;
       } catch (coingeckoError) {
         console.log('[PriceFetcher] CoinGecko also failed, falling back to database...');
@@ -477,8 +462,6 @@ export async function fetchOHLCFromCoinGecko(coinId, days = 7) {
  */
 async function fetchFromBinance() {
   try {
-    console.log('[PriceFetcher] Fetching market data from Binance...');
-    
     // Fetch 24h ticker data for BTC and ETH (includes price, change, volume)
     const btcRes = await fetchWithTimeout(`${BINANCE_API}/ticker/24hr?symbol=BTCUSDT`, {}, 10000);
     const ethRes = await fetchWithTimeout(`${BINANCE_API}/ticker/24hr?symbol=ETHUSDT`, {}, 10000);
@@ -508,8 +491,6 @@ async function fetchFromBinance() {
     // Binance doesn't provide market cap directly, so we use quoteVolume as proxy
     const btcMarketCap = parseFloat(btcData.quoteVolume); // 24h quote volume
     const ethMarketCap = parseFloat(ethData.quoteVolume);
-    
-    console.log(`[PriceFetcher] Binance data fetched - BTC: $${btcData.lastPrice}, ETH: $${ethData.lastPrice}`);
     
     return {
       timestamp: new Date().toISOString(),
