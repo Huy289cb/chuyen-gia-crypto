@@ -477,11 +477,28 @@ export function checkStopLevels(position, currentPrice, candle) {
         hitTP = safePriceComparison(currentPrice, position.take_profit, position.side);
       }
 
+      console.log(`[PaperTrading] Simple take_profit check:`, {
+        position_id: position.position_id,
+        take_profit: position.take_profit,
+        current_price: currentPrice,
+        candle_high: candle?.high,
+        candle_low: candle?.low,
+        side: position.side,
+        hitTP: hitTP,
+        comparison: position.side === 'long' 
+          ? `candle.high (${candle?.high}) >= take_profit (${position.take_profit})`
+          : `candle.low (${candle?.low}) <= take_profit (${position.take_profit})`
+      });
+
       if (hitTP) {
         hitTPs.push({ level: 1, price: position.take_profit });
         console.log(`[PaperTrading] Simple take_profit HIT at ${position.take_profit} for position ${position.position_id}`);
       }
+    } else {
+      console.log(`[PaperTrading] No take_profit set for position ${position.position_id}`);
     }
+  } else {
+    console.log(`[PaperTrading] Using tp_levels for position ${position.position_id}: ${position.tp_levels}`);
   }
 
   return { hitSL, hitTPs, nextTPLevel };
