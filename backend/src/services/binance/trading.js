@@ -72,6 +72,11 @@ export async function setPositionMode(dual) {
     console.log(`[BinanceTrading] Position mode set to ${dual ? 'dual' : 'single'} side`);
     return response;
   } catch (error) {
+    // Ignore "No need to change position side" error
+    if (error.message.includes('-4059') || error.message.includes('No need to change position side')) {
+      console.log(`[BinanceTrading] Position mode already set to ${dual ? 'dual' : 'single'} side`);
+      return { dualSidePosition: dual.toString() };
+    }
     console.error('[BinanceTrading] Failed to set position mode:', error.message);
     throw error;
   }
