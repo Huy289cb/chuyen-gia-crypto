@@ -370,6 +370,9 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   // methodConfig can be either the full method object or just autoEntry config
   const config = methodConfig?.autoEntry || methodConfig || AUTO_ENTRY_CONFIG;
   
+  // Extract methodId early for use in confluence check
+  const methodId = methodConfig?.methodId || null;
+  
   const decision = {
     shouldEnter: false,
     action: 'no_trade',
@@ -650,7 +653,6 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
 
   // Calculate suggested position parameters
-  const methodId = methodConfig?.methodId || null;
   decision.suggestedPosition = await calculateSuggestedPosition(analysis, account, config, methodId);
   
   // If position calculation failed, reject entry
@@ -724,7 +726,6 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     decision.orderType = 'market';
     
     // Recalculate SL/TP based on new entry price to maintain proper distance
-    const methodId = methodConfig?.methodId || null;
     const recalculatedPosition = await recalculateSLTPForMarketOrder(
       decision.suggestedPosition,
       currentPrice,
