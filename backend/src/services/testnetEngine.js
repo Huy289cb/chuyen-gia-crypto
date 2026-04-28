@@ -124,6 +124,15 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   // Calculate quantity based on capped size_usd and leverage
   const size_qty = cappedSizeQty;
 
+  // Round quantity to Binance precision (BTCUSDT stepSize is 0.001)
+  const QUANTITY_PRECISION = 3; // 3 decimal places for BTCUSDT
+  const roundedQty = Math.floor(size_qty * Math.pow(10, QUANTITY_PRECISION)) / Math.pow(10, QUANTITY_PRECISION);
+  
+  // Ensure minimum quantity (Binance minimum for BTCUSDT is 0.001)
+  const finalQty = Math.max(roundedQty, 0.001);
+  
+  console.log(`[TestnetEngine] Quantity calculation: size_usd=${cappedSizeUsd}, entry_price=${entry_price}, raw_qty=${size_qty}, rounded_qty=${finalQty}`);
+
   // Validate position size vs account balance
   if (cappedSizeUsd > account.current_balance) {
     console.error(`[TestnetEngine] Position size ${cappedSizeUsd} exceeds account balance ${account.current_balance}`);
@@ -146,14 +155,14 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     const binanceSide = side === 'long' ? 'BUY' : 'SELL';
     
     // Place market order
-    const order = await placeMarketOrder(testnetClient, symbol, binanceSide, size_qty);
+    const order = await placeMarketOrder(testnetClient, symbol, binanceSide, finalQty);
     
     // Place SL order (opposite side)
     const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-    const slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, size_qty, stop_loss);
+    const slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, stop_loss);
     
     // Place TP order (opposite side)
-    const tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, size_qty, take_profit);
+    const tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, take_profit);
     
     // Save position to database
     const newPosition = await createTestnetPosition(db, {
@@ -165,7 +174,7 @@ export async function openTestnetPosition(db, account, positionData, predictionI
       stop_loss: stop_loss,
       take_profit: take_profit,
       size_usd: cappedSizeUsd,
-      size_qty: size_qty,
+      size_qty: finalQty,
       risk_usd: risk_usd,
       risk_percent: risk_percent,
       expected_rr: expected_rr,
