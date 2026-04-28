@@ -90,8 +90,8 @@ export async function initTestnetEngine() {
     await setPositionMode(true);
     console.log('[TestnetEngine] Position mode set to dual (hedge mode)');
   } catch (error) {
-    // Ignore if already set
-    if (error.message.includes('No need to change position side')) {
+    // Ignore if already set (error -4059 or message contains specific text)
+    if (error.message.includes('No need to change position side') || error.message.includes('-4059')) {
       console.log('[TestnetEngine] Position mode already set to dual');
     } else {
       console.error('[TestnetEngine] Failed to set position mode:', error.message);
