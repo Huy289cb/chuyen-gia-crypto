@@ -226,10 +226,10 @@ export async function createTestnetPosition(db, positionData) {
     db.run(
       `INSERT INTO testnet_positions (
         position_id, account_id, symbol, side, entry_price, stop_loss, take_profit,
-        size_usd, size_qty, risk_usd, risk_percent, expected_rr,
+        entry_time, size_usd, size_qty, risk_usd, risk_percent, expected_rr,
         linked_prediction_id, binance_order_id, binance_sl_order_id, binance_tp_order_id,
         tp_levels, tp_hit_count, partial_closed
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         position_id, account_id, symbol, side, entry_price, stop_loss, take_profit,
         size_usd, size_qty, risk_usd, risk_percent, expected_rr,

@@ -261,6 +261,17 @@ function PositionCard({ position, onClose }: { position: TestnetPosition; onClos
           <p className="font-medium">${formatPrice(position.current_price)}</p>
         </div>
         <div>
+          <p className="text-foreground-tertiary text-xs">Volume</p>
+          <p className="font-medium">${formatPrice(position.size_usd)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">Leverage</p>
+          <p className="font-medium">20x</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-2">
+        <div>
           <p className="text-foreground-tertiary text-xs">Unrealized PnL</p>
           <p className={cn('font-medium', position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger')}>
             {position.unrealized_pnl >= 0 ? '+' : ''}{formatPrice(position.unrealized_pnl)}
@@ -272,9 +283,6 @@ function PositionCard({ position, onClose }: { position: TestnetPosition; onClos
             {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
           </p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 text-sm mt-2">
         <div>
           <p className="text-foreground-tertiary text-xs">SL</p>
           <p className="font-medium text-danger">${formatPrice(position.stop_loss)}</p>
