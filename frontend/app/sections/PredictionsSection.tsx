@@ -105,9 +105,8 @@ export function PredictionsSection({ symbol, method = 'kim_nghia', refreshKey = 
               return [analysisData as PredictionWithAnalysis];
             }
 
-            // Only show 1h timeframe predictions
+            // Show all timeframe predictions (removed 1h filter)
             return analysis.predictions
-              .filter((p: any) => p.timeframe === '1h')
               .map((pred: any) => ({
                 ...analysisData,
                 ...pred,
