@@ -31,11 +31,12 @@ export const endpoints = {
   POSITION_MODE: '/fapi/v1/positionSide/dual',
   POSITION_MARGIN: '/fapi/v1/positionMargin',
   
-  // Conditional orders use the standard new-order endpoint with type=STOP_MARKET/TAKE_PROFIT_MARKET
-  STOP_MARKET_ORDER: '/fapi/v1/order',
-  TAKE_PROFIT_MARKET_ORDER: '/fapi/v1/order',
-  CANCEL_ALGO_ORDER: '/fapi/v1/order',
+  // Conditional orders use the Algo Order API endpoints (Binance API change)
+  ALGO_ORDER: '/fapi/v1/algoOrder',
+  CANCEL_ALGO_ORDER: '/fapi/v1/algoOrder',
   CANCEL_ALL_ALGO_ORDERS: '/fapi/v1/allOpenOrders',
+  STOP_MARKET_ORDER: '/fapi/v1/algoOrder',
+  TAKE_PROFIT_MARKET_ORDER: '/fapi/v1/algoOrder',
   
   // User Data Stream (SIGNED)
   LISTEN_KEY: '/fapi/v1/listenKey',

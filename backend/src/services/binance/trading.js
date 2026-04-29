@@ -83,7 +83,7 @@ export async function setPositionMode(dual) {
 }
 
 /**
- * Place a new stop-market order (for hedge mode SL/TP)
+ * Place a new stop-market order (for hedge mode SL/TP) using Algo Order API
  * @param {object} params - Order parameters
  * @param {string} params.symbol - Trading symbol
  * @param {string} params.side - BUY or SELL
@@ -97,16 +97,24 @@ export async function setPositionMode(dual) {
  */
 export async function placeStopMarketOrder(params) {
   try {
-    const response = await post(endpoints.ORDER, {
-      ...params,
+    const response = await post(endpoints.ALGO_ORDER, {
+      symbol: params.symbol,
+      side: params.side,
+      quantity: params.quantity,
+      stopPrice: params.stopPrice,
+      positionSide: params.positionSide,
+      closePosition: params.closePosition || false,
+      reduceOnly: params.reduceOnly || false,
+      timeInForce: params.timeInForce || 'GTC',
+      algoType: 'CONDITIONAL',
       type: 'STOP_MARKET',
     }, true);
 
-    console.log(`[BinanceTrading] Stop-market order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
+    console.log(`[BinanceTrading] Stop-market algo order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 
     return {
-      orderId: response.orderId,
-      clientOrderId: response.clientOrderId,
+      orderId: response.orderId || response.algoId,
+      clientOrderId: response.clientOrderId || response.clientAlgoId,
       symbol: response.symbol,
       side: response.side,
       type: 'STOP_MARKET',
@@ -127,7 +135,7 @@ export async function placeStopMarketOrder(params) {
 }
 
 /**
- * Place a new take-profit-market order (for hedge mode SL/TP)
+ * Place a new take-profit-market order (for hedge mode SL/TP) using Algo Order API
  * @param {object} params - Order parameters
  * @param {string} params.symbol - Trading symbol
  * @param {string} params.side - BUY or SELL
@@ -141,16 +149,24 @@ export async function placeStopMarketOrder(params) {
  */
 export async function placeTakeProfitMarketOrder(params) {
   try {
-    const response = await post(endpoints.ORDER, {
-      ...params,
+    const response = await post(endpoints.ALGO_ORDER, {
+      symbol: params.symbol,
+      side: params.side,
+      quantity: params.quantity,
+      stopPrice: params.stopPrice,
+      positionSide: params.positionSide,
+      closePosition: params.closePosition || false,
+      reduceOnly: params.reduceOnly || false,
+      timeInForce: params.timeInForce || 'GTC',
+      algoType: 'CONDITIONAL',
       type: 'TAKE_PROFIT_MARKET',
     }, true);
 
-    console.log(`[BinanceTrading] Take-profit-market order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
+    console.log(`[BinanceTrading] Take-profit-market algo order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 
     return {
-      orderId: response.orderId,
-      clientOrderId: response.clientOrderId,
+      orderId: response.orderId || response.algoId,
+      clientOrderId: response.clientOrderId || response.clientAlgoId,
       symbol: response.symbol,
       side: response.side,
       type: 'TAKE_PROFIT_MARKET',
@@ -187,32 +203,35 @@ export async function placeAlgoOrder(params) {
 }
 
 /**
- * Cancel an algo order
+ * Cancel an algo order using Algo Order API
  * @param {string} symbol - Trading symbol
- * @param {number} orderId - Order ID
- * @param {string} [origClientOrderId] - Original client order ID
+ * @param {number|string} algoId - Algo order ID
+ * @param {string} [clientAlgoId] - Client algo order ID
  * @returns {Promise<object>} Cancel response
  */
-export async function cancelAlgoOrder(symbol, orderId, origClientOrderId = null) {
+export async function cancelAlgoOrder(symbol, algoId, clientAlgoId = null) {
   try {
     const params = {
       symbol,
-      orderId: orderId.toString(),
     };
-    
-    if (origClientOrderId) {
-      params.origClientOrderId = origClientOrderId;
+
+    // Use algoId or clientAlgoId (one is required)
+    if (algoId) {
+      params.algoId = algoId.toString();
     }
-    
+    if (clientAlgoId) {
+      params.clientAlgoId = clientAlgoId;
+    }
+
     const response = await del(endpoints.CANCEL_ALGO_ORDER, params, true);
-    
-    console.log(`[BinanceTrading] Algo order cancelled: ${orderId} for ${symbol}`);
-    
+
+    console.log(`[BinanceTrading] Algo order cancelled: ${algoId || clientAlgoId} for ${symbol}`);
+
     return {
-      orderId: response.orderId,
-      clientOrderId: response.clientOrderId,
-      symbol: response.symbol,
-      status: response.status,
+      algoId: response.algoId,
+      clientAlgoId: response.clientAlgoId,
+      code: response.code,
+      msg: response.msg,
     };
   } catch (error) {
     console.error('[BinanceTrading] Failed to cancel algo order:', error.message);
