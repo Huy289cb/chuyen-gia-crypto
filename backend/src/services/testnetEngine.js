@@ -162,6 +162,9 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   const accountBalance = Math.max(Number(account.current_balance) || 0, 0);
   const leverageCapUsd = accountBalance * leverage;
 
+  // Initialize adjustedRiskUsd with original risk_usd (will be updated if volume capping occurs)
+  let adjustedRiskUsd = risk_usd;
+
   // Cap position size to maxVolumePerAccount (from method config, default 2000)
   const maxOrderSize = maxVolumePerAccount;
   let cappedSizeUsd = size_usd;
@@ -199,9 +202,9 @@ export async function openTestnetPosition(db, account, positionData, predictionI
 
     // Recalculate risk_usd based on capped volume
     const riskDistance = Math.abs(entry_price - stop_loss);
-    const newRiskUsd = riskDistance * cappedSizeQty;
+    adjustedRiskUsd = riskDistance * cappedSizeQty;
 
-    console.log(`[TestnetEngine] Volume fallback applied: size_usd=$${cappedSizeUsd.toFixed(2)}, size_qty=${cappedSizeQty.toFixed(6)}, risk_usd=$${newRiskUsd.toFixed(2)}`);
+    console.log(`[TestnetEngine] Volume fallback applied: size_usd=$${cappedSizeUsd.toFixed(2)}, size_qty=${cappedSizeQty.toFixed(6)}, risk_usd=$${adjustedRiskUsd.toFixed(2)}`);
   }
 
   console.log(`[TestnetEngine] Volume check passed: $${totalVolumeAfterOpen.toFixed(2)} <= $${maxVolumePerAccount}`);
