@@ -421,65 +421,90 @@ async function runMethodAnalysis(methodId) {
                 // Create pending limit order for testnet
                 const { createTestnetPendingOrder } = await import('./db/testnetDatabase.js');
                 const { randomUUID } = await import('crypto');
-                const { placeLimitOrder, getTestnetClient } = await import('./services/testnetEngine.js');
+                const { placeLimitOrder, getTestnetClient, calculateTestnetTotalVolume, validateTestnetEntryAlignment } = await import('./services/testnetEngine.js');
                 const { getSymbol } = await import('./config/binance.js');
 
-                // Cap pending order size at maxPendingOrderSize
+                // Check volume constraint before creating pending order
+                const maxVolumePerAccount = method.autoEntry.maxVolumePerAccount || 2000;
+                const currentTotalVolume = await calculateTestnetTotalVolume(db, testnetAccount.id, 'BTC', methodId);
                 let orderSizeUsd = position.size_usd;
                 let orderSizeQty = position.size_qty;
-                const maxPendingOrderSize = method.autoEntry.maxPendingOrderSize || 2000;
+                let shouldSkipOrder = false;
 
-                if (orderSizeUsd > maxPendingOrderSize) {
-                  console.log(`[Scheduler][${method.name}] Testnet pending order size $${orderSizeUsd?.toFixed(2) || 'N/A'} exceeds max $${maxPendingOrderSize}, capping to $${maxPendingOrderSize}`);
-                  orderSizeUsd = maxPendingOrderSize;
-                  orderSizeQty = orderSizeUsd / position.entry_price;
-                }
-
-                // Place limit order on Binance
-                let binanceOrderId = null;
-                try {
-                  const testnetClient = getTestnetClient();
-                  if (testnetClient) {
-                    // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
-                    const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
-                    const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
-                    const limitOrder = await placeLimitOrder(
-                      testnetClient,
-                      getSymbol(),
-                      binanceSide,
-                      orderSizeQty,
-                      position.entry_price,
-                      positionSide
-                    );
-                    binanceOrderId = limitOrder.orderId.toString();
-                    console.log(`[Scheduler][${method.name}] Binance limit order placed: ${binanceOrderId}`);
+                // Check if adding this order would exceed volume limit
+                if (currentTotalVolume + orderSizeUsd > maxVolumePerAccount) {
+                  const remainingVolume = maxVolumePerAccount - currentTotalVolume;
+                  if (remainingVolume <= 0) {
+                    console.log(`[Scheduler][${method.name}] Testnet pending order skipped: volume limit reached ($${currentTotalVolume.toFixed(2)} already at limit $${maxVolumePerAccount})`);
+                    shouldSkipOrder = true;
                   } else {
-                    console.warn(`[Scheduler][${method.name}] Testnet client not available, skipping Binance limit order`);
+                    console.log(`[Scheduler][${method.name}] Testnet pending order size $${orderSizeUsd?.toFixed(2) || 'N/A'} exceeds available volume $${remainingVolume.toFixed(2)}, capping to $${remainingVolume.toFixed(2)}`);
+                    orderSizeUsd = remainingVolume;
+                    orderSizeQty = orderSizeUsd / position.entry_price;
                   }
-                } catch (binanceError) {
-                  console.error(`[Scheduler][${method.name}] Failed to place Binance limit order:`, binanceError.message);
-                  // Continue to save to DB even if Binance order fails
                 }
 
-                await createTestnetPendingOrder(db, {
-                  order_id: randomUUID(),
-                  account_id: testnetAccount.id,
-                  symbol: 'BTC',
-                  side: position.side,
-                  entry_price: position.entry_price,
-                  stop_loss: position.stop_loss,
-                  take_profit: position.take_profit,
-                  size_usd: orderSizeUsd,
-                  size_qty: orderSizeQty,
-                  risk_usd: position.risk_usd,
-                  risk_percent: position.risk_percent,
-                  expected_rr: position.expected_rr,
-                  linked_prediction_id: btcPredictionId,
-                  invalidation_level: position.invalidation_level,
-                  method_id: methodId,
-                  binance_order_id: binanceOrderId
-                });
-                console.log(`[Scheduler][${method.name}] Testnet limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd?.toFixed(2) || 'N/A'}, binance_order_id: ${binanceOrderId}`);
+                // Validate entry alignment with existing open positions
+                const alignmentValidation = validateTestnetEntryAlignment(position.entry_price, position.side, openTestnetPositions);
+                if (!alignmentValidation.valid) {
+                  console.log(`[Scheduler][${method.name}] Testnet pending order skipped: ${alignmentValidation.reason}`);
+                  shouldSkipOrder = true;
+                }
+
+                // Skip if order size is too small after capping
+                if (orderSizeUsd < 10) {
+                  console.log(`[Scheduler][${method.name}] Testnet pending order skipped: order size $${orderSizeUsd?.toFixed(2) || 'N/A'} too small after volume capping`);
+                  shouldSkipOrder = true;
+                }
+
+                // Only create order if all validations pass
+                if (!shouldSkipOrder) {
+                  // Place limit order on Binance
+                  let binanceOrderId = null;
+                  try {
+                    const testnetClient = getTestnetClient();
+                    if (testnetClient) {
+                      // Convert internal side format ('long'/'short') to Binance format ('BUY'/'SELL')
+                      const binanceSide = position.side === 'long' ? 'BUY' : 'SELL';
+                      const positionSide = position.side === 'long' ? 'LONG' : 'SHORT';
+                      const limitOrder = await placeLimitOrder(
+                        testnetClient,
+                        getSymbol(),
+                        binanceSide,
+                        orderSizeQty,
+                        position.entry_price,
+                        positionSide
+                      );
+                      binanceOrderId = limitOrder.orderId.toString();
+                      console.log(`[Scheduler][${method.name}] Binance limit order placed: ${binanceOrderId}`);
+                    } else {
+                      console.warn(`[Scheduler][${method.name}] Testnet client not available, skipping Binance limit order`);
+                    }
+                  } catch (binanceError) {
+                    console.error(`[Scheduler][${method.name}] Failed to place Binance limit order:`, binanceError.message);
+                    // Continue to save to DB even if Binance order fails
+                  }
+
+                  await createTestnetPendingOrder(db, {
+                    order_id: randomUUID(),
+                    account_id: testnetAccount.id,
+                    symbol: 'BTC',
+                    side: position.side,
+                    entry_price: position.entry_price,
+                    stop_loss: position.stop_loss,
+                    take_profit: position.take_profit,
+                    size_usd: orderSizeUsd,
+                    size_qty: orderSizeQty,
+                    risk_usd: position.risk_usd,
+                    risk_percent: position.risk_percent,
+                    expected_rr: position.expected_rr,
+                    linked_prediction_id: btcPredictionId,
+                    invalidation_level: position.invalidation_level,
+                    method_id: methodId,
+                    binance_order_id: binanceOrderId
+                  });
+                  console.log(`[Scheduler][${method.name}] Testnet limit order created (pending): entry ${position.entry_price}, size $${orderSizeUsd?.toFixed(2) || 'N/A'}, binance_order_id: ${binanceOrderId}`);
+                }
               }
             }
           } catch (testnetError) {

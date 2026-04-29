@@ -13,6 +13,16 @@ function getApiKeys() {
   return keys.length > 0 ? keys : null;
 }
 
+function isRateLimitErrorMessage(message = '') {
+  const normalized = message.toLowerCase();
+  return normalized.includes('429') || normalized.includes('rate limit');
+}
+
+function isDailyTokenLimitError(message = '') {
+  const normalized = message.toLowerCase();
+  return normalized.includes('tokens per day') || normalized.includes('tpd');
+}
+
 // Rate limiting protection
 let lastCallTime = 0;
 const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
@@ -246,9 +256,14 @@ class GroqClient {
             lastError = error;
             console.error(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1} failed:`, error.message);
 
+            if (isDailyTokenLimitError(error.message)) {
+              console.warn(`[GroqClient] Daily token limit hit for model ${currentModel}, skipping remaining retries for this model`);
+              break;
+            }
+
             if (attempt < maxRetries) {
               let delay;
-              if (error.message.includes('429') || error.message.includes('rate limit')) {
+              if (isRateLimitErrorMessage(error.message)) {
                 delay = 60000;
                 console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms (1 minute) before retry...`);
               } else {

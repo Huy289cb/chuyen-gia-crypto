@@ -72,7 +72,7 @@ vi.mock('../../src/services/binanceClient.js', () => ({
   })),
   setLeverage: vi.fn(() => Promise.resolve({
     symbol: 'BTCUSDT',
-    leverage: 1,
+    leverage: 20,
     maxNotionalValue: 1000000,
   })),
   setMarginType: vi.fn(() => Promise.resolve({ symbol: 'BTCUSDT', marginType: 'ISOLATED' })),
@@ -113,9 +113,9 @@ vi.mock('../../src/config/binance.js', () => ({
     apiKey: 'test_key',
     secretKey: 'test_secret',
     symbol: 'BTCUSDT',
-    leverage: 1,
+    leverage: 20,
   },
-  getLeverage: () => 1,
+  getLeverage: () => 20,
   getSymbol: () => 'BTCUSDT',
 }));
 
@@ -294,7 +294,7 @@ describe('Testnet Engine', () => {
       expect(position.binance_order_id).toBe('12345');
     });
 
-    it('should throw error when position size exceeds balance', async () => {
+    it('should cap position size to leverage cap instead of rejecting the trade', async () => {
       await initTestnetEngine();
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
       
@@ -303,13 +303,64 @@ describe('Testnet Engine', () => {
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
-        size_usd: 200, // Exceeds 100 balance
+        size_usd: 2500, // Exceeds 100 balance * 20x leverage cap
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+        maxVolumePerAccount: 10000,
+      };
+      
+      const position = await openTestnetPosition(db, account, positionData, 1, 'kim_nghia');
+
+      expect(position).not.toBeNull();
+      expect(position.size_usd).toBe(2000);
+    });
+
+    it('should allow futures notional up to balance multiplied by leverage', async () => {
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      const positionData = {
+        side: 'long',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 2000, // Fits 100 balance * 20x leverage cap
         risk_usd: 10,
         risk_percent: 10,
         expected_rr: 2.0,
       };
-      
-      await expect(openTestnetPosition(db, account, positionData, 1, 'kim_nghia')).rejects.toThrow('Position size exceeds account balance');
+
+      const position = await openTestnetPosition(db, account, positionData, 1, 'kim_nghia');
+
+      expect(position).not.toBeNull();
+      expect(position.size_usd).toBe(2000);
+    });
+
+    it('should throw when balance is too low for minimum executable position size', async () => {
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      await new Promise((resolve, reject) => {
+        db.run('UPDATE testnet_accounts SET current_balance = ? WHERE id = ?', [0.01, account.id], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      const lowBalanceAccount = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+      const positionData = {
+        side: 'long',
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+      };
+
+      await expect(openTestnetPosition(db, lowBalanceAccount, positionData, 1, 'kim_nghia')).rejects.toThrow('Insufficient account balance for minimum position size');
     });
 
     it('should skip when account is in cooldown', async () => {

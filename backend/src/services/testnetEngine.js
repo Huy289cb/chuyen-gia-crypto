@@ -60,6 +60,15 @@ function toPositionSide(side) {
   return side === 'long' ? 'LONG' : 'SHORT';
 }
 
+function getEffectiveLeverage() {
+  const configuredLeverage = Number(getLeverage());
+  if (Number.isFinite(configuredLeverage) && configuredLeverage > 0) {
+    return configuredLeverage;
+  }
+
+  return 20;
+}
+
 async function closeRecoveredEntry(testnetClientInstance, symbol, side, quantity, positionSide, reason) {
   const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
   const recoveryOrder = await placeMarketOrder(testnetClientInstance, symbol, closeSide, quantity, positionSide);
@@ -149,6 +158,9 @@ export async function openTestnetPosition(db, account, positionData, predictionI
 
   const symbol = getSymbol();
   const normalizedSide = normalizeTradeSide(side);
+  const leverage = getEffectiveLeverage();
+  const accountBalance = Math.max(Number(account.current_balance) || 0, 0);
+  const leverageCapUsd = accountBalance * leverage;
 
   // Cap position size to maxVolumePerAccount (from method config, default 2000)
   const maxOrderSize = maxVolumePerAccount;
@@ -160,21 +172,60 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     cappedSizeQty = maxOrderSize / entry_price;
   }
 
+  if (cappedSizeUsd > leverageCapUsd) {
+    console.warn(
+      `[TestnetEngine] Position size ${cappedSizeUsd} exceeds leverage cap ${leverageCapUsd.toFixed(6)} ` +
+      `(${accountBalance} balance x ${leverage}x leverage), capping`
+    );
+    cappedSizeUsd = leverageCapUsd;
+    cappedSizeQty = cappedSizeUsd / entry_price;
+  }
+
+  // Check volume limit before opening position (include both open positions and pending orders)
+  const totalVolume = await calculateTestnetTotalVolume(db, account.id, symbol, methodId);
+  const newVolume = cappedSizeUsd;
+  const totalVolumeAfterOpen = totalVolume + newVolume;
+
+  if (totalVolumeAfterOpen > maxVolumePerAccount) {
+    const remainingVolume = maxVolumePerAccount - totalVolume;
+    if (remainingVolume <= 0) {
+      console.error(`[TestnetEngine] No volume available: current volume $${totalVolume.toFixed(2)} already at limit $${maxVolumePerAccount}`);
+      throw new Error(`No volume available: current volume $${totalVolume.toFixed(2)} already at limit $${maxVolumePerAccount}`);
+    }
+
+    console.log(`[TestnetEngine] Volume limit exceeded: $${totalVolumeAfterOpen.toFixed(2)} > $${maxVolumePerAccount}, falling back to cap at $${remainingVolume.toFixed(2)}`);
+    cappedSizeUsd = remainingVolume;
+    cappedSizeQty = cappedSizeUsd / entry_price;
+
+    // Recalculate risk_usd based on capped volume
+    const riskDistance = Math.abs(entry_price - stop_loss);
+    const newRiskUsd = riskDistance * cappedSizeQty;
+
+    console.log(`[TestnetEngine] Volume fallback applied: size_usd=$${cappedSizeUsd.toFixed(2)}, size_qty=${cappedSizeQty.toFixed(6)}, risk_usd=$${newRiskUsd.toFixed(2)}`);
+  }
+
+  console.log(`[TestnetEngine] Volume check passed: $${totalVolumeAfterOpen.toFixed(2)} <= $${maxVolumePerAccount}`);
+
   // Calculate quantity based on capped size_usd and leverage
   const size_qty = cappedSizeQty;
 
   // Round quantity to Binance precision (BTCUSDT stepSize is 0.001)
   const QUANTITY_PRECISION = 3; // 3 decimal places for BTCUSDT
+  const MIN_QUANTITY = 0.001;
   const roundedQty = Math.floor(size_qty * Math.pow(10, QUANTITY_PRECISION)) / Math.pow(10, QUANTITY_PRECISION);
   
   // Ensure minimum quantity (Binance minimum for BTCUSDT is 0.001)
-  const finalQty = Math.max(roundedQty, 0.001);
+  const finalQty = Math.max(roundedQty, MIN_QUANTITY);
+  const minExecutableNotionalUsd = MIN_QUANTITY * entry_price;
   
 
-  // Validate position size vs account balance
-  if (cappedSizeUsd > account.current_balance) {
-    console.error(`[TestnetEngine] Position size ${cappedSizeUsd} exceeds account balance ${account.current_balance}`);
-    throw new Error('Position size exceeds account balance');
+  // Validate position size vs executable futures notional
+  if (cappedSizeUsd < minExecutableNotionalUsd) {
+    console.error(
+      `[TestnetEngine] Position size ${cappedSizeUsd} is below minimum executable notional ` +
+      `${minExecutableNotionalUsd} (balance ${accountBalance}, leverage ${leverage}x)`
+    );
+    throw new Error('Insufficient account balance for minimum position size');
   }
 
   // Check cooldown
@@ -252,7 +303,7 @@ export async function openTestnetPosition(db, account, positionData, predictionI
       take_profit: take_profit,
       size_usd: cappedSizeUsd,
       size_qty: finalQty,
-      risk_usd: risk_usd,
+      risk_usd: adjustedRiskUsd,
       risk_percent: risk_percent,
       expected_rr: expected_rr,
       linked_prediction_id: predictionId,
@@ -1022,6 +1073,79 @@ export async function cleanupTestnetAccountState(db, account) {
     cancelledOrderIds,
     balance,
   };
+}
+
+/**
+ * Calculate total volume of open positions and pending orders for a testnet account
+ * @param {Object} db - Database instance
+ * @param {string} accountId - Account ID
+ * @param {string} symbol - Trading symbol (BTC, ETH)
+ * @param {string} methodId - Method ID (ict, kim_nghia)
+ * @returns {Promise<number>} Total volume in USD
+ */
+export async function calculateTestnetTotalVolume(db, accountId, symbol, methodId) {
+  const { getTestnetPositions, getTestnetPendingOrders } = await import('../db/testnetDatabase.js');
+
+  const openPositions = await getTestnetPositions(db, { account_id: accountId, symbol, method_id: methodId, status: 'open' });
+  const pendingOrders = await getTestnetPendingOrders(db, { account_id: accountId, symbol, method_id: methodId, status: 'pending' });
+
+  const openVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
+  const pendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
+
+  return openVolume + pendingVolume;
+}
+
+/**
+ * Validate if entry price aligns with existing open testnet positions
+ * Prevents creating limit orders that would execute in invalid price zones
+ * @param {number} entryPrice - Suggested entry price for new order
+ * @param {string} side - Side of new order (long or short)
+ * @param {Array} openPositions - Array of existing open position objects
+ * @returns {Object} Validation result { valid: boolean, reason: string }
+ */
+export function validateTestnetEntryAlignment(entryPrice, side, openPositions) {
+  if (!openPositions || openPositions.length === 0) {
+    return { valid: true, reason: 'No open positions to validate against' };
+  }
+
+  for (const position of openPositions) {
+    const posSide = position.side;
+    const posSL = position.stop_loss;
+    const posTP = position.take_profit;
+
+    // Skip if position doesn't have SL/TP data
+    if (!posSL || !posTP) {
+      continue;
+    }
+
+    // If sides are different, no conflict (short vs long can coexist)
+    if (side !== posSide) {
+      continue;
+    }
+
+    // Same side - check entry alignment
+    if (side === 'short') {
+      // SHORT: Entry must be >= SL OR <= TP (cannot be between TP and SL)
+      // TP < entry < SL is INVALID because price would hit TP before entry
+      if (posTP < entryPrice && entryPrice < posSL) {
+        return {
+          valid: false,
+          reason: `SHORT entry ${entryPrice.toFixed(2)} is between TP ${posTP.toFixed(2)} and SL ${posSL.toFixed(2)} of existing position ${position.position_id}. Entry must be >= SL or <= TP to avoid executing in invalid zone.`
+        };
+      }
+    } else if (side === 'long') {
+      // LONG: Entry must be >= TP OR <= SL (cannot be between SL and TP)
+      // SL < entry < TP is INVALID because price would hit SL before entry
+      if (posSL < entryPrice && entryPrice < posTP) {
+        return {
+          valid: false,
+          reason: `LONG entry ${entryPrice.toFixed(2)} is between SL ${posSL.toFixed(2)} and TP ${posTP.toFixed(2)} of existing position ${position.position_id}. Entry must be >= TP or <= SL to avoid executing in invalid zone.`
+        };
+      }
+    }
+  }
+
+  return { valid: true, reason: 'Entry aligns with existing positions' };
 }
 
 // Re-export Binance client functions for use in scheduler

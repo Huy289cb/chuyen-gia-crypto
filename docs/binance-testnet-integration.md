@@ -63,6 +63,21 @@ Account sync now uses:
 
 `availableBalance` is not used for realized balance sync because it drops when margin is reserved or orders are open.
 
+### Volume constraints
+
+The system enforces volume limits to manage risk:
+
+- Total volume (open positions + pending orders) is limited to 2k per account
+- Volume is capped when adding new orders would exceed the limit
+- Risk is recalculated based on capped volume
+- Entry alignment validation prevents limit orders from executing in invalid price zones:
+  - LONG positions: Entry must be ≥ TP OR ≤ SL (cannot be between SL and TP)
+  - SHORT positions: Entry must be ≥ SL OR ≤ TP (cannot be between TP and SL)
+
+Helper functions in `testnetEngine.js`:
+- `calculateTestnetTotalVolume()` - Calculates total volume from open positions + pending orders
+- `validateTestnetEntryAlignment()` - Validates entry price alignment with existing positions
+
 ## Main Components
 
 ### REST modules

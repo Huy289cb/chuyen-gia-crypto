@@ -58,7 +58,7 @@ vi.mock('../../src/services/binanceClient.js', () => ({
   })),
   setLeverage: vi.fn(() => Promise.resolve({
     symbol: 'BTCUSDT',
-    leverage: 1,
+    leverage: 20,
     maxNotionalValue: 1000000,
   })),
   setMarginType: vi.fn(() => Promise.resolve({ symbol: 'BTCUSDT', marginType: 'ISOLATED' })),
@@ -99,9 +99,9 @@ vi.mock('../../src/config/binance.js', () => ({
     apiKey: 'test_key',
     secretKey: 'test_secret',
     symbol: 'BTCUSDT',
-    leverage: 1,
+    leverage: 20,
   },
-  getLeverage: () => 1,
+  getLeverage: () => 20,
   getSymbol: () => 'BTCUSDT',
 }));
 
@@ -588,7 +588,7 @@ describe('Testnet Flow Integration', () => {
       expect(positions).toHaveLength(0);
     });
 
-    it('should handle position size validation', async () => {
+    it('should handle position size validation when balance is too low', async () => {
       const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
       const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
       const { openTestnetPosition } = await import('../../src/services/testnetEngine.js');
@@ -596,18 +596,27 @@ describe('Testnet Flow Integration', () => {
       await initTestnetEngine();
       const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
 
+      await new Promise((resolve, reject) => {
+        db.run('UPDATE testnet_accounts SET current_balance = ? WHERE id = ?', [0.01, account.id], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      const lowBalanceAccount = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
       const positionData = {
         side: 'long',
         entry_price: 50000,
         stop_loss: 49000,
         take_profit: 52000,
-        size_usd: 200, // Exceeds 100 balance
+        size_usd: 100,
         risk_usd: 10,
         risk_percent: 10,
         expected_rr: 2.0,
       };
 
-      await expect(openTestnetPosition(db, account, positionData, 1, 'kim_nghia')).rejects.toThrow('Position size exceeds account balance');
+      await expect(openTestnetPosition(db, lowBalanceAccount, positionData, 1, 'kim_nghia')).rejects.toThrow('Insufficient account balance for minimum position size');
     });
   });
 });

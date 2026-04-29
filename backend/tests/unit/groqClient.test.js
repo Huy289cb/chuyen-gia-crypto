@@ -159,6 +159,32 @@ describe('GroqClient', () => {
       expect(attemptCount).toBe(3);
       expect(duration).toBeGreaterThanOrEqual(120000); // 2 retries * 60s each
     });
+
+    it('should skip remaining retries for a model when daily token limit is exhausted', async () => {
+      const client = new GroqClient(['key1']);
+
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          text: () => Promise.resolve('Rate limit reached on tokens per day (TPD). Please try again in 4m5s.')
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            choices: [{ message: { content: '{"bias":"bullish","action":"buy","confidence":0.8}' } }]
+          })
+        });
+
+      const result = await client.analyze({
+        systemPrompt: 'test',
+        userPrompt: 'test',
+        maxRetries: 3
+      });
+
+      expect(result).toEqual({ bias: 'bullish', action: 'buy', confidence: 0.8 });
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('createGroqClient factory', () => {

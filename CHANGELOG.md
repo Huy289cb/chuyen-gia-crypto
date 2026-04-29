@@ -2,6 +2,26 @@
 
 All notable changes to the project will be documented in this file.
 
+## [29/04/2026] - v1.2.39 - Binance Testnet Volume Constraints
+
+### Features
+
+**Volume Constraint Implementation for Binance Testnet**
+- **Feature**: Added volume limit enforcement matching paper trading behavior
+- **Details**:
+  - Total volume (open positions + pending orders) limited to 2k per account
+  - Volume capping with risk recalculation when limit is reached
+  - Entry alignment validation for limit orders to prevent invalid price zone execution
+- **Entry Alignment Rules**:
+  - LONG positions: Limit order entry must be ≥ TP OR ≤ SL (cannot be between SL and TP)
+  - SHORT positions: Limit order entry must be ≥ SL OR ≤ TP (cannot be between TP and SL)
+- **Implementation**:
+  - Added `calculateTestnetTotalVolume()` helper function to testnetEngine.js
+  - Added `validateTestnetEntryAlignment()` helper function to testnetEngine.js
+  - Updated scheduler.js to check volume and alignment before creating pending orders
+  - Enhanced `openTestnetPosition()` with volume pre-check before market orders
+- **Files**: `backend/src/services/testnetEngine.js`, `backend/src/scheduler.js`
+
 ## [29/04/2026] - v1.2.38 - Binance Testnet Order Contract & Cleanup Fixes
 
 ### Bug Fixes
