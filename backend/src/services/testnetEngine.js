@@ -862,6 +862,23 @@ async function syncTestnetPositions(db, account) {
             const normalizedSide = normalizeTradeSide(position.side);
             const binanceSide = toBinanceSide(normalizedSide);
             const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
+            
+            // Cancel any existing SL/TP orders with closePosition=true for this position to avoid -4130 error
+            const existingOrders = binanceOrders.filter(o => 
+              o.positionSide === toPositionSide(normalizedSide) && 
+              o.side === slSide &&
+              (o.type === 'STOP_MARKET' || o.type === 'TAKE_PROFIT_MARKET')
+            );
+            
+            for (const existingOrder of existingOrders) {
+              try {
+                await cancelOrder(testnetClient, symbol, existingOrder.orderId);
+                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} order ${existingOrder.orderId} before placing new SL`);
+              } catch (cancelError) {
+                console.warn(`[TestnetEngine] Failed to cancel existing order ${existingOrder.orderId}:`, cancelError.message);
+              }
+            }
+            
             const newSLOrder = await placeStopLossOrder(testnetClient, symbol, slSide, position.size_qty, position.stop_loss, toPositionSide(normalizedSide));
             
             await updateTestnetPosition(db, position.position_id, {
@@ -923,6 +940,23 @@ async function syncTestnetPositions(db, account) {
             const normalizedSide = normalizeTradeSide(position.side);
             const binanceSide = toBinanceSide(normalizedSide);
             const tpSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
+            
+            // Cancel any existing SL/TP orders with closePosition=true for this position to avoid -4130 error
+            const existingOrders = binanceOrders.filter(o => 
+              o.positionSide === toPositionSide(normalizedSide) && 
+              o.side === tpSide &&
+              (o.type === 'STOP_MARKET' || o.type === 'TAKE_PROFIT_MARKET')
+            );
+            
+            for (const existingOrder of existingOrders) {
+              try {
+                await cancelOrder(testnetClient, symbol, existingOrder.orderId);
+                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} order ${existingOrder.orderId} before placing new TP`);
+              } catch (cancelError) {
+                console.warn(`[TestnetEngine] Failed to cancel existing order ${existingOrder.orderId}:`, cancelError.message);
+              }
+            }
+            
             const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, tpSide, position.size_qty, position.take_profit, toPositionSide(normalizedSide));
             
             await updateTestnetPosition(db, position.position_id, {
