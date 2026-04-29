@@ -402,7 +402,7 @@ async function runMethodAnalysis(methodId) {
             const openTestnetPositions = await getTestnetPositions(db, { account_id: testnetAccount.id, status: 'open' });
 
             // Evaluate auto-entry for testnet (reuse same logic)
-            const testnetDecision = await evaluateAutoEntry(analysis.btc, testnetAccount, openTestnetPositions, method, db);
+            const testnetDecision = await evaluateAutoEntry(analysis.btc, testnetAccount, openTestnetPositions, method, db, true);
 
             console.log(`[Scheduler][${method.name}] Testnet decision: shouldEnter=${testnetDecision.shouldEnter}, orderType=${testnetDecision.orderType}, reason=${testnetDecision.reason}`);
 

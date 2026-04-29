@@ -363,9 +363,10 @@ async function recalculateSLTPForMarketOrder(suggestedPosition, newEntryPrice, s
  * @param {Array} openPositions - Current open positions for symbol
  * @param {Object} methodConfig - Method-specific configuration (optional, defaults to AUTO_ENTRY_CONFIG)
  * @param {Object} db - Database instance (for duplicate position check)
+ * @param {boolean} isTestnet - Whether this is for testnet (default false for paper trading)
  * @returns {Promise<Object>} Entry decision with reasoning
  */
-export async function evaluateAutoEntry(analysis, account, openPositions = [], methodConfig = null, db = null) {
+export async function evaluateAutoEntry(analysis, account, openPositions = [], methodConfig = null, db = null, isTestnet = false) {
   // Use method-specific config if provided, otherwise use default
   // methodConfig can be either the full method object or just autoEntry config
   const config = methodConfig?.autoEntry || methodConfig || AUTO_ENTRY_CONFIG;
@@ -422,20 +423,27 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   // Check 3.5: Max volume per account (including pending orders)
   if (config.maxVolumePerAccount) {
     const totalOpenVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
-    
-    // Calculate pending order volume
+
+    // Calculate pending order volume (use testnet or paper trading database based on isTestnet)
     let totalPendingVolume = 0;
     if (db) {
       try {
-        const { getPendingOrders } = await import('../db/database.js');
-        const pendingOrders = await getPendingOrders(db, { account_id: account.id, symbol, status: 'pending' });
-        totalPendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
-        console.log(`[AutoEntry] Pending order volume: $${totalPendingVolume.toFixed(2)} (${pendingOrders.length} orders)`);
+        if (isTestnet) {
+          const { getTestnetPendingOrders } = await import('../db/testnetDatabase.js');
+          const pendingOrders = await getTestnetPendingOrders(db, { account_id: account.id, symbol, status: 'pending' });
+          totalPendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
+          console.log(`[AutoEntry] Testnet pending order volume: $${totalPendingVolume.toFixed(2)} (${pendingOrders.length} orders)`);
+        } else {
+          const { getPendingOrders } = await import('../db/database.js');
+          const pendingOrders = await getPendingOrders(db, { account_id: account.id, symbol, status: 'pending' });
+          totalPendingVolume = pendingOrders.reduce((sum, order) => sum + (order.size_usd || 0), 0);
+          console.log(`[AutoEntry] Paper trading pending order volume: $${totalPendingVolume.toFixed(2)} (${pendingOrders.length} orders)`);
+        }
       } catch (error) {
         console.log(`[AutoEntry] Failed to fetch pending orders for volume check:`, error.message);
       }
     }
-    
+
     const suggestedVolume = decision.suggestedPosition?.size_usd || 0;
     const totalVolume = totalOpenVolume + totalPendingVolume + suggestedVolume;
     
