@@ -17,6 +17,8 @@ import {
   cancelOrder,
   cancelAllOrders,
   getOpenOrders,
+  getOpenAlgoOrders,
+  cancelAlgoOrder,
   setLeverage,
   setMarginType,
 } from './binanceClient.js';
@@ -839,13 +841,13 @@ async function syncTestnetPositions(db, account) {
       return;
     }
     
-    // Get open orders from Binance
-    const binanceOrders = await getOpenOrders(testnetClient, symbol);
+    // Get open algo orders from Binance (STOP_MARKET, TAKE_PROFIT_MARKET)
+    const binanceAlgoOrders = await getOpenAlgoOrders(testnetClient, symbol);
     
     for (const position of dbPositions) {
       // Check SL order status
       if (position.binance_sl_order_id) {
-        const slOrder = binanceOrders.find(o => o.orderId.toString() === position.binance_sl_order_id);
+        const slOrder = binanceAlgoOrders.find(o => o.orderId.toString() === position.binance_sl_order_id);
         
         if (!slOrder) {
           // SL order not found on Binance - might have been filled or cancelled
@@ -863,19 +865,19 @@ async function syncTestnetPositions(db, account) {
             const binanceSide = toBinanceSide(normalizedSide);
             const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
             
-            // Cancel any existing SL/TP orders with closePosition=true for this position to avoid -4130 error
-            const existingOrders = binanceOrders.filter(o => 
+            // Cancel any existing SL/TP algo orders with closePosition=true for this position to avoid -4130 error
+            const existingAlgoOrders = binanceAlgoOrders.filter(o => 
               o.positionSide === toPositionSide(normalizedSide) && 
               o.side === slSide &&
               (o.type === 'STOP_MARKET' || o.type === 'TAKE_PROFIT_MARKET')
             );
             
-            for (const existingOrder of existingOrders) {
+            for (const existingOrder of existingAlgoOrders) {
               try {
-                await cancelOrder(testnetClient, symbol, existingOrder.orderId);
-                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} order ${existingOrder.orderId} before placing new SL`);
+                await cancelAlgoOrder(symbol, existingOrder.orderId);
+                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} algo order ${existingOrder.orderId} before placing new SL`);
               } catch (cancelError) {
-                console.warn(`[TestnetEngine] Failed to cancel existing order ${existingOrder.orderId}:`, cancelError.message);
+                console.warn(`[TestnetEngine] Failed to cancel existing algo order ${existingOrder.orderId}:`, cancelError.message);
               }
             }
             
@@ -924,7 +926,7 @@ async function syncTestnetPositions(db, account) {
       
       // Check TP order status
       if (position.binance_tp_order_id) {
-        const tpOrder = binanceOrders.find(o => o.orderId.toString() === position.binance_tp_order_id);
+        const tpOrder = binanceAlgoOrders.find(o => o.orderId.toString() === position.binance_tp_order_id);
         
         if (!tpOrder) {
           // TP order not found on Binance
@@ -941,19 +943,19 @@ async function syncTestnetPositions(db, account) {
             const binanceSide = toBinanceSide(normalizedSide);
             const tpSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
             
-            // Cancel any existing SL/TP orders with closePosition=true for this position to avoid -4130 error
-            const existingOrders = binanceOrders.filter(o => 
+            // Cancel any existing SL/TP algo orders with closePosition=true for this position to avoid -4130 error
+            const existingAlgoOrders = binanceAlgoOrders.filter(o => 
               o.positionSide === toPositionSide(normalizedSide) && 
               o.side === tpSide &&
               (o.type === 'STOP_MARKET' || o.type === 'TAKE_PROFIT_MARKET')
             );
             
-            for (const existingOrder of existingOrders) {
+            for (const existingOrder of existingAlgoOrders) {
               try {
-                await cancelOrder(testnetClient, symbol, existingOrder.orderId);
-                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} order ${existingOrder.orderId} before placing new TP`);
+                await cancelAlgoOrder(symbol, existingOrder.orderId);
+                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} algo order ${existingOrder.orderId} before placing new TP`);
               } catch (cancelError) {
-                console.warn(`[TestnetEngine] Failed to cancel existing order ${existingOrder.orderId}:`, cancelError.message);
+                console.warn(`[TestnetEngine] Failed to cancel existing algo order ${existingOrder.orderId}:`, cancelError.message);
               }
             }
             

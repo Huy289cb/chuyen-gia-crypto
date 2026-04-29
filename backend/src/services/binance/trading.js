@@ -276,6 +276,39 @@ export async function cancelAllAlgoOrders(symbol) {
 }
 
 /**
+ * Get open algo orders for a symbol
+ * @param {string} symbol - Trading symbol
+ * @returns {Promise<Array>} Array of open algo orders
+ */
+export async function getOpenAlgoOrders(symbol) {
+  try {
+    const response = await get(endpoints.ALGO_ORDER, { symbol }, true);
+    
+    return response.map(order => ({
+      orderId: order.algoId,
+      clientOrderId: order.clientAlgoId,
+      symbol: order.symbol,
+      side: order.side,
+      type: order.type,
+      positionSide: order.positionSide,
+      price: order.price ? parseFloat(order.price) : null,
+      stopPrice: order.stopPrice ? parseFloat(order.stopPrice) : null,
+      triggerPrice: order.triggerPrice ? parseFloat(order.triggerPrice) : null,
+      origQty: parseFloat(order.origQty),
+      executedQty: parseFloat(order.executedQty),
+      cummulativeQuoteQty: parseFloat(order.cummulativeQuoteQty),
+      status: order.status,
+      timeInForce: order.timeInForce,
+      transactTime: order.transactTime,
+      updateTime: order.updateTime,
+    }));
+  } catch (error) {
+    console.error('[BinanceTrading] Failed to get open algo orders:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Place a new order
  * @param {object} params - Order parameters
  * @param {string} params.symbol - Trading symbol

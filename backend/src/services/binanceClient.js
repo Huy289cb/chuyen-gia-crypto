@@ -10,7 +10,7 @@ import { getServerTime } from './binance/market.js';
 import { getBalance } from './binance/account.js';
 import { getCurrentPosition as getCurrentPositionAPI, getPositionRisk as getPositionRiskAPI } from './binance/account.js';
 import { placeOrder as placeOrderAPI, testOrder, cancelOrder as cancelOrderAPI, cancelAllOrders as cancelAllOrdersAPI, getOpenOrders as getOpenOrdersAPI } from './binance/trading.js';
-import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeStopMarketOrder as placeStopMarketOrderAPI, placeTakeProfitMarketOrder as placeTakeProfitMarketOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI } from './binance/trading.js';
+import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeStopMarketOrder as placeStopMarketOrderAPI, placeTakeProfitMarketOrder as placeTakeProfitMarketOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI, getOpenAlgoOrders as getOpenAlgoOrdersAPI } from './binance/trading.js';
 
 /**
  * Initialize Binance Client
@@ -227,6 +227,19 @@ export async function getOpenOrders(client, symbol) {
     return orders;
   } catch (error) {
     console.error('[BinanceClient] Failed to get open orders:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get open algo orders for a symbol (STOP_MARKET, TAKE_PROFIT_MARKET)
+ */
+export async function getOpenAlgoOrders(client, symbol) {
+  try {
+    const orders = await getOpenAlgoOrdersAPI(symbol);
+    return orders;
+  } catch (error) {
+    console.error('[BinanceClient] Failed to get open algo orders:', error.message);
     throw error;
   }
 }
