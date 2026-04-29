@@ -101,7 +101,7 @@ export async function placeStopMarketOrder(params) {
       symbol: params.symbol,
       side: params.side,
       quantity: params.quantity,
-      stopPrice: params.stopPrice,
+      triggerPrice: params.stopPrice, // Algo Order API uses triggerPrice instead of stopPrice
       positionSide: params.positionSide,
       timeInForce: params.timeInForce || 'GTC',
       algoType: 'CONDITIONAL',
@@ -163,7 +163,7 @@ export async function placeTakeProfitMarketOrder(params) {
       symbol: params.symbol,
       side: params.side,
       quantity: params.quantity,
-      stopPrice: params.stopPrice,
+      triggerPrice: params.stopPrice, // Algo Order API uses triggerPrice instead of stopPrice
       positionSide: params.positionSide,
       timeInForce: params.timeInForce || 'GTC',
       algoType: 'CONDITIONAL',
