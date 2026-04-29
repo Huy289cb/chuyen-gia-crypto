@@ -17,7 +17,6 @@ import {
   cancelOrder,
   cancelAllOrders,
   getOpenOrders,
-  getOpenAlgoOrders,
   cancelAlgoOrder,
   setLeverage,
   setMarginType,
@@ -841,8 +840,13 @@ async function syncTestnetPositions(db, account) {
       return;
     }
     
-    // Get open algo orders from Binance (STOP_MARKET, TAKE_PROFIT_MARKET)
-    const binanceAlgoOrders = await getOpenAlgoOrders(testnetClient, symbol);
+    // Get open orders from Binance (includes both regular and algo orders)
+    const binanceOrders = await getOpenOrders(testnetClient, symbol);
+    
+    // Filter for algo orders (STOP_MARKET, TAKE_PROFIT_MARKET) for SL/TP
+    const binanceAlgoOrders = binanceOrders.filter(o => 
+      o.type === 'STOP_MARKET' || o.type === 'TAKE_PROFIT_MARKET'
+    );
     
     for (const position of dbPositions) {
       // Check SL order status
@@ -874,7 +878,8 @@ async function syncTestnetPositions(db, account) {
             
             for (const existingOrder of existingAlgoOrders) {
               try {
-                await cancelAlgoOrder(symbol, existingOrder.orderId);
+                // Use cancelAlgoOrder for algo orders
+                await cancelAlgoOrder(testnetClient, symbol, existingOrder.orderId);
                 console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} algo order ${existingOrder.orderId} before placing new SL`);
               } catch (cancelError) {
                 console.warn(`[TestnetEngine] Failed to cancel existing algo order ${existingOrder.orderId}:`, cancelError.message);
@@ -952,7 +957,8 @@ async function syncTestnetPositions(db, account) {
             
             for (const existingOrder of existingAlgoOrders) {
               try {
-                await cancelAlgoOrder(symbol, existingOrder.orderId);
+                // Use cancelAlgoOrder for algo orders
+                await cancelAlgoOrder(testnetClient, symbol, existingOrder.orderId);
                 console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} algo order ${existingOrder.orderId} before placing new TP`);
               } catch (cancelError) {
                 console.warn(`[TestnetEngine] Failed to cancel existing algo order ${existingOrder.orderId}:`, cancelError.message);
