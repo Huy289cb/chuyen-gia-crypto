@@ -16,8 +16,8 @@ import {
   placeTakeProfitOrder,
   cancelOrder,
   cancelAllOrders,
+  cancelAllAlgoOrders,
   getOpenOrders,
-  cancelAlgoOrder,
   setLeverage,
   setMarginType,
 } from './binanceClient.js';
@@ -870,26 +870,12 @@ async function syncTestnetPositions(db, account) {
             const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
             const positionSide = toPositionSide(normalizedSide);
             
-            // Cancel ALL algo orders for this position side to avoid -4130 error
-            const existingAlgoOrders = binanceAlgoOrders.filter(o => 
-              o.positionSide === positionSide && 
-              o.side === slSide
-            );
-            
-            for (const existingOrder of existingAlgoOrders) {
-              try {
-                // Try canceling as regular order first
-                await cancelOrder(testnetClient, symbol, existingOrder.orderId);
-                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} order ${existingOrder.orderId} before placing new SL`);
-              } catch (cancelError) {
-                // If regular cancel fails, try canceling as algo order
-                try {
-                  await cancelAlgoOrder(testnetClient, symbol, existingOrder.orderId, existingOrder.clientOrderId);
-                  console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} algo order ${existingOrder.orderId} before placing new SL`);
-                } catch (algoCancelError) {
-                  console.warn(`[TestnetEngine] Failed to cancel order ${existingOrder.orderId}:`, algoCancelError.message);
-                }
-              }
+            // Cancel ALL algo orders for this symbol to avoid -4130 error
+            try {
+              await cancelAllAlgoOrders(testnetClient, symbol);
+              console.log(`[TestnetEngine] Cancelled all algo orders for ${symbol} before placing new SL`);
+            } catch (cancelAllError) {
+              console.warn(`[TestnetEngine] Failed to cancel all algo orders:`, cancelAllError.message);
             }
             
             const newSLOrder = await placeStopLossOrder(testnetClient, symbol, slSide, position.size_qty, position.stop_loss, positionSide);
@@ -955,26 +941,12 @@ async function syncTestnetPositions(db, account) {
             const tpSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
             const positionSide = toPositionSide(normalizedSide);
             
-            // Cancel ALL algo orders for this position side to avoid -4130 error
-            const existingAlgoOrders = binanceAlgoOrders.filter(o => 
-              o.positionSide === positionSide && 
-              o.side === tpSide
-            );
-            
-            for (const existingOrder of existingAlgoOrders) {
-              try {
-                // Try canceling as regular order first
-                await cancelOrder(testnetClient, symbol, existingOrder.orderId);
-                console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} order ${existingOrder.orderId} before placing new TP`);
-              } catch (cancelError) {
-                // If regular cancel fails, try canceling as algo order
-                try {
-                  await cancelAlgoOrder(testnetClient, symbol, existingOrder.orderId, existingOrder.clientOrderId);
-                  console.log(`[TestnetEngine] Cancelled existing ${existingOrder.type} algo order ${existingOrder.orderId} before placing new TP`);
-                } catch (algoCancelError) {
-                  console.warn(`[TestnetEngine] Failed to cancel order ${existingOrder.orderId}:`, algoCancelError.message);
-                }
-              }
+            // Cancel ALL algo orders for this symbol to avoid -4130 error
+            try {
+              await cancelAllAlgoOrders(testnetClient, symbol);
+              console.log(`[TestnetEngine] Cancelled all algo orders for ${symbol} before placing new TP`);
+            } catch (cancelAllError) {
+              console.warn(`[TestnetEngine] Failed to cancel all algo orders:`, cancelAllError.message);
             }
             
             const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, tpSide, position.size_qty, position.take_profit, positionSide);

@@ -233,6 +233,20 @@ export async function cancelAlgoOrder(client, symbol, algoId, clientAlgoId = nul
 }
 
 /**
+ * Cancel all algo orders for a symbol
+ */
+export async function cancelAllAlgoOrders(client, symbol) {
+  try {
+    const response = await cancelAllAlgoOrdersAPI(symbol);
+    console.log(`[BinanceClient] All algo orders cancelled for ${symbol}`);
+    return response;
+  } catch (error) {
+    console.error('[BinanceClient] Failed to cancel all algo orders:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Get open orders for a symbol
  */
 export async function getOpenOrders(client, symbol) {
