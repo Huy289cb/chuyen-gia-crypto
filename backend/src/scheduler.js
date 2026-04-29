@@ -464,7 +464,7 @@ async function runMethodAnalysis(methodId) {
         // Step 7: Testnet position decisions (if enabled)
         if (process.env.BINANCE_ENABLED === 'true' && analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
           try {
-            const { closeTestnetPositionEngine, updateTestnetPositionSL } = await import('./services/testnetEngine.js');
+            const { closeTestnetPositionEngine, updateTestnetPositionSL, partialCloseTestnetPosition, reverseTestnetPosition } = await import('./services/testnetEngine.js');
             const { getTestnetPosition } = await import('./db/testnetDatabase.js');
             const { fetchRealTimePrices } = await import('./price-fetcher.js');
             const { getMethodConfig } = await import('./config/methods.js');
@@ -504,8 +504,9 @@ async function runMethodAnalysis(methodId) {
                 
                 // Handle close_partial
                 else if (decision.action === 'close_partial') {
-                  // Testnet doesn't support partial close yet, log for now
-                  console.log(`[Scheduler][${method.name}] Partial close not yet supported for testnet position ${decision.position_id}: ${decision.reason}`);
+                  const closeRatio = decision.close_ratio || 0.5; // Default 50%
+                  await partialCloseTestnetPosition(db, position, currentPrice, closeRatio, `ai_recommendation: ${decision.reason}`);
+                  console.log(`[Scheduler][${method.name}] Partial closed testnet position ${decision.position_id}: ${Math.round(closeRatio * 100)}% - ${decision.reason}`);
                 }
                 
                 // Handle move_sl
@@ -519,8 +520,18 @@ async function runMethodAnalysis(methodId) {
                 
                 // Handle reverse
                 else if (decision.action === 'reverse') {
-                  // Testnet doesn't support reverse yet, log for now
-                  console.log(`[Scheduler][${method.name}] Reverse not yet supported for testnet position ${decision.position_id}: ${decision.reason}`);
+                  const newPositionData = {
+                    side: decision.new_side || (position.side === 'long' ? 'short' : 'long'),
+                    entry_price: decision.new_entry || currentPrice,
+                    stop_loss: decision.new_sl,
+                    take_profit: decision.new_tp,
+                    size_usd: decision.new_size_usd || position.size_usd,
+                    risk_usd: decision.new_risk_usd || position.risk_usd,
+                    risk_percent: decision.new_risk_percent || position.risk_percent,
+                    expected_rr: decision.new_expected_rr || position.expected_rr,
+                  };
+                  await reverseTestnetPosition(db, position, currentPrice, newPositionData, `ai_recommendation: ${decision.reason}`);
+                  console.log(`[Scheduler][${method.name}] Reversed testnet position ${decision.position_id}: ${decision.reason}`);
                 }
               } catch (error) {
                 console.error(`[Scheduler][${method.name}] Failed to execute testnet position decision for ${decision.position_id}:`, error.message);

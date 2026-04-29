@@ -1038,6 +1038,120 @@ export function getTestnetClient() {
   return testnetClient;
 }
 
+/**
+ * Partial close a testnet position (AI decision)
+ */
+export async function partialCloseTestnetPosition(db, position, currentPrice, closeRatio, reason) {
+  if (!testnetClient) {
+    console.error('[TestnetEngine] Testnet client not initialized');
+    throw new Error('Testnet client not initialized');
+  }
+
+  try {
+    const symbol = getSymbol();
+    const normalizedSide = normalizeTradeSide(position.side);
+    const binanceSide = toBinanceSide(normalizedSide);
+    const closeSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
+    
+    // Calculate close quantity
+    const closeQty = position.size_qty * closeRatio;
+    
+    if (closeQty < 0.001) {
+      console.log('[TestnetEngine] Close quantity too small, skipping partial close');
+      return null;
+    }
+    
+    // Cancel existing TP order
+    if (position.binance_tp_order_id) {
+      try {
+        await cancelOrder(testnetClient, symbol, position.binance_tp_order_id);
+        console.log(`[TestnetEngine] Cancelled TP order ${position.binance_tp_order_id} for partial close`);
+      } catch (error) {
+        console.error('[TestnetEngine] Failed to cancel TP order:', error.message);
+      }
+    }
+    
+    // Place partial close market order
+    const positionSide = toPositionSide(normalizedSide);
+    const closeOrder = await placeMarketOrder(testnetClient, symbol, closeSide, closeQty, positionSide);
+    
+    // Calculate partial PnL
+    const priceDiff = closeSide === 'SELL' 
+      ? currentPrice - position.entry_price 
+      : position.entry_price - currentPrice;
+    const partialPnl = priceDiff * closeQty;
+    
+    // Update position
+    const newPartialClosed = (position.partial_closed || 0) + closeQty;
+    const remainingQty = position.size_qty - newPartialClosed;
+    
+    await updateTestnetPosition(db, position.position_id, {
+      partial_closed: newPartialClosed,
+      size_qty: remainingQty,
+      size_usd: remainingQty * currentPrice,
+    });
+    
+    // Update account balance with partial PnL
+    await updateTestnetAccountBalance(db, position.account_id, null, partialPnl);
+    
+    // Record trade event
+    await recordTestnetTradeEvent(db, position.position_id, 'partial_close', {
+      close_price: currentPrice,
+      close_qty: closeQty,
+      close_ratio: closeRatio,
+      pnl: partialPnl,
+      reason,
+      close_order_id: closeOrder.orderId,
+    });
+    
+    // If there's remaining position, place new TP order
+    if (remainingQty > 0.001) {
+      const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, closeSide, remainingQty, position.take_profit, positionSide);
+      
+      await updateTestnetPosition(db, position.position_id, {
+        binance_tp_order_id: newTPOrder.orderId.toString(),
+      });
+      
+      console.log(`[TestnetEngine] Replaced TP order after partial close`);
+    }
+    
+    console.log(`[TestnetEngine] Partial closed testnet position ${position.position_id}: ${Math.round(closeRatio * 100)}% at ${currentPrice}, PnL: $${partialPnl.toFixed(2)}`);
+    
+    return { partialPnl, closeQty };
+  } catch (error) {
+    console.error('[TestnetEngine] Failed to partial close position:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Reverse a testnet position (AI decision)
+ */
+export async function reverseTestnetPosition(db, position, currentPrice, newPositionData, reason) {
+  if (!testnetClient) {
+    console.error('[TestnetEngine] Testnet client not initialized');
+    throw new Error('Testnet client not initialized');
+  }
+
+  try {
+    // Close existing position
+    await closeTestnetPositionEngine(db, position, currentPrice, `ai_reverse: ${reason}`);
+    
+    // Open new position in opposite direction
+    const { getOrCreateTestnetAccount } = await import('../db/testnetDatabase.js');
+    const account = await getOrCreateTestnetAccount(db, 'BTC', position.method_id);
+    
+    await openTestnetPosition(db, account, newPositionData, null, position.method_id);
+    
+    console.log(`[TestnetEngine] Reversed testnet position ${position.position_id} to ${newPositionData.side}: ${reason}`);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[TestnetEngine] Failed to reverse position:', error.message);
+    throw error;
+  }
+}
+
 export async function cleanupTestnetAccountState(db, account) {
   if (!testnetClient) {
     console.error('[TestnetEngine] Testnet client not initialized');
