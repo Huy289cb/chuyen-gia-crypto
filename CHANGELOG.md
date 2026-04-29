@@ -2,6 +2,31 @@
 
 All notable changes to the project will be documented in this file.
 
+## [29/04/2026] - v1.2.40 - Testnet Paper Trading Implementation
+
+### Features
+
+**Complete Testnet Paper Trading System**
+- **Feature**: Full paper trading system for Binance Futures Testnet with position management, SL/TP, and performance tracking
+- **Details**:
+  - Partial close implementation for testnet positions
+  - Reverse position support for testnet
+  - Price update scheduler for real-time PnL and SL/TP monitoring
+  - Account snapshots for performance tracking
+  - Performance metrics calculation (win rate, profit factor, equity curve)
+  - Trade events recording for audit trail
+- **API Endpoints**:
+  - Testnet positions (GET/POST)
+  - Testnet accounts (GET/POST reset)
+  - Testnet performance metrics (GET metrics/equity-curve/trades)
+  - Manual position close and sync
+- **Frontend Components**:
+  - TestnetPanel component for dashboard
+  - Real-time balance display
+  - Position and trade history
+- **Bug Fix**: Fixed Binance API error -4130 when replacing SL/TP orders by clearing order IDs from DB instead of attempting replacement
+- **Files**: `backend/src/services/testnetEngine.js`, `backend/src/db/testnetDatabase.js`, `backend/src/schedulers/priceUpdateScheduler.js`, `backend/src/routes/testnet.js`, `frontend/app/components/crypto/TestnetPanel.tsx`
+
 ## [29/04/2026] - v1.2.39 - Binance Testnet Volume Constraints
 
 ### Features
