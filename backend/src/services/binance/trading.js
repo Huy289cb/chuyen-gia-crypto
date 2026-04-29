@@ -97,18 +97,28 @@ export async function setPositionMode(dual) {
  */
 export async function placeStopMarketOrder(params) {
   try {
-    const response = await post(endpoints.ALGO_ORDER, {
+    const requestParams = {
       symbol: params.symbol,
       side: params.side,
       quantity: params.quantity,
       stopPrice: params.stopPrice,
       positionSide: params.positionSide,
-      closePosition: params.closePosition || false,
-      reduceOnly: params.reduceOnly || false,
       timeInForce: params.timeInForce || 'GTC',
       algoType: 'CONDITIONAL',
       type: 'STOP_MARKET',
-    }, true);
+    };
+
+    // Only set closePosition if it's true (for hedge mode)
+    if (params.closePosition) {
+      requestParams.closePosition = true;
+    }
+
+    // Only set reduceOnly if closePosition is false (for single position mode)
+    if (!params.closePosition && params.reduceOnly) {
+      requestParams.reduceOnly = true;
+    }
+
+    const response = await post(endpoints.ALGO_ORDER, requestParams, true);
 
     console.log(`[BinanceTrading] Stop-market algo order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 
@@ -149,18 +159,28 @@ export async function placeStopMarketOrder(params) {
  */
 export async function placeTakeProfitMarketOrder(params) {
   try {
-    const response = await post(endpoints.ALGO_ORDER, {
+    const requestParams = {
       symbol: params.symbol,
       side: params.side,
       quantity: params.quantity,
       stopPrice: params.stopPrice,
       positionSide: params.positionSide,
-      closePosition: params.closePosition || false,
-      reduceOnly: params.reduceOnly || false,
       timeInForce: params.timeInForce || 'GTC',
       algoType: 'CONDITIONAL',
       type: 'TAKE_PROFIT_MARKET',
-    }, true);
+    };
+
+    // Only set closePosition if it's true (for hedge mode)
+    if (params.closePosition) {
+      requestParams.closePosition = true;
+    }
+
+    // Only set reduceOnly if closePosition is false (for single position mode)
+    if (!params.closePosition && params.reduceOnly) {
+      requestParams.reduceOnly = true;
+    }
+
+    const response = await post(endpoints.ALGO_ORDER, requestParams, true);
 
     console.log(`[BinanceTrading] Take-profit-market algo order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 
