@@ -863,36 +863,13 @@ async function syncTestnetPositions(db, account) {
             reason: 'order_not_found_on_binance',
           });
           
-          // Re-place SL order if position is still open using Algo Order API
-          try {
-            const normalizedSide = normalizeTradeSide(position.side);
-            const binanceSide = toBinanceSide(normalizedSide);
-            const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-            const positionSide = toPositionSide(normalizedSide);
-            
-            // Cancel ALL algo orders for this symbol to avoid -4130 error
-            try {
-              await cancelAllAlgoOrders(testnetClient, symbol);
-              console.log(`[TestnetEngine] Cancelled all algo orders for ${symbol} before placing new SL`);
-            } catch (cancelAllError) {
-              console.warn(`[TestnetEngine] Failed to cancel all algo orders:`, cancelAllError.message);
-            }
-            
-            const newSLOrder = await placeStopLossOrder(testnetClient, symbol, slSide, position.size_qty, position.stop_loss, positionSide);
-            
-            await updateTestnetPosition(db, position.position_id, {
-              binance_sl_order_id: newSLOrder.orderId.toString(),
-            });
-            
-            await recordTestnetTradeEvent(db, position.position_id, 'sl_order_replaced', {
-              old_order_id: position.binance_sl_order_id,
-              new_order_id: newSLOrder.orderId,
-              reason: 'order_missing',
-            });
-            
-          } catch (replaceError) {
-            console.error(`[TestnetEngine] Failed to replace SL order:`, replaceError.message);
-          }
+          // Instead of trying to replace (which causes -4130 error), just clear the SL order ID from DB
+          // The position will be managed by AI decisions or manual close
+          await updateTestnetPosition(db, position.position_id, {
+            binance_sl_order_id: null,
+          });
+          
+          console.log(`[TestnetEngine] Cleared SL order ID from DB for position ${position.position_id} (order not found on Binance)`);
         } else if (slOrder.status === 'FILLED') {
           // SL order was filled - position should be closed
 
@@ -934,36 +911,13 @@ async function syncTestnetPositions(db, account) {
             reason: 'order_not_found_on_binance',
           });
           
-          // Re-place TP order if position is still open using Algo Order API
-          try {
-            const normalizedSide = normalizeTradeSide(position.side);
-            const binanceSide = toBinanceSide(normalizedSide);
-            const tpSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
-            const positionSide = toPositionSide(normalizedSide);
-            
-            // Cancel ALL algo orders for this symbol to avoid -4130 error
-            try {
-              await cancelAllAlgoOrders(testnetClient, symbol);
-              console.log(`[TestnetEngine] Cancelled all algo orders for ${symbol} before placing new TP`);
-            } catch (cancelAllError) {
-              console.warn(`[TestnetEngine] Failed to cancel all algo orders:`, cancelAllError.message);
-            }
-            
-            const newTPOrder = await placeTakeProfitOrder(testnetClient, symbol, tpSide, position.size_qty, position.take_profit, positionSide);
-            
-            await updateTestnetPosition(db, position.position_id, {
-              binance_tp_order_id: newTPOrder.orderId.toString(),
-            });
-            
-            await recordTestnetTradeEvent(db, position.position_id, 'tp_order_replaced', {
-              old_order_id: position.binance_tp_order_id,
-              new_order_id: newTPOrder.orderId,
-              reason: 'order_missing',
-            });
-            
-          } catch (replaceError) {
-            console.error(`[TestnetEngine] Failed to replace TP order:`, replaceError.message);
-          }
+          // Instead of trying to replace (which causes -4130 error), just clear the TP order ID from DB
+          // The position will be managed by AI decisions or manual close
+          await updateTestnetPosition(db, position.position_id, {
+            binance_tp_order_id: null,
+          });
+          
+          console.log(`[TestnetEngine] Cleared TP order ID from DB for position ${position.position_id} (order not found on Binance)`);
         } else if (tpOrder.status === 'FILLED') {
           // TP order was filled - position should be closed
 
