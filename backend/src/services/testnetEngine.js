@@ -718,38 +718,44 @@ export async function syncTestnetAccount(db, account) {
     const balance = await getAccountBalance(testnetClient);
 
     const correctBalance = balance.walletBalance;
-    const correctEquity = balance.walletBalance + balance.totalUnrealizedProfit;
+
+    // Calculate equity from local positions instead of Binance's totalWalletBalance
+    // Binance's calculation can be incorrect, so we use: availableBalance + unrealizedPnL from positions
+    const { getTestnetPositions } = await import('../db/testnetDatabase.js');
+    const openPositions = await getTestnetPositions(db, { account_id: account.id, status: 'open' });
+    const totalUnrealizedPnl = openPositions.reduce((sum, pos) => sum + (pos.unrealized_pnl || 0), 0);
+    const calculatedEquity = balance.availableBalance + totalUnrealizedPnl;
 
     // Detect discrepancies using wallet balance, not available balance.
     const balanceDiff = Math.abs(correctBalance - account.current_balance);
-    const equityDiff = Math.abs(correctEquity - account.equity);
+    const equityDiff = Math.abs(calculatedEquity - account.equity);
 
     // Skip auto-correction if Binance balance is 0 (unfunded testnet account)
     // Keep DB balance for paper trading
     if (balance.walletBalance < 1) {
       // Still update equity with unrealized PnL from positions (if any)
-      await updateTestnetAccountEquity(db, account.id, balance.totalUnrealizedProfit);
+      await updateTestnetAccountEquity(db, account.id, totalUnrealizedPnl);
     } else if (balanceDiff > 0.01 || equityDiff > 0.01) {
       console.warn(`[TestnetEngine] Balance discrepancy detected for account ${account.id}:`);
       console.warn(`  DB balance: ${account.current_balance}, Binance balance: ${correctBalance} (diff: ${balanceDiff.toFixed(2)})`);
-      console.warn(`  DB equity: ${account.equity}, Binance equity: ${correctEquity} (diff: ${equityDiff.toFixed(2)})`);
+      console.warn(`  DB equity: ${account.equity}, Calculated equity: ${calculatedEquity.toFixed(2)}, Binance equity: ${(balance.walletBalance + balance.totalUnrealizedProfit).toFixed(2)} (diff: ${equityDiff.toFixed(2)})`);
 
-      // Auto-correct: update database with Binance values
+      // Auto-correct: update database with correct values
       await updateTestnetAccountBalance(db, account.id, correctBalance, 0);
-      await updateTestnetAccountEquityDirect(db, account.id, correctEquity);
+      await updateTestnetAccountEquityDirect(db, account.id, calculatedEquity);
 
       // Record sync event
       await recordTestnetTradeEvent(db, `account_${account.id}`, 'balance_sync', {
         old_balance: account.current_balance,
         new_balance: correctBalance,
         old_equity: account.equity,
-        new_equity: correctEquity,
+        new_equity: calculatedEquity,
         reason: 'discrepancy_detected',
       });
 
     } else {
-      // No discrepancy, just update equity with latest correct equity
-      await updateTestnetAccountEquityDirect(db, account.id, correctEquity);
+      // No discrepancy, just update equity with latest calculated equity
+      await updateTestnetAccountEquityDirect(db, account.id, calculatedEquity);
     }
     
     // Sync positions with Binance

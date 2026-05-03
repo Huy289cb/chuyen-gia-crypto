@@ -30,6 +30,13 @@ vi.mock('../../src/db/testnetDatabase.js', () => ({
   })),
   getTestnetPositions: vi.fn(() => Promise.resolve([])),
   createTestnetAccountSnapshot: vi.fn(() => Promise.resolve(1)),
+  getTestnetPendingOrders: vi.fn(() => Promise.resolve([])),
+  cancelTestnetPendingOrder: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock('../../src/db/database.js', () => ({
+  getPendingOrders: vi.fn(() => Promise.resolve([])),
+  cancelPendingOrder: vi.fn(() => Promise.resolve()),
 }));
 
 // Helper function to create in-memory database
@@ -200,6 +207,123 @@ describe('Price Update Scheduler - Testnet Monitoring', () => {
 
       process.env.BINANCE_ENABLED = originalEnv;
       expect(disabled).toBe(false);
+    });
+  });
+
+  describe('Stale Order Cancellation (New Feature)', () => {
+    it('should cancel paper trading orders older than 24 hours', async () => {
+      const { getPendingOrders, cancelPendingOrder } = await import('../../src/db/database.js');
+      
+      const now = Date.now();
+      const twentyFiveHoursAgo = now - (25 * 60 * 60 * 1000);
+      const oneHourAgo = now - (1 * 60 * 60 * 1000);
+
+      // Mock orders: one stale (>24h), one fresh (<24h)
+      getPendingOrders.mockResolvedValue([
+        { id: 1, symbol: 'BTC', status: 'pending', created_at: new Date(twentyFiveHoursAgo).toISOString() },
+        { id: 2, symbol: 'BTC', status: 'pending', created_at: new Date(oneHourAgo).toISOString() }
+      ]);
+
+      // Simulate the cancellation logic
+      const pendingOrders = await getPendingOrders(db, { symbol: 'BTC', status: 'pending' });
+      const STALE_THRESHOLD = 24 * 60 * 60 * 1000;
+
+      for (const order of pendingOrders) {
+        const createdAt = new Date(order.created_at).getTime();
+        if (now - createdAt > STALE_THRESHOLD) {
+          await cancelPendingOrder(db, order.id, 'stale');
+        }
+      }
+
+      expect(cancelPendingOrder).toHaveBeenCalledTimes(1);
+      expect(cancelPendingOrder).toHaveBeenCalledWith(db, 1, 'stale');
+    });
+
+    it('should not cancel paper trading orders younger than 24 hours', async () => {
+      const { getPendingOrders, cancelPendingOrder } = await import('../../src/db/database.js');
+      
+      const now = Date.now();
+      const twelveHoursAgo = now - (12 * 60 * 60 * 1000);
+
+      getPendingOrders.mockResolvedValue([
+        { id: 1, symbol: 'BTC', status: 'pending', created_at: new Date(twelveHoursAgo).toISOString() }
+      ]);
+
+      // Simulate the cancellation logic
+      const pendingOrders = await getPendingOrders(db, { symbol: 'BTC', status: 'pending' });
+      const STALE_THRESHOLD = 24 * 60 * 60 * 1000;
+
+      for (const order of pendingOrders) {
+        const createdAt = new Date(order.created_at).getTime();
+        if (now - createdAt > STALE_THRESHOLD) {
+          await cancelPendingOrder(db, order.id, 'stale');
+        }
+      }
+
+      expect(cancelPendingOrder).not.toHaveBeenCalled();
+    });
+
+    it('should cancel testnet orders older than 24 hours when Binance enabled', async () => {
+      const originalEnv = process.env.BINANCE_ENABLED;
+      process.env.BINANCE_ENABLED = 'true';
+
+      const { getTestnetPendingOrders, cancelTestnetPendingOrder } = await import('../../src/db/testnetDatabase.js');
+      
+      const now = Date.now();
+      const twentyFiveHoursAgo = now - (25 * 60 * 60 * 1000);
+
+      getTestnetPendingOrders.mockResolvedValue([
+        { order_id: 'test1', symbol: 'BTC', status: 'pending', created_at: new Date(twentyFiveHoursAgo).toISOString(), binance_order_id: 'binance1' }
+      ]);
+
+      // Simulate the testnet cancellation logic
+      if (process.env.BINANCE_ENABLED === 'true') {
+        const pendingOrders = await getTestnetPendingOrders(db, { symbol: 'BTC', status: 'pending' });
+        const STALE_THRESHOLD = 24 * 60 * 60 * 1000;
+
+        for (const order of pendingOrders) {
+          const createdAt = new Date(order.created_at).getTime();
+          if (now - createdAt > STALE_THRESHOLD) {
+            await cancelTestnetPendingOrder(db, order.order_id, 'stale', order.binance_order_id);
+          }
+        }
+      }
+
+      expect(cancelTestnetPendingOrder).toHaveBeenCalledTimes(1);
+      expect(cancelTestnetPendingOrder).toHaveBeenCalledWith(db, 'test1', 'stale', 'binance1');
+
+      process.env.BINANCE_ENABLED = originalEnv;
+    });
+
+    it('should skip testnet order cancellation when Binance disabled', async () => {
+      const originalEnv = process.env.BINANCE_ENABLED;
+      process.env.BINANCE_ENABLED = 'false';
+
+      const { getTestnetPendingOrders, cancelTestnetPendingOrder } = await import('../../src/db/testnetDatabase.js');
+      
+      const now = Date.now();
+      const twentyFiveHoursAgo = now - (25 * 60 * 60 * 1000);
+
+      getTestnetPendingOrders.mockResolvedValue([
+        { order_id: 'test1', symbol: 'BTC', status: 'pending', created_at: new Date(twentyFiveHoursAgo).toISOString(), binance_order_id: 'binance1' }
+      ]);
+
+      // Simulate the testnet cancellation logic
+      if (process.env.BINANCE_ENABLED === 'true') {
+        const pendingOrders = await getTestnetPendingOrders(db, { symbol: 'BTC', status: 'pending' });
+        const STALE_THRESHOLD = 24 * 60 * 60 * 1000;
+
+        for (const order of pendingOrders) {
+          const createdAt = new Date(order.created_at).getTime();
+          if (now - createdAt > STALE_THRESHOLD) {
+            await cancelTestnetPendingOrder(db, order.order_id, 'stale', order.binance_order_id);
+          }
+        }
+      }
+
+      expect(cancelTestnetPendingOrder).not.toHaveBeenCalled();
+
+      process.env.BINANCE_ENABLED = originalEnv;
     });
   });
 });

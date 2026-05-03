@@ -105,6 +105,73 @@ export async function validateOrderLogic(side, entry, sl, tp, methodId = null) {
 }
 
 /**
+ * Validate entry timing to ensure pullback entries (not chase entries)
+ * @param {number} suggestedEntry - Suggested entry price
+ * @param {number} currentPrice - Current market price
+ * @param {string} side - Position side (long or short)
+ * @returns {Object} Validation result { valid: boolean, reason: string }
+ */
+function validateEntryTiming(suggestedEntry, currentPrice, side) {
+  const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
+  const minPullbackPercent = 0.005; // 0.5% minimum pullback
+
+  // Entry should be at least 0.5% away from current price (pullback requirement)
+  if (priceDiff < minPullbackPercent) {
+    return {
+      valid: false,
+      reason: `Entry too close to current price (${(priceDiff * 100).toFixed(2)}% < ${minPullbackPercent * 100}%) - not a pullback`
+    };
+  }
+
+  // For long: entry should be below current price (buy on dip)
+  if (side === 'long' && suggestedEntry > currentPrice) {
+    return {
+      valid: false,
+      reason: 'Long entry above current price (not a pullback - chasing price)'
+    };
+  }
+
+  // For short: entry should be above current price (sell on rally)
+  if (side === 'short' && suggestedEntry < currentPrice) {
+    return {
+      valid: false,
+      reason: 'Short entry below current price (not a pullback - chasing price)'
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Calculate dynamic risk based on account win rate
+ * Reduces risk during poor performance to protect capital
+ * @param {Object} account - Account data with total_trades and winning_trades
+ * @param {Object} methodConfig - Method configuration with riskPerTrade
+ * @returns {number} Adjusted risk percentage (e.g., 0.08 for 8%)
+ */
+function calculateDynamicRisk(account, methodConfig) {
+  const totalTrades = account.total_trades || 0;
+  const winningTrades = account.winning_trades || 0;
+
+  // Use default risk if insufficient trade history
+  if (totalTrades < 10) {
+    return methodConfig?.riskPerTrade || 0.01;
+  }
+
+  const winRate = winningTrades / totalTrades;
+  const baseRisk = methodConfig?.riskPerTrade || 0.01;
+
+  // Adjust risk based on win rate
+  if (winRate >= 0.6) {
+    return baseRisk; // Full risk for good performance (60%+ win rate)
+  } else if (winRate >= 0.4) {
+    return baseRisk * 0.8; // Reduce risk by 20% for moderate performance (40-60%)
+  } else {
+    return baseRisk * 0.5; // Reduce risk by 50% for poor performance (<40%)
+  }
+}
+
+/**
  * Validate if entry price aligns with existing open positions
  * Prevents creating limit orders that would execute in invalid price zones
  * @param {number} entryPrice - Suggested entry price for new order
@@ -420,7 +487,7 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 3 PASSED: Open positions ${openPositions.length}/${config.maxPositionsPerSymbol}`);
 
-  // Check 3.5: Max volume per account (including pending orders)
+  // Check 3.5: Max volume per account (separate limits for open and pending)
   if (config.maxVolumePerAccount) {
     const totalOpenVolume = openPositions.reduce((sum, pos) => sum + (pos.size_usd || 0), 0);
 
@@ -445,14 +512,26 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
     }
 
     const suggestedVolume = decision.suggestedPosition?.size_usd || 0;
-    const totalVolume = totalOpenVolume + totalPendingVolume + suggestedVolume;
-    
-    if (totalVolume > config.maxVolumePerAccount) {
-      console.log(`[AutoEntry] Check 3.5 FAILED: Total volume $${totalVolume.toFixed(2)} (open: $${totalOpenVolume.toFixed(2)}, pending: $${totalPendingVolume.toFixed(2)}, new: $${suggestedVolume.toFixed(2)}) exceeds max $${config.maxVolumePerAccount} for account`);
-      decision.reason = `Total volume $${totalVolume.toFixed(2)} exceeds max $${config.maxVolumePerAccount} for account`;
+    const maxOpenVolume = config.maxOpenVolume || config.maxVolumePerAccount || 2000;
+    const maxPendingVolume = config.maxPendingVolume || config.maxVolumePerAccount || 2000;
+
+    // Check open volume limit separately
+    const projectedOpenVolume = totalOpenVolume + suggestedVolume;
+    if (projectedOpenVolume > maxOpenVolume) {
+      console.log(`[AutoEntry] Check 3.5 FAILED: Open volume $${projectedOpenVolume.toFixed(2)} (current: $${totalOpenVolume.toFixed(2)}, new: $${suggestedVolume.toFixed(2)}) exceeds max $${maxOpenVolume}`);
+      decision.reason = `Open volume $${projectedOpenVolume.toFixed(2)} exceeds max $${maxOpenVolume}`;
       return decision;
     }
-    console.log(`[AutoEntry] Check 3.5 PASSED: Total volume $${totalVolume.toFixed(2)} (open: $${totalOpenVolume.toFixed(2)}, pending: $${totalPendingVolume.toFixed(2)}, new: $${suggestedVolume.toFixed(2)}) <= max $${config.maxVolumePerAccount}`);
+
+    // Check pending volume limit separately (only for new pending orders, not market orders)
+    // This check is skipped for market orders since they don't add to pending volume
+    if (totalPendingVolume > maxPendingVolume) {
+      console.log(`[AutoEntry] Check 3.5 FAILED: Pending volume $${totalPendingVolume.toFixed(2)} exceeds max $${maxPendingVolume}`);
+      decision.reason = `Pending volume $${totalPendingVolume.toFixed(2)} exceeds max $${maxPendingVolume}`;
+      return decision;
+    }
+
+    console.log(`[AutoEntry] Check 3.5 PASSED: Open volume $${projectedOpenVolume.toFixed(2)} <= max $${maxOpenVolume}, Pending volume $${totalPendingVolume.toFixed(2)} <= max $${maxPendingVolume}`);
   }
   
   // Check 3.6: Strategic entry validation when volume is at limit
@@ -541,6 +620,21 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
   }
   console.log(`[AutoEntry] Check 8 PASSED: R:R ${expectedRR.toFixed(1)} >= ${config.minRRRatio}`);
 
+  // Check 8.5: Entry timing validation (pullback requirement)
+  const entryForTiming = analysis.suggested_entry || analysis.current_price || 0;
+  const priceForTiming = analysis.current_price || 0;
+  const sideForTiming = analysis.bias === 'bullish' ? 'long' : 'short';
+  
+  if (entryForTiming && priceForTiming) {
+    const entryTimingValidation = validateEntryTiming(entryForTiming, priceForTiming, sideForTiming);
+    if (!entryTimingValidation.valid) {
+      console.log(`[AutoEntry] Check 8.5 FAILED: ${entryTimingValidation.reason}`);
+      decision.reason = entryTimingValidation.reason;
+      return decision;
+    }
+    console.log(`[AutoEntry] Check 8.5 PASSED: Entry timing valid (pullback)`);
+  }
+
   // Check 9: Confluence filters - Method-specific rules
   let confluence;
   let confluenceRequired;
@@ -554,8 +648,8 @@ export async function evaluateAutoEntry(analysis, account, openPositions = [], m
       orderBlockNearby: analysis.order_block_distance !== undefined && analysis.order_block_distance <= 0.01,
       fvgNearby: analysis.fvg_distance !== undefined && analysis.fvg_distance <= 0.01
     };
-    confluenceRequired = true;
-    confluenceMinMet = 2; // 2/4 met for Kim Nghia
+    confluenceRequired = config.requireConfluence;
+    confluenceMinMet = config.minConfluenceCount || 3; // Use config value, default to 3
   } else {
     // ICT method: Multi-timeframe alignment required, stricter thresholds
     confluence = {
@@ -826,7 +920,8 @@ async function calculateSuggestedPosition(analysis, account, config = AUTO_ENTRY
     return null;
   }
   const bias = analysis.bias;
-  const riskAmount = account.current_balance * config.riskPerTrade;
+  const dynamicRisk = calculateDynamicRisk(account, config);
+  const riskAmount = account.current_balance * dynamicRisk;
 
   // Require AI-provided entry, SL, TP - validate first, then fallback if null/undefined
   const suggestedEntry = analysis.suggested_entry || currentPrice;

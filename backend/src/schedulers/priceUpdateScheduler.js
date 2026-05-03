@@ -146,6 +146,9 @@ async function updateSymbolPositions(symbol, currentPrice, candle) {
     // Check and execute pending orders first with candle data
     await checkAndExecutePendingOrders(symbol, currentPrice, candle);
 
+    // Cancel stale pending orders (older than 24h)
+    await cancelStalePendingOrders(symbol);
+
     // Check and execute testnet pending orders
     await checkTestnetPendingOrders(symbol, currentPrice, candle);
 
@@ -175,6 +178,33 @@ const previousPrices = {
   BTC: null,
   ETH: null
 };
+
+/**
+ * Cancel stale pending orders older than 24 hours
+ * @param {string} symbol - Symbol name (BTC, ETH)
+ */
+async function cancelStalePendingOrders(symbol) {
+  try {
+    const { getPendingOrders, cancelPendingOrder } = await import('../db/database.js');
+    const STALE_THRESHOLD_HOURS = 24;
+    const STALE_THRESHOLD = STALE_THRESHOLD_HOURS * 60 * 60 * 1000; // 24 hours in milliseconds
+    const now = Date.now();
+
+    const pendingOrders = await getPendingOrders(db, { symbol, status: 'pending' });
+
+    for (const order of pendingOrders) {
+      const createdAt = new Date(order.created_at).getTime();
+      const ageHours = (now - createdAt) / (60 * 60 * 1000);
+      
+      if (now - createdAt > STALE_THRESHOLD) {
+        console.log(`[PriceScheduler] Cancelling stale pending order ${order.id} (age: ${Math.floor(ageHours)}h)`);
+        await cancelPendingOrder(db, order.id, 'stale');
+      }
+    }
+  } catch (error) {
+    console.error(`[PriceScheduler] Error cancelling stale orders for ${symbol}:`, error.message);
+  }
+}
 
 /**
  * Check pending orders and execute when price hits entry level
@@ -294,6 +324,35 @@ async function checkAndExecutePendingOrders(symbol, currentPrice, candle) {
     previousPrices[symbol] = currentPrice;
   } catch (error) {
     console.error(`[PriceScheduler] Error checking pending orders for ${symbol}:`, error.message);
+  }
+}
+
+/**
+ * Cancel stale testnet pending orders older than 24 hours
+ * @param {string} symbol - Symbol name (BTC, ETH)
+ */
+async function cancelStaleTestnetPendingOrders(symbol) {
+  try {
+    if (process.env.BINANCE_ENABLED !== 'true') return;
+
+    const { getTestnetPendingOrders, cancelTestnetPendingOrder } = await import('../db/testnetDatabase.js');
+    const STALE_THRESHOLD_HOURS = 24;
+    const STALE_THRESHOLD = STALE_THRESHOLD_HOURS * 60 * 60 * 1000; // 24 hours in milliseconds
+    const now = Date.now();
+
+    const pendingOrders = await getTestnetPendingOrders(db, { symbol, status: 'pending' });
+
+    for (const order of pendingOrders) {
+      const createdAt = new Date(order.created_at).getTime();
+      const ageHours = (now - createdAt) / (60 * 60 * 1000);
+      
+      if (now - createdAt > STALE_THRESHOLD) {
+        console.log(`[PriceScheduler] Cancelling stale testnet pending order ${order.order_id} (age: ${Math.floor(ageHours)}h)`);
+        await cancelTestnetPendingOrder(db, order.order_id, 'stale', order.binance_order_id);
+      }
+    }
+  } catch (error) {
+    console.error(`[PriceScheduler] Error cancelling stale testnet orders for ${symbol}:`, error.message);
   }
 }
 
@@ -498,6 +557,9 @@ async function updateTestnetPositions(prices) {
 
     // Update unrealized PnL and check SL/TP
     await updateTestnetPositionsPnL(db, currentPrice);
+
+    // Cancel stale testnet pending orders (older than 24h)
+    await cancelStaleTestnetPendingOrders('BTC');
 
     // Sync account balance from Binance (every cycle)
     const testnetAccount = await getTestnetAccount(db, 'BTC', 'kim_nghia');

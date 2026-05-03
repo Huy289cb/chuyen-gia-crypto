@@ -109,7 +109,7 @@ kim_nghia: {
     minAlignment: 0.6, // Increase from 0.5 to 0.6
     minSLDistancePercent: 0.0075, // Increase from 0.004 to 0.0075 (0.75%)
     requireConfluence: true,
-    minConfluenceCount: 4, // Increase from 3 to 4
+    minConfluenceCount: 3, // Increase from 2 to 3 (3/4 met - 4/4 too strict for AI)
     requireHighLiquiditySession: false,
     requireMarketStructure: true
   }

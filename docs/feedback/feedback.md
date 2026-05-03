@@ -64,7 +64,7 @@ May 3, 2026
    - minRRRatio: 2.5 → 3.0
    - minSLDistancePercent: 0.004 → 0.0075
    - cooldownHours: 4 → 6
-   - minConfluenceCount: 3 → 4
+   - minConfluenceCount: 2 → 3 (3/4 met - kept at 3 because 4/4 too strict for AI)
 
 3. **Fix testnet equity calculation** (testnetEngine.js)
    - Use calculated equity instead of Binance totalWalletBalance

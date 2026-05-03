@@ -513,6 +513,101 @@ describe('Testnet Flow Integration', () => {
       expect(snapshots.length).toBeGreaterThan(0);
       expect(snapshots[0].account_id).toBe(account.id);
     });
+
+    it('should calculate equity from local positions instead of Binance totalWalletBalance (New Feature)', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount, createTestnetPosition, getTestnetPosition } = await import('../../src/db/testnetDatabase.js');
+      const { syncTestnetAccount } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      // Create an open position with unrealized PnL
+      await createTestnetPosition(db, {
+        position_id: 'test_pos_equity',
+        account_id: account.id,
+        symbol: 'BTCUSDT',
+        side: 'long',
+        entry_price: 50000,
+        current_price: 51000,
+        stop_loss: 49000,
+        take_profit: 52000,
+        size_usd: 100,
+        size_qty: 0.002,
+        risk_usd: 10,
+        risk_percent: 10,
+        expected_rr: 2.0,
+        unrealized_pnl: 4, // Position is in profit
+        status: 'open',
+      });
+
+      // Mock Binance balance response
+      const { getAccountBalance } = await import('../../src/services/binanceClient.js');
+      vi.mocked(getAccountBalance).mockResolvedValueOnce({
+        walletBalance: 950,
+        availableBalance: 900,
+        totalWalletBalance: 1100, // Binance's calculation (may be incorrect)
+        totalUnrealizedProfit: 150,
+      });
+
+      const balance = await syncTestnetAccount(db, account);
+
+      // The new logic should use: availableBalance + unrealizedPnL from local positions
+      // 900 (available) + 4 (local unrealized) = 904
+      // NOT Binance's totalWalletBalance (1100)
+      
+      expect(balance).not.toBeNull();
+      expect(balance.availableBalance).toBe(900);
+
+      // Verify database equity is calculated from local positions
+      const updatedAccount = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM testnet_accounts WHERE id = ?', [account.id], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      // Should be 904 (900 available + 4 unrealized from local positions)
+      expect(updatedAccount.equity).toBeCloseTo(904, 0);
+    });
+
+    it('should log discrepancy when Binance and calculated equity differ significantly', async () => {
+      const { initTestnetEngine } = await import('../../src/services/testnetEngine.js');
+      const { getOrCreateTestnetAccount } = await import('../../src/db/testnetDatabase.js');
+      const { syncTestnetAccount } = await import('../../src/services/testnetEngine.js');
+
+      await initTestnetEngine();
+      const account = await getOrCreateTestnetAccount(db, 'BTC', 'kim_nghia');
+
+      // Set database equity to a different value
+      await new Promise((resolve, reject) => {
+        db.run('UPDATE testnet_accounts SET equity = 800 WHERE id = ?', [account.id], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      // Mock Binance balance response with significant discrepancy
+      const { getAccountBalance } = await import('../../src/services/binanceClient.js');
+      vi.mocked(getAccountBalance).mockResolvedValueOnce({
+        walletBalance: 950,
+        availableBalance: 900,
+        totalWalletBalance: 1100,
+        totalUnrealizedProfit: 150,
+      });
+
+      const balance = await syncTestnetAccount(db, account);
+
+      // Should update database with calculated equity (900 available + 0 unrealized = 900)
+      const updatedAccount = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM testnet_accounts WHERE id = ?', [account.id], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      expect(updatedAccount.equity).toBe(900);
+    });
   });
 
   describe('Error handling and fallback', () => {

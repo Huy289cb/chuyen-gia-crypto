@@ -99,7 +99,9 @@ CRITICAL SL/TP PLACEMENT:
       minRRRatio: 2.0,
       riskPerTrade: 0.10, // 10% để trading nhanh
       maxPositionsPerSymbol: 6,
-      maxVolumePerAccount: 2000, // Max 2k USD total volume per account
+      maxVolumePerAccount: 2000, // Max 2k USD total volume per account (backward compatibility)
+      maxOpenVolume: 2000, // Max 2k USD for open positions only
+      maxPendingVolume: 2000, // Max 2k USD for pending orders only
       maxPositionSize: 2000, // Max 2k USD per individual position
       maxPendingOrderSize: 2000, // Max 2k USD per individual pending order
       cooldownAfterLosses: 3,
@@ -236,24 +238,26 @@ CRITICAL SL/TP PLACEMENT:
 - R:R ratio should be at least 2.5 for Kim Nghia
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
-      minConfidence: 75,
-      minRRRatio: 2.5,
-      riskPerTrade: 0.10, // 10% để trading nhanh
+      minConfidence: 80, // Increased from 75 to 80 for stricter entry criteria
+      minRRRatio: 3.0, // Increased from 2.5 to 3.0 for better risk/reward
+      riskPerTrade: 0.08, // Reduced from 0.10 to 0.08 (8% risk per trade)
       maxPositionsPerSymbol: 6,
-      maxVolumePerAccount: 2000, // Max 2k USD total volume per account
+      maxVolumePerAccount: 2000, // Max 2k USD total volume per account (backward compatibility)
+      maxOpenVolume: 2000, // Max 2k USD for open positions only
+      maxPendingVolume: 2000, // Max 2k USD for pending orders only
       maxPositionSize: 2000, // Max 2k USD per individual position
       maxPendingOrderSize: 2000, // Max 2k USD per individual pending order
       cooldownAfterLosses: 3,
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,
-      cooldownHours: 4,
+      cooldownHours: 6, // Increased from 4 to 6 hours for longer cooldown
       enabledSymbols: ['BTC', 'ETH'],
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
-      minAlignment: 0.5,
-      minSLDistancePercent: 0.004, // Minimum SL distance as percentage of entry price (0.4% for Kim Nghia)
+      minAlignment: 0.6, // Increased from 0.5 to 0.6 for stricter HTF alignment
+      minSLDistancePercent: 0.0075, // Increased from 0.004 to 0.0075 (0.75% SL distance)
       requireConfluence: true,
-      minConfluenceCount: 3,
+      minConfluenceCount: 3, // Kept at 3 (3/4 met) - 4/4 is too strict for current AI outputs
       requireHighLiquiditySession: false,
       requireMarketStructure: false
     }
