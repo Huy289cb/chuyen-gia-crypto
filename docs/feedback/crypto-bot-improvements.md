@@ -93,7 +93,7 @@ kim_nghia: {
   // ... existing config ...
   autoEntry: {
     minConfidence: 80, // Increase from 75 to 80
-    minRRRatio: 3.0, // Increase from 2.5 to 3.0
+    minRRRatio: 2.5, // Keep at 2.5 - 3.0 too strict for current AI
     riskPerTrade: 0.08, // Reduce from 0.10 to 0.08 (8%)
     maxPositionsPerSymbol: 6,
     maxVolumePerAccount: 2000,

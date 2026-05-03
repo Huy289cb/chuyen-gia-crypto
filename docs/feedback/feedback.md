@@ -61,7 +61,7 @@ May 3, 2026
 ### Priority 2 - Performance Improvement
 2. **Improve Kim Nghia settings** (methods.js)
    - minConfidence: 75 → 80
-   - minRRRatio: 2.5 → 3.0
+   - minRRRatio: 2.5 (kept at 2.5 - 3.0 too strict for current AI)
    - minSLDistancePercent: 0.004 → 0.0075
    - cooldownHours: 4 → 6
    - minConfluenceCount: 2 → 3 (3/4 met - kept at 3 because 4/4 too strict for AI)

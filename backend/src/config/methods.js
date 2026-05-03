@@ -239,7 +239,7 @@ CRITICAL SL/TP PLACEMENT:
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
       minConfidence: 80, // Increased from 75 to 80 for stricter entry criteria
-      minRRRatio: 3.0, // Increased from 2.5 to 3.0 for better risk/reward
+      minRRRatio: 2.5, // Keep at 2.5 - 3.0 too strict for current AI outputs
       riskPerTrade: 0.08, // Reduced from 0.10 to 0.08 (8% risk per trade)
       maxPositionsPerSymbol: 6,
       maxVolumePerAccount: 2000, // Max 2k USD total volume per account (backward compatibility)
