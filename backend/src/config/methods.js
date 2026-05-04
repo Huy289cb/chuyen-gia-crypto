@@ -259,7 +259,7 @@ CRITICAL SL/TP PLACEMENT:
       requireConfluence: true,
       minConfluenceCount: 3, // Kept at 3 (3/4 met) - 4/4 is too strict for current AI outputs
       requireHighLiquiditySession: false,
-      requireMarketStructure: false
+      requireMarketStructure: false // Disabled to allow more entries
     }
   }
 };
