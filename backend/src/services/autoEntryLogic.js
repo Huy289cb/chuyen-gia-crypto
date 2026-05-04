@@ -113,29 +113,29 @@ export async function validateOrderLogic(side, entry, sl, tp, methodId = null) {
  */
 function validateEntryTiming(suggestedEntry, currentPrice, side) {
   const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
-  const minPullbackPercent = 0.005; // 0.5% minimum pullback
+  const minPullbackPercent = 0.002; // Reduced to 0.2% - more flexible for market orders
 
-  // Entry should be at least 0.5% away from current price (pullback requirement)
-  if (priceDiff < minPullbackPercent) {
+  // Allow market orders at current price (0% diff) but require minimum pullback for limit orders
+  if (priceDiff > 0 && priceDiff < minPullbackPercent) {
     return {
       valid: false,
-      reason: `Entry too close to current price (${(priceDiff * 100).toFixed(2)}% < ${minPullbackPercent * 100}%) - not a pullback`
+      reason: `Entry too close to current price (${(priceDiff * 100).toFixed(2)}% < ${minPullbackPercent * 100}%) - not a meaningful pullback`
     };
   }
 
-  // For long: entry should be below current price (buy on dip)
-  if (side === 'long' && suggestedEntry > currentPrice) {
+  // For long: entry should be below or at current price (buy on dip or market order)
+  if (side === 'long' && suggestedEntry > currentPrice * 1.001) { // Allow 0.1% above for market orders
     return {
       valid: false,
-      reason: 'Long entry above current price (not a pullback - chasing price)'
+      reason: 'Long entry significantly above current price (chasing price)'
     };
   }
 
-  // For short: entry should be above current price (sell on rally)
-  if (side === 'short' && suggestedEntry < currentPrice) {
+  // For short: entry should be above or at current price (sell on rally or market order)
+  if (side === 'short' && suggestedEntry < currentPrice * 0.999) { // Allow 0.1% below for market orders
     return {
       valid: false,
-      reason: 'Short entry below current price (not a pullback - chasing price)'
+      reason: 'Short entry significantly below current price (chasing price)'
     };
   }
 
