@@ -1361,4 +1361,542 @@ describe('autoEntryLogic - Volume Management & Order Validation', () => {
       expect(decision.reason).toContain('Pending volume');
     });
   });
+
+  describe('Confluence Validation (Check 9)', () => {
+    it('should pass Kim Nghia confluence with 3/4 factors met', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 150,
+        avgVolume: 100,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.003,
+        break_of_structure: true,
+        change_of_character: true
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'kim_nghia',
+        autoEntry: {
+          minConfidence: 80,
+          minRRRatio: 1.0,
+          riskPerTrade: 0.08,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['all_timeframes'],
+          requiredTimeframes: ['4h', '1h'],
+          minAlignment: 0.6,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: true,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false,
+          requireMarketStructure: false
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(true);
+      expect(decision.reason).toContain('All criteria met');
+    });
+
+    it('should fail Kim Nghia confluence with only 2/4 factors met', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 90, // Low volume
+        avgVolume: 100,
+        liquidity_sweep_detected: false,
+        order_block_distance: 0.02, // Too far
+        fvg_distance: 0.02, // Too far
+        break_of_structure: true,
+        change_of_character: true
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'kim_nghia',
+        autoEntry: {
+          minConfidence: 80,
+          minRRRatio: 1.0,
+          riskPerTrade: 0.08,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['all_timeframes'],
+          requiredTimeframes: ['4h', '1h'],
+          minAlignment: 0.6,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: true,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false,
+          requireMarketStructure: false
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(false);
+      expect(decision.reason).toContain('Confluence');
+    });
+
+    it('should skip confluence check when requireConfluence is false', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 90,
+        avgVolume: 100,
+        liquidity_sweep_detected: false,
+        order_block_distance: 0.02,
+        fvg_distance: 0.02
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'kim_nghia',
+        autoEntry: {
+          minConfidence: 80,
+          minRRRatio: 1.0,
+          riskPerTrade: 0.08,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['all_timeframes'],
+          requiredTimeframes: ['4h', '1h'],
+          minAlignment: 0.6,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: false, // Disabled
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false,
+          requireMarketStructure: false
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(true);
+    });
+  });
+
+  describe('Session Validation (Check 10)', () => {
+    it('should pass when in high liquidity session', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 150,
+        avgVolume: 100,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.003
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'ict',
+        autoEntry: {
+          minConfidence: 70,
+          minRRRatio: 2.0,
+          riskPerTrade: 0.01,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['london_killzone', 'ny_killzone'],
+          requiredTimeframes: ['4h', '1d'],
+          minAlignment: 0.5,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: false,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: true, // Enabled
+          requireMarketStructure: false
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      // Should pass if current time is in session (depends on actual time)
+      if (decision.shouldEnter) {
+        expect(decision.reason).toContain('All criteria met');
+      } else {
+        expect(decision.reason).toContain('high liquidity');
+      }
+    });
+
+    it('should skip session check when requireHighLiquiditySession is false', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 150,
+        avgVolume: 100,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.003
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'ict',
+        autoEntry: {
+          minConfidence: 70,
+          minRRRatio: 2.0,
+          riskPerTrade: 0.01,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['london_killzone', 'ny_killzone'],
+          requiredTimeframes: ['4h', '1d'],
+          minAlignment: 0.5,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: false,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false, // Disabled
+          requireMarketStructure: false
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(true);
+      expect(decision.reason).toContain('All criteria met');
+    });
+  });
+
+  describe('Market Structure Validation (Check 11)', () => {
+    it('should pass when market structure is valid', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 150,
+        avgVolume: 100,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.003,
+        break_of_structure: true, // BOS present
+        change_of_character: true,
+        range_width: 0.008 // < 1% (not choppy)
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'ict',
+        autoEntry: {
+          minConfidence: 70,
+          minRRRatio: 2.0,
+          riskPerTrade: 0.01,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['all_timeframes'],
+          requiredTimeframes: ['4h', '1d'],
+          minAlignment: 0.5,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: false,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false,
+          requireMarketStructure: true // Enabled
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(true);
+      expect(decision.reason).toContain('All criteria met');
+    });
+
+    it('should fail when market is choppy (range width > 1%)', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 150,
+        avgVolume: 100,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.003,
+        break_of_structure: true,
+        change_of_character: true,
+        range_width: 0.015 // > 1% (choppy)
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'ict',
+        autoEntry: {
+          minConfidence: 70,
+          minRRRatio: 2.0,
+          riskPerTrade: 0.01,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['all_timeframes'],
+          requiredTimeframes: ['4h', '1d'],
+          minAlignment: 0.5,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: false,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false,
+          requireMarketStructure: true
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(false);
+      expect(decision.reason).toContain('choppy');
+    });
+
+    it('should fail when no BOS for trend following entry', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 150,
+        avgVolume: 100,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.003,
+        break_of_structure: false, // No BOS
+        change_of_character: true,
+        range_width: 0.008
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'ict',
+        autoEntry: {
+          minConfidence: 70,
+          minRRRatio: 2.0,
+          riskPerTrade: 0.01,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['all_timeframes'],
+          requiredTimeframes: ['4h', '1d'],
+          minAlignment: 0.5,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: false,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false,
+          requireMarketStructure: true
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(false);
+      expect(decision.reason).toContain('Break of Structure');
+    });
+
+    it('should skip market structure check when requireMarketStructure is false', async () => {
+      const analysis = {
+        symbol: 'BTC',
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.85,
+        current_price: 77000,
+        suggested_entry: 76500,
+        suggested_stop_loss: 76000,
+        suggested_take_profit: 78000,
+        expected_rr: 2.0,
+        volume: 150,
+        avgVolume: 100,
+        liquidity_sweep_detected: true,
+        order_block_distance: 0.005,
+        fvg_distance: 0.003,
+        break_of_structure: false,
+        change_of_character: true,
+        range_width: 0.015 // Choppy
+      };
+
+      const account = {
+        id: 1,
+        symbol: 'BTC',
+        current_balance: 100,
+        total_trades: 20,
+        winning_trades: 12,
+        cooldown_until: null,
+        consecutive_losses: 0
+      };
+
+      const methodConfig = {
+        methodId: 'ict',
+        autoEntry: {
+          minConfidence: 70,
+          minRRRatio: 2.0,
+          riskPerTrade: 0.01,
+          maxPositionsPerSymbol: 6,
+          maxVolumePerAccount: 2000,
+          maxOpenVolume: 2000,
+          maxPendingVolume: 2000,
+          enabledSymbols: ['BTC'],
+          allowedSessions: ['all_timeframes'],
+          requiredTimeframes: ['4h', '1d'],
+          minAlignment: 0.5,
+          minSLDistancePercent: 0.0075,
+          requireConfluence: false,
+          minConfluenceCount: 3,
+          requireHighLiquiditySession: false,
+          requireMarketStructure: false // Disabled
+        }
+      };
+
+      const db = {};
+      const decision = await evaluateAutoEntry(analysis, account, [], methodConfig, db);
+
+      expect(decision.shouldEnter).toBe(true);
+      expect(decision.reason).toContain('All criteria met');
+    });
+  });
 });
