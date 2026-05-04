@@ -115,8 +115,9 @@ function validateEntryTiming(suggestedEntry, currentPrice, side) {
   const priceDiff = Math.abs(suggestedEntry - currentPrice) / currentPrice;
   const minPullbackPercent = 0.002; // Reduced to 0.2% - more flexible for market orders
 
-  // Allow market orders at current price (0% diff) but require minimum pullback for limit orders
-  if (priceDiff > 0 && priceDiff < minPullbackPercent) {
+  // Allow market orders at current price (0% or very close to 0% diff)
+  // Only reject if diff is between 0.05% and 0.2% (meaningful but not enough pullback)
+  if (priceDiff > 0.0005 && priceDiff < minPullbackPercent) {
     return {
       valid: false,
       reason: `Entry too close to current price (${(priceDiff * 100).toFixed(2)}% < ${minPullbackPercent * 100}%) - not a meaningful pullback`
