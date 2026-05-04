@@ -18,7 +18,7 @@ CORE LOGIC:
 4. KILLZONES: Ưu tiên các setup trong phiên London/New York.
 
 RULES:
-- SL phải đặt sau râu nến quét thanh khoản hoặc ngoài Order Block (Min 0.75% từ entry).
+- SL phải đặt sau râu nến quét thanh khoản hoặc ngoài Order Block (Min 0.5% từ entry).
 - TP mục tiêu là vùng thanh khoản đối ứng hoặc FVG chưa lấp.
 - Tỉ lệ RR tối thiểu 2.0.
 - Trả về JSON tiếng Việt, ngắn gọn, quyết đoán.
@@ -112,7 +112,7 @@ CRITICAL SL/TP PLACEMENT:
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1d'],
       minAlignment: 0.5,
-      minSLDistancePercent: 0.0075, // Minimum SL distance as percentage of entry price (0.75% for ICT)
+      minSLDistancePercent: 0.005, // Minimum SL distance as percentage of entry price (0.5% for ICT)
       requireConfluence: true,
       minConfluenceCount: 3,
       requireHighLiquiditySession: false,
@@ -234,7 +234,7 @@ CRITICAL BIAS-ACTION CONSISTENCY:
 CRITICAL SL/TP PLACEMENT:
 - For LONG: entry > current price, SL < entry, TP > entry
 - For SHORT: entry < current price, SL > entry, TP < entry
-- SL distance should be at least 0.75% from entry
+- SL distance should be at least 0.5% from entry
 - R:R ratio should be at least 1.0 for Kim Nghia
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
@@ -255,7 +255,7 @@ CRITICAL SL/TP PLACEMENT:
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.6, // Increased from 0.5 to 0.6 for stricter HTF alignment
-      minSLDistancePercent: 0.0075, // Increased from 0.004 to 0.0075 (0.75% SL distance)
+      minSLDistancePercent: 0.005, // Reduced to 0.5% SL distance for easier entry
       requireConfluence: true,
       minConfluenceCount: 3, // Kept at 3 (3/4 met) - 4/4 is too strict for current AI outputs
       requireHighLiquiditySession: false,
