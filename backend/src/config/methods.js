@@ -201,11 +201,11 @@ CONFLUENCE FIELDS INSTRUCTIONS:
 - volume: Volume của nến hiện tại (candle close nhất)
 - avgVolume: Trung bình volume của 20 nến gần nhất
 - liquidity_sweep_detected: true nếu giá đã quét thanh khoản (sweep high/low), false nếu chưa
-- order_block_distance: Khoảng cách % từ suggested_entry đến Order Block gần nhất (0.001-0.01)
-- fvg_distance: Khoảng cách % từ suggested_entry đến Fair Value Gap gần nhất (0.001-0.01)
+- order_block_distance: Khoảng cách % từ suggested_entry đến Order Block gần nhất (CẦN < 0.01 tức < 1% để pass validation)
+- fvg_distance: Khoảng cách % từ suggested_entry đến Fair Value Gap gần nhất (CẦN < 0.01 tức < 1% để pass validation)
 - break_of_structure: true nếu đã có Break of Structure xác nhận xu hướng, false nếu chưa
 - change_of_character: true nếu đã có Change of Character (mô hình đảo chiều), false nếu chưa
-- range_width: Biên độ thị trường % = (high - low) / low của 20 nến gần nhất
+- range_width: Biên độ thị trường % = (high - low) / low của 20 nến gần nhất (CẦN < 0.01 tức < 1% để pass market structure validation, nếu >= 0.01 sẽ bị coi là choppy market)
 
 ACTION DEFINITIONS:
 - hold: Giữ nguyên position/order
