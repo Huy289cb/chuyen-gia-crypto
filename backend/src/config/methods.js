@@ -235,11 +235,11 @@ CRITICAL SL/TP PLACEMENT:
 - For LONG: entry > current price, SL < entry, TP > entry
 - For SHORT: entry < current price, SL > entry, TP < entry
 - SL distance should be at least 0.75% from entry
-- R:R ratio should be at least 2.5 for Kim Nghia
+- R:R ratio should be at least 1.0 for Kim Nghia
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
       minConfidence: 80, // Increased from 75 to 80 for stricter entry criteria
-      minRRRatio: 2.5, // Keep at 2.5 - 3.0 too strict for current AI outputs
+      minRRRatio: 1.0, // Reduced from 2.5 to 1.0 - allow more trades to pass
       riskPerTrade: 0.08, // Reduced from 0.10 to 0.08 (8% risk per trade)
       maxPositionsPerSymbol: 6,
       maxVolumePerAccount: 2000, // Max 2k USD total volume per account (backward compatibility)
