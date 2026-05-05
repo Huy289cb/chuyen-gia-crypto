@@ -10,7 +10,8 @@ export const endpoints = {
   KLINE: '/fapi/v1/klines',
   PRICE: '/fapi/v1/ticker/price',
   BOOK_TICKER: '/fapi/v1/ticker/bookTicker',
-  
+  PREMIUM_INDEX: '/fapi/v1/premiumIndex',
+
   // Account endpoints (SIGNED)
   ACCOUNT: '/fapi/v3/account',
   BALANCE: '/fapi/v3/balance',
