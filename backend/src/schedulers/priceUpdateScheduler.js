@@ -544,8 +544,8 @@ async function runAccountSnapshotJob() {
  */
 async function updateTestnetPositions(prices) {
   try {
-    const { updateTestnetPositionsPnL, syncTestnetAccount } = await import('../services/testnetEngine.js');
-    const { getTestnetPositions, getTestnetAccount } = await import('../db/testnetDatabase.js');
+    const { updateTestnetPositionsPnL, syncTestnetAccount, calculateFundingFee } = await import('../services/testnetEngine.js');
+    const { getTestnetPositions, getTestnetAccount, updateFundingFee } = await import('../db/testnetDatabase.js');
 
     // Get current price for BTC (testnet only supports BTC)
     const currentPrice = prices.btc?.price;
@@ -557,6 +557,29 @@ async function updateTestnetPositions(prices) {
 
     // Update unrealized PnL and check SL/TP
     await updateTestnetPositionsPnL(db, currentPrice);
+
+    // Update funding fees for open positions
+    const openPositions = await getTestnetPositions(db, { status: 'open' });
+    for (const position of openPositions) {
+      if (!position.entry_time) continue;
+
+      const entryTime = new Date(position.entry_time);
+      const hoursHeld = (Date.now() - entryTime.getTime()) / (1000 * 60 * 60);
+
+      // Only update funding fee if position has been held for at least 1 hour
+      // to avoid excessive API calls
+      if (hoursHeld >= 1) {
+        try {
+          const fundingFee = await calculateFundingFee(position, hoursHeld);
+          if (fundingFee > 0.01) { // Only update if fee is significant (> 0.01 USDT)
+            await updateFundingFee(db, position.position_id, fundingFee, position.account_id);
+            console.log(`[PriceScheduler] Updated funding fee for ${position.position_id}: ${fundingFee.toFixed(4)} USDT (${hoursHeld.toFixed(1)}h held)`);
+          }
+        } catch (feeError) {
+          console.error(`[PriceScheduler] Failed to calculate funding fee for ${position.position_id}:`, feeError.message);
+        }
+      }
+    }
 
     // Cancel stale testnet pending orders (older than 24h)
     await cancelStaleTestnetPendingOrders('BTC');

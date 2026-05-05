@@ -794,6 +794,49 @@ function addTestnetPendingOrderBinanceColumn(db) {
     } else {
       console.log('[Migration] Added binance_order_id column to testnet_pending_orders');
     }
+    // Add fee tracking columns after this
+    addTestnetFeeTrackingColumns(db);
+  });
+}
+
+/**
+ * Add fee tracking columns to testnet_positions and testnet_accounts tables
+ */
+function addTestnetFeeTrackingColumns(db) {
+  console.log('[Migration] Starting fee tracking columns migration...');
+
+  // Add columns to testnet_positions
+  const positionColumns = [
+    { name: 'entry_fee', sql: 'ALTER TABLE testnet_positions ADD COLUMN entry_fee REAL DEFAULT 0' },
+    { name: 'exit_fee', sql: 'ALTER TABLE testnet_positions ADD COLUMN exit_fee REAL DEFAULT 0' },
+    { name: 'funding_fee', sql: 'ALTER TABLE testnet_positions ADD COLUMN funding_fee REAL DEFAULT 0' }
+  ];
+
+  // Add columns to testnet_accounts
+  const accountColumns = [
+    { name: 'accumulated_trading_fees', sql: 'ALTER TABLE testnet_accounts ADD COLUMN accumulated_trading_fees REAL DEFAULT 0' },
+    { name: 'accumulated_funding_fee', sql: 'ALTER TABLE testnet_accounts ADD COLUMN accumulated_funding_fee REAL DEFAULT 0' }
+  ];
+
+  const allColumns = [...positionColumns, ...accountColumns];
+  let completed = 0;
+
+  allColumns.forEach((column) => {
+    db.run(column.sql, (err) => {
+      if (err) {
+        if (err.message.includes('duplicate column name')) {
+          console.log(`[Migration] Column ${column.name} already exists`);
+        } else {
+          console.error(`[Migration] Error adding column ${column.name}:`, err.message);
+        }
+      } else {
+        console.log(`[Migration] Added fee tracking column: ${column.name}`);
+      }
+      completed++;
+      if (completed === allColumns.length) {
+        console.log('[Migration] Fee tracking columns migration completed');
+      }
+    });
   });
 }
 

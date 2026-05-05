@@ -158,6 +158,17 @@ export function TestnetPanel() {
             <p className="text-lg font-semibold text-danger">{account.losing_trades}</p>
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-surface-2">
+          <div className="space-y-1">
+            <p className="text-xs text-foreground-tertiary">Accumulated Trading Fees</p>
+            <p className="text-lg font-semibold text-warning">${formatPrice((account as any).accumulated_trading_fees || 0)}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-foreground-tertiary">Accumulated Funding Fees</p>
+            <p className="text-lg font-semibold text-warning">${formatPrice((account as any).accumulated_funding_fee || 0)}</p>
+          </div>
+        </div>
       </Card>
 
       {/* Pending Orders */}
@@ -293,6 +304,21 @@ function PositionCard({ position, onClose }: { position: TestnetPosition; onClos
         <div>
           <p className="text-foreground-tertiary text-xs">TP</p>
           <p className="font-medium text-success">${formatPrice(position.take_profit)}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 text-sm mt-2 pt-2 border-t border-surface-2">
+        <div>
+          <p className="text-foreground-tertiary text-xs">Entry Fee</p>
+          <p className="font-medium text-warning">${formatPrice((position as any).entry_fee || 0)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">Exit Fee</p>
+          <p className="font-medium text-warning">${formatPrice((position as any).exit_fee || 0)}</p>
+        </div>
+        <div>
+          <p className="text-foreground-tertiary text-xs">Funding Fee</p>
+          <p className="font-medium text-warning">${formatPrice((position as any).funding_fee || 0)}</p>
         </div>
       </div>
 

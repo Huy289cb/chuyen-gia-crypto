@@ -85,8 +85,22 @@ export async function placeMarketOrder(client, symbol, side, quantity, positionS
     
     const response = await placeOrderAPI(params);
     
-    console.log(`[BinanceClient] Market order placed: ${side} ${quantity} ${symbol}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
-    return response;
+    // Calculate estimated fee (market orders are taker orders)
+    // Binance Futures taker fee: 0.04% (0.0004)
+    const executedQty = parseFloat(response.executedQty || response.origQty || quantity);
+    const executedPrice = parseFloat(response.cummulativeQuoteQty || 0) / executedQty || 0;
+    const orderValue = executedQty * executedPrice;
+    const takerFeeRate = 0.0004; // 0.04%
+    const estimatedFee = orderValue * takerFeeRate;
+    
+    console.log(`[BinanceClient] Market order placed: ${side} ${quantity} ${symbol}${positionSide ? ` (positionSide: ${positionSide})` : ''}, estimated fee: ${estimatedFee.toFixed(4)} USDT`);
+    
+    return {
+      ...response,
+      commission: estimatedFee,
+      commissionAsset: 'USDT',
+      commissionUsdt: estimatedFee,
+    };
   } catch (error) {
     console.error('[BinanceClient] Failed to place market order:', error.message);
     throw error;

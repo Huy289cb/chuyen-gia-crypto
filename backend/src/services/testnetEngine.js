@@ -5,9 +5,9 @@
  * including opening/closing positions, SL/TP management, and account sync
  */
 
-import { 
-  initTestnetClient, 
-  testConnection, 
+import {
+  initTestnetClient,
+  testConnection,
   getAccountBalance,
   getCurrentPosition,
   placeMarketOrder,
@@ -35,8 +35,10 @@ import {
   updateTestnetAccountEquityDirect,
   updateTestnetAccountStats,
   createTestnetAccountSnapshot,
+  updateTradingFees,
 } from '../db/testnetDatabase.js';
 import { getCurrentPosition as getBinancePosition } from './binance/account.js';
+import { get as httpGet } from './binance/client.js';
 
 // Global client instance
 let testnetClient = null;
@@ -77,6 +79,41 @@ async function closeRecoveredEntry(testnetClientInstance, symbol, side, quantity
   console.warn(`[TestnetEngine] Recovered unprotected entry for ${symbol}: closeSide=${closeSide} positionSide=${positionSide} reason=${reason}`);
 
   return recoveryOrder;
+}
+
+/**
+ * Fetch funding rate from Binance Futures API
+ * @param {string} symbol - Trading symbol (e.g., BTCUSDT)
+ * @returns {Promise<number>} Funding rate (e.g., 0.0001 for 0.01%)
+ */
+async function fetchFundingRate(symbol) {
+  try {
+    const { endpoints } = await import('./binance/endpoints.js');
+    const response = await httpGet(endpoints.PREMIUM_INDEX, { symbol }, true);
+    return parseFloat(response.lastFundingRate || 0);
+  } catch (error) {
+    console.error('[TestnetEngine] Failed to fetch funding rate:', error.message);
+    return 0;
+  }
+}
+
+/**
+ * Calculate funding fee for a position
+ * @param {object} position - Position object with size_usd
+ * @param {number} hoursHeld - Hours position has been held
+ * @returns {Promise<number>} Funding fee in USDT
+ */
+async function calculateFundingFee(position, hoursHeld) {
+  try {
+    const fundingRate = await fetchFundingRate(position.symbol);
+    const positionSizeUsd = position.size_usd;
+    // Funding is charged every 8 hours
+    const fee = positionSizeUsd * fundingRate * (hoursHeld / 8);
+    return Math.abs(fee); // Always positive
+  } catch (error) {
+    console.error('[TestnetEngine] Failed to calculate funding fee:', error.message);
+    return 0;
+  }
 }
 
 /**
@@ -297,6 +334,9 @@ export async function openTestnetPosition(db, account, positionData, predictionI
       throw new Error(`Failed to place SL/TP protection after entry: ${protectionError.message}`);
     }
     
+    // Extract entry fee from order response
+    const entryFee = order.commissionUsdt || 0;
+
     const newPosition = await createTestnetPosition(db, {
       position_id: positionId,
       account_id: account.id,
@@ -314,7 +354,11 @@ export async function openTestnetPosition(db, account, positionData, predictionI
       binance_order_id: order.orderId.toString(),
       binance_sl_order_id: slOrder.orderId.toString(),
       binance_tp_order_id: tpOrder.orderId.toString(),
+      entry_fee: entryFee,
     });
+
+    // Update account accumulated trading fees
+    await updateTradingFees(db, account.id, entryFee);
     
     // Record trade event
     await recordTestnetTradeEvent(db, positionId, 'position_opened', {
@@ -419,9 +463,12 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
     const positionSide = toPositionSide(normalizedSide);
 
     let closeOrder = null;
+    let exitFee = 0;
     if (positionExists) {
       // Place opposite market order to close
       closeOrder = await placeMarketOrder(testnetClient, position.symbol, closeSide, position.size_qty, positionSide);
+      // Extract exit fee from close order
+      exitFee = closeOrder.commissionUsdt || 0;
     } else {
       console.log(`[TestnetEngine] Position ${position.position_id} already closed on Binance, skipping market order`);
     }
@@ -430,17 +477,23 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
     const priceDiff = closeSide === 'SELL'
       ? currentPrice - position.entry_price
       : position.entry_price - currentPrice;
-    
+
     const realizedPnl = priceDiff * position.size_qty;
     const isWin = realizedPnl > 0;
-    
+
     // Update position status
     await closeTestnetPosition(db, position.position_id, currentPrice, closeReason);
     await updateTestnetPosition(db, position.position_id, {
       realized_pnl: realizedPnl,
       close_price: currentPrice,
+      exit_fee: exitFee,
     });
-    
+
+    // Update account accumulated trading fees
+    if (exitFee > 0 && position.account_id) {
+      await updateTradingFees(db, position.account_id, exitFee);
+    }
+
     // Update account balance
     const newBalance = position.account_id ? await getAccountBalance(testnetClient) : null;
     if (newBalance) {
@@ -720,11 +773,15 @@ export async function syncTestnetAccount(db, account) {
     const correctBalance = balance.walletBalance;
 
     // Calculate equity from local positions instead of Binance's totalWalletBalance
-    // Binance's calculation can be incorrect, so we use: availableBalance + unrealizedPnL from positions
+    // Binance's calculation can be incorrect, so we use: availableBalance + unrealizedPnL from positions - fees
     const { getTestnetPositions } = await import('../db/testnetDatabase.js');
     const openPositions = await getTestnetPositions(db, { account_id: account.id, status: 'open' });
     const totalUnrealizedPnl = openPositions.reduce((sum, pos) => sum + (pos.unrealized_pnl || 0), 0);
-    const calculatedEquity = balance.availableBalance + totalUnrealizedPnl;
+
+    // Include accumulated fees in equity calculation
+    const accumulatedTradingFees = account.accumulated_trading_fees || 0;
+    const accumulatedFundingFee = account.accumulated_funding_fee || 0;
+    const calculatedEquity = balance.availableBalance + totalUnrealizedPnl - accumulatedTradingFees - accumulatedFundingFee;
 
     // Detect discrepancies using wallet balance, not available balance.
     const balanceDiff = Math.abs(correctBalance - account.current_balance);

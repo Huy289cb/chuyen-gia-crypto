@@ -288,6 +288,25 @@ function PositionCard({ position, onClose, onClick }: { position: Position; onCl
         </div>
       </div>
 
+      {/* Fees */}
+      <div className="bg-surface-1 rounded-lg p-3 mb-4">
+        <div className="text-xs text-foreground-tertiary mb-2">Fees</div>
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <span className="text-foreground-tertiary block">Entry Fee</span>
+            <span className="font-mono text-foreground">${formatPrice((position as any).entry_fee || 0)}</span>
+          </div>
+          <div>
+            <span className="text-foreground-tertiary block">Exit Fee</span>
+            <span className="font-mono text-foreground">${formatPrice((position as any).exit_fee || 0)}</span>
+          </div>
+          <div>
+            <span className="text-foreground-tertiary block">Funding Fee</span>
+            <span className="font-mono text-foreground">${formatPrice((position as any).funding_fee || 0)}</span>
+          </div>
+        </div>
+      </div>
+
       {/* SL/TP Progress */}
       <div className="mb-4">
         <div className="flex justify-between text-xs text-foreground-tertiary mb-1">

@@ -59,9 +59,36 @@ This prevents orphan live positions on Binance that are missing from the local d
 Account sync now uses:
 
 - `walletBalance` as the source of truth for `current_balance`
-- `walletBalance + totalUnrealizedProfit` as the source of truth for `equity`
+- `walletBalance + totalUnrealizedProfit - accumulated_trading_fees - accumulated_funding_fee` as the source of truth for `equity`
 
 `availableBalance` is not used for realized balance sync because it drops when margin is reserved or orders are open.
+
+### Fee tracking
+
+The system tracks trading fees and funding fees to ensure accurate equity calculation:
+
+**Trading fees:**
+- Entry fees: Calculated as 0.04% (taker fee) of the order value
+- Exit fees: Calculated as 0.04% (taker fee) of the closing order value
+- Fees are extracted from Binance order responses and stored in `testnet_positions.entry_fee` and `testnet_positions.exit_fee`
+- Accumulated trading fees are tracked in `testnet_accounts.accumulated_trading_fees`
+
+**Funding fees:**
+- Calculated every price update cycle for positions held longer than 1 hour
+- Formula: `position_size_usd * funding_rate * (hours_held / 8)` (funding is charged every 8 hours)
+- Funding rates are fetched from Binance Premium Index API
+- Funding fees are accumulated in `testnet_positions.funding_fee` and `testnet_accounts.accumulated_funding_fee`
+
+**Database schema:**
+- `testnet_positions` columns: `entry_fee`, `exit_fee`, `funding_fee`
+- `testnet_accounts` columns: `accumulated_trading_fees`, `accumulated_funding_fee`
+
+**Equity calculation:**
+```
+equity = availableBalance + unrealizedPnL - accumulatedTradingFees - accumulatedFundingFees
+```
+
+This ensures that the ~95 USDT equity discrepancy caused by untracked fees is eliminated.
 
 ### Volume constraints
 

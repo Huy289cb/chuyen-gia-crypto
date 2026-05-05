@@ -108,6 +108,78 @@ export async function updateTestnetAccountBalance(db, accountId, newBalance, pnl
 }
 
 /**
+ * Update accumulated trading fees for an account
+ */
+export async function updateTradingFees(db, accountId, feeAmount) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+    
+    db.run(
+      `UPDATE testnet_accounts 
+       SET accumulated_trading_fees = COALESCE(accumulated_trading_fees, 0) + ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [feeAmount, now, accountId],
+      function(err) {
+        if (err) {
+          console.error('[TestnetDB] Error updating trading fees:', err.message);
+          reject(err);
+          return;
+        }
+        
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+/**
+ * Update funding fee for a position and accumulated funding fee for account
+ */
+export async function updateFundingFee(db, positionId, feeAmount, accountId = null) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+    
+    // Update position funding fee
+    db.run(
+      `UPDATE testnet_positions 
+       SET funding_fee = COALESCE(funding_fee, 0) + ?,
+           updated_at = ?
+       WHERE position_id = ?`,
+      [feeAmount, now, positionId],
+      function(err) {
+        if (err) {
+          console.error('[TestnetDB] Error updating position funding fee:', err.message);
+          reject(err);
+          return;
+        }
+        
+        // If accountId provided, also update account accumulated funding fee
+        if (accountId) {
+          db.run(
+            `UPDATE testnet_accounts 
+             SET accumulated_funding_fee = COALESCE(accumulated_funding_fee, 0) + ?,
+                 updated_at = ?
+             WHERE id = ?`,
+            [feeAmount, now, accountId],
+            function(accountErr) {
+              if (accountErr) {
+                console.error('[TestnetDB] Error updating account funding fee:', accountErr.message);
+                reject(accountErr);
+                return;
+              }
+              resolve(this.changes);
+            }
+          );
+        } else {
+          resolve(this.changes);
+        }
+      }
+    );
+  });
+}
+
+/**
  * Update testnet account equity and unrealized PnL
  */
 export async function updateTestnetAccountEquity(db, accountId, unrealizedPnl) {
@@ -216,6 +288,7 @@ export async function createTestnetPosition(db, positionData) {
       tp_levels = null,
       tp_hit_count = 0,
       partial_closed = 0,
+      entry_fee = 0,
     } = positionData;
     
     db.run(
@@ -223,13 +296,13 @@ export async function createTestnetPosition(db, positionData) {
         position_id, account_id, symbol, side, entry_price, stop_loss, take_profit,
         entry_time, size_usd, size_qty, risk_usd, risk_percent, expected_rr,
         linked_prediction_id, binance_order_id, binance_sl_order_id, binance_tp_order_id,
-        tp_levels, tp_hit_count, partial_closed
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        tp_levels, tp_hit_count, partial_closed, entry_fee
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         position_id, account_id, symbol, side, entry_price, stop_loss, take_profit,
         size_usd, size_qty, risk_usd, risk_percent, expected_rr,
         linked_prediction_id, binance_order_id, binance_sl_order_id, binance_tp_order_id,
-        tp_levels, tp_hit_count, partial_closed
+        tp_levels, tp_hit_count, partial_closed, entry_fee
       ],
       function(err) {
         if (err) {
