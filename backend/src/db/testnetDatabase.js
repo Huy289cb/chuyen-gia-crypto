@@ -138,30 +138,27 @@ export async function updateTradingFees(db, accountId, feeAmount) {
  */
 export async function updateFundingFee(db, positionId, feeAmount, accountId = null) {
   return new Promise((resolve, reject) => {
-    const now = new Date().toISOString();
-    
     // Update position funding fee
     db.run(
-      `UPDATE testnet_positions 
-       SET funding_fee = COALESCE(funding_fee, 0) + ?,
-           updated_at = ?
+      `UPDATE testnet_positions
+       SET funding_fee = COALESCE(funding_fee, 0) + ?
        WHERE position_id = ?`,
-      [feeAmount, now, positionId],
+      [feeAmount, positionId],
       function(err) {
         if (err) {
           console.error('[TestnetDB] Error updating position funding fee:', err.message);
           reject(err);
           return;
         }
-        
+
         // If accountId provided, also update account accumulated funding fee
         if (accountId) {
           db.run(
-            `UPDATE testnet_accounts 
+            `UPDATE testnet_accounts
              SET accumulated_funding_fee = COALESCE(accumulated_funding_fee, 0) + ?,
-                 updated_at = ?
+                 updated_at = datetime('now')
              WHERE id = ?`,
-            [feeAmount, now, accountId],
+            [feeAmount, accountId],
             function(accountErr) {
               if (accountErr) {
                 console.error('[TestnetDB] Error updating account funding fee:', accountErr.message);
