@@ -2054,11 +2054,12 @@ export async function executePendingOrder(db, orderId, positionId) {
 // Cancel a pending order
 export async function cancelPendingOrder(db, orderId, reason = 'cancelled') {
   return new Promise((resolve, reject) => {
+    // Try order_id first (for backward compatibility), then id
     db.run(
       `UPDATE pending_orders
        SET status = ?
-       WHERE order_id = ?`,
-      [`cancelled_${reason}`, orderId],
+       WHERE order_id = ? OR id = ?`,
+      [`cancelled_${reason}`, orderId, orderId],
       function(err) {
         if (err) {
           reject(err);
