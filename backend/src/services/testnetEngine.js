@@ -103,7 +103,7 @@ async function fetchFundingRate(symbol) {
  * @param {number} hoursHeld - Hours position has been held
  * @returns {Promise<number>} Funding fee in USDT
  */
-async function calculateFundingFee(position, hoursHeld) {
+export async function calculateFundingFee(position, hoursHeld) {
   try {
     const fundingRate = await fetchFundingRate(position.symbol);
     const positionSizeUsd = position.size_usd;
