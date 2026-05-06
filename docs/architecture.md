@@ -254,6 +254,8 @@ The system is designed to support multiple trading methods running in parallel. 
 
 ### Database Layer (SQLite)
 - **Location**: `backend/data/predictions.db`
+- **Source of truth**: This single SQLite file is the runtime database for analysis, paper trading, and testnet tables
+- **Do not infer from filenames**: if another `.db` file exists under `backend/data/`, verify against `backend/src/db/database.js` before using it
 - **Tables**:
   - `analysis_history` - Lịch sử phân tích với bias, action, confidence, method_id
   - `predictions` - Dự báo multi-timeframe với validation tracking (ICT only)

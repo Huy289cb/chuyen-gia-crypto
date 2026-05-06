@@ -21,6 +21,8 @@
 - No hallucinated APIs, env vars, DB columns, market data, balances, or trading results.
 - If the repo or runtime does not prove a fact, say it is unknown and inspect first.
 - Prefer `hold` or no change over unsafe automation when trading intent is ambiguous.
+- When DB path or schema matters, use `backend/src/db/database.js` and `backend/src/db/testnetDatabase.js` as the source of truth instead of guessing from filenames.
+- When runtime behavior, thresholds, or active methods matter, prefer code in `backend/src/config`, `backend/src/db`, and live services over historical docs or plan files.
 
 ## Crypto And Trading Domain
 - Treat risk controls as correctness, not optional polish.
@@ -29,6 +31,8 @@
 - Short logic must satisfy `take_profit < entry < stop_loss`.
 - Do not weaken confidence thresholds, cooldowns, SL distance checks, or volume guards without explicit reason from code or task scope.
 - Respect current repo state: `kim_nghia` is active, `ict` is preserved but disabled in runtime scheduling, and some live-management flows are BTC-first.
+- Canonical app SQLite database: `backend/data/predictions.db`.
+- Testnet tables also live inside `backend/data/predictions.db`; there is no separate runtime DB for testnet.
 
 ## Skills
 - Use `.windsurf/skills/crypto-analysis` for market-analysis workflows.

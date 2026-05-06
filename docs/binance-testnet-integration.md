@@ -11,6 +11,12 @@ This project integrates Binance USD-M Futures using the official REST API, with 
 
 The implementation does not use a Binance SDK. All requests go through the local REST modules in `backend/src/services/binance/`.
 
+## Runtime Database
+
+- Runtime SQLite file: `backend/data/predictions.db`
+- Testnet tables such as `testnet_accounts`, `testnet_positions`, `testnet_trade_events`, `testnet_account_snapshots`, and `testnet_pending_orders` live inside this same file
+- If a different `.db` file exists under `backend/data/`, verify code before treating it as active
+
 ## Current Behavior
 
 ### Order placement

@@ -37,6 +37,12 @@ cd ../backend
 npm run db:init
 ```
 
+### Database Source Of Truth
+
+- Canonical SQLite database file: `backend/data/predictions.db`
+- Paper trading tables and Binance testnet tables both live in this same file
+- If another `.db` file appears in `backend/data/`, do not assume the app uses it unless `backend/src/db/database.js` or `backend/src/db/testnetDatabase.js` says so
+
 ## Configuration
 
 ### Backend Environment Variables
@@ -182,6 +188,7 @@ Check `tsconfig.json` paths configuration:
 - SQLite suitable for MVP/single-server deployments
 - For multi-server deployments, consider PostgreSQL or MySQL
 - Database file location: `backend/data/predictions.db`
+- This is the runtime source of truth for analysis, paper trading, and testnet tables
 - Data retention: 15m candles kept for 30 days
 - Run `npm run db:init` to initialize/recreate database schema
 
