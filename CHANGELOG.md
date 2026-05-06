@@ -2,6 +2,23 @@
 
 All notable changes to the project will be documented in this file.
 
+## [06/05/2026] - v1.2.41 - Close Early Loss Cooldown Trigger Fix
+
+### Bug Fixes
+
+**Testnet Cooldown Trigger**
+- **Bug**: Close early with negative PnL was not triggering cooldown in testnet system
+- **Fix**: Added cooldown trigger logic to testnet position closing functions
+- **Details**:
+  - Added `shouldEnterTestnetCooldown()` function to check if account should enter cooldown
+  - Added `setTestnetAccountCooldown()` function to set cooldown timestamp
+  - Updated `closeTestnetPositionEngine()` to trigger cooldown after losses
+  - Updated `closeTestnetPositionInDBOnly()` to trigger cooldown after losses
+  - Close early with negative PnL now correctly counts as loss and triggers 4h cooldown after 3 consecutive losses
+- **Paper Trading**: Already working correctly, added clarifying comment
+- **Documentation**: Updated `docs/ai-position-management.md` with close early loss tracking details
+- **Files**: `backend/src/db/testnetDatabase.js`, `backend/src/services/testnetEngine.js`, `backend/src/services/paperTradingEngine.js`, `docs/ai-position-management.md`
+
 ## [29/04/2026] - v1.2.40 - Testnet Paper Trading Implementation
 
 ### Features

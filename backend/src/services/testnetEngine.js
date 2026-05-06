@@ -38,6 +38,8 @@ import {
   createTestnetAccountSnapshot,
   updateTradingFees,
   updatePrecisionError,
+  shouldEnterTestnetCooldown,
+  setTestnetAccountCooldown,
 } from '../db/testnetDatabase.js';
 import { getCurrentPosition as getBinancePosition } from './binance/account.js';
 import { get as httpGet } from './binance/client.js';
@@ -672,7 +674,17 @@ export async function closeTestnetPositionEngine(db, position, currentPrice, clo
     
     // Update account stats
     await updateTestnetAccountStats(db, position.account_id, isWin);
-    
+
+    // Check if cooldown should be triggered after loss (including close_early with negative PnL)
+    if (!isWin && position.account_id) {
+      const { shouldCooldown, cooldownUntil } = await shouldEnterTestnetCooldown(db, position.account_id);
+
+      if (shouldCooldown) {
+        await setTestnetAccountCooldown(db, position.account_id, cooldownUntil);
+        console.log(`[TestnetEngine] Account ${position.account_id} entered cooldown until ${cooldownUntil} after consecutive losses`);
+      }
+    }
+
     // Record trade event
     await recordTestnetTradeEvent(db, position.position_id, 'position_closed', {
       close_price: currentPrice,
@@ -723,6 +735,16 @@ export async function closeTestnetPositionInDBOnly(db, position, currentPrice, c
     // Update account stats
     if (position.account_id) {
       await updateTestnetAccountStats(db, position.account_id, isWin);
+    }
+
+    // Check if cooldown should be triggered after loss (including close_early with negative PnL)
+    if (!isWin && position.account_id) {
+      const { shouldCooldown, cooldownUntil } = await shouldEnterTestnetCooldown(db, position.account_id);
+
+      if (shouldCooldown) {
+        await setTestnetAccountCooldown(db, position.account_id, cooldownUntil);
+        console.log(`[TestnetEngine] Account ${position.account_id} entered cooldown until ${cooldownUntil} after consecutive losses`);
+      }
     }
 
     // Record trade event (no close_order_id since no order was placed)

@@ -261,6 +261,66 @@ export async function updateTestnetAccountStats(db, accountId, isWin) {
 }
 
 /**
+ * Check if testnet account should enter cooldown after consecutive losses
+ */
+export async function shouldEnterTestnetCooldown(db, accountId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT consecutive_losses FROM testnet_accounts WHERE id = ?`,
+      [accountId],
+      (err, row) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        if (!row) {
+          resolve({ shouldCooldown: false, reason: 'Account not found' });
+          return;
+        }
+
+        const consecutiveLosses = row.consecutive_losses || 0;
+        if (consecutiveLosses >= 3) {
+          const cooldownUntil = new Date();
+          cooldownUntil.setHours(cooldownUntil.getHours() + 4);
+          resolve({
+            shouldCooldown: true,
+            cooldownUntil: cooldownUntil.toISOString(),
+            consecutiveLosses,
+            reason: `${consecutiveLosses} consecutive losses, entering 4h cooldown`
+          });
+        } else {
+          resolve({
+            shouldCooldown: false,
+            consecutiveLosses,
+            reason: `${consecutiveLosses} consecutive losses, below threshold of 3`
+          });
+        }
+      }
+    );
+  });
+}
+
+/**
+ * Set cooldown timestamp on testnet account
+ */
+export async function setTestnetAccountCooldown(db, accountId, cooldownUntil) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE testnet_accounts SET cooldown_until = ? WHERE id = ?`,
+      [cooldownUntil, accountId],
+      function(err) {
+        if (err) {
+          console.error('[TestnetDB] Error setting testnet account cooldown:', err.message);
+          reject(err);
+          return;
+        }
+        resolve(this.changes);
+      }
+    );
+  });
+}
+
+/**
  * Create testnet position
  */
 export async function createTestnetPosition(db, positionData) {

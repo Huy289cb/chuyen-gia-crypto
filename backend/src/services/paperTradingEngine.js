@@ -661,6 +661,9 @@ export async function closePosition(db, position, currentPrice, closeReason) {
   
   const isWin = realizedPnl > 0;
   const isLoss = realizedPnl < 0;
+
+  // Note: close_early with negative PnL correctly counts as loss and triggers cooldown
+  // via the isLoss check and shouldEnterCooldown call below
   
   const newBalance = account.current_balance + realizedPnl;
   

@@ -90,6 +90,14 @@ Close_early is only allowed when:
 2. Market structure has fundamentally changed (structure break)
 3. Position has reached the nearest take profit target
 
+### Close Early and Loss Tracking
+
+**Important**: When `close_early` is executed with negative PnL, it is counted as a losing trade. This means:
+- The `consecutive_losses` counter is incremented
+- After 3 consecutive losses (including close_early losses), a 4-hour cooldown is triggered
+- This applies to both paper trading and testnet systems
+- The cooldown prevents new auto-entries to protect the account from further losses
+
 ### Implementation
 
 The system enforces bias consistency through two mechanisms:
