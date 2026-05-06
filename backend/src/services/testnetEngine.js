@@ -102,14 +102,18 @@ function validateOrderParams({ quantity, price, minQty, stepSize, tickSize, minN
     throw new Error(`Quantity below minQty: ${quantity} < ${minQty}`);
   }
 
-  const qtyRemainder = Number(quantity) % Number(stepSize);
-  if (qtyRemainder > 1e-12) {
+  // Check quantity alignment with stepSize using tolerance for floating-point precision
+  const qtyDivided = Number(quantity) / Number(stepSize);
+  const qtyRemainder = Math.abs(qtyDivided - Math.round(qtyDivided));
+  if (qtyRemainder > 1e-10) {
     throw new Error(`Quantity not aligned with stepSize: ${quantity} stepSize=${stepSize}`);
   }
 
   if (price !== undefined && price !== null) {
-    const priceRemainder = Number(price) % Number(tickSize);
-    if (priceRemainder > 1e-12) {
+    // Check price alignment with tickSize using tolerance for floating-point precision
+    const priceDivided = Number(price) / Number(tickSize);
+    const priceRemainder = Math.abs(priceDivided - Math.round(priceDivided));
+    if (priceRemainder > 1e-10) {
       throw new Error(`Price not aligned with tickSize: ${price} tickSize=${tickSize}`);
     }
 
