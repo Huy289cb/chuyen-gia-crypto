@@ -371,7 +371,8 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 
 - [Architecture](./docs/architecture.md)
 - [API Spec](./docs/api-spec.md)
-- [ICT Rules](./rules/analysis.rules.md)
+- [Windsurf Skills](./.windsurf/skills)
+- [Windsurf Global Rules](./.windsurfrules)
 - [Setup Guide](./docs/setup.md)
 - [Binance Testnet Integration](./docs/binance-testnet-integration.md)
 - [Changelog](./CHANGELOG.md)
