@@ -20,6 +20,7 @@ import {
   getOpenOrders,
   setLeverage,
   setMarginType,
+  getExchangeInfo,
 } from './binanceClient.js';
 import { setPositionMode } from './binance/trading.js';
 import { binanceConfig, getLeverage, getSymbol, validateConfig } from '../config/binance.js';
@@ -36,12 +37,91 @@ import {
   updateTestnetAccountStats,
   createTestnetAccountSnapshot,
   updateTradingFees,
+  updatePrecisionError,
 } from '../db/testnetDatabase.js';
 import { getCurrentPosition as getBinancePosition } from './binance/account.js';
 import { get as httpGet } from './binance/client.js';
 
 // Global client instance
 let testnetClient = null;
+
+/**
+ * Get decimal places from a number string
+ * @param {string|number} numStr - Number or string representation
+ * @returns {number} Number of decimal places
+ */
+function getDecimalPlaces(numStr) {
+  const s = String(numStr);
+  if (!s.includes('.')) return 0;
+  return s.split('.')[1].replace(/0+$/, '').length;
+}
+
+/**
+ * Normalize quantity to stepSize
+ * Uses Math.floor to stay safely within Binance rules
+ * @param {number} value - Raw quantity value
+ * @param {string|number} stepSize - stepSize from exchangeInfo
+ * @returns {number} Normalized quantity
+ */
+function normalizeToStepSize(value, stepSize) {
+  const step = Number(stepSize);
+  if (!step || step <= 0) throw new Error(`Invalid stepSize: ${stepSize}`);
+
+  const normalized = Math.floor(Number(value) / step) * step;
+  return Number(normalized.toFixed(getDecimalPlaces(stepSize)));
+}
+
+/**
+ * Normalize price to tickSize
+ * Uses Math.floor to stay safely within Binance rules
+ * @param {number} price - Raw price value
+ * @param {string|number} tickSize - tickSize from exchangeInfo
+ * @returns {number} Normalized price
+ */
+function normalizeToTickSize(price, tickSize) {
+  const tick = Number(tickSize);
+  if (!tick || tick <= 0) throw new Error(`Invalid tickSize: ${tickSize}`);
+
+  const normalized = Math.floor(Number(price) / tick) * tick;
+  return Number(normalized.toFixed(getDecimalPlaces(tickSize)));
+}
+
+/**
+ * Validate order parameters against Binance filters
+ * @param {object} params - Order parameters
+ * @param {object} params.quantity - Order quantity
+ * @param {object} params.price - Order price (optional for market orders)
+ * @param {object} params.minQty - Minimum quantity from LOT_SIZE filter
+ * @param {object} params.stepSize - stepSize from LOT_SIZE filter
+ * @param {object} params.tickSize - tickSize from PRICE_FILTER filter
+ * @param {object} params.minNotional - Minimum notional value (optional)
+ */
+function validateOrderParams({ quantity, price, minQty, stepSize, tickSize, minNotional }) {
+  if (quantity <= 0) throw new Error('Quantity must be > 0');
+  if (quantity < Number(minQty)) {
+    throw new Error(`Quantity below minQty: ${quantity} < ${minQty}`);
+  }
+
+  const qtyRemainder = Number(quantity) % Number(stepSize);
+  if (qtyRemainder > 1e-12) {
+    throw new Error(`Quantity not aligned with stepSize: ${quantity} stepSize=${stepSize}`);
+  }
+
+  if (price !== undefined && price !== null) {
+    const priceRemainder = Number(price) % Number(tickSize);
+    if (priceRemainder > 1e-12) {
+      throw new Error(`Price not aligned with tickSize: ${price} tickSize=${tickSize}`);
+    }
+
+    if (minNotional) {
+      const notional = quantity * price;
+      const minNotionalValue = Number(minNotional.notional || minNotional.minNotional || 0);
+      if (notional < minNotionalValue) {
+        throw new Error(`Notional below minimum: ${notional} < ${minNotionalValue}`);
+      }
+    }
+  }
+}
 
 function normalizeTradeSide(side) {
   if (side === 'long' || side === 'BUY') {
@@ -247,32 +327,104 @@ export async function openTestnetPosition(db, account, positionData, predictionI
 
   console.log(`[TestnetEngine] Volume check passed: $${totalVolumeAfterOpen.toFixed(2)} <= $${maxVolumePerAccount}`);
 
-  // Calculate quantity based on capped size_usd and leverage
-  const size_qty = cappedSizeQty;
-
-  // Round quantity to Binance precision (BTCUSDT stepSize is 0.001)
-  const QUANTITY_PRECISION = 3; // 3 decimal places for BTCUSDT
-  const MIN_QUANTITY = 0.001;
-  const roundedQty = Math.floor(size_qty * Math.pow(10, QUANTITY_PRECISION)) / Math.pow(10, QUANTITY_PRECISION);
-  
-  // Ensure minimum quantity (Binance minimum for BTCUSDT is 0.001)
-  const finalQty = Math.max(roundedQty, MIN_QUANTITY);
-  const minExecutableNotionalUsd = MIN_QUANTITY * entry_price;
-  
-
-  // Validate position size vs executable futures notional
-  if (cappedSizeUsd < minExecutableNotionalUsd) {
-    console.error(
-      `[TestnetEngine] Position size ${cappedSizeUsd} is below minimum executable notional ` +
-      `${minExecutableNotionalUsd} (balance ${accountBalance}, leverage ${leverage}x)`
-    );
-    throw new Error('Insufficient account balance for minimum position size');
+  // Check precision cooldown before proceeding
+  if (account.precision_cooldown_until && new Date(account.precision_cooldown_until) > new Date()) {
+    console.log(`[TestnetEngine] Account ${account.id} is in precision cooldown until ${account.precision_cooldown_until}`);
+    return null;
   }
 
-  // Check cooldown
+  // Check regular cooldown
   if (account.cooldown_until && new Date(account.cooldown_until) > new Date()) {
     return null;
   }
+
+  // Fetch exchange info to get Binance filters
+  let exchangeInfo;
+  try {
+    exchangeInfo = await getExchangeInfo(testnetClient, symbol);
+  } catch (error) {
+    console.error('[TestnetEngine] Failed to fetch exchange info:', error.message);
+    throw new Error(`Failed to fetch exchange info: ${error.message}`);
+  }
+
+  // Extract filters from exchange info
+  const lotSizeFilter = exchangeInfo.filters?.find(f => f.filterType === 'LOT_SIZE');
+  const priceFilter = exchangeInfo.filters?.find(f => f.filterType === 'PRICE_FILTER');
+  const minNotionalFilter = exchangeInfo.filters?.find(f => f.filterType === 'MIN_NOTIONAL');
+
+  if (!lotSizeFilter) {
+    throw new Error('LOT_SIZE filter not found in exchange info');
+  }
+  if (!priceFilter) {
+    throw new Error('PRICE_FILTER filter not found in exchange info');
+  }
+
+  const { stepSize, minQty, maxQty } = lotSizeFilter;
+  const { tickSize, minPrice, maxPrice } = priceFilter;
+
+  // Calculate quantity based on capped size_usd and leverage
+  const rawSizeQty = cappedSizeQty;
+
+  // Normalize quantity using stepSize from exchange info
+  const normalizedQty = normalizeToStepSize(rawSizeQty, stepSize);
+
+  // Ensure minimum quantity from exchange info
+  const finalQty = Math.max(normalizedQty, Number(minQty));
+
+  // Validate position size vs minimum quantity
+  if (finalQty < Number(minQty)) {
+    console.error(
+      `[TestnetEngine] Normalized quantity ${finalQty} is below minQty ${minQty} ` +
+      `(raw: ${rawSizeQty}, stepSize: ${stepSize})`
+    );
+    throw new Error(`Insufficient quantity after normalization: ${finalQty} < ${minQty}`);
+  }
+
+  // Validate position size vs maximum quantity
+  if (finalQty > Number(maxQty)) {
+    console.error(
+      `[TestnetEngine] Normalized quantity ${finalQty} exceeds maxQty ${maxQty} ` +
+      `(raw: ${rawSizeQty}, stepSize: ${stepSize})`
+    );
+    throw new Error(`Quantity exceeds maximum allowed: ${finalQty} > ${maxQty}`);
+  }
+
+  // Normalize prices using tickSize from exchange info
+  const normalizedEntryPrice = normalizeToTickSize(entry_price, tickSize);
+  const normalizedStopLoss = normalizeToTickSize(stop_loss, tickSize);
+  const normalizedTakeProfit = normalizeToTickSize(take_profit, tickSize);
+
+  // Validate order parameters before placing orders
+  try {
+    validateOrderParams({
+      quantity: finalQty,
+      price: normalizedEntryPrice,
+      minQty,
+      stepSize,
+      tickSize,
+      minNotional: minNotionalFilter,
+    });
+  } catch (validationError) {
+    console.error('[TestnetEngine] Order parameter validation failed:', validationError.message);
+    throw validationError;
+  }
+
+  // Log precision parameters for debugging
+  console.log('[TestnetEngine] Precision parameters:', {
+    symbol,
+    rawQuantity: rawSizeQty,
+    normalizedQuantity: finalQty,
+    rawEntryPrice: entry_price,
+    normalizedEntryPrice,
+    normalizedStopLoss,
+    normalizedTakeProfit,
+    stepSize,
+    tickSize,
+    minQty,
+    maxQty,
+    minPrice,
+    maxPrice,
+  });
 
   // Generate positionId before try block for error handling
   const positionId = `testnet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -280,8 +432,8 @@ export async function openTestnetPosition(db, account, positionData, predictionI
   try {
     const binanceSide = toBinanceSide(normalizedSide);
     const positionSide = toPositionSide(normalizedSide);
-    
-    // Place market order
+
+    // Place market order with normalized quantity
     const order = await placeMarketOrder(testnetClient, symbol, binanceSide, finalQty, positionSide);
 
     const slSide = binanceSide === 'BUY' ? 'SELL' : 'BUY';
@@ -289,9 +441,21 @@ export async function openTestnetPosition(db, account, positionData, predictionI
     let tpOrder;
 
     try {
-      slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, stop_loss, positionSide);
-      tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, take_profit, positionSide);
+      // Place SL/TP orders with normalized prices
+      slOrder = await placeStopLossOrder(testnetClient, symbol, slSide, finalQty, normalizedStopLoss, positionSide);
+      tpOrder = await placeTakeProfitOrder(testnetClient, symbol, slSide, finalQty, normalizedTakeProfit, positionSide);
     } catch (protectionError) {
+      // Detect precision error (-1111) and track it
+      const isPrecisionError = protectionError.message && protectionError.message.includes('-1111');
+      if (isPrecisionError) {
+        console.error('[TestnetEngine] Precision error detected in protective order placement:', protectionError.message);
+        try {
+          await updatePrecisionError(db, account.id, '-1111', protectionError.message);
+        } catch (trackingError) {
+          console.error('[TestnetEngine] Failed to track precision error:', trackingError.message);
+        }
+      }
+
       let recoveryOrder = null;
 
       try {
@@ -311,6 +475,7 @@ export async function openTestnetPosition(db, account, positionData, predictionI
           error: protectionError.message,
           recovery_error: recoveryError.message,
           recovery_order_id: null,
+          is_precision_error: isPrecisionError,
         });
 
         throw new Error(`Failed to place SL/TP protection after entry and recovery close also failed: ${protectionError.message}; recovery: ${recoveryError.message}`);
@@ -322,6 +487,7 @@ export async function openTestnetPosition(db, account, positionData, predictionI
         tp_order_id: tpOrder?.orderId || null,
         error: protectionError.message,
         recovery_order_id: recoveryOrder.orderId,
+        is_precision_error: isPrecisionError,
       });
 
       await recordTestnetTradeEvent(db, positionId, 'recovery_close', {

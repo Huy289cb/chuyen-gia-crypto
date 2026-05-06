@@ -508,47 +508,136 @@ router.get('/pending-orders', async (req, res) => {
  */
 router.post('/pending-orders/:id/cancel', async (req, res) => {
   const { db, dbEnabled } = req;
-  
+
   if (!dbEnabled || !db) {
     return res.status(503).json({
       success: false,
       error: 'Database not available'
     });
   }
-  
+
   const { id } = req.params;
   const { reason = 'manual' } = req.body;
-  
+
   try {
     const { getTestnetPendingOrders } = await import('../db/testnetDatabase.js');
     const { cancelTestnetPendingOrder } = await import('../db/testnetDatabase.js');
-    
+
     const orders = await getTestnetPendingOrders(db, { order_id: id });
     const order = orders[0];
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
         error: 'Pending order not found'
       });
     }
-    
+
     if (order.status !== 'pending') {
       return res.status(400).json({
         success: false,
         error: 'Order is not pending'
       });
     }
-    
+
     // Cancel order (including Binance limit order if exists)
     await cancelTestnetPendingOrder(db, id, reason, order.binance_order_id);
-    
+
     res.json({
       success: true,
       message: 'Pending order cancelled successfully',
       data: {
         order_id: id,
         cancel_reason: reason
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/testnet/precision-cooldown/:accountId - Get precision cooldown status
+ */
+router.get('/precision-cooldown/:accountId', async (req, res) => {
+  const { db, dbEnabled } = req;
+
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  const { accountId } = req.params;
+
+  try {
+    const { getTestnetAccount } = await import('../db/testnetDatabase.js');
+
+    const account = await getTestnetAccount(db, 'BTC', 'kim_nghia');
+
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        error: 'Testnet account not found'
+      });
+    }
+
+    const now = new Date();
+    const precisionCooldownUntil = account.precision_cooldown_until ? new Date(account.precision_cooldown_until) : null;
+    const isInCooldown = precisionCooldownUntil && precisionCooldownUntil > now;
+
+    res.json({
+      success: true,
+      data: {
+        account_id: account.id,
+        precision_error_count: account.precision_error_count || 0,
+        precision_cooldown_until: account.precision_cooldown_until,
+        is_in_precision_cooldown: isInCooldown,
+        last_precision_error_time: account.last_precision_error_time,
+        last_precision_error_code: account.last_precision_error_code,
+        last_precision_error_message: account.last_precision_error_message,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/testnet/precision-cooldown/:accountId/reset - Reset precision cooldown
+ */
+router.post('/precision-cooldown/:accountId/reset', async (req, res) => {
+  const { db, dbEnabled } = req;
+
+  if (!dbEnabled || !db) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  const { accountId } = req.params;
+
+  try {
+    const { resetPrecisionErrorTracking } = await import('../db/testnetDatabase.js');
+
+    const updatedAccount = await resetPrecisionErrorTracking(db, accountId);
+
+    res.json({
+      success: true,
+      message: 'Precision error tracking reset successfully',
+      data: {
+        account_id: accountId,
+        precision_error_count: 0,
+        precision_cooldown_until: null,
+        reset_at: new Date().toISOString()
       }
     });
   } catch (error) {

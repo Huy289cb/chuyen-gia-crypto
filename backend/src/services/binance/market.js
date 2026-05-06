@@ -98,3 +98,28 @@ export async function getBookTicker(symbol) {
     throw error;
   }
 }
+
+/**
+ * Get exchange information including trading rules and filters
+ * @param {string} symbol - Optional symbol to filter (e.g., BTCUSDT)
+ * @returns {Promise<object>} Exchange information with symbol filters
+ */
+export async function getExchangeInfo(symbol = null) {
+  try {
+    const params = symbol ? { symbol } : {};
+    const response = await get(endpoints.EXCHANGE_INFO, params);
+    
+    if (symbol && response.symbols) {
+      const symbolInfo = response.symbols.find(s => s.symbol === symbol);
+      if (!symbolInfo) {
+        throw new Error(`Symbol ${symbol} not found in exchange info`);
+      }
+      return symbolInfo;
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('[BinanceMarket] Failed to get exchange info:', error.message);
+    throw error;
+  }
+}

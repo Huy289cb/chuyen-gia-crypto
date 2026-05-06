@@ -405,6 +405,12 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
             continue;
           }
 
+          // Check precision cooldown before executing
+          if (account.precision_cooldown_until && new Date(account.precision_cooldown_until) > new Date()) {
+            console.log(`[PriceScheduler] Account ${account.id} is in precision cooldown until ${account.precision_cooldown_until}, skipping order execution`);
+            continue;
+          }
+
           // Check volume limit before executing testnet pending order
           // Market orders may have filled the volume limit before this pending order executes
           const { getTestnetPositions, cancelTestnetPendingOrder } = await import('../db/testnetDatabase.js');
@@ -446,7 +452,7 @@ async function checkTestnetPendingOrders(symbol, currentPrice, candle) {
               const { cancelOrder, getTestnetClient } = await import('../services/testnetEngine.js');
               const { getSymbol } = await import('../config/binance.js');
               const testnetClient = getTestnetClient();
-              
+
               if (testnetClient) {
                 await cancelOrder(testnetClient, getSymbol(), order.binance_order_id);
               }

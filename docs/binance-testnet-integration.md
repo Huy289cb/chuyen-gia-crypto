@@ -90,6 +90,45 @@ equity = availableBalance + unrealizedPnL - accumulatedTradingFees - accumulated
 
 This ensures that the ~95 USDT equity discrepancy caused by untracked fees is eliminated.
 
+### Precision handling
+
+The system now uses dynamic precision filters from Binance exchangeInfo instead of hardcoded values:
+
+**Exchange Info Fetching:**
+- Fetches `LOT_SIZE` filter (stepSize, minQty, maxQty) from Binance
+- Fetches `PRICE_FILTER` filter (tickSize, minPrice, maxPrice) from Binance
+- Fetches `MIN_NOTIONAL` filter for notional validation
+
+**Normalization Functions:**
+- `normalizeToStepSize(value, stepSize)` - Normalizes quantity to exact stepSize multiples using Math.floor
+- `normalizeToTickSize(price, tickSize)` - Normalizes price to exact tickSize multiples using Math.floor
+- `validateOrderParams()` - Validates all order parameters before sending to Binance
+
+**Order Flow:**
+1. Fetch exchangeInfo for the symbol
+2. Extract LOT_SIZE and PRICE_FILTER filters
+3. Normalize quantity using stepSize
+4. Normalize prices (entry, SL, TP) using tickSize
+5. Validate all parameters against filters
+6. Place entry order with normalized quantity
+7. Place SL/TP orders with normalized prices
+8. Log detailed precision parameters for debugging
+
+**Precision Error Tracking:**
+- Tracks precision errors (error code -1111) in database
+- Triggers cooldown after 3 precision errors in 10 minutes
+- Cooldown duration: 5 minutes initially, then 10 minutes, then 30 minutes
+- During cooldown, no new positions or pending orders are executed
+
+**Database schema additions:**
+- `testnet_accounts` columns: `precision_error_count`, `precision_cooldown_until`, `last_precision_error_time`, `last_precision_error_code`, `last_precision_error_message`
+
+**API Endpoints:**
+- `GET /api/testnet/precision-cooldown/:accountId` - Get precision cooldown status
+- `POST /api/testnet/precision-cooldown/:accountId/reset` - Reset precision cooldown manually
+
+This eliminates the open/close loop caused by precision mismatches and prevents infinite retry loops.
+
 ### Volume constraints
 
 The system enforces volume limits to manage risk:

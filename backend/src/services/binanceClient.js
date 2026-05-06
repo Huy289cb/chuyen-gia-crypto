@@ -6,7 +6,7 @@
  */
 
 import { validateConfig } from './binance/config.js';
-import { getServerTime } from './binance/market.js';
+import { getServerTime, getExchangeInfo } from './binance/market.js';
 import { getBalance } from './binance/account.js';
 import { getCurrentPosition as getCurrentPositionAPI, getPositionRisk as getPositionRiskAPI } from './binance/account.js';
 import { placeOrder as placeOrderAPI, testOrder, cancelOrder as cancelOrderAPI, cancelAllOrders as cancelAllOrdersAPI, getOpenOrders as getOpenOrdersAPI } from './binance/trading.js';
@@ -36,6 +36,23 @@ export async function testConnection(client) {
   } catch (error) {
     console.error('[BinanceClient] Connection test failed:', error.message);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get exchange information including trading rules and filters
+ * @param {object} client - Client instance (not used for public endpoints)
+ * @param {string} symbol - Optional symbol to filter (e.g., BTCUSDT)
+ * @returns {Promise<object>} Exchange information with symbol filters
+ */
+export async function getExchangeInfo(client, symbol = null) {
+  try {
+    const exchangeInfo = await getExchangeInfo(symbol);
+    console.log(`[BinanceClient] Exchange info fetched${symbol ? ` for ${symbol}` : ''}`);
+    return exchangeInfo;
+  } catch (error) {
+    console.error('[BinanceClient] Failed to get exchange info:', error.message);
+    throw error;
   }
 }
 

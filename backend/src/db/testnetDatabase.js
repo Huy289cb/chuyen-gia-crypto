@@ -871,3 +871,123 @@ export async function createTestnetPendingOrder(db, orderData) {
     );
   });
 }
+
+/**
+ * Update precision error tracking for a testnet account
+ */
+export async function updatePrecisionError(db, accountId, errorCode, errorMessage) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+
+    db.run(
+      `UPDATE testnet_accounts
+       SET precision_error_count = precision_error_count + 1,
+           last_precision_error_time = ?,
+           last_precision_error_code = ?,
+           last_precision_error_message = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [now, errorCode, errorMessage, now, accountId],
+      function(err) {
+        if (err) {
+          console.error('[TestnetDB] Error updating precision error:', err.message);
+          reject(err);
+          return;
+        }
+
+        // Fetch updated account to check if cooldown should be triggered
+        db.get(
+          'SELECT * FROM testnet_accounts WHERE id = ?',
+          [accountId],
+          (fetchErr, row) => {
+            if (fetchErr) {
+              reject(fetchErr);
+              return;
+            }
+
+            // Trigger cooldown if more than 3 precision errors in 10 minutes
+            if (row.precision_error_count >= 3) {
+              const lastErrorTime = row.last_precision_error_time ? new Date(row.last_precision_error_time) : null;
+              if (lastErrorTime && (Date.now() - lastErrorTime.getTime()) < 10 * 60 * 1000) {
+                // Set cooldown for 5 minutes initially, then 10 minutes, then 30 minutes
+                const cooldownMinutes = Math.min(5 * Math.pow(2, row.precision_error_count - 3), 30);
+                const cooldownUntil = new Date(Date.now() + cooldownMinutes * 60 * 1000).toISOString();
+
+                db.run(
+                  `UPDATE testnet_accounts
+                   SET precision_cooldown_until = ?
+                   WHERE id = ?`,
+                  [cooldownUntil, accountId],
+                  (cooldownErr) => {
+                    if (cooldownErr) {
+                      console.error('[TestnetDB] Error setting precision cooldown:', cooldownErr.message);
+                      reject(cooldownErr);
+                      return;
+                    }
+                    console.log(`[TestnetDB] Precision cooldown set for account ${accountId} until ${cooldownUntil}`);
+                    resolve({ ...row, precision_cooldown_until: cooldownUntil });
+                  }
+                );
+              } else {
+                // Reset count if errors are spread out
+                db.run(
+                  `UPDATE testnet_accounts
+                   SET precision_error_count = 0
+                   WHERE id = ?`,
+                  [accountId],
+                  (resetErr) => {
+                    if (resetErr) {
+                      console.error('[TestnetDB] Error resetting precision error count:', resetErr.message);
+                      reject(resetErr);
+                      return;
+                    }
+                    resolve({ ...row, precision_error_count: 0 });
+                  }
+                );
+              }
+            } else {
+              resolve(row);
+            }
+          }
+        );
+      }
+    );
+  });
+}
+
+/**
+ * Reset precision error tracking for a testnet account
+ */
+export async function resetPrecisionErrorTracking(db, accountId) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+
+    db.run(
+      `UPDATE testnet_accounts
+       SET precision_error_count = 0,
+           precision_cooldown_until = NULL,
+           last_precision_error_time = NULL,
+           last_precision_error_code = NULL,
+           last_precision_error_message = NULL,
+           updated_at = ?
+       WHERE id = ?`,
+      [now, accountId],
+      function(err) {
+        if (err) {
+          console.error('[TestnetDB] Error resetting precision error tracking:', err.message);
+          reject(err);
+          return;
+        }
+
+        db.get(
+          'SELECT * FROM testnet_accounts WHERE id = ?',
+          [accountId],
+          (fetchErr, row) => {
+            if (fetchErr) reject(fetchErr);
+            else resolve(row);
+          }
+        );
+      }
+    );
+  });
+}

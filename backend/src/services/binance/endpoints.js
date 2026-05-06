@@ -11,6 +11,7 @@ export const endpoints = {
   PRICE: '/fapi/v1/ticker/price',
   BOOK_TICKER: '/fapi/v1/ticker/bookTicker',
   PREMIUM_INDEX: '/fapi/v1/premiumIndex',
+  EXCHANGE_INFO: '/fapi/v1/exchangeInfo',
 
   // Account endpoints (SIGNED)
   ACCOUNT: '/fapi/v3/account',

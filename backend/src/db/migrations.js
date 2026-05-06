@@ -608,6 +608,13 @@ function addTestnetTables(db, resolve, reject) {
       consecutive_losses INTEGER DEFAULT 0,
       last_trade_time DATETIME,
       cooldown_until DATETIME,
+      precision_error_count INTEGER DEFAULT 0,
+      precision_cooldown_until DATETIME,
+      last_precision_error_time DATETIME,
+      last_precision_error_code TEXT,
+      last_precision_error_message TEXT,
+      accumulated_trading_fees REAL DEFAULT 0,
+      accumulated_funding_fee REAL DEFAULT 0,
       api_key_hash TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -835,6 +842,42 @@ function addTestnetFeeTrackingColumns(db) {
       completed++;
       if (completed === allColumns.length) {
         console.log('[Migration] Fee tracking columns migration completed');
+        // Add precision error tracking columns after this
+        addTestnetPrecisionErrorTrackingColumns(db);
+      }
+    });
+  });
+}
+
+/**
+ * Add precision error tracking columns to testnet_accounts table
+ */
+function addTestnetPrecisionErrorTrackingColumns(db) {
+  console.log('[Migration] Starting precision error tracking columns migration...');
+
+  const columns = [
+    { name: 'precision_error_count', sql: 'ALTER TABLE testnet_accounts ADD COLUMN precision_error_count INTEGER DEFAULT 0' },
+    { name: 'precision_cooldown_until', sql: 'ALTER TABLE testnet_accounts ADD COLUMN precision_cooldown_until DATETIME' },
+    { name: 'last_precision_error_time', sql: 'ALTER TABLE testnet_accounts ADD COLUMN last_precision_error_time DATETIME' },
+    { name: 'last_precision_error_code', sql: 'ALTER TABLE testnet_accounts ADD COLUMN last_precision_error_code TEXT' },
+    { name: 'last_precision_error_message', sql: 'ALTER TABLE testnet_accounts ADD COLUMN last_precision_error_message TEXT' }
+  ];
+
+  let completed = 0;
+  columns.forEach((column) => {
+    db.run(column.sql, (err) => {
+      if (err) {
+        if (err.message.includes('duplicate column name')) {
+          console.log(`[Migration] Column ${column.name} already exists`);
+        } else {
+          console.error(`[Migration] Error adding column ${column.name}:`, err.message);
+        }
+      } else {
+        console.log(`[Migration] Added precision error tracking column: ${column.name}`);
+      }
+      completed++;
+      if (completed === columns.length) {
+        console.log('[Migration] Precision error tracking columns migration completed');
       }
     });
   });
