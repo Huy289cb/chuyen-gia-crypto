@@ -142,11 +142,19 @@ async function runMethodAnalysis(methodId) {
       try {
         const { saveAnalysis, getPositions } = await import('./db/database.js');
         const { evaluateAutoEntry } = await import('./services/autoEntryLogic.js');
-        const { openPosition } = await import('./services/paperTradingEngine.js');
+        const { openPosition, checkPredictionReversal } = await import('./services/paperTradingEngine.js');
         
         // Save analysis for BTC with method_id and raw data
         const btcResult = await saveAnalysis(db, 'BTC', priceData, analysis, methodId, analysis.raw_question, analysis.raw_answer);
         const btcPredictionId = btcResult.predictionIds?.['4h'] || btcResult.predictionIds?.['1d'];
+
+        // Check for prediction reversal BEFORE processing position_decisions
+        // This uses correct close_reason='prediction_reversal' instead of 'close_early'
+        const reversalResult = await checkPredictionReversal(db, analysis.btc, 'BTC');
+        console.log(`[Scheduler][${method.name}] Prediction reversal check:`, reversalResult);
+        
+        // Track positions closed by reversal to skip them in position_decisions
+        const closedByReversal = new Set(reversalResult.closed.map(c => c.position_id));
 
         // Process position decisions from AI analysis
         if (analysis.btc?.position_decisions && Array.isArray(analysis.btc.position_decisions)) {
@@ -160,6 +168,12 @@ async function runMethodAnalysis(methodId) {
           const confidenceThreshold = (methodConfig.autoEntry?.minConfidence || 70) / 100;
 
           for (const decision of analysis.btc.position_decisions) {
+            // Skip if position was already closed by prediction reversal
+            if (closedByReversal.has(decision.position_id)) {
+              console.log(`[Scheduler][${method.name}] Skipping position decision for ${decision.position_id}: already closed by prediction reversal`);
+              continue;
+            }
+
             console.log(`[Scheduler][${method.name}] Processing position decision: position_id=${decision.position_id}, action=${decision.action}, confidence=${decision.confidence}`);
 
             // Check confidence threshold

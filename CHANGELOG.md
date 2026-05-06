@@ -2,6 +2,22 @@
 
 All notable changes to the project will be documented in this file.
 
+## [06/05/2026] - v1.2.42 - Prediction Reversal Close Reason Fix
+
+### Bug Fixes
+
+**Issue: Positions closed with wrong close_reason for bias reversal**
+- **Problem**: When bias reversed with high confidence (>=80%), positions were closed with `close_reason='close_early'` instead of `'prediction_reversal'`
+- **Root Cause**: The `checkPredictionReversal` function existed but was not called in the scheduler. AI returned `action: "close_early"` for bias reversal scenarios, which is less descriptive
+- **Fix**:
+  - Added call to `checkPredictionReversal` in scheduler after `saveAnalysis`
+  - Added logic to track positions closed by reversal check
+  - Skip position_decisions for positions already closed by reversal to prevent duplicate closes
+  - Positions now close with correct `close_reason='prediction_reversal'` when bias reverses
+- **Impact**: More accurate position history with descriptive close reasons, consistent with existing code design
+- **Files**: `backend/src/scheduler.js`
+- **Documentation**: Updated `docs/feedback/fix-close-early.md` to mark as completed
+
 ## [06/05/2026] - v1.2.41 - Close Early Loss Cooldown Trigger Fix
 
 ### Bug Fixes
