@@ -19,6 +19,17 @@ All notable changes to the project will be documented in this file.
 - **Documentation**: Updated `docs/ai-position-management.md` with close early loss tracking details
 - **Files**: `backend/src/db/testnetDatabase.js`, `backend/src/services/testnetEngine.js`, `backend/src/services/paperTradingEngine.js`, `docs/ai-position-management.md`
 
+### Documentation Updates
+
+**Universal Loss Tracking Clarification**
+- **Update**: Clarified that ANY position close with negative PnL counts as loss for cooldown
+- **Details**:
+  - Loss tracking is based on realized PnL, not close reason
+  - Applies to all close reasons: stop_loss, take_profit, close_early, manual, prediction_reversal, reverse, close_partial, etc.
+  - After 3 consecutive losses (any reason), 4h cooldown is triggered
+  - This applies to both paper trading and testnet systems
+- **Files**: `docs/ai-position-management.md`
+
 ## [29/04/2026] - v1.2.40 - Testnet Paper Trading Implementation
 
 ### Features

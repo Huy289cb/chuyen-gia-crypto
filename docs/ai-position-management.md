@@ -98,6 +98,20 @@ Close_early is only allowed when:
 - This applies to both paper trading and testnet systems
 - The cooldown prevents new auto-entries to protect the account from further losses
 
+### Universal Loss Tracking
+
+**Critical**: ANY position close with negative PnL counts as a loss, regardless of the close reason. This includes:
+- `stop_loss` - Stop loss hit
+- `take_profit` - Take profit hit (can result in loss if partial closes or fees)
+- `close_early` - AI-recommended early close
+- `manual` - Manual close by user
+- `prediction_reversal` - Close due to analysis reversal
+- `reverse` - Position reversal
+- `close_partial` - Partial close (if overall position PnL is negative)
+- Any other close reason
+
+The system tracks losses based on **realized PnL**, not the close reason. If `realizedPnl < 0`, it's counted as a loss and increments the `consecutive_losses` counter. After 3 consecutive losses, a 4-hour cooldown is automatically triggered to protect the account.
+
 ### Implementation
 
 The system enforces bias consistency through two mechanisms:
