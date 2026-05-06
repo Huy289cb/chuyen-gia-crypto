@@ -6,7 +6,7 @@
  */
 
 import { validateConfig } from './binance/config.js';
-import { getServerTime, getExchangeInfo } from './binance/market.js';
+import { getServerTime, getExchangeInfo as getExchangeInfoAPI } from './binance/market.js';
 import { getBalance } from './binance/account.js';
 import { getCurrentPosition as getCurrentPositionAPI, getPositionRisk as getPositionRiskAPI } from './binance/account.js';
 import { placeOrder as placeOrderAPI, testOrder, cancelOrder as cancelOrderAPI, cancelAllOrders as cancelAllOrdersAPI, getOpenOrders as getOpenOrdersAPI } from './binance/trading.js';
@@ -47,7 +47,7 @@ export async function testConnection(client) {
  */
 export async function getExchangeInfo(client, symbol = null) {
   try {
-    const exchangeInfo = await getExchangeInfo(symbol);
+    const exchangeInfo = await getExchangeInfoAPI(symbol);
     console.log(`[BinanceClient] Exchange info fetched${symbol ? ` for ${symbol}` : ''}`);
     return exchangeInfo;
   } catch (error) {
