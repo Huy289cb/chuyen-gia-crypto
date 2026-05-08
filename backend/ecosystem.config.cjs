@@ -9,6 +9,7 @@
  * - API: 300M max memory
  * - Worker: 350M max memory
  */
+require('dotenv').config();
 
 module.exports = {
   apps: [
