@@ -1,0 +1,419 @@
+// Prisma Schema for Crypto Analyzer Backend
+// Source of truth for database structure
+// Target: Neon Postgres
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ANALYSIS & PREDICTIONS
+// ============================================
+
+model AnalysisHistory {
+  id                   Int      @id @default(autoincrement())
+  coin                 String
+  timestamp            DateTime @default(now())
+  current_price        Float
+  bias                 String
+  action               String
+  confidence           Float
+  narrative            String?
+  comparison           String?
+  market_sentiment     String?
+  disclaimer           String?
+  method_id            String   @default("ict")
+  breakout_retest      String?  @db.Text
+  position_decisions   String?  @db.Text
+  alternative_scenario String?  @db.Text
+  suggested_entry      Float?
+  suggested_stop_loss  Float?
+  suggested_take_profit Float?
+  expected_rr          Float?
+  invalidation_level   Float?
+  raw_question         String?  @db.Text
+  raw_answer           String?  @db.Text
+
+  predictions          Prediction[]
+  key_levels           KeyLevel[]
+
+  @@index([coin, timestamp])
+  @@index([method_id])
+  @@map("analysis_history")
+}
+
+model Prediction {
+  id                   Int      @id @default(autoincrement())
+  analysis_id          Int
+  coin                 String
+  timeframe            String
+  direction            String
+  target_price         Float?
+  confidence           Float?
+  predicted_at         DateTime @default(now())
+  expires_at           DateTime?
+  actual_price         Float?
+  accuracy             Float?
+  is_correct           Boolean?
+  outcome              String?
+  pnl                  Float    @default(0)
+  hit_tp               Int      @default(0)
+  hit_sl               Int      @default(0)
+  linked_position_id   Int?
+  suggested_entry      Float?
+  suggested_stop_loss  Float?
+  suggested_take_profit Float?
+  expected_rr          Float?
+  invalidation_level   Float?
+  reason_summary       String?  @db.Text
+  model_version        String   @default("1.0")
+  method_id            String   @default("ict")
+
+  analysis             AnalysisHistory @relation(fields: [analysis_id], references: [id], onDelete: Cascade)
+
+  @@index([analysis_id])
+  @@index([coin, predicted_at])
+  @@index([method_id])
+  @@map("predictions")
+}
+
+model KeyLevel {
+  id           Int      @id @default(autoincrement())
+  analysis_id  Int
+  coin         String
+  level_type   String
+  description  String?  @db.Text
+  price_levels String?  @db.Text
+
+  analysis     AnalysisHistory @relation(fields: [analysis_id], references: [id], onDelete: Cascade)
+
+  @@index([analysis_id])
+  @@map("key_levels")
+}
+
+// ============================================
+// MARKET DATA
+// ============================================
+
+model OhlcvCandle {
+  id        Int      @id @default(autoincrement())
+  coin      String
+  timestamp DateTime
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float?
+  timeframe String   @default("15m")
+
+  @@unique([coin, timestamp, timeframe])
+  @@index([coin, timestamp])
+  @@index([coin, timeframe, timestamp])
+  @@map("ohlcv_candles")
+}
+
+model LatestPrice {
+  id          Int      @id @default(autoincrement())
+  coin        String   @unique
+  price       Float
+  change_24h  Float?
+  change_7d   Float?
+  market_cap  Float?
+  volume_24h  Float?
+  updated_at  DateTime @default(now())
+
+  @@map("latest_prices")
+}
+
+model PriceHistory {
+  id        Int      @id @default(autoincrement())
+  coin      String
+  price     Float
+  timestamp DateTime @default(now())
+
+  @@index([coin, timestamp])
+  @@map("price_history")
+}
+
+// ============================================
+// PAPER TRADING
+// ============================================
+
+model Account {
+  id                   Int       @id @default(autoincrement())
+  symbol               String
+  method_id            String    @default("ict")
+  starting_balance     Float     @default(100)
+  current_balance      Float     @default(100)
+  equity               Float     @default(100)
+  unrealized_pnl       Float     @default(0)
+  realized_pnl         Float     @default(0)
+  total_trades         Int       @default(0)
+  winning_trades       Int       @default(0)
+  losing_trades        Int       @default(0)
+  max_drawdown         Float     @default(0)
+  consecutive_losses   Int       @default(0)
+  last_trade_time      DateTime?
+  cooldown_until       DateTime?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  positions            Position[]
+  pending_orders       PendingOrder[]
+  snapshots            AccountSnapshot[]
+
+  @@unique([symbol, method_id])
+  @@index([method_id])
+  @@map("accounts")
+}
+
+model Position {
+  id                   Int      @id @default(autoincrement())
+  position_id          String   @unique
+  account_id           Int
+  symbol               String
+  side                 String
+  entry_price          Float
+  current_price        Float    @default(0)
+  stop_loss            Float
+  take_profit          Float
+  entry_time           DateTime @default(now())
+  status               String   @default("open")
+  size_usd             Float
+  size_qty             Float
+  risk_usd             Float
+  risk_percent         Float
+  expected_rr          Float
+  realized_pnl         Float    @default(0)
+  unrealized_pnl       Float    @default(0)
+  close_price          Float?
+  close_time           DateTime?
+  close_reason         String?
+  linked_prediction_id Int?
+  invalidation_level   Float?
+  ict_strategy         String?
+  tp_levels            String?  @db.Text
+  tp_hit_count         Int      @default(0)
+  partial_closed       Float    @default(0)
+  r_multiple           Float    @default(0)
+  tp1_hit              Int      @default(0)
+
+  account              Account  @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  trade_events         TradeEvent[]
+
+  @@index([account_id])
+  @@index([symbol, status])
+  @@map("positions")
+}
+
+model AccountSnapshot {
+  id                 Int      @id @default(autoincrement())
+  account_id         Int
+  balance            Float
+  equity             Float
+  unrealized_pnl     Float    @default(0)
+  open_positions     Int      @default(0)
+  timestamp          DateTime @default(now())
+
+  account            Account  @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@map("account_snapshots")
+}
+
+model TradeEvent {
+  id         Int      @id @default(autoincrement())
+  position_id Int
+  event_type String
+  event_data String?  @db.Text
+  timestamp  DateTime @default(now())
+
+  position   Position @relation(fields: [position_id], references: [id], onDelete: Cascade)
+
+  @@index([position_id])
+  @@map("trade_events")
+}
+
+model PendingOrder {
+  id                    Int      @id @default(autoincrement())
+  order_id              String   @unique
+  account_id            Int
+  symbol                String
+  side                  String
+  entry_price           Float
+  stop_loss             Float
+  take_profit           Float
+  size_usd              Float
+  size_qty              Float
+  risk_usd              Float
+  risk_percent          Float
+  expected_rr           Float
+  linked_prediction_id  Int?
+  invalidation_level    Float?
+  status                String   @default("pending")
+  created_at            DateTime @default(now())
+  executed_at           DateTime?
+  executed_price        Float?
+  executed_size_qty     Float?
+  executed_size_usd     Float?
+  realized_pnl          Float?
+  realized_pnl_percent  Float?
+  close_reason          String?
+  method_id             String   @default("ict")
+
+  account               Account  @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@index([symbol, status])
+  @@index([method_id])
+  @@map("pending_orders")
+}
+
+// ============================================
+// TESTNET (Binance Futures Testnet)
+// ============================================
+
+model TestnetAccount {
+  id                           Int       @id @default(autoincrement())
+  symbol                       String
+  method_id                    String
+  starting_balance             Float
+  current_balance              Float
+  equity                       Float
+  unrealized_pnl               Float     @default(0)
+  realized_pnl                 Float     @default(0)
+  total_trades                 Int       @default(0)
+  winning_trades               Int       @default(0)
+  losing_trades                Int       @default(0)
+  max_drawdown                 Float     @default(0)
+  consecutive_losses           Int       @default(0)
+  last_trade_time              DateTime?
+  cooldown_until               DateTime?
+  precision_error_count        Int       @default(0)
+  precision_cooldown_until     DateTime?
+  last_precision_error_time    DateTime?
+  last_precision_error_code    String?
+  last_precision_error_message String?   @db.Text
+  accumulated_trading_fees    Float     @default(0)
+  accumulated_funding_fee     Float     @default(0)
+  api_key_hash                 String?
+  created_at                   DateTime  @default(now())
+  updated_at                   DateTime  @updatedAt
+
+  positions                    TestnetPosition[]
+  pending_orders               TestnetPendingOrder[]
+  snapshots                    TestnetAccountSnapshot[]
+
+  @@unique([symbol, method_id])
+  @@map("testnet_accounts")
+}
+
+model TestnetPosition {
+  id                   Int      @id @default(autoincrement())
+  position_id          String   @unique
+  account_id           Int
+  symbol               String
+  side                 String
+  entry_price          Float
+  current_price        Float    @default(0)
+  stop_loss            Float
+  take_profit          Float
+  entry_time           DateTime @default(now())
+  status               String   @default("open")
+  size_usd             Float
+  size_qty             Float
+  risk_usd             Float
+  risk_percent         Float
+  expected_rr          Float
+  realized_pnl         Float    @default(0)
+  unrealized_pnl       Float    @default(0)
+  close_price          Float?
+  close_time           DateTime?
+  close_reason         String?
+  linked_prediction_id Int?
+  binance_order_id     String?
+  binance_sl_order_id  String?
+  binance_tp_order_id  String?
+  tp_levels            String?  @db.Text
+  tp_hit_count         Int      @default(0)
+  partial_closed       Float    @default(0)
+  entry_fee            Float    @default(0)
+  exit_fee             Float    @default(0)
+  funding_fee          Float    @default(0)
+
+  account              TestnetAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  trade_events         TestnetTradeEvent[]
+
+  @@index([account_id])
+  @@index([symbol, status])
+  @@map("testnet_positions")
+}
+
+model TestnetAccountSnapshot {
+  id                  Int      @id @default(autoincrement())
+  account_id          Int
+  balance             Float
+  equity              Float
+  unrealized_pnl      Float    @default(0)
+  realized_pnl        Float    @default(0)
+  open_positions_count Int      @default(0)
+  timestamp           DateTime @default(now())
+
+  account             TestnetAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@map("testnet_account_snapshots")
+}
+
+model TestnetTradeEvent {
+  id         Int      @id @default(autoincrement())
+  position_id String
+  event_type String
+  event_data String?  @db.Text
+  timestamp  DateTime @default(now())
+
+  position   TestnetPosition @relation(fields: [position_id], references: [position_id], onDelete: Cascade)
+
+  @@index([position_id])
+  @@map("testnet_trade_events")
+}
+
+model TestnetPendingOrder {
+  id                    Int      @id @default(autoincrement())
+  order_id              String   @unique
+  account_id            Int
+  symbol                String
+  side                  String
+  entry_price           Float
+  stop_loss             Float
+  take_profit           Float
+  size_usd              Float
+  size_qty              Float
+  risk_usd              Float
+  risk_percent          Float
+  expected_rr           Float
+  linked_prediction_id  Int?
+  invalidation_level    Float?
+  method_id             String
+  status                String   @default("pending")
+  created_at            DateTime @default(now())
+  executed_at           DateTime?
+  executed_price        Float?
+  executed_size_qty     Float?
+  executed_size_usd     Float?
+  realized_pnl          Float?
+  realized_pnl_percent  Float?
+  close_reason          String?
+  binance_order_id      String?
+
+  account               TestnetAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@index([symbol, status])
+  @@map("testnet_pending_orders")
+}

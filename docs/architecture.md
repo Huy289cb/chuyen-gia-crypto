@@ -6,13 +6,13 @@ Crypto Trend Analyzer là hệ thống phân tích crypto sử dụng **ICT Smar
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Frontend      │────▶│   Backend API   │────▶│     Cache       │
-│ (Next.js 15)    │     │   (Express)     │     │  (In-Memory)    │
+│   Frontend      │────▶│   Backend API   │────▶│  Neon Postgres  │
+│ (Next.js 15)    │     │   (Express/TS)  │     │   (Prisma ORM)  │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                                │
                                ▼
                         ┌─────────────────┐
-                        │   Scheduler     │
+                        │   Worker Proc   │
                         │  (node-cron)    │
                         │  Multi-Method   │
                         └─────────────────┘
@@ -34,12 +34,19 @@ Crypto Trend Analyzer là hệ thống phân tích crypto sử dụng **ICT Smar
                               └──────────────┬──────────────┘
                                              ▼
                                     ┌─────────────────┐
-                                    │  SQLite DB      │
+                                    │  Neon Postgres  │
                                     │  (OHLCV +       │
                                     │   Predictions)  │
                                     │   Positions)    │
                                     └─────────────────┘
 ```
+
+**Architecture Notes:**
+- Backend rewritten in TypeScript with Prisma ORM
+- Two-process architecture: `crypto-api` (HTTP) + `crypto-worker` (scheduler/sync)
+- Production database: Neon Postgres (managed PostgreSQL)
+- SQLite retained only for migration input during cutover
+- Worker uses PostgreSQL advisory lock for leader election
 
 ## Multi-Method Architecture
 
@@ -155,7 +162,11 @@ The system is designed to support multiple trading methods running in parallel. 
 - **API Calls**: Chỉ gọi backend, không gọi trực tiếp external APIs
 
 ### Backend (Port 3000)
-- **Stack**: Node.js, Express, node-cron, SQLite3
+- **Stack**: Node.js, TypeScript, Express, node-cron, Prisma ORM, Neon Postgres
+- **Architecture**: Two-process split (API + Worker)
+  - `crypto-api`: HTTP API server (serves endpoints)
+  - `crypto-worker`: Background worker (scheduler, price sync, testnet sync)
+  - Worker uses PostgreSQL advisory lock for leader election
 - **APIs**:
   - `GET /api/analysis` - Trả về cached analysis (ICT hoặc Kim Nghia)
   - `GET /api/health` - Health check với cache status
@@ -167,10 +178,13 @@ The system is designed to support multiple trading methods running in parallel. 
   - `GET /api/performance/metrics` - Performance metrics
   - `GET /api/performance/equity-curve` - Equity curve data
   - `GET /api/performance/trades` - Trade history
-- **Schedulers**:
+- **Schedulers** (Worker only):
   - ICT: Chạy mỗi 15 phút (`*/15 * * * *`)
   - Kim Nghia: Chạy mỗi 7.5 phút (`7,22,37,52 * * * *`)
-  - Price Update: Chạy mỗi 10 giây với 1-minute candle data để update PnL và check SL/TP
+  - Price Update: Chạy mỗi 30 giây với 1-minute candle data để update PnL và check SL/TP
+  - Prediction Validation: Hourly (`0 * * * *`)
+  - Account Snapshots: Every 5 minutes (`*/5 * * * *`)
+  - Daily Maintenance: 3 AM daily (`0 3 * * *`)
 - **Groq AI Models**:
   - Primary: meta-llama/llama-4-scout-17b-16e-instruct (most reliable)
   - Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
@@ -252,10 +266,12 @@ The system is designed to support multiple trading methods running in parallel. 
   }
   ```
 
-### Database Layer (SQLite)
-- **Location**: `backend/data/predictions.db`
-- **Source of truth**: This single SQLite file is the runtime database for analysis, paper trading, and testnet tables
-- **Do not infer from filenames**: if another `.db` file exists under `backend/data/`, verify against `backend/src/db/database.js` before using it
+### Database Layer (Neon Postgres + Prisma)
+- **Production Database**: Neon Postgres (managed PostgreSQL)
+- **ORM**: Prisma with schema as source of truth
+- **Schema File**: `prisma/schema.prisma`
+- **Migration**: Fresh deployment uses `prisma db push` or `prisma migrate dev --name init`
+- **SQLite**: Retained only for migration input during cutover (not used in runtime)
 - **Tables**:
   - `analysis_history` - Lịch sử phân tích với bias, action, confidence, method_id
   - `predictions` - Dự báo multi-timeframe với validation tracking (ICT only)
@@ -267,17 +283,25 @@ The system is designed to support multiple trading methods running in parallel. 
   - `positions` - Paper trading positions với PnL tracking
   - `account_snapshots` - Account balance snapshots cho equity curve
   - `trade_events` - Trade events (entry, TP, SL, close)
-- **Data Retention**: 15m candles kept for 30 days (auto-cleanup)
+  - `pending_orders` - Pending orders for paper trading
+  - `testnet_accounts` - Binance testnet accounts
+  - `testnet_positions` - Binance testnet positions
+  - `testnet_trade_events` - Binance testnet trade events
+  - `testnet_account_snapshots` - Binance testnet account snapshots
+  - `testnet_pending_orders` - Binance testnet pending orders
+- **Data Retention**: 15m candles kept for 30 days (auto-cleanup via maintenance job)
 
 ## Scalability Considerations
 
-### Current (MVP)
-- Single process, in-memory cache
-- Đủ cho demo/small usage
-- Dễ extend thêm coins khác
+### Current (Production)
+- Two-process architecture (API + Worker) on 1 vCPU / 1 GB RAM VPS
+- Neon Postgres for database (offloaded from VPS)
+- In-memory cache with TTL
+- Worker leader lock via PostgreSQL advisory lock
+- PM2 for process management with memory caps (API: 300M, Worker: 350M)
+- Nginx reverse proxy in front of API only
 
 ### Future Scaling
-- Replace SQLite với PostgreSQL/MySQL cho multi-server deployments
 - Replace in-memory cache với Redis
 - Add rate limiting per API key
 - Support WebSocket cho real-time updates
@@ -285,3 +309,4 @@ The system is designed to support multiple trading methods running in parallel. 
 - Integrate thêm nguồn dữ liệu (TradingView, etc.)
 - Add authentication và user-specific analysis history
 - Implement prediction accuracy tracking dashboard
+- Horizontal scaling with multiple API instances behind load balancer

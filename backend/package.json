@@ -4,17 +4,30 @@
   "type": "module",
   "scripts": {
     "dev": "node src/index.js",
-    "start": "node src/index.js",
+    "dev:legacy": "node src/index.js",
+    "dev:api": "cross-env API_ONLY=true tsx src/server.ts",
+    "dev:worker": "cross-env WORKER_ONLY=true tsx src/worker.ts",
+    "dev:ts": "tsx src/server.ts",
+    "start": "npm run build && npm run start:api",
+    "start:api": "node dist/server.js",
+    "start:worker": "node dist/worker.js",
+    "build": "tsc",
     "db:init": "node src/db/init.js",
     "setup:data": "node scripts/ensure-data-dir.js",
     "testnet:cleanup": "node scripts/testnet-cleanup.js",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "tsx scripts/migrate-sqlite-to-postgres.ts"
   },
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
+    "cross-env": "^10.1.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
@@ -22,7 +35,15 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/node-cron": "^3.0.11",
     "@vitest/ui": "^4.1.4",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
     "vitest": "^4.1.4"
   }
 }

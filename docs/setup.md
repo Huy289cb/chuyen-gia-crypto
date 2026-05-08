@@ -5,6 +5,7 @@
 - Node.js >= 18
 - npm or yarn
 - Groq API Key (free tier available)
+- Neon Postgres account (for production deployment)
 
 ## Installation
 
@@ -19,6 +20,13 @@ cd backend
 npm install
 ```
 
+**Backend Stack:**
+- Node.js + TypeScript 5.7
+- Express 4.19
+- Prisma ORM 5.22
+- Neon Postgres (production)
+- node-cron 3.0
+
 ### 3. Install Frontend Dependencies (Next.js + TypeScript)
 ```bash
 cd ../frontend
@@ -31,35 +39,67 @@ npm install
 - Tailwind CSS 3.4
 - Lucide React icons
 
-### 4. Initialize Database (Optional - auto-initialized on first run)
+### 4. Set Up Neon Postgres (Production)
+1. Create a Neon account at https://console.neon.tech/
+2. Create a new project
+3. Copy the connection string
+4. Update `backend/.env` with:
+   ```
+   DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+   DIRECT_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+   ```
+
+### 5. Initialize Database Schema
 ```bash
 cd ../backend
-npm run db:init
+npm run prisma:generate
+npm run prisma:migrate  # or npm run prisma:db:push for fresh deployment
 ```
 
-### Database Source Of Truth
-
-- Canonical SQLite database file: `backend/data/predictions.db`
-- Paper trading tables and Binance testnet tables both live in this same file
-- If another `.db` file appears in `backend/data/`, do not assume the app uses it unless `backend/src/db/database.js` or `backend/src/db/testnetDatabase.js` says so
+### 6. (Optional) Migrate SQLite Data
+If you have existing SQLite data to migrate:
+```bash
+npm run prisma:seed
+```
 
 ## Configuration
 
 ### Backend Environment Variables
 
-Create `backend/.env`:
+Create `backend/.env` (see `.env.example` for reference):
 
 ```env
-# Required
-GROQ_API_KEY=gsk_your_groq_api_key_here
-
-# Optional (defaults shown)
+# Application
+NODE_ENV=development
 PORT=3000
-CACHE_TTL_MINUTES=20
-CRON_SCHEDULE=*/15 * * * *
 
-# CORS Configuration (comma-separated origins)
+# Database (Neon Postgres)
+DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+DIRECT_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+
+# Process Configuration
+API_ONLY=false
+WORKER_ONLY=false
+WORKER_LEADER_LOCK_KEY=12345
+
+# Worker Scheduler
+PRICE_UPDATE_INTERVAL_MS=30000
+PREDICTION_VALIDATION_CRON=0 * * * *
+DAILY_MAINTENANCE_CRON=0 3 * * *
+SNAPSHOT_CRON=*/5 * * * *
+
+# Groq API
+GROQ_API_KEY=gsk_your_groq_api_key_here
+GROQ_API_KEY_1=
+GROQ_API_KEY_2=
+
+# CORS
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Binance (Testnet)
+BINANCE_ENABLED=false
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
 ```
 
 **Get Groq API Key:**
@@ -70,28 +110,25 @@ ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 
 ## Running Locally
 
-### Terminal 1 - Start Backend
+### Option 1: Run Both Processes (Development)
 ```bash
 cd backend
-npm run dev
+npm run dev:ts
 ```
 
-Expected output:
-```
-=================================
-  Crypto Trend Analyzer Backend
-=================================
-Server running on http://localhost:3000
-Database: connected
-
-[Scheduler] Starting 15-minute job scheduler...
-[Job 2026-04-05T...] Starting analysis job...
-[PriceFetcher] Fetching prices from CoinGecko...
-[Database] Connected to SQLite database at: .../data/predictions.db
-[Cache] Data cached at ...
+### Option 2: Run API Only
+```bash
+cd backend
+API_ONLY=true npm run dev:ts
 ```
 
-### Terminal 2 - Start Frontend (Next.js)
+### Option 3: Run Worker Only
+```bash
+cd backend
+WORKER_ONLY=true npm run dev:ts
+```
+
+### Start Frontend (Next.js)
 ```bash
 cd frontend
 npm run dev
@@ -110,7 +147,7 @@ Expected output:
 ### Access Application
 Open browser: `http://localhost:3000`
 
-**Note**: Next.js frontend chạy trên port 3000 (cùng port với backend dev proxy). Trong production, frontend build ra static files và có thể deploy riêng.
+**Note**: Next.js frontend runs on port 3000. In development, backend can run on a different port or use the dev proxy. In production, frontend builds static files and can deploy separately.
 
 ## Cron Job Details
 
@@ -156,50 +193,100 @@ Check `tsconfig.json` paths configuration:
 
 ### Backend won't start
 - Check `.env` file exists
+- Verify DATABASE_URL is set (for production)
 - Verify GROQ_API_KEY is set
 - Check port 3000 is available
+
+### Prisma Client Issues
+```bash
+# Regenerate Prisma client
+cd backend
+npm run prisma:generate
+
+# Push schema to database (for fresh deployment)
+npm run prisma:db:push
+
+# Or create migration
+npm run prisma:migrate
+```
 
 ### No data showing
 - Check backend console for errors
 - Verify `/api/analysis` returns data
 - Check browser network tab
+- Verify worker process is running (for scheduler jobs)
 
 ### Cache not updating
-- Check cron job logs
+- Check worker console for scheduler logs
 - Verify Groq API key is valid
 - Check rate limits (Groq free tier: 20 requests/minute)
 
 ### Database errors
-- Ensure `backend/data` directory exists
-- Check file permissions for database directory
-- Run `npm run db:init` to recreate schema if needed
-- Check SQLite is available on the system
+- Verify DATABASE_URL is correct
+- Check Neon Postgres is accessible
+- Run `npm run prisma:generate` to regenerate client
+- Run `npm run prisma:db:push` to sync schema
 
 ## Production Considerations
 
 ### Environment
-- Use strong random PORT if behind reverse proxy
 - Set NODE_ENV=production
-- Use Redis instead of in-memory cache for production
+- Configure DATABASE_URL and DIRECT_URL (Neon Postgres)
+- Set API_ONLY=true for API process, WORKER_ONLY=true for worker process
 - Configure ALLOWED_ORIGINS for production domains
 - Add rate limiting middleware
 
-### Database
-- SQLite suitable for MVP/single-server deployments
-- For multi-server deployments, consider PostgreSQL or MySQL
-- Database file location: `backend/data/predictions.db`
-- This is the runtime source of truth for analysis, paper trading, and testnet tables
-- Data retention: 15m candles kept for 30 days
-- Run `npm run db:init` to initialize/recreate database schema
+### Database (Neon Postgres)
+- Production database: Neon Postgres (managed PostgreSQL)
+- Schema source of truth: `prisma/schema.prisma`
+- Use Prisma migrations for schema changes
+- Data retention: 15m candles kept for 30 days (auto-cleanup)
+- SQLite retained only for migration input
+
+### Process Management (PM2)
+```bash
+# Build TypeScript
+cd backend
+npm run build
+
+# Start API process
+pm2 start ecosystem.config.cjs --only crypto-api
+
+# Start Worker process
+pm2 start ecosystem.config.cjs --only crypto-worker
+
+# Start both
+pm2 start ecosystem.config.cjs
+
+# View logs
+pm2 logs
+
+# Monitor
+pm2 monit
+```
+
+Memory limits (for 1 vCPU / 1 GB RAM VPS):
+- API: 300M max memory
+- Worker: 350M max memory
+
+### Nginx Configuration
+Copy `backend/deploy/nginx.conf` to `/etc/nginx/sites-available/crypto-analyzer`:
+```bash
+sudo cp backend/deploy/nginx.conf /etc/nginx/sites-available/crypto-analyzer
+sudo ln -s /etc/nginx/sites-available/crypto-analyzer /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
 ### Security
 - Never commit .env files
 - Use environment variables for secrets
 - Enable CORS only for trusted origins
 - Add request validation
+- Use HTTPS in production
 
 ### Timezone Configuration
-- **Backend**: Uses UTC timestamps (SQLite `datetime('now')` and `DEFAULT CURRENT_TIMESTAMP`)
+- **Backend**: Uses UTC timestamps (Postgres `DEFAULT NOW()`)
 - **Frontend**: Automatically converts all timestamps to GMT+7 (Asia/Ho_Chi_Minh) for display
 - **Server Timezone**: No specific timezone required (UTC is fine)
 - **Frontend Display**: All timestamps use `toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })` or +7 hours offset for Unix timestamps
@@ -208,13 +295,17 @@ Check `tsconfig.json` paths configuration:
 **VPS Deployment**:
 ```bash
 cd ~/chuyen-gia-crypto
-git pull origin main
+git pull origin develop
 cd backend
-pm2 restart backend
+npm install
+npm run build
+npm run prisma:generate
+npm run prisma:db:push
+pm2 restart all
 ```
-No timezone configuration needed on VPS.
 
 ### Monitoring
-- Add health check endpoints
-- Log rotation for cron jobs
-- Alert on API failures
+- Health check endpoint: `/health`
+- PM2 logs: `pm2 logs crypto-api` and `pm2 logs crypto-worker`
+- PM2 monitoring: `pm2 monit`
+- Log rotation: Configure in PM2 ecosystem file
