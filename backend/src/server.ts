@@ -1,6 +1,9 @@
 import { createApp } from './app';
 import { appConfig, isApiProcess } from './config/app';
 import { validateAppConfig } from './config/app';
+import dotenv from 'dotenv';
+dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
+
 
 /**
  * API Server Entry Point

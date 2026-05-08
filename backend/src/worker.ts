@@ -2,6 +2,8 @@ import { appConfig, isWorkerProcess } from './config/app';
 import { validateAppConfig } from './config/app';
 import { disconnectPrisma } from './lib/prisma';
 import { startWorkerScheduler, stopWorkerScheduler } from './services/worker-scheduler';
+import dotenv from 'dotenv';
+dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
 /**
  * Worker Process Entry Point

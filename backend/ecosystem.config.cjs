@@ -22,6 +22,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M',
       env_file: '.env',
+      cwd: "/home/ubuntu/chuyen-gia-crypto/backend",
       env: {
         NODE_ENV: 'production',
         API_ONLY: 'true',
@@ -45,6 +46,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '350M',
       env_file: '.env',
+      cwd: "/home/ubuntu/chuyen-gia-crypto/backend",
       env: {
         NODE_ENV: 'production',
         API_ONLY: 'false',
