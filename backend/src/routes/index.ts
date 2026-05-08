@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getRecentAnalysis } from '../repositories/analysis.repository';
 import { getLatestPrice } from '../repositories/market.repository';
 import { fetchRealTimePrices } from '../services/price-fetcher';
+import { prisma } from '../lib/prisma';
 
 // Import JavaScript sub-routers
 import accountsRouter from './accounts.js';
@@ -11,54 +12,10 @@ import testnetRouter from './testnet.js';
 
 const router = Router();
 
-// Initialize database connection
-let db: any = null;
-let dbEnabled = false;
-
-// Local database initialization to avoid ES module compatibility issues
-async function initDb() {
-  try {
-    // Check if sqlite3 is available
-    try {
-      await import('sqlite3');
-      console.log('[Routes] sqlite3 module is available');
-    } catch (importError: any) {
-      console.error('[Routes] sqlite3 module not found:', importError.message);
-      console.log('[Routes] Running without database persistence');
-      db = null;
-      dbEnabled = false;
-      return { db, dbEnabled };
-    }
-
-    const { initDatabase } = await import('../db/database.js');
-    const { runMigrations } = await import('../db/migrations.js');
-    db = await initDatabase();
-    await runMigrations(db);
-    dbEnabled = true;
-    console.log('[Routes] Database connected and migrations run');
-  } catch (error: any) {
-    console.error('[Routes] Database initialization failed:', error.message);
-    console.error('[Routes] Error stack:', error.stack);
-    console.log('[Routes] Running without database persistence');
-    db = null;
-    dbEnabled = false;
-  }
-  return { db, dbEnabled };
-}
-
-// Initialize database on startup
-initDb().then(({ db: database, dbEnabled: enabled }: any) => {
-  db = database;
-  dbEnabled = enabled;
-  console.log('[Routes] Database initialized:', dbEnabled ? 'connected' : 'disabled');
-}).catch((err: Error) => {
-  console.error('[Routes] Database initialization failed:', err.message);
-});
-
-// Middleware to inject db into routes for JavaScript sub-routers
+// Middleware to inject Prisma client into routes for JavaScript sub-routers
 router.use((req: any, _res: Response, next: NextFunction) => {
-  req.db = db;
-  req.dbEnabled = dbEnabled;
+  req.prisma = prisma;
+  req.dbEnabled = true; // Prisma is always available
   next();
 });
 
@@ -131,26 +88,29 @@ router.get('/latest-price/:coin', async (req: Request, res: Response) => {
  * GET /api/predictions/:coin - Get prediction history for a coin with pagination
  */
 router.get('/predictions/:coin', async (req: Request, res: Response): Promise<void> => {
-  if (!dbEnabled || !db) {
-    res.status(503).json({
-      success: false,
-      error: 'Database not available',
-      message: 'Please install sqlite3: npm install sqlite3'
-    });
-    return;
-  }
-
   const { coin } = req.params;
   const { limit = 5, page = 1, method } = req.query;
 
   try {
-    const { getRecentAnalysisWithPredictions } = await import('../db/database.js');
-    const methodParam = method ? method as string : undefined;
-    const result = await getRecentAnalysisWithPredictions(db, coin, parseInt(limit as string), methodParam as any, parseInt(page as string));
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const where: any = { coin };
+    if (method) where.method_id = method as string;
+
+    const [predictions, total] = await Promise.all([
+      prisma.prediction.findMany({
+        where,
+        orderBy: { predicted_at: 'desc' },
+        take: parseInt(limit as string),
+        skip,
+        include: { analysis: true }
+      }),
+      prisma.prediction.count({ where })
+    ]);
+
     res.json({
       success: true,
-      data: result.data,
-      pagination: result.pagination,
+      data: predictions,
+      pagination: { total, page: parseInt(page as string), limit: parseInt(limit as string) },
       meta: { coin, limit: parseInt(limit as string), page: parseInt(page as string), method: method || 'ict' }
     });
   } catch (error: any) {
@@ -174,12 +134,12 @@ router.post('/analysis/run', async (_req: Request, res: Response): Promise<void>
     console.log('[Routes] Manual analysis trigger requested');
 
     // Fetch prices
-    const priceData: any = await fetchPrices(db);
+    const priceData: any = await fetchPrices();
 
     // Run analysis (use Kim Nghia method for manual trigger)
     const methodConfig = getMethodConfig('kim_nghia');
     const analyzer: any = createAnalyzer(methodConfig);
-    const analysis = await analyzer.analyze(priceData, db);
+    const analysis = await analyzer.analyze(priceData, prisma);
     
     // Cache results
     const cachedData = {
@@ -189,11 +149,37 @@ router.post('/analysis/run', async (_req: Request, res: Response): Promise<void>
     };
     cache.set(cachedData);
     
-    // Save to database if enabled
-    if (dbEnabled && db) {
-      const { saveAnalysis } = await import('../db/database.js');
-      await saveAnalysis(db, 'BTC', priceData, analysis, 'kim_nghia', analysis.raw_question, analysis.raw_answer);
-      await saveAnalysis(db, 'ETH', priceData, analysis, 'kim_nghia', analysis.raw_question, analysis.raw_answer);
+    // Save to database using Prisma
+    if (analysis) {
+      await prisma.analysisHistory.create({
+        data: {
+          coin: 'BTC',
+          timestamp: new Date(),
+          current_price: priceData.btc?.price || 0,
+          bias: analysis.btc?.bias || 'neutral',
+          action: analysis.btc?.action || 'hold',
+          confidence: analysis.btc?.confidence || 0,
+          narrative: analysis.btc?.narrative,
+          method_id: 'kim_nghia',
+          raw_question: analysis.raw_question,
+          raw_answer: analysis.raw_answer
+        }
+      });
+      
+      await prisma.analysisHistory.create({
+        data: {
+          coin: 'ETH',
+          timestamp: new Date(),
+          current_price: priceData.eth?.price || 0,
+          bias: analysis.eth?.bias || 'neutral',
+          action: analysis.eth?.action || 'hold',
+          confidence: analysis.eth?.confidence || 0,
+          narrative: analysis.eth?.narrative,
+          method_id: 'kim_nghia',
+          raw_question: analysis.raw_question,
+          raw_answer: analysis.raw_answer
+        }
+      });
     }
     
     res.json({
@@ -213,29 +199,23 @@ router.post('/analysis/run', async (_req: Request, res: Response): Promise<void>
  * GET /api/pending-orders - Get all pending orders
  */
 router.get('/pending-orders', async (req: Request, res: Response): Promise<void> => {
-  if (!dbEnabled || !db) {
-    res.status(503).json({
-      success: false,
-      error: 'Database not available'
-    });
-    return;
-  }
-  
   const { symbol, status, method } = req.query;
-  const filters: any = {};
+  const where: any = {};
   
-  if (symbol) filters.symbol = symbol;
-  if (status) filters.status = status;
-  if (method) filters.method_id = method;
+  if (symbol) where.symbol = symbol;
+  if (status) where.status = status;
+  if (method) where.method_id = method;
   
   try {
-    const { getPendingOrders } = await import('../db/database.js');
-    const orders = await getPendingOrders(db, filters);
+    const orders = await prisma.pendingOrder.findMany({
+      where,
+      orderBy: { created_at: 'desc' }
+    });
     
     res.json({
       success: true,
       data: orders,
-      meta: { count: orders.length, filters, method: method || 'ict' }
+      meta: { count: orders.length, filters: { symbol, status, method }, method: method || 'ict' }
     });
   } catch (error: any) {
     res.status(500).json({
@@ -249,20 +229,13 @@ router.get('/pending-orders', async (req: Request, res: Response): Promise<void>
  * GET /api/pending-orders/:id - Get specific pending order
  */
 router.get('/pending-orders/:id', async (req: Request, res: Response): Promise<void> => {
-  if (!dbEnabled || !db) {
-    res.status(503).json({
-      success: false,
-      error: 'Database not available'
-    });
-    return;
-  }
-  
   const { id } = req.params;
+  const orderId = Array.isArray(id) ? id[0] : id;
   
   try {
-    const { getPendingOrders } = await import('../db/database.js');
-    const orders = await getPendingOrders(db, {});
-    const order = orders.find((o: any) => o.id == id);
+    const order = await prisma.pendingOrder.findUnique({
+      where: { id: parseInt(orderId) }
+    });
     
     if (!order) {
       res.status(404).json({
@@ -288,28 +261,30 @@ router.get('/pending-orders/:id', async (req: Request, res: Response): Promise<v
  * POST /api/pending-orders/:id/cancel - Cancel a pending order
  */
 router.post('/pending-orders/:id/cancel', async (req: Request, res: Response): Promise<void> => {
-  if (!dbEnabled || !db) {
-    res.status(503).json({
-      success: false,
-      error: 'Database not available'
-    });
-    return;
-  }
-  
   const { id } = req.params;
+  const orderId = Array.isArray(id) ? id[0] : id;
   const { reason = 'manual' } = req.body;
   
   try {
-    const { cancelPendingOrder } = await import('../db/database.js');
-    const changes = await cancelPendingOrder(db, id, reason);
+    const order = await prisma.pendingOrder.findUnique({
+      where: { id: parseInt(orderId) }
+    });
     
-    if (changes === 0) {
+    if (!order) {
       res.status(404).json({
         success: false,
         error: 'Pending order not found or already executed'
       });
       return;
     }
+
+    await prisma.pendingOrder.update({
+      where: { id: parseInt(orderId) },
+      data: {
+        status: 'cancelled',
+        close_reason: reason
+      }
+    });
     
     res.json({
       success: true,
