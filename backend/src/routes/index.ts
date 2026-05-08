@@ -9,14 +9,42 @@ import positionsRouter from './positions.js';
 import performanceRouter from './performance.js';
 import testnetRouter from './testnet.js';
 
-// Import database initialization from old routes.js
-import { initDb } from '../routes.js';
-
 const router = Router();
 
 // Initialize database connection
 let db: any = null;
 let dbEnabled = false;
+
+// Local database initialization to avoid ES module compatibility issues
+async function initDb() {
+  try {
+    // Check if sqlite3 is available
+    try {
+      await import('sqlite3');
+      console.log('[Routes] sqlite3 module is available');
+    } catch (importError: any) {
+      console.error('[Routes] sqlite3 module not found:', importError.message);
+      console.log('[Routes] Running without database persistence');
+      db = null;
+      dbEnabled = false;
+      return { db, dbEnabled };
+    }
+
+    const { initDatabase } = await import('../db/database.js');
+    const { runMigrations } = await import('../db/migrations.js');
+    db = await initDatabase();
+    await runMigrations(db);
+    dbEnabled = true;
+    console.log('[Routes] Database connected and migrations run');
+  } catch (error: any) {
+    console.error('[Routes] Database initialization failed:', error.message);
+    console.error('[Routes] Error stack:', error.stack);
+    console.log('[Routes] Running without database persistence');
+    db = null;
+    dbEnabled = false;
+  }
+  return { db, dbEnabled };
+}
 
 // Initialize database on startup
 initDb().then(({ db: database, dbEnabled: enabled }: any) => {
