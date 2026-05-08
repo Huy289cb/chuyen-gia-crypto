@@ -20,6 +20,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '300M',
+      env_file: '.env',
       env: {
         NODE_ENV: 'production',
         API_ONLY: 'true',
@@ -40,6 +41,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '350M',
+      env_file: '.env',
       env: {
         NODE_ENV: 'production',
         API_ONLY: 'false',
