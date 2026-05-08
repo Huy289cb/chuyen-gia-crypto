@@ -1,7 +1,6 @@
 {
   "name": "crypto-analyzer-backend",
   "version": "1.2.37",
-  "type": "module",
   "scripts": {
     "dev": "node src/index.js",
     "dev:legacy": "node src/index.js",
