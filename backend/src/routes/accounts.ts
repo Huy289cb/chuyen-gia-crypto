@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { getOrCreateAccount } from '../repositories/paperTrading.repository';
 
 const router = Router();
 
@@ -42,6 +43,46 @@ router.get('/', async (req: Request, res: Response) => {
       success: true,
       data: accounts,
       meta: { count: accounts.length, method: method || null }
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// POST /api/accounts - Create or get account
+router.post('/', async (req: Request, res: Response) => {
+  const prismaClient = req.prisma || prisma;
+
+  if (!prismaClient) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not available'
+    });
+  }
+
+  const { symbol, method = 'ict', starting_balance = 100 } = req.body;
+
+  if (!symbol) {
+    return res.status(400).json({
+      success: false,
+      error: 'Symbol is required'
+    });
+  }
+
+  try {
+    const account = await getOrCreateAccount(
+      String(symbol),
+      String(method),
+      Number(starting_balance)
+    );
+
+    return res.json({
+      success: true,
+      data: account,
+      meta: { method }
     });
   } catch (error: any) {
     return res.status(500).json({
