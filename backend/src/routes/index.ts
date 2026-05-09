@@ -203,20 +203,20 @@ router.get('/predictions/:coin', async (req: Request, res: Response): Promise<vo
     const where: any = { coin };
     if (method) where.method_id = method as string;
 
-    const [predictions, total] = await Promise.all([
-      prisma.prediction.findMany({
+    const [analyses, total] = await Promise.all([
+      prisma.analysisHistory.findMany({
         where,
-        orderBy: { predicted_at: 'desc' },
+        orderBy: { timestamp: 'desc' },
         take: parseInt(limit as string),
         skip,
-        include: { analysis: true }
+        include: { predictions: true, key_levels: true }
       }),
-      prisma.prediction.count({ where })
+      prisma.analysisHistory.count({ where })
     ]);
 
     res.json({
       success: true,
-      data: predictions,
+      data: analyses,
       pagination: { total, page: parseInt(page as string), limit: parseInt(limit as string) },
       meta: { coin, limit: parseInt(limit as string), page: parseInt(page as string), method: method || 'ict' }
     });

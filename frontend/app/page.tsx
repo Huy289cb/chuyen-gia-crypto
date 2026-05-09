@@ -8,6 +8,7 @@ import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
 import { HeroSection } from './sections/HeroSection';
 import { TestnetPanel } from './components/crypto/TestnetPanel';
+import { PredictionsSection } from './sections/PredictionsSection';
 import { useTrends } from './hooks/useTrends';
 import { Loader2, AlertCircle } from 'lucide-react';
 
@@ -110,6 +111,9 @@ function HomeContent() {
           method="kim_nghia"
         />
 
+
+        {/* Predictions Timeline */}
+        <PredictionsSection symbol="BTC" method="kim_nghia" />
 
         {/* Testnet Panel */}
         <TestnetPanel />

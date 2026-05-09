@@ -273,6 +273,9 @@ router.get('/sync/:accountId', async (req: Request, res: Response) => {
         current_balance: walletBalance,
         equity,
         unrealized_pnl: unrealizedPnl,
+        // Fix: On first sync (no trades yet), set starting_balance to actual Binance balance
+        // so Total Return calculates correctly instead of using default 100
+        ...(account.total_trades === 0 && { starting_balance: walletBalance }),
         updated_at: new Date(),
       },
     });
