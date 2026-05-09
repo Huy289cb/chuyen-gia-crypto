@@ -1,0 +1,29 @@
+services:
+  # API Server
+  - type: web
+    name: crypto-analyzer-api
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_ONLY
+        value: true
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
+    
+  # Background Worker (optional - for scheduler)
+  - type: worker
+    name: crypto-analyzer-worker
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_ONLY
+        value: true
