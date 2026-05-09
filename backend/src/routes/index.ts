@@ -238,10 +238,23 @@ router.post('/analysis/run', async (_req: Request, res: Response): Promise<void>
     const { createAnalyzer } = await import('../analyzers/analyzerFactory.js');
     const { getMethodConfig } = await import('../config/methods.js');
     const { cache } = await import('../cache.js');
+    const { fetchHistoricalCandles } = await import('../services/price-fetcher.js');
 
     console.log('[Routes] Manual analysis trigger requested');
 
     const priceData: any = await fetchRealTimePrices();
+
+    // Fetch historical OHLCV data for analyzer context
+    const btcCandles = await fetchHistoricalCandles('BTC', '1d', 24);
+    const ethCandles = await fetchHistoricalCandles('ETH', '1d', 24);
+
+    // Add historical prices to priceData
+    if (btcCandles && btcCandles.length > 0) {
+      priceData.btc.prices1d = btcCandles.map((k: any[]) => parseFloat(k[4])); // Close prices
+    }
+    if (ethCandles && ethCandles.length > 0) {
+      priceData.eth.prices1d = ethCandles.map((k: any[]) => parseFloat(k[4])); // Close prices
+    }
 
     const methodConfig = getMethodConfig('kim_nghia');
     const analyzer: any = createAnalyzer(methodConfig);
