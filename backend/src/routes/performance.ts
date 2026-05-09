@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { getOrCreateAccount } from '../repositories/paperTrading.repository';
 
 const router = Router();
 
@@ -17,27 +18,14 @@ function toPositiveInt(value: any, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function resolveAccount(prismaClient: typeof prisma, symbol: string, method?: string) {
+async function resolveAccount(_prismaClient: typeof prisma, symbol: string, method?: string) {
   if (!symbol) {
     return null;
   }
 
   const normalizedSymbol = String(symbol).toUpperCase();
-  if (method) {
-    return prismaClient.account.findUnique({
-      where: {
-        symbol_method_id: {
-          symbol: normalizedSymbol,
-          method_id: String(method),
-        },
-      },
-    });
-  }
-
-  return prismaClient.account.findFirst({
-    where: { symbol: normalizedSymbol },
-    orderBy: { created_at: 'desc' },
-  });
+  const methodId = method ? String(method) : 'ict';
+  return getOrCreateAccount(normalizedSymbol, methodId, 100);
 }
 
 async function buildPerformanceMetrics(prismaClient: typeof prisma, account: any) {

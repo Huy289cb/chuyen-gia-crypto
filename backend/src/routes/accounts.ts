@@ -107,28 +107,17 @@ router.get('/:symbol', async (req: Request, res: Response) => {
   const { method } = req.query;
 
   try {
-    let account;
-    if (method) {
-      account = await prismaClient.account.findUnique({
-        where: { symbol_method_id: { symbol: String(symbol).toUpperCase(), method_id: String(method) } }
-      });
-    } else {
-      account = await prismaClient.account.findFirst({
-        where: { symbol: String(symbol).toUpperCase() }
-      });
-    }
-    
-    if (!account) {
-      return res.status(404).json({
-        success: false,
-        error: 'Account not found'
-      });
-    }
-    
+    const methodId = method ? String(method) : 'ict';
+    const account = await getOrCreateAccount(
+      String(symbol).toUpperCase(),
+      methodId,
+      100
+    );
+
     return res.json({
       success: true,
       data: account,
-      meta: { method: method || null }
+      meta: { method: methodId }
     });
   } catch (error: any) {
     return res.status(500).json({
