@@ -19,9 +19,7 @@ const nextConfig = {
         source: '/api/:path*',
         destination: process.env.NODE_ENV === 'development' 
           ? 'http://localhost:3000/api/:path*'
-          : process.env.API_URL 
-            ? `${process.env.API_URL}/api/:path*`
-            : 'https://chuyen-gia-crypto-backend.onrender.com/api/:path*',
+          : '/api/:path*',
       },
     ];
   },
