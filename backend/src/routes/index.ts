@@ -130,6 +130,59 @@ router.get('/analysis', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/ohlc/:coin - Get OHLC candle data for charts
+ */
+router.get('/ohlc/:coin', async (req: Request, res: Response) => {
+  try {
+    const coin = String(req.params.coin);
+    const { timeframe = '15m', limit = 100 } = req.query;
+
+    const coinMap: Record<string, string> = {
+      bitcoin: 'BTC',
+      btc: 'BTC',
+      ethereum: 'ETH',
+      eth: 'ETH',
+    };
+    const coinId = coinMap[coin.toLowerCase()] || coin.toUpperCase();
+
+    const hoursBack =
+      timeframe === '1d' ? 720 : timeframe === '4h' ? 168 : 48;
+
+    const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+
+    const rawCandles = await prisma.ohlcvCandle.findMany({
+      where: {
+        coin: coinId,
+        timeframe: '15m',
+        timestamp: { gte: cutoff },
+      },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    const formatted = rawCandles.map((c) => ({
+      time: Math.floor(c.timestamp.getTime() / 1000),
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+    }));
+
+    const take = parseInt(String(limit), 10) || 100;
+    const limited = formatted.slice(-take);
+
+    res.json({
+      success: true,
+      data: limited,
+      meta: { coin: coinId, timeframe, limit: take, count: limited.length },
+    });
+  } catch (error: any) {
+    console.error('[Routes] Error fetching OHLC:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch OHLC data' });
+  }
+});
+
+/**
  * GET /api/latest-price/:coin - Get latest price for a specific coin
  */
 router.get('/latest-price/:coin', async (req: Request, res: Response) => {
