@@ -4,15 +4,15 @@ import { getLatestPrice } from '../repositories/market.repository';
 import { fetchRealTimePrices } from '../services/price-fetcher';
 import { prisma } from '../lib/prisma';
 
-// Import JavaScript sub-routers
-import accountsRouter from './accounts.js';
-import positionsRouter from './positions.js';
-import performanceRouter from './performance.js';
-import testnetRouter from './testnet.js';
+// Import TypeScript sub-routers
+import accountsRouter from './accounts';
+import positionsRouter from './positions';
+import performanceRouter from './performance';
+import testnetRouter from './testnet';
 
 const router = Router();
 
-// Middleware to inject Prisma client into routes for JavaScript sub-routers
+// Middleware to inject Prisma client into routes
 router.use((req: any, _res: Response, next: NextFunction) => {
   req.prisma = prisma;
   req.dbEnabled = true; // Prisma is always available
@@ -126,20 +126,17 @@ router.get('/predictions/:coin', async (req: Request, res: Response): Promise<vo
  */
 router.post('/analysis/run', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { fetchPrices } = await import('../price-fetcher.js');
     const { createAnalyzer } = await import('../analyzers/analyzerFactory.js');
     const { getMethodConfig } = await import('../config/methods.js');
     const { cache } = await import('../cache.js');
 
     console.log('[Routes] Manual analysis trigger requested');
 
-    // Fetch prices
-    const priceData: any = await fetchPrices();
+    const priceData: any = await fetchRealTimePrices();
 
-    // Run analysis (use Kim Nghia method for manual trigger)
     const methodConfig = getMethodConfig('kim_nghia');
     const analyzer: any = createAnalyzer(methodConfig);
-    const analysis = await analyzer.analyze(priceData, prisma);
+    const analysis = await analyzer.analyze(priceData, true);
     
     // Cache results
     const cachedData = {
