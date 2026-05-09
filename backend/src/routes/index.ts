@@ -153,7 +153,7 @@ router.get('/ohlc/:coin', async (req: Request, res: Response) => {
     const rawCandles = await prisma.ohlcvCandle.findMany({
       where: {
         coin: coinId,
-        timeframe: '15m',
+        timeframe: String(timeframe),
         timestamp: { gte: cutoff },
       },
       orderBy: { timestamp: 'asc' },
