@@ -311,6 +311,7 @@ export async function getTestnetPositions(filters: {
   symbol?: string;
   status?: string;
   positionId?: string;
+  methodId?: string;
   limit?: number;
 }): Promise<any[]> {
   const where: any = {};
@@ -319,6 +320,7 @@ export async function getTestnetPositions(filters: {
   if (filters.symbol) where.symbol = filters.symbol.toUpperCase();
   if (filters.status) where.status = filters.status;
   if (filters.positionId) where.position_id = filters.positionId;
+  if (filters.methodId) where.account = { method_id: filters.methodId };
 
   return prisma.testnetPosition.findMany({
     where,

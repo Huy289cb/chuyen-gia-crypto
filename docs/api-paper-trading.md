@@ -1,3 +1,11 @@
+# DEPRECATED - Paper Trading API
+
+**This document is deprecated.** Paper trading API endpoints have been removed.
+
+See `docs/binance-testnet-integration.md` for the current testnet API documentation.
+
+---
+
 # Paper Trading API Specification
 
 ## Base URL

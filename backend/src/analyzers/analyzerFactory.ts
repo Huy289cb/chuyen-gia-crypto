@@ -229,7 +229,7 @@ export async function buildUserPrompt(priceData: PriceData, db: any, methodId: s
   if (db) {
     try {
       const { getRecentAnalysis } = await import('../repositories/analysis.repository');
-      const { getPositions, getPendingOrders } = await import('../repositories/paperTrading.repository');
+      const { getTestnetPositions, getTestnetPendingOrders } = await import('../repositories/testnet.repository');
       
       // Get predictions from last 24 hours, filtered by method_id (BTC only)
       const btcHistoryResult = await getRecentAnalysis('BTC', 20, methodId);
@@ -281,7 +281,7 @@ export async function buildUserPrompt(priceData: PriceData, db: any, methodId: s
       
       // Fetch open positions for AI decision making, filtered by method_id (BTC only)
       try {
-        const btcOpenPositions = await getPositions({ symbol: 'BTC', status: 'open', methodId });
+        const btcOpenPositions = await getTestnetPositions({ symbol: 'BTC', status: 'open', methodId });
         
         const formatOpenPositions = (positions: any[], coinName: string): string => {
           if (!positions || positions.length === 0) return '';
@@ -319,7 +319,7 @@ export async function buildUserPrompt(priceData: PriceData, db: any, methodId: s
       
       // Fetch pending orders for AI decision making, filtered by method_id (BTC only)
       try {
-        const btcPendingOrders = await getPendingOrders({ symbol: 'BTC', status: 'pending', methodId });
+        const btcPendingOrders = await getTestnetPendingOrders({ symbol: 'BTC', status: 'pending', methodId });
         
         const formatPendingOrders = (orders: any[], coinName: string): string => {
           if (!orders || orders.length === 0) return '';
@@ -432,8 +432,8 @@ async function formatAnalysisResponse(rawResponse: any, priceData: PriceData, me
   let openPositions: any[] = [];
   if (db) {
     try {
-      const { getPositions } = await import('../repositories/paperTrading.repository');
-      const btcOpenPositions = await getPositions({ symbol: 'BTC', status: 'open', methodId });
+      const { getTestnetPositions } = await import('../repositories/testnet.repository');
+      const btcOpenPositions = await getTestnetPositions({ symbol: 'BTC', status: 'open', methodId });
       openPositions = btcOpenPositions || [];
       console.log(`[AnalyzerFactory] Fetched ${openPositions.length} open positions for bias validation`);
     } catch (error: any) {

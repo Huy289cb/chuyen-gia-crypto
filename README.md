@@ -58,23 +58,14 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - See `docs/ai-position-management.md` for detailed documentation
 
-### Binance Futures Integration (New - REST API)
-- **Real Trading**: Execute actual trades on Binance Futures (Demo + Mainnet support)
-- **Official REST API**: No SDK dependency, uses official Binance REST API directly
-- **Parallel with Paper Trading**: Compare performance between paper trading and real execution
-- **BTC-Only**: Currently supports BTCUSDT trading with Kim Nghia method
-- **Auto-Entry**: Automatic position opening based on Kim Nghia analysis (75% confidence threshold, R:R >= 2.5)
-- **Risk Management**: 10% risk per trade, SL/TP orders placed immediately, leverage support (default 20x)
-- **Conditional Orders**: Hedge-mode SL/TP uses the standard Binance Futures `POST /fapi/v1/order` endpoint with `STOP_MARKET` and `TAKE_PROFIT_MARKET`
-- **Account Sync**: Auto-sync with Binance every 5 minutes, manual sync available via API, wallet balance used as the source of truth for realized balance
-- **Position Management**: Open/close positions, update SL, partial TP support
-- **Recovery Logic**: If market entry succeeds but SL/TP placement fails, system immediately places a recovery close to avoid orphan Binance positions
-- **Trade Events**: Complete audit trail of all trading actions
-- **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown
-- **API Endpoints**: Full REST API for accounts, positions, performance metrics
-- **Cleanup Tools**: Manual cleanup route and CLI script to cancel orphan open orders, close orphan Binance positions, and resync snapshots
-- **Environment Switch**: Switch between Demo and Mainnet by changing `BINANCE_BASE_URL`
-- See `docs/binance-testnet-integration.md` for detailed documentation
+### AI Position Management
+- **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
+- **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
+- **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
+- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 75% (Kim Nghia)
+- **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
+- **Testnet Integration**: AI decisions are executed on Binance Testnet positions and orders
+- See `docs/ai-position-management.md` for detailed documentation
 
 ### Price Data & AI Models
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn

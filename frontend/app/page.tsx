@@ -7,16 +7,8 @@ import { cn } from '@/lib/utils';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
 import { HeroSection } from './sections/HeroSection';
-import { TradingDashboard } from './sections/TradingDashboard';
-import { PositionsSection } from './sections/PositionsSection';
-import { HistorySection } from './sections/HistorySection';
-import { PendingOrdersSection } from './sections/PendingOrdersSection';
-import { PredictionsSection } from './sections/PredictionsSection';
-import { PerformanceSection } from './sections/PerformanceSection';
 import { TestnetPanel } from './components/crypto/TestnetPanel';
-import { ComparisonDashboard } from './components/crypto/ComparisonDashboard';
 import { useTrends } from './hooks/useTrends';
-import { usePaperTrading } from './hooks/usePaperTrading';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 export default function Home() {
@@ -29,10 +21,7 @@ export default function Home() {
 
 function HomeContent() {
   const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends('kim_nghia');
-  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition, refresh: refreshPaperTrading } = usePaperTrading('kim_nghia');
-  const [activeTab, setActiveTab] = useState<'paper' | 'testnet' | 'comparison'>('paper');
   const [isTriggering, setIsTriggering] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const prices = data?.prices;
   const analysis = data?.analysis;
@@ -41,8 +30,6 @@ function HomeContent() {
 
   const handleRefresh = () => {
     refetch();
-    refreshPaperTrading();
-    setRefreshKey(prev => prev + 1);
   };
 
   const handleTriggerAnalysis = async () => {
@@ -123,98 +110,9 @@ function HomeContent() {
           method="kim_nghia"
         />
 
-        {/* Trading System Tabs */}
-        <div className="mb-6">
-          <div className="flex gap-2 border-b border-surface-2 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setActiveTab('paper')}
-              className={cn(
-                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
-                activeTab === 'paper'
-                  ? 'text-accent-primary border-b-2 border-accent-primary'
-                  : 'text-foreground-secondary hover:text-foreground'
-              )}
-            >
-              Paper Trading
-            </button>
-            <button
-              onClick={() => setActiveTab('testnet')}
-              className={cn(
-                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
-                activeTab === 'testnet'
-                  ? 'text-accent-primary border-b-2 border-accent-primary'
-                  : 'text-foreground-secondary hover:text-foreground'
-              )}
-            >
-              Binance Testnet
-            </button>
-            <button
-              onClick={() => setActiveTab('comparison')}
-              className={cn(
-                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
-                activeTab === 'comparison'
-                  ? 'text-accent-primary border-b-2 border-accent-primary'
-                  : 'text-foreground-secondary hover:text-foreground'
-              )}
-            >
-              Comparison
-            </button>
-          </div>
-        </div>
-
-        {/* Paper Trading Dashboard */}
-        {activeTab === 'paper' && (
-          <TradingDashboard
-            accounts={accounts}
-            loading={ptLoading}
-            onReset={resetAccount}
-            method="kim_nghia"
-          />
-        )}
 
         {/* Testnet Panel */}
-        {activeTab === 'testnet' && <TestnetPanel />}
-
-        {/* Comparison Dashboard */}
-        {activeTab === 'comparison' && <ComparisonDashboard />}
-
-        {/* Open Positions - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <PositionsSection
-            positions={positions}
-            onClosePosition={closePosition}
-          />
-        )}
-
-        {/* Pending Orders - Only show on paper trading tab */}
-        {activeTab === 'paper' && <PendingOrdersSection method="kim_nghia" refreshKey={refreshKey} />}
-
-        {/* Trade History - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <HistorySection
-            symbol="BTC"
-            method="kim_nghia"
-            refreshKey={refreshKey}
-          />
-        )}
-
-        {/* Prediction Timeline - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <PredictionsSection
-            symbol="BTC"
-            method="kim_nghia"
-            refreshKey={refreshKey}
-          />
-        )}
-
-        {/* Performance Charts & Metrics - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <PerformanceSection
-            symbol="BTC"
-            method="kim_nghia"
-            refreshKey={refreshKey}
-          />
-        )}
+        <TestnetPanel />
       </main>
 
       <Footer />

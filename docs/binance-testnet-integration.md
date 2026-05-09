@@ -7,7 +7,7 @@ This project integrates Binance USD-M Futures using the official REST API, with 
 - Demo trading via `https://demo-fapi.binance.com`
 - Mainnet via `https://fapi.binance.com`
 - BTC-only execution for the active Kim Nghia method
-- Running in parallel with paper trading for comparison
+- Primary trading system (paper trading deprecated)
 
 The implementation does not use a Binance SDK. All requests go through the local REST modules in `backend/src/services/binance/`.
 

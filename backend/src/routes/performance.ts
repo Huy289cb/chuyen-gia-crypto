@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { getOrCreateAccount } from '../repositories/paperTrading.repository';
+import { getOrCreateTestnetAccount } from '../repositories/testnet.repository';
 
 const router = Router();
 
@@ -25,11 +25,11 @@ async function resolveAccount(_prismaClient: typeof prisma, symbol: string, meth
 
   const normalizedSymbol = String(symbol).toUpperCase();
   const methodId = method ? String(method) : 'ict';
-  return getOrCreateAccount(normalizedSymbol, methodId, 100);
+  return getOrCreateTestnetAccount(normalizedSymbol, methodId, 100);
 }
 
 async function buildPerformanceMetrics(prismaClient: typeof prisma, account: any) {
-  const closedPositions = await prismaClient.position.findMany({
+  const closedPositions = await prismaClient.testnetPosition.findMany({
     where: {
       account_id: account.id,
       close_time: { not: null },

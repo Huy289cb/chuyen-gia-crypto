@@ -95,7 +95,7 @@ Close_early is only allowed when:
 **Important**: When `close_early` is executed with negative PnL, it is counted as a losing trade. This means:
 - The `consecutive_losses` counter is incremented
 - After 3 consecutive losses (including close_early losses), a 4-hour cooldown is triggered
-- This applies to both paper trading and testnet systems
+- This applies to the testnet system
 - The cooldown prevents new auto-entries to protect the account from further losses
 
 ### Universal Loss Tracking

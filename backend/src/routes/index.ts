@@ -4,8 +4,6 @@ import { fetchRealTimePrices } from '../services/price-fetcher';
 import { prisma } from '../lib/prisma';
 
 // Import TypeScript sub-routers
-import accountsRouter from './accounts';
-import positionsRouter from './positions';
 import performanceRouter from './performance';
 import testnetRouter from './testnet';
 
@@ -420,18 +418,6 @@ router.post('/pending-orders/:id/cancel', async (req: Request, res: Response): P
 // ============================================================================
 // Mount Sub-routers (JavaScript modules)
 // ============================================================================
-
-/**
- * Mount accounts router
- * Endpoints: GET /api/accounts, GET /api/accounts/:symbol, POST /api/accounts/reset/:symbol
- */
-router.use('/accounts', accountsRouter);
-
-/**
- * Mount positions router
- * Endpoints: GET /api/positions, GET /api/positions/:id, POST /api/positions/open, POST /api/positions/close/:id
- */
-router.use('/positions', positionsRouter);
 
 /**
  * Mount performance router

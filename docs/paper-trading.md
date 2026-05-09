@@ -1,3 +1,11 @@
+# DEPRECATED - Paper Trading System
+
+**This document is deprecated.** Paper trading has been removed from the system. All trading now uses Binance Futures Testnet.
+
+See `docs/binance-testnet-integration.md` for the current trading system documentation.
+
+---
+
 # Paper Trading System
 
 ## Overview

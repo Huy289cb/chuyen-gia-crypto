@@ -7,7 +7,6 @@ import {
   saveOhlcvCandle,
   savePriceHistory,
 } from '../repositories/market.repository';
-import { syncPaperTradingForSymbol } from './paper-trading-sync';
 import { createTradingSnapshots, runDataRetention } from './runtime-maintenance';
 import { syncTestnetForSymbol } from './testnet-sync';
 import { fetchRealTimePrices } from './price-fetcher';
@@ -66,9 +65,6 @@ async function runPriceSyncJob() {
       });
 
       const candle = symbolToCandle[item.coin as keyof typeof symbolToCandle];
-      if (workerConfig.enablePaperTradingSync && candle) {
-        await syncPaperTradingForSymbol(item.coin, candle);
-      }
       if (workerConfig.enableTestnetSync && process.env.BINANCE_ENABLED === 'true' && candle) {
         await syncTestnetForSymbol(item.coin, candle);
       }
@@ -143,7 +139,7 @@ export async function startWorkerScheduler(): Promise<void> {
   cronTasks.push(maintenanceTask);
 
   console.log(
-    `[WorkerScheduler] Started. symbols=${workerConfig.syncSymbols.join(',')} timeframe=${workerConfig.ohlcvTimeframe} paperTradingSync=${workerConfig.enablePaperTradingSync} testnetSync=${workerConfig.enableTestnetSync} priceInterval=${appConfig.priceUpdateIntervalMs}ms validationCron="${appConfig.predictionValidationCron}" snapshotCron="${appConfig.snapshotCron}" maintenanceCron="${appConfig.dailyMaintenanceCron}"`
+    `[WorkerScheduler] Started. symbols=${workerConfig.syncSymbols.join(',')} timeframe=${workerConfig.ohlcvTimeframe} testnetSync=${workerConfig.enableTestnetSync} priceInterval=${appConfig.priceUpdateIntervalMs}ms validationCron="${appConfig.predictionValidationCron}" snapshotCron="${appConfig.snapshotCron}" maintenanceCron="${appConfig.dailyMaintenanceCron}"`
   );
 }
 

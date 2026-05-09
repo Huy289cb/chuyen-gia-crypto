@@ -144,6 +144,7 @@ model PriceHistory {
 // PAPER TRADING
 // ============================================
 
+// DEPRECATED: Paper trading account model. Use TestnetAccount instead.
 model Account {
   id                   Int       @id @default(autoincrement())
   symbol               String
@@ -415,5 +416,7 @@ model TestnetPendingOrder {
 
   @@index([account_id])
   @@index([symbol, status])
+  @@map("testnet_pending_orders")
+}
   @@map("testnet_pending_orders")
 }

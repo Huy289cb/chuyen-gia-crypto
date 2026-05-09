@@ -1,7 +1,6 @@
 export interface WorkerConfig {
   syncSymbols: string[];
   ohlcvTimeframe: string;
-  enablePaperTradingSync: boolean;
   enableTestnetSync: boolean;
 }
 
@@ -18,7 +17,6 @@ export const workerConfig: WorkerConfig = {
   // Reuse ENABLED_SYMBOLS so API/worker stay aligned by default.
   syncSymbols: parseSymbols(process.env.ENABLED_SYMBOLS),
   ohlcvTimeframe: process.env.WORKER_OHLCV_TIMEFRAME || '1m',
-  enablePaperTradingSync: process.env.WORKER_ENABLE_PAPER_TRADING_SYNC !== 'false',
   enableTestnetSync: process.env.WORKER_ENABLE_TESTNET_SYNC !== 'false',
 };
 

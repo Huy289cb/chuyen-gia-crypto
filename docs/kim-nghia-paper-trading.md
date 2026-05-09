@@ -1,3 +1,11 @@
+# DEPRECATED - Kim Nghia Paper Trading
+
+**This document is deprecated.** Paper trading has been removed from the system.
+
+See `docs/binance-testnet-integration.md` for the current trading system documentation.
+
+---
+
 # Paper Trading System — Method 2 (kim-nghia-paper-trading) (SMC + Volume + Fibonacci)
 
 ## Overview
