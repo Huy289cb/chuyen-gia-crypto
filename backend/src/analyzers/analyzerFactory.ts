@@ -65,7 +65,13 @@ export function createAnalyzer(methodConfig: MethodConfig): Analyzer {
      * @returns {Promise<Object>} Analysis result
      */
     analyze: async (priceData: PriceData, db: any = null): Promise<AnalysisResult> => {
-      const client = createGroqClient(process.env.GROQ_API_KEY);
+      // Get API keys from environment (GROQ_API_KEY_1, GROQ_API_KEY_2, GROQ_API_KEY)
+      const apiKeys: string[] = [];
+      if (process.env.GROQ_API_KEY_1) apiKeys.push(process.env.GROQ_API_KEY_1);
+      if (process.env.GROQ_API_KEY_2) apiKeys.push(process.env.GROQ_API_KEY_2);
+      if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key_here') apiKeys.push(process.env.GROQ_API_KEY);
+      
+      const client = createGroqClient(apiKeys.length > 0 ? apiKeys : undefined);
 
       // If no Groq API key, return error immediately
       if (!client) {
