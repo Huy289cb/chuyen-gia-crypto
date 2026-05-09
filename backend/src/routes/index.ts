@@ -1,5 +1,4 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { getRecentAnalysis } from '../repositories/analysis.repository';
 import { getLatestPrice } from '../repositories/market.repository';
 import { fetchRealTimePrices } from '../services/price-fetcher';
 import { prisma } from '../lib/prisma';
@@ -44,19 +43,89 @@ router.get('/prices', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /api/analysis - Get recent analysis
+ * GET /api/analysis - Get latest market data and analysis
  */
 router.get('/analysis', async (req: Request, res: Response) => {
   try {
-    const coin = (req.query.coin as string) || 'BTC';
-    const limit = parseInt(req.query.limit as string) || 10;
-    const methodId = req.query.methodId as string;
+    const methodId = req.query.methodId as string || 'kim_nghia';
 
-    const result = await getRecentAnalysis(coin, limit, methodId);
+    // Fetch real-time prices
+    const prices = await fetchRealTimePrices();
+
+    // Get latest analysis for BTC and ETH
+    const [btcAnalysis, ethAnalysis] = await Promise.all([
+      prisma.analysisHistory.findFirst({
+        where: { coin: 'BTC', method_id: methodId },
+        orderBy: { timestamp: 'desc' },
+        include: { predictions: true, key_levels: true },
+      }),
+      prisma.analysisHistory.findFirst({
+        where: { coin: 'ETH', method_id: methodId },
+        orderBy: { timestamp: 'desc' },
+        include: { predictions: true, key_levels: true },
+      }),
+    ]);
+
+    // Helper to map DB analysisHistory to frontend Analysis format
+    const mapAnalysis = (record: any) => {
+      if (!record) return null;
+      const predictions: Record<string, any> = {};
+      if (record.predictions) {
+        for (const p of record.predictions) {
+          predictions[p.timeframe] = {
+            timeframe: p.timeframe,
+            direction: p.direction,
+            confidence: p.confidence,
+            target: p.target_price,
+            price_target: p.target_price,
+            invalidation_price: record.invalidation_level,
+            reasoning: p.reason_summary,
+          };
+        }
+      }
+      const keyLevels: Record<string, string> = {};
+      if (record.key_levels) {
+        for (const k of record.key_levels) {
+          keyLevels[k.level_type] = k.description || '';
+        }
+      }
+      return {
+        action: record.action,
+        bias: record.bias,
+        confidence: record.confidence,
+        narrative: record.narrative,
+        disclaimer: record.disclaimer,
+        suggested_entry: record.suggested_entry,
+        stop_loss: record.suggested_stop_loss,
+        take_profit: record.suggested_take_profit,
+        expected_rr: record.expected_rr,
+        invalidation_level: record.invalidation_level,
+        predictions,
+        key_levels: keyLevels,
+      };
+    };
+
+    const result = {
+      success: true,
+      data: {
+        prices: {
+          btc: prices.btc,
+          eth: prices.eth,
+          marketData: prices,
+          timestamp: prices.timestamp,
+        },
+        analysis: {
+          btc: mapAnalysis(btcAnalysis),
+          eth: mapAnalysis(ethAnalysis),
+        },
+        lastUpdated: prices.timestamp,
+      },
+    };
+
     res.json(result);
   } catch (error: any) {
     console.error('[Routes] Error fetching analysis:', error.message);
-    res.status(500).json({ error: 'Failed to fetch analysis' });
+    res.status(500).json({ success: false, message: 'Failed to fetch analysis' });
   }
 });
 
