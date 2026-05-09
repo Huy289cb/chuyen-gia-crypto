@@ -126,6 +126,42 @@ export async function fetchPricesFromDb(coin: string = 'BTC'): Promise<CandleDat
 }
 
 /**
+ * Fetch historical OHLCV candles from Binance API
+ */
+export async function fetchHistoricalCandles(symbol: string, interval: string = '15m', limit: number = 100): Promise<any[]> {
+  const maxRetries = 3;
+  const retryDelay = 1000;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(
+        `${BINANCE_API}/klines?symbol=${symbol}USDT&interval=${interval}&limit=${limit}`,
+        {},
+        10000
+      );
+
+      if (!response.ok) {
+        throw new Error(`Binance klines error: ${response.status}`);
+      }
+
+      const klines = await response.json() as any[][];
+      return klines;
+    } catch (error: any) {
+      console.error(`[PriceFetcher] Historical candles fetch failed (attempt ${attempt}/${maxRetries}):`, error.message);
+
+      if (attempt < maxRetries) {
+        await delay(retryDelay);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error('Failed to fetch historical candles after all retries');
+}
+
+/**
  * Fetch prices with fallback chain: Binance -> Database -> CoinGecko
  */
 export async function fetchPrices(coin: string = 'BTC'): Promise<CandleData> {

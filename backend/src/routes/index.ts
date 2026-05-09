@@ -145,36 +145,23 @@ router.get('/ohlc/:coin', async (req: Request, res: Response) => {
     };
     const coinId = coinMap[coin.toLowerCase()] || coin.toUpperCase();
 
-    const hoursBack =
-      timeframe === '1d' ? 720 : timeframe === '4h' ? 168 : 48;
+    // Fetch directly from Binance API
+    const { fetchHistoricalCandles } = await import('../services/price-fetcher');
+    const rawCandles = await fetchHistoricalCandles(coinId, String(timeframe), parseInt(String(limit), 10));
 
-    const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-
-    const rawCandles = await prisma.ohlcvCandle.findMany({
-      where: {
-        coin: coinId,
-        timeframe: String(timeframe),
-        timestamp: { gte: cutoff },
-      },
-      orderBy: { timestamp: 'asc' },
-    });
-
-    const formatted = rawCandles.map((c) => ({
-      time: Math.floor(c.timestamp.getTime() / 1000),
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-      volume: c.volume,
+    const formatted = rawCandles.map((kline: any[]) => ({
+      time: Math.floor(kline[0] / 1000),
+      open: parseFloat(kline[1]),
+      high: parseFloat(kline[2]),
+      low: parseFloat(kline[3]),
+      close: parseFloat(kline[4]),
+      volume: parseFloat(kline[5]),
     }));
-
-    const take = parseInt(String(limit), 10) || 100;
-    const limited = formatted.slice(-take);
 
     res.json({
       success: true,
-      data: limited,
-      meta: { coin: coinId, timeframe, limit: take, count: limited.length },
+      data: formatted,
+      meta: { coin: coinId, timeframe, limit: parseInt(String(limit), 10), count: formatted.length },
     });
   } catch (error: any) {
     console.error('[Routes] Error fetching OHLC:', error.message);
