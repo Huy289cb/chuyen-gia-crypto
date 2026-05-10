@@ -1,61 +1,56 @@
 /**
  * PM2 Ecosystem Configuration
- * 
- * This file defines the two-process architecture for production:
- * - crypto-api: HTTP API server (serves endpoints)
- * - crypto-worker: Background worker (scheduler, price sync, testnet sync)
- * 
- * Memory limits are set for 1 vCPU / 1 GB RAM VPS:
- * - API: 300M max memory
- * - Worker: 350M max memory
+ *
+ * Deploy layout:
+ * - `.env` lives in `./backend` (same folder as this file).
+ * - Built entrypoints run from `./backend/dist` (`server.js`, `worker.js`).
+ * - Logs are written under `./backend/logs` (not inside `dist`).
+ *
+ * All runtime variables (API_ONLY, WORKER_ONLY, PORT, DATABASE_URL, cron tuning, …)
+ * come from `backend/.env` via `env_file`. Use `API_ONLY=false` and `WORKER_ONLY=false`
+ * when both apps share that file.
+ *
+ * Memory limits (1 vCPU / 1 GB RAM VPS): API 300M, worker 350M.
  */
-require('dotenv').config();
+const path = require('path');
+
+const backendRoot = __dirname;
+const distDir = path.join(backendRoot, 'dist');
+const envPath = path.join(backendRoot, '.env');
+const logsDir = path.join(backendRoot, 'logs');
+
+require('dotenv').config({ path: envPath });
 
 module.exports = {
   apps: [
     {
       name: 'crypto-api',
-      script: './dist/server.js',
+      cwd: distDir,
+      script: path.join(distDir, 'server.js'),
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
       watch: false,
       max_memory_restart: '300M',
-      env_file: '.env',
-      cwd: "/home/ubuntu/chuyen-gia-crypto/backend",
-      env: {
-        NODE_ENV: 'production',
-        API_ONLY: 'true',
-        WORKER_ONLY: 'false',
-        PORT: 3000,
-        DATABASE_URL: process.env.DATABASE_URL,
-        DIRECT_URL: process.env.DIRECT_URL,
-      },
-      error_file: './logs/api-error.log',
-      out_file: './logs/api-out.log',
+      env_file: envPath,
+      error_file: path.join(logsDir, 'api-error.log'),
+      out_file: path.join(logsDir, 'api-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       time: true,
     },
     {
       name: 'crypto-worker',
-      script: './dist/worker.js',
+      cwd: distDir,
+      script: path.join(distDir, 'worker.js'),
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
       watch: false,
       max_memory_restart: '350M',
-      env_file: '.env',
-      cwd: "/home/ubuntu/chuyen-gia-crypto/backend",
-      env: {
-        NODE_ENV: 'production',
-        API_ONLY: 'false',
-        WORKER_ONLY: 'true',
-        DATABASE_URL: process.env.DATABASE_URL,
-        DIRECT_URL: process.env.DIRECT_URL,
-      },
-      error_file: './logs/worker-error.log',
-      out_file: './logs/worker-out.log',
+      env_file: envPath,
+      error_file: path.join(logsDir, 'worker-error.log'),
+      out_file: path.join(logsDir, 'worker-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       time: true,
