@@ -88,7 +88,7 @@ The system is designed to support multiple trading methods running in parallel. 
 - **Fibonacci Levels** - Golden Pocket (0.5-0.618) và Extension (1.272-1.618)
 - **Scoring System** - HTF Alignment (30%), Liquidity & Structure (30%), Confluence (20%), Volume (20%)
 - **No Timeframe Predictions** - Sử dụng price_prediction thay vì timeframe predictions (không cần multi-timeframe alignment)
-- **Auto-Entry**: Confidence threshold 75%, không cần multi-timeframe alignment, R:R >= 2.5
+- **Auto-Entry**: Confidence threshold 82%, không cần multi-timeframe alignment, R:R >= 2.5
 - **Schedule**: Every 7.5 minutes (offset 450s)
 
 ### Multi-Timeframe Priority
@@ -226,9 +226,9 @@ The system is designed to support multiple trading methods running in parallel. 
       "4h": { "direction": "up|down|sideways", "target": number, "confidence": 0-1 },
       "1d": { "direction": "up|down|sideways", "target": number, "confidence": 0-1 }
     },
-    "suggested_entry": 76100,
-    "suggested_stop_loss": 75800,
-    "suggested_take_profit": 77270,
+    "suggested_entry": 76100.50,
+    "suggested_stop_loss": 75800.25,
+    "suggested_take_profit": 77270.75,
     "expected_rr": 2.8
   }
   ```
@@ -244,9 +244,9 @@ The system is designed to support multiple trading methods running in parallel. 
       "narrative": "Market story in Vietnamese (max 200 characters)",
       "structure": { "trend": "bullish|bearish|sideways", "key_event": "BOS/CHOCH tại mức giá..." },
       "volume_analysis": "Volume Profile description and breakout confirmation",
-      "suggested_entry": 76100,
-      "suggested_stop_loss": 75800,
-      "suggested_take_profit": 77270,
+      "suggested_entry": 76100.50,
+      "suggested_stop_loss": 75800.25,
+      "suggested_take_profit": 77270.75,
       "expected_rr": 2.8,
       "alternative_scenario": { "trigger": "Mức giá vô hiệu hóa", "logic": "Kịch bản ngược lại" }
     }

@@ -130,7 +130,7 @@ CRITICAL SL/TP PLACEMENT:
 - R:R ratio should be at least 2:1
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
-      minConfidence: 70,
+      minConfidence: Number(process.env.ICT_CONFIDENCE_THRESHOLD) * 100 || 70,
       minRRRatio: 2.0,
       riskPerTrade: 0.10, // 10% để trading nhanh
       maxPositionsPerSymbol: 6,
@@ -273,7 +273,7 @@ CRITICAL SL/TP PLACEMENT:
 - R:R ratio should be at least 1.0 for Kim Nghia
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
-      minConfidence: 80, // Increased from 75 to 80 for stricter entry criteria
+      minConfidence: Number(process.env.KIM_NGHIA_CONFIDENCE_THRESHOLD) * 100 || 80, // Read from env or default to 80
       minRRRatio: 1.0, // Reduced from 2.5 to 1.0 - allow more trades to pass
       riskPerTrade: 0.08, // Reduced from 0.10 to 0.08 (8% risk per trade)
       maxPositionsPerSymbol: 6,

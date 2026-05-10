@@ -11,6 +11,7 @@ import {
   getTestnetPositions,
   updateTestnetPendingOrder,
 } from '../repositories/testnet.repository';
+import { prisma } from '../lib/prisma';
 
 export type KimNghiaAnalysisJobResult =
   | { success: true; data: unknown }
@@ -90,6 +91,10 @@ export async function runKimNghiaAnalysisJob(): Promise<KimNghiaAnalysisJobResul
       });
 
       await maybeProcessPendingOrderDecisions({
+        analysisBtc: analysis.btc,
+      });
+
+      await maybeProcessPositionDecisions({
         analysisBtc: analysis.btc,
       });
     }
@@ -198,10 +203,10 @@ async function maybeProcessPendingOrderDecisions({
     return;
   }
 
-  const confidenceThreshold = 0.82; // 82% threshold for Kim Nghia method
+  const confidenceThreshold = Number(process.env.KIM_NGHIA_CONFIDENCE_THRESHOLD) || 0.82;
 
   for (const decision of decisions) {
-    const { order_id, action, confidence, reason, new_sl, new_tp } = decision;
+    const { order_id, action, confidence, reason, new_sl, new_tp, new_entry } = decision;
 
     if (!order_id || !action) continue;
 
@@ -216,11 +221,79 @@ async function maybeProcessPendingOrderDecisions({
         await cancelTestnetPendingOrder(order_id, reason || 'AI decision');
         console.log(`[KimNghiaPendingOrderDecision] Cancelled order ${order_id}: ${reason}`);
       } else if (action === 'modify') {
+        const pendingOrders = await getTestnetPendingOrders({ orderId: order_id });
+        if (!pendingOrders || pendingOrders.length === 0) {
+          console.log(`[KimNghiaPendingOrderDecision] Order ${order_id} not found, skipping modify`);
+          continue;
+        }
+
+        const order = pendingOrders[0];
+        const entryPrice = Number(order.entry_price);
+        const side = order.side;
+
         const updates: any = {};
-        if (new_sl) updates.stop_loss = new_sl;
-        if (new_tp) updates.take_profit = new_tp;
-        
-        if (Object.keys(updates).length > 0) {
+        let isValid = true;
+
+        if (new_entry) {
+          const newEntryValue = Number(new_entry);
+          if (isNaN(newEntryValue)) {
+            isValid = false;
+          } else {
+            updates.entry_price = newEntryValue;
+          }
+        }
+
+        if (new_sl) {
+          const newSlValue = Number(new_sl);
+          if (isNaN(newSlValue)) {
+            isValid = false;
+          } else {
+            const actualEntry = updates.entry_price || entryPrice;
+            const slDistance = Math.abs(newSlValue - actualEntry);
+            const minDistance = actualEntry * 0.005;
+
+            if (slDistance < minDistance) {
+              console.log(`[KimNghiaPendingOrderDecision] SL too close to entry for order ${order_id}`);
+              isValid = false;
+            }
+
+            if (side === 'long' && newSlValue >= actualEntry) {
+              console.log(`[KimNghiaPendingOrderDecision] Long SL must be below entry`);
+              isValid = false;
+            }
+            if (side === 'short' && newSlValue <= actualEntry) {
+              console.log(`[KimNghiaPendingOrderDecision] Short SL must be above entry`);
+              isValid = false;
+            }
+
+            if (isValid) {
+              updates.stop_loss = newSlValue;
+            }
+          }
+        }
+
+        if (new_tp) {
+          const newTpValue = Number(new_tp);
+          if (isNaN(newTpValue)) {
+            isValid = false;
+          } else {
+            const actualEntry = updates.entry_price || entryPrice;
+            if (side === 'long' && newTpValue <= actualEntry) {
+              console.log(`[KimNghiaPendingOrderDecision] Long TP must be above entry`);
+              isValid = false;
+            }
+            if (side === 'short' && newTpValue >= actualEntry) {
+              console.log(`[KimNghiaPendingOrderDecision] Short TP must be below entry`);
+              isValid = false;
+            }
+
+            if (isValid) {
+              updates.take_profit = newTpValue;
+            }
+          }
+        }
+
+        if (isValid && Object.keys(updates).length > 0) {
           await updateTestnetPendingOrder(order_id, updates);
           console.log(`[KimNghiaPendingOrderDecision] Modified order ${order_id}: ${reason}`, updates);
         }
@@ -228,6 +301,136 @@ async function maybeProcessPendingOrderDecisions({
       // 'hold' action does nothing
     } catch (error: any) {
       console.error(`[KimNghiaPendingOrderDecision] Error processing ${action} for order ${order_id}:`, error.message);
+    }
+  }
+}
+
+async function maybeProcessPositionDecisions({
+  analysisBtc,
+}: {
+  analysisBtc: any;
+}): Promise<void> {
+  if (!analysisBtc) return;
+
+  const decisions = analysisBtc?.position_decisions;
+  if (!decisions || !Array.isArray(decisions) || decisions.length === 0) {
+    return;
+  }
+
+  const confidenceThreshold = Number(process.env.KIM_NGHIA_CONFIDENCE_THRESHOLD) || 0.82;
+
+  for (const decision of decisions) {
+    const { position_id, action, confidence, reason, new_sl, new_tp, close_percent } = decision;
+
+    if (!position_id || !action) continue;
+
+    const confidenceValue = Number(confidence) || 0;
+    if (confidenceValue < confidenceThreshold) {
+      console.log(`[KimNghiaPositionDecision] Skipping ${action} for position ${position_id} - confidence ${(confidenceValue * 100).toFixed(0)}% < threshold ${(confidenceThreshold * 100).toFixed(0)}%`);
+      continue;
+    }
+
+    try {
+      const positions = await getTestnetPositions({ positionId: position_id });
+      if (!positions || positions.length === 0) {
+        console.log(`[KimNghiaPositionDecision] Position ${position_id} not found`);
+        continue;
+      }
+
+      const position = positions[0];
+      const entryPrice = Number(position.entry_price);
+      const side = position.side;
+      const currentPrice = Number(position.current_price || position.entry_price);
+
+      if (action === 'hold') {
+        console.log(`[KimNghiaPositionDecision] Holding position ${position_id}`);
+      } else if (action === 'close_early') {
+        await prisma.testnetPosition.update({
+          where: { position_id: position_id },
+          data: { status: 'closed', close_price: currentPrice, close_time: new Date(), close_reason: 'AI early close' }
+        });
+        console.log(`[KimNghiaPositionDecision] Closed position ${position_id} early at ${currentPrice}: ${reason}`);
+      } else if (action === 'close_partial') {
+        const closePercentValue = Number(close_percent) || 0.5;
+        if (closePercentValue <= 0 || closePercentValue > 1) {
+          console.log(`[KimNghiaPositionDecision] Invalid close_percent`);
+          continue;
+        }
+        const currentSizeUsd = Number(position.size_usd);
+        const newPartialClosed = (Number(position.partial_closed) || 0) + closePercentValue;
+        await prisma.testnetPosition.update({
+          where: { position_id: position_id },
+          data: {
+            partial_closed: newPartialClosed,
+            size_usd: currentSizeUsd * (1 - closePercentValue),
+            size_qty: Number(position.size_qty) * (1 - closePercentValue)
+          }
+        });
+        console.log(`[KimNghiaPositionDecision] Partially closed position ${position_id}: ${closePercentValue * 100}%`);
+      } else if (action === 'move_sl') {
+        const updates: any = {};
+        let isValid = true;
+
+        if (new_sl) {
+          const newSlValue = Number(new_sl);
+          if (isNaN(newSlValue)) {
+            isValid = false;
+          } else {
+            const slDistance = Math.abs(newSlValue - entryPrice);
+            const minDistance = entryPrice * 0.005;
+            if (slDistance < minDistance) {
+              console.log(`[KimNghiaPositionDecision] SL too close to entry`);
+              isValid = false;
+            }
+            if (side === 'long' && newSlValue >= entryPrice) {
+              console.log(`[KimNghiaPositionDecision] Long SL must be below entry`);
+              isValid = false;
+            }
+            if (side === 'short' && newSlValue <= entryPrice) {
+              console.log(`[KimNghiaPositionDecision] Short SL must be above entry`);
+              isValid = false;
+            }
+            if (isValid) {
+              updates.stop_loss = newSlValue;
+            }
+          }
+        }
+
+        if (new_tp) {
+          const newTpValue = Number(new_tp);
+          if (isNaN(newTpValue)) {
+            isValid = false;
+          } else {
+            if (side === 'long' && newTpValue <= entryPrice) {
+              console.log(`[KimNghiaPositionDecision] Long TP must be above entry`);
+              isValid = false;
+            }
+            if (side === 'short' && newTpValue >= entryPrice) {
+              console.log(`[KimNghiaPositionDecision] Short TP must be below entry`);
+              isValid = false;
+            }
+            if (isValid) {
+              updates.take_profit = newTpValue;
+            }
+          }
+        }
+
+        if (isValid && Object.keys(updates).length > 0) {
+          await prisma.testnetPosition.update({
+            where: { position_id: position_id },
+            data: updates
+          });
+          console.log(`[KimNghiaPositionDecision] Moved SL/TP for position ${position_id}: ${reason}`);
+        }
+      } else if (action === 'reverse') {
+        await prisma.testnetPosition.update({
+          where: { position_id: position_id },
+          data: { status: 'closed', close_price: currentPrice, close_time: new Date(), close_reason: 'AI reverse' }
+        });
+        console.log(`[KimNghiaPositionDecision] Reversed position ${position_id} - closed at ${currentPrice}: ${reason}`);
+      }
+    } catch (error: any) {
+      console.error(`[KimNghiaPositionDecision] Error processing ${action} for position ${position_id}:`, error.message);
     }
   }
 }
