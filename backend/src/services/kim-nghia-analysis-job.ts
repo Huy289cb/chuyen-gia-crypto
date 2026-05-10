@@ -4,10 +4,12 @@ import { cache } from '../cache';
 import { fetchHistoricalCandles, fetchRealTimePrices } from './price-fetcher';
 import { saveAnalysis } from '../repositories/analysis.repository';
 import {
+  cancelTestnetPendingOrder,
   createTestnetPendingOrder,
   getOrCreateTestnetAccount,
   getTestnetPendingOrders,
   getTestnetPositions,
+  updateTestnetPendingOrder,
 } from '../repositories/testnet.repository';
 
 export type KimNghiaAnalysisJobResult =
@@ -61,6 +63,9 @@ export async function runKimNghiaAnalysisJob(): Promise<KimNghiaAnalysisJobResul
         positionDecisions: analysis.btc?.position_decisions
           ? JSON.stringify(analysis.btc.position_decisions)
           : undefined,
+        pendingOrderDecisions: analysis.btc?.pending_order_decisions
+          ? JSON.stringify(analysis.btc.pending_order_decisions)
+          : undefined,
       });
 
       await saveAnalysis({
@@ -81,6 +86,10 @@ export async function runKimNghiaAnalysisJob(): Promise<KimNghiaAnalysisJobResul
 
       await maybeCreateKimNghiaPendingOrder({
         analysisId: btcSaved.analysisId,
+        analysisBtc: analysis.btc,
+      });
+
+      await maybeProcessPendingOrderDecisions({
         analysisBtc: analysis.btc,
       });
     }
@@ -175,4 +184,50 @@ async function maybeCreateKimNghiaPendingOrder({
   console.log(
     `[KimNghiaAutoEntry] Created pending order ${orderId} side=${side} entry=${entry.toFixed(2)} sl=${stopLoss.toFixed(2)} tp=${takeProfit.toFixed(2)} sizeUsd=${sizeUsd.toFixed(2)}`
   );
+}
+
+async function maybeProcessPendingOrderDecisions({
+  analysisBtc,
+}: {
+  analysisBtc: any;
+}): Promise<void> {
+  if (!analysisBtc) return;
+
+  const decisions = analysisBtc?.pending_order_decisions;
+  if (!decisions || !Array.isArray(decisions) || decisions.length === 0) {
+    return;
+  }
+
+  const confidenceThreshold = 0.82; // 82% threshold for Kim Nghia method
+
+  for (const decision of decisions) {
+    const { order_id, action, confidence, reason, new_sl, new_tp } = decision;
+
+    if (!order_id || !action) continue;
+
+    const confidenceValue = Number(confidence) || 0;
+    if (confidenceValue < confidenceThreshold) {
+      console.log(`[KimNghiaPendingOrderDecision] Skipping ${action} for order ${order_id} - confidence ${(confidenceValue * 100).toFixed(0)}% < threshold ${(confidenceThreshold * 100).toFixed(0)}%`);
+      continue;
+    }
+
+    try {
+      if (action === 'cancel') {
+        await cancelTestnetPendingOrder(order_id, reason || 'AI decision');
+        console.log(`[KimNghiaPendingOrderDecision] Cancelled order ${order_id}: ${reason}`);
+      } else if (action === 'modify') {
+        const updates: any = {};
+        if (new_sl) updates.stop_loss = new_sl;
+        if (new_tp) updates.take_profit = new_tp;
+        
+        if (Object.keys(updates).length > 0) {
+          await updateTestnetPendingOrder(order_id, updates);
+          console.log(`[KimNghiaPendingOrderDecision] Modified order ${order_id}: ${reason}`, updates);
+        }
+      }
+      // 'hold' action does nothing
+    } catch (error: any) {
+      console.error(`[KimNghiaPendingOrderDecision] Error processing ${action} for order ${order_id}:`, error.message);
+    }
+  }
 }

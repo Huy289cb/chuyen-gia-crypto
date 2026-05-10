@@ -79,7 +79,7 @@ The system is designed to support multiple trading methods running in parallel. 
 - **Fair Value Gaps** - Phát hiện imbalance zones
 - **Narrative** - Xây dựng câu chuyện thị trường (Tiếng Việt)
 - **Multi-Timeframe Predictions** - Dự báo cho 15m, 1h, 4h, 1d với target prices
-- **Auto-Entry**: ICT confidence threshold 70%, Kim Nghia 75%, multi-timeframe alignment required (4h, 1d), R:R >= 2.0
+- **Auto-Entry**: ICT confidence threshold 70%, Kim Nghia 82%, multi-timeframe alignment required (4h, 1d), R:R >= 2.0
 - **Schedule**: Every 15 minutes
 
 ### 2. Kim Nghia (SMC + Volume + Fibonacci)
@@ -127,7 +127,7 @@ The system is designed to support multiple trading methods running in parallel. 
    │
 8. Evaluate auto-entry:
    - ICT: Check confidence >= 70%, multi-timeframe alignment, R:R >= 2.0
-   - Kim Nghia: Check confidence >= 75%, R:R >= 2.5 (skip multi-timeframe alignment)
+   - Kim Nghia: Check confidence >= 82%, R:R >= 2.5 (skip multi-timeframe alignment)
    │
 9. If entry criteria met, create position in paper trading system
    │

@@ -767,7 +767,7 @@ All position openings (manual and auto) now enforce:
 - **Direction alignment**: Entry price must align with trade direction
 
 > **Note**: groqAnalyzer.js has been removed. All analysis now uses analyzerFactory.js directly. Shared utilities extracted to utils/dateHelpers.js and utils/asyncHelpers.js.
-- **Minimum confidence**: ICT 70%, Kim Nghia 75% threshold for auto-entry
+- **Minimum confidence**: ICT 70%, Kim Nghia 82% threshold for auto-entry
 - **AI-provided SL/TP**: Required for auto-entry (no default fallback)
 - **SL/TP side validation**: SL must be on correct side of entry based on bias
 - **Granular SL/TP**: AI must provide precise price levels with at least 2 decimal places

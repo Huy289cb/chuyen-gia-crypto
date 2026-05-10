@@ -54,8 +54,8 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKe
   if (loading) {
     return (
       <section className="mb-8">
-        <CardHeader 
-          title="Execution History" 
+        <CardHeader
+          title="Download Money Execution History"
           subtitle="Loading..."
           icon={<History className="w-5 h-5" />}
         />
@@ -73,14 +73,14 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKe
   if (trades.length === 0) {
     return (
       <section className="mb-8">
-        <CardHeader 
-          title="Execution History" 
+        <CardHeader
+          title="Download Money Execution History"
           subtitle="No completed executions yet"
           icon={<History className="w-5 h-5" />}
         />
         <Card className="mt-4">
           <p className="text-foreground-tertiary text-sm text-center py-8">
-            No execution history available. Closed positions will appear here.
+            No execution history available. Closed Download Money positions will appear here.
           </p>
         </Card>
       </section>
@@ -89,8 +89,8 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKe
 
   return (
     <section className="mb-8">
-      <CardHeader 
-        title={`Execution History (${pagination.total})`}
+      <CardHeader
+        title={`Download Money Execution History (${pagination.total})`}
         subtitle={`Page ${pagination.page} of ${pagination.totalPages} (${symbol} executions)`}
         icon={<History className="w-5 h-5" />}
       />

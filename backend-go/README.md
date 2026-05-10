@@ -189,7 +189,7 @@ AI-powered position management with the following capabilities:
 - Position actions: hold, close_early, close_partial, move_sl, reverse
 - Order actions: hold, cancel, modify
 - Context: 60 recent candles, positions, orders
-- Confidence thresholds: ICT (70%), Kim Nghia (75%)
+- Confidence thresholds: ICT (70%), Kim Nghia (82%)
 - BTC-only mode (ETH paused during migration)
 
 ## Database Schema

@@ -31,15 +31,15 @@ Rebrand frontend copy and core UI identity from "Crypto Analyzer" to "Download M
 ## Phase 3 - Visual Identity
 
 - [x] Confirm logo/icon treatment in header (keep Zap or replace)
-- [~] Update accent text/marketing tone in key cards
-- [ ] Validate dark/light mode visual consistency after copy updates
+- [x] Update accent text/marketing tone in key cards
+- [x] Validate dark/light mode visual consistency after copy updates
 
 ## Phase 4 - QA and Release
 
-- [ ] Verify desktop and mobile layouts for text overflow/regression
-- [ ] Verify all key pages with real API data
-- [ ] Verify refresh, trigger analysis, and pagination behavior
-- [ ] Create release note for rebrand update
+- [x] Verify desktop and mobile layouts for text overflow/regression
+- [x] Verify all key pages with real API data
+- [x] Verify refresh, trigger analysis, and pagination behavior
+- [x] Create release note for rebrand update
 
 ## Notes / Decisions
 

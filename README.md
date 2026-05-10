@@ -27,7 +27,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 ### Paper Trading System
 - **Multi-Method Support**: ICT Smart Money (temporarily disabled) và Kim Nghia (SMC + Volume + Fibonacci) - code preserved for future multi-method support
 - **ICT Auto-Entry** (Temporarily Disabled): Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
-- **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 75%, R:R >= 2.5
+- **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 82%, R:R >= 2.5
 - **Risk Management**:
   - ICT: 1% risk per trade, SL distance minimum 0.75% (disabled)
   - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
@@ -54,7 +54,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
 - **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
 - **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
-- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 75% (Kim Nghia)
+- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 82% (Kim Nghia)
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - See `docs/ai-position-management.md` for detailed documentation
 
@@ -62,7 +62,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
 - **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
 - **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
-- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 75% (Kim Nghia)
+- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 82% (Kim Nghia)
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - **Testnet Integration**: AI decisions are executed on Binance Testnet positions and orders
 - See `docs/ai-position-management.md` for detailed documentation

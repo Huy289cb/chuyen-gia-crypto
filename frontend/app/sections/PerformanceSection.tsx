@@ -42,8 +42,8 @@ export function PerformanceSection({ symbol, method = 'kim_nghia', refreshKey = 
   if (loading) {
     return (
       <section className="mb-8">
-        <CardHeader 
-          title="Performance Metrics" 
+        <CardHeader
+          title="Download Money Performance"
           subtitle="Loading..."
           icon={<BarChart3 className="w-5 h-5" />}
         />
@@ -59,8 +59,8 @@ export function PerformanceSection({ symbol, method = 'kim_nghia', refreshKey = 
   if (!metrics || metrics.total_trades === 0) {
     return (
       <section className="mb-8">
-        <CardHeader 
-          title="Performance Metrics" 
+        <CardHeader
+          title="Download Money Performance"
           subtitle={`${symbol} trading statistics`}
           icon={<BarChart3 className="w-5 h-5" />}
         />
@@ -77,8 +77,8 @@ export function PerformanceSection({ symbol, method = 'kim_nghia', refreshKey = 
 
   return (
     <section className="mb-8">
-      <CardHeader 
-        title="Performance Metrics"
+      <CardHeader
+        title="Download Money Performance"
         subtitle={`${symbol} detailed statistics`}
         icon={<BarChart3 className="w-5 h-5" />}
       />

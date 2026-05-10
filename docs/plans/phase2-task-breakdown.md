@@ -45,7 +45,7 @@
 - [ ] Document error handling patterns
 - [ ] Document timezone handling (UTC storage, Vietnam time display)
 - [ ] Document AI position management capabilities (BTC-only mode)
-- [ ] Document confidence thresholds (ICT: 70%, Kim Nghia: 75%)
+- [ ] Document confidence thresholds (ICT: 70%, Kim Nghia: 82%)
 - [ ] Document trading rules (risk management, RR ratios, etc.)
 
 ### 2.1.4 Weekly Review Setup
@@ -250,7 +250,7 @@
 - [ ] Implement position actions (hold, close_early, close_partial, move_sl, reverse)
 - [ ] Implement order actions (hold, cancel, modify)
 - [ ] Add context building (60 recent candles, positions, orders)
-- [ ] Implement confidence threshold validation (ICT: 70%, Kim Nghia: 75%)
+- [ ] Implement confidence threshold validation (ICT: 70%, Kim Nghia: 82%)
 - [ ] Maintain BTC-only mode during migration
 - [ ] Add unit tests for AI position management
 

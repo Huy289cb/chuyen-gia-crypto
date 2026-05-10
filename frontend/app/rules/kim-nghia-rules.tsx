@@ -280,7 +280,7 @@ export function KimNghiaRules({ language = 'en' }: KimNghiaRulesProps) {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <span className="text-success">✓</span>
-              <span className="text-sm text-foreground">Confidence ≥ 75%</span>
+              <span className="text-sm text-foreground">Confidence ≥ 82%</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-success">✓</span>
@@ -342,7 +342,7 @@ export function KimNghiaRules({ language = 'en' }: KimNghiaRulesProps) {
             </div>
             <div>
               <span className="text-xs text-foreground-secondary">Min Confidence</span>
-              <p className="text-sm font-medium text-foreground">75%</p>
+              <p className="text-sm font-medium text-foreground">82%</p>
             </div>
             <div>
               <span className="text-xs text-foreground-secondary">Min R:R</span>

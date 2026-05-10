@@ -19,6 +19,7 @@ export interface SaveAnalysisData {
   methodId?: string;
   breakoutRetest?: string;
   positionDecisions?: string;
+  pendingOrderDecisions?: string;
   alternativeScenario?: string;
   suggestedEntry?: number;
   suggestedStopLoss?: number;
@@ -71,6 +72,7 @@ export async function saveAnalysis(
     methodId = 'ict',
     breakoutRetest,
     positionDecisions,
+    pendingOrderDecisions,
     alternativeScenario,
     suggestedEntry,
     suggestedStopLoss,
@@ -96,6 +98,7 @@ export async function saveAnalysis(
       method_id: methodId,
       breakout_retest: breakoutRetest,
       position_decisions: positionDecisions,
+      pending_order_decisions: pendingOrderDecisions,
       alternative_scenario: alternativeScenario,
       suggested_entry: suggestedEntry,
       suggested_stop_loss: suggestedStopLoss,

@@ -147,7 +147,7 @@ func Load() error {
 		},
 		Analysis: AnalysisConfig{
 			ICTConfidenceThreshold:       getEnvAsFloat("ICT_CONFIDENCE_THRESHOLD", 0.70),
-			KimNghiaConfidenceThreshold:  getEnvAsFloat("KIM_NGHIA_CONFIDENCE_THRESHOLD", 0.75),
+			KimNghiaConfidenceThreshold:  getEnvAsFloat("KIM_NGHIA_CONFIDENCE_THRESHOLD", 0.82),
 			AutoEntryConfidenceThreshold: getEnvAsFloat("AUTO_ENTRY_CONFIDENCE_THRESHOLD", 0.80),
 		},
 		Trading: TradingConfig{

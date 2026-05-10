@@ -28,9 +28,10 @@ model AnalysisHistory {
   market_sentiment     String?
   disclaimer           String?
   method_id            String   @default("ict")
-  breakout_retest      String?  @db.Text
-  position_decisions   String?  @db.Text
-  alternative_scenario String?  @db.Text
+  breakout_retest        String?  @db.Text
+  position_decisions     String?  @db.Text
+  pending_order_decisions String?  @db.Text
+  alternative_scenario   String?  @db.Text
   suggested_entry      Float?
   suggested_stop_loss  Float?
   suggested_take_profit Float?
@@ -416,7 +417,5 @@ model TestnetPendingOrder {
 
   @@index([account_id])
   @@index([symbol, status])
-  @@map("testnet_pending_orders")
-}
   @@map("testnet_pending_orders")
 }

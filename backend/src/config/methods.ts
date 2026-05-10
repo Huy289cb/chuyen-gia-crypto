@@ -250,7 +250,7 @@ ACTION DEFINITIONS:
 - reverse: Đảo chiều position (close current + open opposite)
 - cancel: Hủy pending order
 - modify: Sửa pending order (specify new_entry, new_sl, new_tp)
-CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 75%. Nếu thấp hơn, default là hold.
+CONFIDENCE THRESHOLD: Chỉ thực hiện action nếu confidence >= 82%. Nếu thấp hơn, default là hold.
 
 CRITICAL CONSISTENCY RULE (BẮT BUỘC):
 - Position decisions PHẢI nhất quán với market bias.

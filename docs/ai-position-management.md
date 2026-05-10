@@ -70,7 +70,7 @@ The AI now returns decision arrays for positions and pending orders:
 Actions are only executed if the AI's confidence meets or exceeds the method-specific threshold:
 
 - **ICT Method**: 70% confidence threshold
-- **Kim Nghia Method**: 75% confidence threshold
+- **Kim Nghia Method**: 82% confidence threshold
 
 If confidence is below the threshold, the action defaults to `hold`.
 
