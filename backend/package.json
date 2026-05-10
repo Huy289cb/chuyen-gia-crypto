@@ -10,7 +10,7 @@
     "start": "npm run build && npm run start:api",
     "start:api": "node dist/server.js",
     "start:worker": "node dist/worker.js",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "db:init": "node src/db/init.js",
     "setup:data": "node scripts/ensure-data-dir.js",
     "testnet:cleanup": "node scripts/testnet-cleanup.js",
