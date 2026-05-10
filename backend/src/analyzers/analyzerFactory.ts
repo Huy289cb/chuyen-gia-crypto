@@ -222,6 +222,8 @@ export function createAnalyzer(methodConfig: MethodConfig): Analyzer {
  * @returns {Promise<string>} User prompt string
  */
 export async function buildUserPrompt(priceData: PriceData, db: any, methodId: string): Promise<string> {
+  const MAX_CONTEXT_CHARS = 1200;
+  const MAX_OHLC_CANDLES = 24;
   let historicalContext = '';
   let openPositionsContext = '';
   let pendingOrdersContext = '';
@@ -281,7 +283,7 @@ export async function buildUserPrompt(priceData: PriceData, db: any, methodId: s
       
       // Fetch open positions for AI decision making, filtered by method_id (BTC only)
       try {
-        const btcOpenPositions = await getTestnetPositions({ symbol: 'BTC', status: 'open', methodId });
+        const btcOpenPositions = await getTestnetPositions({ symbol: 'BTC', status: 'open', methodId, limit: 5 });
         
         const formatOpenPositions = (positions: any[], coinName: string): string => {
           if (!positions || positions.length === 0) return '';
@@ -308,7 +310,7 @@ export async function buildUserPrompt(priceData: PriceData, db: any, methodId: s
         const btcPositions = formatOpenPositions(btcOpenPositions, 'BTC');
         
         if (btcPositions) {
-          openPositionsContext = `\n\n${btcPositions}\n\nFor each open position, provide a decision in position_decisions array with action (hold/close_early/close_partial/move_sl/reverse), confidence (0-1), and reason. Include position_id from above.\n\nCRITICAL REMINDER: Position decisions MUST align with your overall bias assessment. If you determine bias=bearish, do NOT close existing short positions unless structure has fundamentally changed (bias reversal or structure break). If bias=bullish, do NOT close existing long positions unless structure has fundamentally changed.`;
+          openPositionsContext = `\n\n${btcPositions.slice(0, MAX_CONTEXT_CHARS)}\n\nFor each open position, provide a decision in position_decisions array with action (hold/close_early/close_partial/move_sl/reverse), confidence (0-1), and reason. Include position_id from above.\n\nCRITICAL REMINDER: Position decisions MUST align with your overall bias assessment. If you determine bias=bearish, do NOT close existing short positions unless structure has fundamentally changed (bias reversal or structure break). If bias=bullish, do NOT close existing long positions unless structure has fundamentally changed.`;
           console.log(`[AnalyzerFactory][${methodId}] Open positions context included:`, btcOpenPositions.length, 'positions');
         } else {
           console.log(`[AnalyzerFactory][${methodId}] No open positions to analyze`);
@@ -343,7 +345,7 @@ export async function buildUserPrompt(priceData: PriceData, db: any, methodId: s
         const btcPending = formatPendingOrders(btcPendingOrders, 'BTC');
         
         if (btcPending) {
-          pendingOrdersContext = `\n\n${btcPending}\n\nFor each pending order, provide a decision in pending_order_decisions array with action (hold/cancel/modify), confidence (0-1), and reason. Include order_id from above.`;
+          pendingOrdersContext = `\n\n${btcPending.slice(0, MAX_CONTEXT_CHARS)}\n\nFor each pending order, provide a decision in pending_order_decisions array with action (hold/cancel/modify), confidence (0-1), and reason. Include order_id from above.`;
           console.log(`[AnalyzerFactory][${methodId}] Pending orders context included:`, btcPendingOrders.length, 'orders');
         } else {
           console.log(`[AnalyzerFactory][${methodId}] No pending orders to analyze`);
@@ -382,16 +384,16 @@ export async function buildUserPrompt(priceData: PriceData, db: any, methodId: s
     try {
       const { getOhlcvCandles } = await import('../repositories/market.repository');
       console.log(`[AnalyzerFactory][${methodId}] Fetching OHLC data for analysis...`);
-      const btcOhlc = await getOhlcvCandles('BTC', 24, '15m');
+      const btcOhlc = await getOhlcvCandles('BTC', 6, '15m');
 
       if (btcOhlc && btcOhlc.length > 0) {
-        const btcRecent = btcOhlc.map(c =>
+        const btcRecent = btcOhlc.slice(-MAX_OHLC_CANDLES).map(c =>
           `[${new Date(c.timestamp).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}] O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)} V:${c.volume || 'N/A'}`
         ).join('\n');
-        ohlcContext += `\nBTC OHLC CANDLES (15m, 24 candles):\n${btcRecent}\n`;
+        ohlcContext += `\nBTC OHLC CANDLES (15m, max ${MAX_OHLC_CANDLES} candles):\n${btcRecent}\n`;
       }
 
-      console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles (reduced to 24 for rate limit)`);
+      console.log(`[AnalyzerFactory][${methodId}] OHLC data fetched - BTC: ${btcOhlc?.length || 0} candles (limited to ${MAX_OHLC_CANDLES} for prompt)`);
     } catch (error: any) {
       console.log(`[AnalyzerFactory][${methodId}] Failed to fetch OHLC data:`, error.message);
     }

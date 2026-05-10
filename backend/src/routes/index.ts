@@ -215,11 +215,18 @@ router.get('/predictions/:coin', async (req: Request, res: Response): Promise<vo
       prisma.analysisHistory.count({ where })
     ]);
 
+    const limitNum = parseInt(limit as string, 10);
+    const pageNum = parseInt(page as string, 10);
     res.json({
       success: true,
       data: analyses,
-      pagination: { total, page: parseInt(page as string), limit: parseInt(limit as string) },
-      meta: { coin, limit: parseInt(limit as string), page: parseInt(page as string), method: method || 'ict' }
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
+      },
+      meta: { coin, limit: limitNum, page: pageNum, method: method || 'ict' }
     });
   } catch (error: any) {
     res.status(500).json({
