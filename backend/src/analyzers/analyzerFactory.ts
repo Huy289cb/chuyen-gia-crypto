@@ -449,20 +449,36 @@ async function formatAnalysisResponse(rawResponse: any, priceData: PriceData, me
     try {
       const { getFibonacciFromOHLC } = await import('../utils/fibonacci');
       const { getOhlcvCandles } = await import('../repositories/market.repository');
+      const { workerConfig } = await import('../config/worker');
       console.log('[AnalyzerFactory] Fetching OHLC data for Fibonacci calculation...');
-      const btcOhlc = await getOhlcvCandles('BTC', 30, '15m');
-      const ethOhlc = await getOhlcvCandles('ETH', 30, '15m');
-      console.log('[AnalyzerFactory] OHLC data fetched - BTC:', btcOhlc?.length, 'candles, ETH:', ethOhlc?.length, 'candles');
+      
+      // Only fetch OHLC data for enabled symbols
+      const enabledSymbols = workerConfig.syncSymbols;
+      const ohlcData: Record<string, any[]> = {};
+      
+      for (const symbol of enabledSymbols) {
+        const symbolOhlc = await getOhlcvCandles(symbol, 30, '15m');
+        ohlcData[symbol] = symbolOhlc;
+        console.log(`[AnalyzerFactory] OHLC data fetched - ${symbol}:`, symbolOhlc?.length, 'candles');
+      }
 
-      // Check if OHLC data is available before calculating Fibonacci
-      if (btcOhlc && btcOhlc.length > 0 && ethOhlc && ethOhlc.length > 0) {
-        const btcBias = rawResponse?.btc?.bias === 'bullish' ? 'up' : 'down';
-        const ethBias = rawResponse?.eth?.bias === 'bullish' ? 'up' : 'down';
-        console.log('[AnalyzerFactory] Calculating Fibonacci - BTC bias:', btcBias, 'ETH bias:', ethBias);
-        kimNghiaFibonacci = {
-          btc: getFibonacciFromOHLC(btcOhlc, btcBias, 20),
-          eth: getFibonacciFromOHLC(ethOhlc, ethBias, 20)
-        };
+      // Check if we have OHLC data for enabled symbols
+      const hasValidData = enabledSymbols.every(symbol => 
+        ohlcData[symbol] && ohlcData[symbol].length > 0
+      );
+
+      if (hasValidData) {
+        kimNghiaFibonacci = {};
+        
+        for (const symbol of enabledSymbols) {
+          const symbolData = rawResponse?.[symbol.toLowerCase() as keyof typeof rawResponse];
+          if (symbolData) {
+            const bias = symbolData.bias === 'bullish' ? 'up' : 'down';
+            console.log(`[AnalyzerFactory] Calculating Fibonacci - ${symbol} bias:`, bias);
+            kimNghiaFibonacci[symbol.toLowerCase()] = getFibonacciFromOHLC(ohlcData[symbol], bias, 20);
+          }
+        }
+        
         console.log('[AnalyzerFactory] Fibonacci calculation successful');
       } else {
         console.warn('[AnalyzerFactory] No OHLC data available for Fibonacci calculation');
