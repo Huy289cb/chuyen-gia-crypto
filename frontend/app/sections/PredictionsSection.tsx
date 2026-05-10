@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Brain, TrendingUp, TrendingDown, Minus, Clock, ChevronDown, ChevronUp, Code, MessageSquare } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { cn, formatPrice } from '@/lib/utils';
+import { formatToGMT7 } from '@/lib/dateHelpers';
 import type { PredictionHistory, ApiResponse, Analysis } from '../types';
 
 const tfLabels: Record<string, string> = {
@@ -142,7 +143,7 @@ export function PredictionsSection({ symbol, method = 'kim_nghia', refreshKey = 
     return (
       <section className="mb-8">
         <CardHeader
-          title="Prediction Timeline"
+          title="Download Money Signals"
           subtitle="Loading..."
           icon={<Brain className="w-5 h-5" />}
         />
@@ -161,13 +162,13 @@ export function PredictionsSection({ symbol, method = 'kim_nghia', refreshKey = 
     return (
       <section className="mb-8">
         <CardHeader
-          title="Prediction Timeline"
-          subtitle="1H timeframe predictions"
+          title="Download Money Signals"
+          subtitle="Signal feed by timeframe"
           icon={<Brain className="w-5 h-5" />}
         />
         <Card className="mt-4">
           <p className="text-foreground-tertiary text-sm text-center py-8">
-            No prediction history available yet.
+            No signal history available yet.
           </p>
         </Card>
       </section>
@@ -177,8 +178,8 @@ export function PredictionsSection({ symbol, method = 'kim_nghia', refreshKey = 
   return (
     <section className="mb-8">
       <CardHeader
-        title="Prediction Timeline"
-        subtitle={`${symbol} 1H timeframe predictions & outcomes`}
+        title="Download Money Signals"
+        subtitle={`${symbol} signal timeline and outcomes`}
         icon={<Brain className="w-5 h-5" />}
       />
 
@@ -271,20 +272,6 @@ function PredictionItem({
     }
   };
   
-  const formatDateTime = (timestamp: string) => {
-    if (!timestamp) return 'N/A';
-    const date = new Date(timestamp);
-    // Add 7 hours offset to convert UTC to GMT+7
-    const gmt7Date = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-    return gmt7Date.toLocaleString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-  
   const formatPnL = (pnl: number | null) => {
     if (pnl === undefined || pnl === null) return 'N/A';
     const sign = pnl >= 0 ? '+' : '';
@@ -328,7 +315,7 @@ function PredictionItem({
           {/* Timestamp */}
           <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
             <Clock size={12} />
-            {formatDateTime(prediction.predicted_at || prediction.timestamp)}
+            {formatToGMT7(prediction.predicted_at, prediction.timestamp)}
           </div>
         </div>
 
@@ -511,7 +498,7 @@ function PredictionItem({
               className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
             >
               <MessageSquare size={14} />
-              <span>Raw Question (Input)</span>
+              <span>Model Input (Prompt)</span>
               {showRawQuestion ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             {showRawQuestion && (
@@ -530,7 +517,7 @@ function PredictionItem({
               className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
             >
               <Code size={14} />
-              <span>Raw Answer (AI Response)</span>
+              <span>Model Output (AI Response)</span>
               {showRawAnswer ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             {showRawAnswer && (

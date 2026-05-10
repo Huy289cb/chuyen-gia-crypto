@@ -112,7 +112,7 @@ const translations = {
     },
     aiAnalysis: {
       title: 'AI Position Analysis',
-      desc: 'AI evaluates open positions every 15 minutes for closure recommendations'
+      desc: 'AI evaluates live positions every 15 minutes for closure recommendations'
     },
     decisionOptions: {
       title: 'Decision Options',
@@ -272,7 +272,7 @@ export function KimNghiaRules({ language = 'en' }: KimNghiaRulesProps) {
       {/* Auto-Entry Criteria */}
       <section>
         <CardHeader 
-          title="Auto-Entry Criteria" 
+          title="Download Money Entry Criteria" 
           subtitle="Method-specific entry rules"
           icon={<Shield className="w-6 h-6" />}
         />
@@ -330,7 +330,7 @@ export function KimNghiaRules({ language = 'en' }: KimNghiaRulesProps) {
       {/* Configuration */}
       <section>
         <CardHeader 
-          title="Method Configuration" 
+          title="Download Money Method Configuration" 
           subtitle="Kim Nghia specific settings"
           icon={<Clock className="w-6 h-6" />}
         />

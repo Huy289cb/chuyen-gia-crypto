@@ -71,13 +71,13 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
     return (
       <section className="mb-8">
         <CardHeader 
-          title="Open Positions" 
+          title="Live Positions" 
           subtitle="No active positions"
           icon={<Target className="w-5 h-5" />}
         />
         <Card className="mt-4">
           <p className="text-foreground-tertiary text-sm text-center py-8">
-            No open positions. Waiting for high-confidence signals...
+            No live positions. Waiting for Download Money high-confidence signals...
           </p>
         </Card>
       </section>
@@ -87,7 +87,7 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
   return (
     <section className="mb-8">
       <CardHeader 
-        title={`Open Positions (${btcPositions.length})`}
+        title={`Live Positions (${btcPositions.length})`}
         icon={<Target className="w-5 h-5" />}
       />
       
@@ -108,7 +108,7 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
           <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto bg-bg-primary border border-border-default rounded-xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-bold">AI Predictions</h3>
+                <h3 className="text-lg font-bold">Signal Context</h3>
                 <p className="text-sm text-foreground-tertiary">
                   {selectedPosition.symbol} - {selectedPosition.side.toUpperCase()} @ ${formatPrice(selectedPosition.entry_price)}
                 </p>
@@ -123,11 +123,11 @@ export function PositionsSection({ positions, onClosePosition }: PositionsSectio
             
             {loadingPredictions ? (
               <div className="text-center py-8 text-foreground-tertiary">
-                Loading predictions...
+                Loading signals...
               </div>
             ) : predictions.length === 0 ? (
               <div className="text-center py-8 text-foreground-tertiary">
-                No predictions found for this position
+                No signals found for this position
               </div>
             ) : (
               <>
@@ -337,13 +337,13 @@ function PositionCard({ position, onClose, onClick }: { position: Position; onCl
           className="group relative w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-accent-primary/20 to-accent-secondary/20 hover:from-accent-primary/30 hover:to-accent-secondary/30 border border-accent-primary/30 rounded-lg transition-all duration-200"
         >
           <Brain className="w-4 h-4 text-accent-primary group-hover:scale-110 transition-transform" />
-          <span className="text-sm font-medium text-accent-primary">View AI Predictions</span>
+          <span className="text-sm font-medium text-accent-primary">View Download Money Signals</span>
 
           {/* Hover Tooltip */}
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-surface-3 border border-border-default rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
             <div className="flex items-center gap-2 text-xs text-foreground">
               <Info className="w-3 h-3 text-accent-primary" />
-              <span>Click to see AI analysis & predictions for this position</span>
+              <span>Click to view signal analysis for this position</span>
             </div>
             {/* Arrow */}
             <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-surface-3" />

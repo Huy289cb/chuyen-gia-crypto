@@ -16,9 +16,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Crypto Analyzer | AI-Powered Trading Analysis",
-  description: "Advanced cryptocurrency trend analysis with ICT Smart Money Concepts and paper trading simulation",
-  keywords: ["crypto", "trading", "analysis", "BTC", "ETH", "ICT", "paper trading"],
+  title: "Download Money | AI Trading Workspace",
+  description: "Download Money is an AI-powered trading workspace for BTC market signals, execution planning, and performance tracking.",
+  keywords: ["download money", "trading workspace", "BTC", "AI trading", "signals", "execution"],
 };
 
 export default function RootLayout({

@@ -40,7 +40,7 @@ export function TestnetPanel() {
     return (
       <Card className="p-6">
         <div className="text-center text-danger">
-          <p className="font-medium">Error loading testnet data</p>
+          <p className="font-medium">Error loading execution workspace data</p>
           <p className="text-sm text-foreground-tertiary mt-1">{error}</p>
           <Button onClick={refresh} variant="secondary" size="sm" className="mt-4">
             Retry
@@ -54,8 +54,8 @@ export function TestnetPanel() {
     return (
       <Card className="p-6">
         <div className="text-center text-foreground-tertiary">
-          <p className="font-medium">No testnet account found</p>
-          <p className="text-sm mt-1">Please enable testnet integration in backend</p>
+          <p className="font-medium">No execution account found</p>
+          <p className="text-sm mt-1">Please enable backend execution integration</p>
         </div>
       </Card>
     );
@@ -71,7 +71,7 @@ export function TestnetPanel() {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold">Binance Testnet</h3>
+            <h3 className="text-lg font-semibold">Download Money Execution Sandbox</h3>
             <p className="text-sm text-foreground-tertiary">{account.symbol} - {account.method_id}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -171,16 +171,16 @@ export function TestnetPanel() {
         </div>
       </Card>
 
-      {/* Pending Orders */}
+      {/* Planned Entries */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Pending Orders</h3>
+          <h3 className="text-lg font-semibold">Planned Entries</h3>
           <Badge variant="neutral">{pendingOrders.length}</Badge>
         </div>
 
         {pendingOrders.length === 0 ? (
           <div className="text-center py-8 text-foreground-tertiary">
-            <p>No pending orders</p>
+            <p>No planned entries</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -191,16 +191,16 @@ export function TestnetPanel() {
         )}
       </Card>
 
-      {/* Open Positions */}
+      {/* Live Positions */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Open Positions</h3>
+          <h3 className="text-lg font-semibold">Live Positions</h3>
           <Badge variant="neutral">{positions.length}</Badge>
         </div>
 
         {positions.length === 0 ? (
           <div className="text-center py-8 text-foreground-tertiary">
-            <p>No open positions</p>
+            <p>No live positions</p>
           </div>
         ) : (
           <div className="space-y-3">

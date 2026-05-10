@@ -64,7 +64,7 @@ function HomeContent() {
       <div className="min-h-screen bg-bg-primary flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-accent-primary animate-spin mx-auto mb-4" />
-          <p className="text-foreground-secondary">Loading market data...</p>
+          <p className="text-foreground-secondary">Loading Download Money workspace...</p>
         </div>
       </div>
     );
@@ -101,7 +101,7 @@ function HomeContent() {
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Hero Section - Crypto Cards with Charts */}
+        {/* Hero Section - Download Money overview */}
         <HeroSection
           btcData={data?.prices.btc}
           ethData={data?.prices.eth}
@@ -112,7 +112,7 @@ function HomeContent() {
         />
 
 
-        {/* Predictions Timeline */}
+        {/* Signal Timeline */}
         <PredictionsSection symbol="BTC" method="kim_nghia" />
 
         {/* Testnet Panel */}

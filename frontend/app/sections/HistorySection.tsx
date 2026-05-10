@@ -6,23 +6,8 @@ import { Card, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { cn, formatPrice } from '@/lib/utils';
+import { formatToGMT7 } from '@/lib/dateHelpers';
 import type { Trade } from '../types';
-
-// Helper function to format timestamp to GMT+7
-const formatToGMT7 = (timestamp: string) => {
-  if (!timestamp) return '-';
-  const date = new Date(timestamp);
-  // Add 7 hours offset to convert UTC to GMT+7
-  const gmt7Date = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-  return gmt7Date.toLocaleString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-};
 
 interface HistorySectionProps {
   symbol?: string;
@@ -70,7 +55,7 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKe
     return (
       <section className="mb-8">
         <CardHeader 
-          title="Trade History" 
+          title="Execution History" 
           subtitle="Loading..."
           icon={<History className="w-5 h-5" />}
         />
@@ -89,13 +74,13 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKe
     return (
       <section className="mb-8">
         <CardHeader 
-          title="Trade History" 
-          subtitle="No completed trades yet"
+          title="Execution History" 
+          subtitle="No completed executions yet"
           icon={<History className="w-5 h-5" />}
         />
         <Card className="mt-4">
           <p className="text-foreground-tertiary text-sm text-center py-8">
-            No trade history available. Positions will appear here when closed.
+            No execution history available. Closed positions will appear here.
           </p>
         </Card>
       </section>
@@ -105,8 +90,8 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKe
   return (
     <section className="mb-8">
       <CardHeader 
-        title={`Trade History (${pagination.total})`}
-        subtitle={`Page ${pagination.page} of ${pagination.totalPages} (${symbol} trades)`}
+        title={`Execution History (${pagination.total})`}
+        subtitle={`Page ${pagination.page} of ${pagination.totalPages} (${symbol} executions)`}
         icon={<History className="w-5 h-5" />}
       />
       
@@ -156,7 +141,7 @@ export function HistorySection({ symbol = 'BTC', method = 'kim_nghia', refreshKe
                     ${formatPrice(trade.size_usd)}
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-foreground-tertiary">
-                    {formatToGMT7(trade.entry_time || trade.opened_at || '')}
+                    {formatToGMT7(trade.entry_time || trade.opened_at)}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-foreground">
                     ${formatPrice(trade.entry_price)}

@@ -75,7 +75,7 @@ export function PendingOrdersSection({ symbol, method = 'kim_nghia', refreshKey 
     return (
       <section className="mb-8">
         <CardHeader 
-          title="Pending Orders" 
+          title="Planned Entries" 
           subtitle="Loading..."
           icon={<Clock className="w-5 h-5" />}
         />
@@ -94,13 +94,13 @@ export function PendingOrdersSection({ symbol, method = 'kim_nghia', refreshKey 
     return (
       <section className="mb-8">
         <CardHeader 
-          title="Pending Orders" 
+          title="Planned Entries" 
           subtitle={`${symbol || 'All'} limit orders waiting to execute`}
           icon={<Clock className="w-5 h-5" />}
         />
         <Card className="mt-4">
           <p className="text-foreground-tertiary text-sm text-center py-8">
-            No pending limit orders. New orders will appear when auto-entry conditions are met.
+            No planned entries right now. New entries appear when auto-entry conditions are met.
           </p>
         </Card>
       </section>
@@ -110,7 +110,7 @@ export function PendingOrdersSection({ symbol, method = 'kim_nghia', refreshKey 
   return (
     <section className="mb-8">
       <CardHeader 
-        title={`Pending Orders (${orders.length})`}
+        title={`Planned Entries (${orders.length})`}
         subtitle={`${symbol || 'All'} limit orders waiting for price to hit entry`}
         icon={<Clock className="w-5 h-5" />}
       />

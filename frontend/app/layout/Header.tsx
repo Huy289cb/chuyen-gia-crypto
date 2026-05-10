@@ -55,13 +55,13 @@ export function Header({ onRefresh, onTriggerAnalysis, isTriggering, isLoading, 
               </div>
               <div>
                 <h1 className="text-base sm:text-lg font-bold text-foreground">
-                  <span className="hidden sm:inline">Crypto</span>
-                  <span className="sm:hidden">C</span>
-                  <span className="text-gradient">Analyzer</span>
+                  <span className="hidden sm:inline">Download</span>
+                  <span className="sm:hidden">D</span>
+                  <span className="text-gradient">Money</span>
                   <span className="ml-1 sm:ml-2 px-1.5 sm:px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded-full">v{APP_VERSION}</span>
                 </h1>
                 <p className="text-xs text-foreground-tertiary hidden sm:block">
-                  AI-Powered Trading Analysis
+                  AI Trading Workspace
                 </p>
               </div>
             </div>

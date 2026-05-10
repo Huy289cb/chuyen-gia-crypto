@@ -61,10 +61,10 @@ export function PriceChartContainer({
         const result = await response.json();
         
         if (result.success && result.data) {
-          // Convert Unix timestamps to GMT+7 (add 7 hours = 25200 seconds)
-          const gmt7Offset = 7 * 60 * 60; // 7 hours in seconds
-          const formattedData = result.data.map((candle: any) => ({
-            time: candle.time + gmt7Offset,
+          // OHLC `time` is already UTC Unix seconds (Binance); do not add +7 — the chart
+          // library aligns the axis with the viewer's locale / UTC correctly.
+          const formattedData = result.data.map((candle: { time: number; open: number; high: number; low: number; close: number }) => ({
+            time: candle.time,
             open: candle.open,
             high: candle.high,
             low: candle.low,

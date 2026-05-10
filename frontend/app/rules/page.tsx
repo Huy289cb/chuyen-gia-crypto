@@ -11,8 +11,8 @@ type Language = 'vi' | 'en';
 
 const translations = {
   vi: {
-    title: 'Quy Tắc & Hành Vi Hệ Thống',
-    subtitle: 'Giải thích chi tiết về quy tắc, hành vi và logic quyết định của hệ thống paper trading',
+    title: 'Download Money - Quy Tắc & Hành Vi',
+    subtitle: 'Giải thích chi tiết về quy tắc, hành vi và logic quyết định của Download Money workspace',
     badges: {
       btcFocus: 'Tập trung BTC',
       ictMethodology: 'Phương pháp ICT',
@@ -189,7 +189,7 @@ const translations = {
     },
     importantNotes: {
       paperTrading: {
-        title: 'Chỉ Paper Trading',
+        title: 'Chỉ Sandbox Mô Phỏng',
         description: 'Đây là hệ thống mô phỏng. Không có tiền thật liên quan.'
       },
       educational: {
@@ -228,8 +228,8 @@ const translations = {
     }
   },
   en: {
-    title: 'System Rules & Behavior',
-    subtitle: 'Detailed explanation of paper trading system rules, behaviors, and decision logic',
+    title: 'Download Money - System Rules & Behavior',
+    subtitle: 'Detailed explanation of workspace rules, behaviors, and decision logic',
     badges: {
       btcFocus: 'BTC Focus',
       ictMethodology: 'ICT Methodology',
@@ -369,7 +369,7 @@ const translations = {
         title: 'Manual Cancellation',
         description: 'Users can cancel pending orders via UI',
         status: 'active',
-        details: 'Pending Orders section provides manual cancellation controls'
+        details: 'Planned Entries section provides manual cancellation controls'
       },
       orderValidation: {
         title: 'Order Validation',
@@ -406,7 +406,7 @@ const translations = {
     },
     importantNotes: {
       paperTrading: {
-        title: 'Paper Trading Only',
+        title: 'Simulation Sandbox Only',
         description: 'This is a simulation system. No real money is involved.'
       },
       educational: {

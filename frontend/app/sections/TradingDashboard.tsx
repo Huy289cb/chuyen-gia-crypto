@@ -31,7 +31,7 @@ export function TradingDashboard({ accounts, loading, onReset, method = 'kim_ngh
     <section className="mb-8">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-foreground">Paper Trading Dashboard</h2>
+          <h2 className="text-lg font-semibold text-foreground">Download Money Trading Dashboard</h2>
           <Badge variant="default" size="sm">{methodName}</Badge>
         </div>
         <div className="flex gap-2">
