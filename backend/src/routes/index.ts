@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma';
 // Import TypeScript sub-routers
 import performanceRouter from './performance';
 import testnetRouter from './testnet';
+import { runKimNghiaAnalysisJob } from '../services/kim-nghia-analysis-job';
 
 const router = Router();
 
@@ -233,81 +234,21 @@ router.get('/predictions/:coin', async (req: Request, res: Response): Promise<vo
  */
 router.post('/analysis/run', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { createAnalyzer } = await import('../analyzers/analyzerFactory.js');
-    const { getMethodConfig } = await import('../config/methods.js');
-    const { cache } = await import('../cache.js');
-    const { fetchHistoricalCandles } = await import('../services/price-fetcher.js');
-
     console.log('[Routes] Manual analysis trigger requested');
-
-    const priceData: any = await fetchRealTimePrices();
-
-    // Fetch historical OHLCV data for analyzer context
-    const btcCandles = await fetchHistoricalCandles('BTC', '1d', 24);
-    const ethCandles = await fetchHistoricalCandles('ETH', '1d', 24);
-
-    // Add historical prices to priceData
-    if (btcCandles && btcCandles.length > 0) {
-      priceData.btc.prices1d = btcCandles.map((k: any[]) => parseFloat(k[4])); // Close prices
+    const result = await runKimNghiaAnalysisJob();
+    if (!result.success) {
+      res.status(500).json({ success: false, error: result.error });
+      return;
     }
-    if (ethCandles && ethCandles.length > 0) {
-      priceData.eth.prices1d = ethCandles.map((k: any[]) => parseFloat(k[4])); // Close prices
-    }
-
-    const methodConfig = getMethodConfig('kim_nghia');
-    const analyzer: any = createAnalyzer(methodConfig);
-    const analysis = await analyzer.analyze(priceData, true);
-    
-    // Cache results
-    const cachedData = {
-      prices: priceData,
-      analysis: analysis,
-      lastUpdated: priceData.timestamp
-    };
-    cache.set(cachedData);
-    
-    // Save to database using Prisma
-    if (analysis) {
-      await prisma.analysisHistory.create({
-        data: {
-          coin: 'BTC',
-          timestamp: new Date(),
-          current_price: priceData.btc?.price || 0,
-          bias: analysis.btc?.bias || 'neutral',
-          action: analysis.btc?.action || 'hold',
-          confidence: analysis.btc?.confidence || 0,
-          narrative: analysis.btc?.narrative,
-          method_id: 'kim_nghia',
-          raw_question: analysis.raw_question,
-          raw_answer: analysis.raw_answer
-        }
-      });
-      
-      await prisma.analysisHistory.create({
-        data: {
-          coin: 'ETH',
-          timestamp: new Date(),
-          current_price: priceData.eth?.price || 0,
-          bias: analysis.eth?.bias || 'neutral',
-          action: analysis.eth?.action || 'hold',
-          confidence: analysis.eth?.confidence || 0,
-          narrative: analysis.eth?.narrative,
-          method_id: 'kim_nghia',
-          raw_question: analysis.raw_question,
-          raw_answer: analysis.raw_answer
-        }
-      });
-    }
-    
     res.json({
       success: true,
-      data: cachedData,
-      message: 'Analysis completed successfully'
+      data: result.data,
+      message: 'Analysis completed successfully',
     });
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });

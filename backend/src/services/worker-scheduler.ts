@@ -10,10 +10,12 @@ import {
 import { createTradingSnapshots, runDataRetention } from './runtime-maintenance';
 import { syncTestnetForSymbol } from './testnet-sync';
 import { fetchRealTimePrices } from './price-fetcher';
+import { runKimNghiaAnalysisJob } from './kim-nghia-analysis-job';
 
 let priceSyncInterval: NodeJS.Timeout | null = null;
 const cronTasks: ScheduledTask[] = [];
 let priceSyncJobRunning = false;
+let analysisJobRunning = false;
 
 async function runPriceSyncJob() {
   if (priceSyncJobRunning) {
@@ -112,6 +114,26 @@ async function runMaintenanceJob() {
   }
 }
 
+async function runKimNghiaCronJob() {
+  if (analysisJobRunning) {
+    console.warn('[WorkerScheduler] Previous Kim Nghia analysis still running, skipping CRON_SCHEDULE tick');
+    return;
+  }
+  analysisJobRunning = true;
+  try {
+    const result = await runKimNghiaAnalysisJob();
+    if (result.success) {
+      console.log('[WorkerScheduler] Kim Nghia analysis (CRON_SCHEDULE) completed');
+    } else {
+      console.error('[WorkerScheduler] Kim Nghia analysis (CRON_SCHEDULE) failed:', result.error);
+    }
+  } catch (error) {
+    console.error('[WorkerScheduler] Kim Nghia analysis job threw:', error);
+  } finally {
+    analysisJobRunning = false;
+  }
+}
+
 export async function startWorkerScheduler(): Promise<void> {
   console.log('[WorkerScheduler] Starting scheduler...');
   validateWorkerConfig();
@@ -138,8 +160,13 @@ export async function startWorkerScheduler(): Promise<void> {
   });
   cronTasks.push(maintenanceTask);
 
+  const analysisTask = cron.schedule(appConfig.analysisCronSchedule, () => {
+    void runKimNghiaCronJob();
+  });
+  cronTasks.push(analysisTask);
+
   console.log(
-    `[WorkerScheduler] Started. symbols=${workerConfig.syncSymbols.join(',')} timeframe=${workerConfig.ohlcvTimeframe} testnetSync=${workerConfig.enableTestnetSync} priceInterval=${appConfig.priceUpdateIntervalMs}ms validationCron="${appConfig.predictionValidationCron}" snapshotCron="${appConfig.snapshotCron}" maintenanceCron="${appConfig.dailyMaintenanceCron}"`
+    `[WorkerScheduler] Started. symbols=${workerConfig.syncSymbols.join(',')} timeframe=${workerConfig.ohlcvTimeframe} testnetSync=${workerConfig.enableTestnetSync} priceInterval=${appConfig.priceUpdateIntervalMs}ms validationCron="${appConfig.predictionValidationCron}" snapshotCron="${appConfig.snapshotCron}" maintenanceCron="${appConfig.dailyMaintenanceCron}" analysisCron="${appConfig.analysisCronSchedule}"`
   );
 }
 

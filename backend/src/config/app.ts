@@ -19,6 +19,8 @@ export interface AppConfig {
   predictionValidationCron: string;
   dailyMaintenanceCron: string;
   snapshotCron: string;
+  /** Kim Nghia Groq analysis (node-cron, 5-field). Env: CRON_SCHEDULE */
+  analysisCronSchedule: string;
   retentionDaysPriceHistory: number;
   retentionDaysOhlcv: number;
 }
@@ -35,6 +37,7 @@ export const appConfig: AppConfig = {
   predictionValidationCron: process.env.PREDICTION_VALIDATION_CRON || '0 * * * *',
   dailyMaintenanceCron: process.env.DAILY_MAINTENANCE_CRON || '0 3 * * *',
   snapshotCron: process.env.SNAPSHOT_CRON || '*/5 * * * *',
+  analysisCronSchedule: process.env.CRON_SCHEDULE || '*/15 * * * *',
   retentionDaysPriceHistory: parseInt(process.env.RETENTION_DAYS_PRICE_HISTORY || '30', 10),
   retentionDaysOhlcv: parseInt(process.env.RETENTION_DAYS_OHLCV || '90', 10),
 };
@@ -77,6 +80,10 @@ export function validateAppConfig(): void {
 
   if (!cron.validate(appConfig.snapshotCron)) {
     errors.push('SNAPSHOT_CRON is invalid');
+  }
+
+  if (!cron.validate(appConfig.analysisCronSchedule)) {
+    errors.push('CRON_SCHEDULE is invalid');
   }
 
   if (!Number.isFinite(appConfig.retentionDaysPriceHistory) || appConfig.retentionDaysPriceHistory < 1) {
