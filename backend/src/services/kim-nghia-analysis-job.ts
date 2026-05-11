@@ -169,7 +169,9 @@ async function maybeCreateKimNghiaPendingOrder({
   const riskUsd = Math.max(1, Number(account.current_balance || 0) * auto.riskPerTrade);
   const slDistancePct = Math.abs(entry - stopLoss) / entry;
   console.log(`[KimNghiaAutoEntry] SL distance: ${slDistancePct.toFixed(4)} (min=${auto.minSLDistancePercent})`);
-  if (slDistancePct < auto.minSLDistancePercent) {
+  // Add epsilon tolerance for floating point precision
+  const epsilon = 0.0001;
+  if (slDistancePct < auto.minSLDistancePercent - epsilon) {
     console.log(`[KimNghiaAutoEntry] Order creation skipped: SL distance too small`);
     return;
   }
