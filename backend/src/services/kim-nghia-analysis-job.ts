@@ -131,7 +131,10 @@ async function maybeCreateKimNghiaPendingOrder({
   const confidencePct = (Number(analysisBtc.confidence) || 0) * 100;
   const rr = Number(analysisBtc.expected_rr) || 0;
 
+  console.log(`[KimNghiaAutoEntry] Checking order creation: action=${action} confidence=${confidencePct}% (min=${auto.minConfidence}) rr=${rr} (min=${auto.minRRRatio})`);
+
   if ((action !== 'buy' && action !== 'sell') || confidencePct < auto.minConfidence || rr < auto.minRRRatio) {
+    console.log(`[KimNghiaAutoEntry] Order creation skipped: action=${action} confidence=${confidencePct}% < ${auto.minConfidence}% or rr=${rr} < ${auto.minRRRatio}`);
     return;
   }
 
@@ -139,6 +142,7 @@ async function maybeCreateKimNghiaPendingOrder({
   const stopLoss = Number(analysisBtc.suggested_stop_loss);
   const takeProfit = Number(analysisBtc.suggested_take_profit);
   if (!isValidNumber(entry) || !isValidNumber(stopLoss) || !isValidNumber(takeProfit)) {
+    console.log(`[KimNghiaAutoEntry] Order creation skipped: invalid entry/SL/TP values`);
     return;
   }
 
@@ -148,18 +152,25 @@ async function maybeCreateKimNghiaPendingOrder({
     getTestnetPendingOrders({ symbol: 'BTC', status: 'pending', methodId: 'kim_nghia' }),
   ]);
 
+  console.log(`[KimNghiaAutoEntry] Current state: openPositions=${openPositions.length}/${auto.maxPositionsPerSymbol} pendingOrders=${pendingOrders.length}/${auto.maxPositionsPerSymbol}`);
+
   if (openPositions.length >= auto.maxPositionsPerSymbol || pendingOrders.length >= auto.maxPositionsPerSymbol) {
+    console.log(`[KimNghiaAutoEntry] Order creation skipped: max positions/orders limit reached`);
     return;
   }
 
   const pendingVolume = pendingOrders.reduce((sum, o) => sum + (Number(o.size_usd) || 0), 0);
+  console.log(`[KimNghiaAutoEntry] Pending volume: ${pendingVolume}/${auto.maxPendingVolume}`);
   if (pendingVolume >= auto.maxPendingVolume) {
+    console.log(`[KimNghiaAutoEntry] Order creation skipped: max pending volume reached`);
     return;
   }
 
   const riskUsd = Math.max(1, Number(account.current_balance || 0) * auto.riskPerTrade);
   const slDistancePct = Math.abs(entry - stopLoss) / entry;
+  console.log(`[KimNghiaAutoEntry] SL distance: ${slDistancePct.toFixed(4)} (min=${auto.minSLDistancePercent})`);
   if (slDistancePct < auto.minSLDistancePercent) {
+    console.log(`[KimNghiaAutoEntry] Order creation skipped: SL distance too small`);
     return;
   }
 
@@ -167,7 +178,9 @@ async function maybeCreateKimNghiaPendingOrder({
   const computedSizeUsd = riskUsd / slDistancePct;
   const remainingPendingCapacity = Math.max(0, auto.maxPendingVolume - pendingVolume);
   const sizeUsd = Math.min(computedSizeUsd, auto.maxPendingOrderSize, remainingPendingCapacity);
+  console.log(`[KimNghiaAutoEntry] Computed size: computed=${computedSizeUsd.toFixed(2)} maxOrder=${auto.maxPendingOrderSize} remaining=${remainingPendingCapacity.toFixed(2)} final=${sizeUsd.toFixed(2)}`);
   if (sizeUsd <= 0) {
+    console.log(`[KimNghiaAutoEntry] Order creation skipped: computed size <= 0`);
     return;
   }
 
