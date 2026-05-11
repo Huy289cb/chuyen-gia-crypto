@@ -75,13 +75,29 @@ export async function getOrCreateTestnetAccount(
     return account;
   }
 
+  // If BINANCE_ENABLED is true, fetch actual balance from Binance
+  let actualBalance = startingBalance;
+  if (process.env.BINANCE_ENABLED === 'true') {
+    try {
+      const { getAccountBalance } = await import('../services/binanceClient');
+      const client = {}; // Binance client is not needed for module functions
+      const balanceInfo: any = await getAccountBalance(client);
+      if (balanceInfo && balanceInfo.totalWalletBalance) {
+        actualBalance = parseFloat(balanceInfo.totalWalletBalance);
+        console.log(`[TestnetRepository] Fetched actual balance from Binance: ${actualBalance} USDT for ${symbol}/${methodId}`);
+      }
+    } catch (error: any) {
+      console.warn(`[TestnetRepository] Failed to fetch balance from Binance, using default ${startingBalance}:`, error.message);
+    }
+  }
+
   return prisma.testnetAccount.create({
     data: {
       symbol: symbol.toUpperCase(),
       method_id: methodId,
-      starting_balance: startingBalance,
-      current_balance: startingBalance,
-      equity: startingBalance,
+      starting_balance: actualBalance,
+      current_balance: actualBalance,
+      equity: actualBalance,
     },
   });
 }
