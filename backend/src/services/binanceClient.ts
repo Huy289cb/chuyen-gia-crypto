@@ -11,10 +11,87 @@ import { getBalance } from './binance/account';
 import { getCurrentPosition as getCurrentPositionAPI, getPositionRisk as getPositionRiskAPI } from './binance/account';
 import { placeOrder as placeOrderAPI, cancelOrder as cancelOrderAPI, cancelAllOrders as cancelAllOrdersAPI, getOpenOrders as getOpenOrdersAPI } from './binance/trading';
 import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeStopMarketOrder as placeStopMarketOrderAPI, placeTakeProfitMarketOrder as placeTakeProfitMarketOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI, getOpenAlgoOrders as getOpenAlgoOrdersAPI } from './binance/trading';
+import { get } from './binance/client';
+import { endpoints } from './binance/endpoints';
+
+// Cache for exchange info to avoid repeated API calls
+let exchangeInfoCache: any = null;
+let exchangeInfoCacheTime = 0;
+const EXCHANGE_INFO_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Initialize Binance Client
+ * Get exchange info with caching (internal function for precision handling)
  */
+async function getExchangeInfoCached(symbol?: string): Promise<any> {
+  const now = Date.now();
+  
+  if (exchangeInfoCache && now - exchangeInfoCacheTime < EXCHANGE_INFO_CACHE_TTL) {
+    if (symbol && exchangeInfoCache.symbols) {
+      return exchangeInfoCache.symbols.find((s: any) => s.symbol === symbol) || exchangeInfoCache;
+    }
+    return exchangeInfoCache;
+  }
+  
+  const params = symbol ? { symbol } : {};
+  const response = await get(endpoints.EXCHANGE_INFO, params);
+  
+  exchangeInfoCache = response;
+  exchangeInfoCacheTime = now;
+  
+  if (symbol && response.symbols) {
+    return response.symbols.find((s: any) => s.symbol === symbol) || response;
+  }
+  
+  return response;
+}
+
+/**
+ * Normalize value to step size (for quantity precision)
+ */
+function normalizeToStepSize(value: number, stepSize: number): number {
+  const stepDecimals = stepSize.toString().split('.')[1]?.length || 0;
+  const normalized = Math.floor(value / stepSize) * stepSize;
+  return parseFloat(normalized.toFixed(stepDecimals));
+}
+
+/**
+ * Normalize price to tick size (for price precision)
+ */
+function normalizeToTickSize(price: number, tickSize: number): number {
+  const tickDecimals = tickSize.toString().split('.')[1]?.length || 0;
+  const normalized = Math.floor(price / tickSize) * tickSize;
+  return parseFloat(normalized.toFixed(tickDecimals));
+}
+
+/**
+ * Get precision filters for a symbol
+ */
+async function getSymbolFilters(symbol: string): Promise<{
+  stepSize: number;
+  tickSize: number;
+  minQty: number;
+  maxQty: number;
+  minPrice: number;
+  maxPrice: number;
+  minNotional: number;
+}> {
+  const symbolInfo = await getExchangeInfoCached(symbol);
+  
+  const lotSizeFilter = symbolInfo.filters.find((f: any) => f.filterType === 'LOT_SIZE');
+  const priceFilter = symbolInfo.filters.find((f: any) => f.filterType === 'PRICE_FILTER');
+  const minNotionalFilter = symbolInfo.filters.find((f: any) => f.filterType === 'MIN_NOTIONAL');
+  
+  return {
+    stepSize: parseFloat(lotSizeFilter.stepSize),
+    tickSize: parseFloat(priceFilter.tickSize),
+    minQty: parseFloat(lotSizeFilter.minQty),
+    maxQty: parseFloat(lotSizeFilter.maxQty),
+    minPrice: parseFloat(priceFilter.minPrice),
+    maxPrice: parseFloat(priceFilter.maxPrice),
+    minNotional: parseFloat(minNotionalFilter.minNotional),
+  };
+}
+
 export function initTestnetClient(): any {
   if (!validateConfig()) {
     console.log('[BinanceClient] Configuration validation failed');
@@ -129,12 +206,19 @@ export async function placeMarketOrder(_client: any, symbol: string, side: strin
  */
 export async function placeLimitOrder(_client: any, symbol: string, side: string, quantity: number, price: number, positionSide: string | null = null, newClientOrderId: string | null = null): Promise<any> {
   try {
+    // Get precision filters and normalize values
+    const filters = await getSymbolFilters(symbol);
+    const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
+    const normalizedPrice = normalizeToTickSize(price, filters.tickSize);
+    
+    console.log(`[BinanceClient] Precision normalization: quantity ${quantity} -> ${normalizedQuantity} (stepSize: ${filters.stepSize}), price ${price} -> ${normalizedPrice} (tickSize: ${filters.tickSize})`);
+
     const params: any = {
       symbol,
       side,
       type: 'LIMIT',
-      quantity: quantity.toString(),
-      price: price.toString(),
+      quantity: normalizedQuantity.toString(),
+      price: normalizedPrice.toString(),
       timeInForce: 'GTC',
     };
     
@@ -150,7 +234,7 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
     
     const response = await placeOrderAPI(params);
     
-    console.log(`[BinanceClient] Limit order placed: ${side} ${quantity} ${symbol} @ ${price}${positionSide ? ` (positionSide: ${positionSide})` : ''}${newClientOrderId ? ` (clientOrderId: ${newClientOrderId})` : ''}`);
+    console.log(`[BinanceClient] Limit order placed: ${side} ${normalizedQuantity} ${symbol} @ ${normalizedPrice}${positionSide ? ` (positionSide: ${positionSide})` : ''}${newClientOrderId ? ` (clientOrderId: ${newClientOrderId})` : ''}`);
     return response;
   } catch (error: any) {
     console.error('[BinanceClient] Failed to place limit order:', error.message);
@@ -164,11 +248,18 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
  */
 export async function placeStopLossOrder(_client: any, symbol: string, side: string, quantity: number, stopPrice: number, positionSide: string | null = null): Promise<any> {
   try {
+    // Get precision filters and normalize values
+    const filters = await getSymbolFilters(symbol);
+    const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
+    const normalizedStopPrice = normalizeToTickSize(stopPrice, filters.tickSize);
+    
+    console.log(`[BinanceClient] Precision normalization for SL: quantity ${quantity} -> ${normalizedQuantity}, stopPrice ${stopPrice} -> ${normalizedStopPrice}`);
+
     const params: any = {
       symbol,
       side,
-      quantity: quantity.toString(),
-      stopPrice: stopPrice.toString(),
+      quantity: normalizedQuantity.toString(),
+      stopPrice: normalizedStopPrice.toString(),
     };
 
     // Add positionSide for hedge mode (dual position side)
@@ -176,14 +267,14 @@ export async function placeStopLossOrder(_client: any, symbol: string, side: str
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
       const response = await placeStopMarketOrderAPI(params);
-      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=STOP_MARKET stopPrice=${stopPrice}`);
+      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=STOP_MARKET stopPrice=${normalizedStopPrice}`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.type = 'STOP_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} type=STOP_MARKET stopPrice=${stopPrice}`);
+      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} type=STOP_MARKET stopPrice=${normalizedStopPrice}`);
       return response;
     }
   } catch (error: any) {
@@ -198,11 +289,18 @@ export async function placeStopLossOrder(_client: any, symbol: string, side: str
  */
 export async function placeTakeProfitOrder(_client: any, symbol: string, side: string, quantity: number, price: number, positionSide: string | null = null): Promise<any> {
   try {
+    // Get precision filters and normalize values
+    const filters = await getSymbolFilters(symbol);
+    const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
+    const normalizedPrice = normalizeToTickSize(price, filters.tickSize);
+    
+    console.log(`[BinanceClient] Precision normalization for TP: quantity ${quantity} -> ${normalizedQuantity}, price ${price} -> ${normalizedPrice}`);
+
     const params: any = {
       symbol,
       side,
-      quantity: quantity.toString(),
-      stopPrice: price.toString(),
+      quantity: normalizedQuantity.toString(),
+      stopPrice: normalizedPrice.toString(),
     };
 
     // Add positionSide for hedge mode (dual position side)
@@ -210,14 +308,14 @@ export async function placeTakeProfitOrder(_client: any, symbol: string, side: s
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
       const response = await placeTakeProfitMarketOrderAPI(params);
-      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=TAKE_PROFIT_MARKET stopPrice=${price}`);
+      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=TAKE_PROFIT_MARKET price=${normalizedPrice}`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.type = 'TAKE_PROFIT_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} type=TAKE_PROFIT_MARKET stopPrice=${price}`);
+      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} type=TAKE_PROFIT_MARKET price=${normalizedPrice}`);
       return response;
     }
   } catch (error: any) {
