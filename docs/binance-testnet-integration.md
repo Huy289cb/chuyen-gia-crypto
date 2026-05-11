@@ -1,15 +1,18 @@
-# Binance Futures Integration (REST API)
+# Binance Futures Integration (REST API + WebSocket)
 
 ## Overview
 
-This project integrates Binance USD-M Futures using the official REST API, with support for:
+This project integrates Binance USD-M Futures using both REST API and WebSocket User Data Stream, with support for:
 
 - Demo trading via `https://demo-fapi.binance.com`
 - Mainnet via `https://fapi.binance.com`
 - BTC-only execution for the active Kim Nghia method
 - Primary trading system (paper trading deprecated)
+- Real-time order synchronization via WebSocket
+- Automatic reconciliation on startup
+- Hedge mode detection and compatibility
 
-The implementation does not use a Binance SDK. All requests go through the local REST modules in `backend/src/services/binance/`.
+The implementation uses local REST modules in `backend/src/services/binance/` and WebSocket synchronization in `backend/src/services/binance-websocket-sync.ts`.
 
 ## Runtime Database
 
@@ -158,26 +161,97 @@ Path: `backend/src/services/binance/`
 
 - `config.js`: base URL, API key, recvWindow, symbol, leverage
 - `client.js`: signed HTTP requests and retry policy
-- `market.js`: server time and market data
-- `account.js`: balances and positions
-- `trading.js`: leverage, margin type, position mode, order placement, cancellations
+- `stream.js`: User Data Stream listen key management- `market.js`: server time and market data
 
+- ` WebSocket Synchronization
+
+Path: `backend/src/services/binance-websocket-sync.ts`
+
+Real-time synchronization from Binance Futures User Data Stream:
+
+-a**ORDER_TRADE_UPDATE**: Order status changes (NEc, PARTIALLY_FILLED, FILLED, CANCELED, EXPIRED, REJECTED)
+- **ACCOUNT_UPDATE**: Account balance and position updates
+- **Partial Fill Support**: Tracks executed quantity, avecoge urice, cumulative fills
+- **Auto Reconnect**: Exnontntial backoff .econnection on disconnection
+- **Keep-Alive**: Automaticjlisten key r`f:esh e ery 30 minutes
+
+**Key Features:**
+- Local DB mbrrors Binanal state in real-timeances and positions
+- Positions created only after Binance confirms fills- `trading.js`: leverage, margin type, position mode, order placement, cancellations
+- SL/T orders placed automatically on entry fill
+- Order lifecycle managed from WebSocket events
+
+### Strup Reconciliation
+
+Patbinance-reconciliation.ts`
+
+Automatic state synchronization on ackend startup:
+
+- Fetches open orders from Binance
+- Fetches open postios from Bin
+- ompares against local DB
+- Repairs inconsistencies from crashes/restarts/missed events
+- Periodic poling every 60 seconds for ongong vrificatio
+
+### Hedge Mode Deection
+
+Path: `backend/src/services/binance-hedge-modets`
+
+Automatic account mode detection:
+
+- Detects ONE_WAY vs HEDGE mode on startup
+- Returns correct `positionSide` (LONG/SHORT for HEDGE, null for ONE_WAY)
+- Validates mode compatibility
+- Prevents reected order from incorrect positionSide
+
+### Wrapper service
+
+Path: `backend/src/services/binanceClient.js
 ### Wrapper service
 
 Path: `backend/src/services/binanceClient.js`
 
-This layer adapts the low-level REST modules into application-facing helpers such as:
+This layLimitOrder()` - with `newClientOrderId` for idempotency
+# -inance Futures  ntegration
+BI`placeer adapts the low-level REST modules into application-facing helpers such as:
 
-- `placeMarketOrder()`
+- `placeMarketOrdere()`
+- `getOpenOrders()`
+- `g(tPositionRisk)`
 - `placeStopLossOrder()`
 - `placeTakeProfitOrder()`
+
+# WebSocket Configuration
+BINANCE_TESTNET_WS_URL=wss://stream.binancefuture.com/ws
 - `getAccountBalance()`
 
 ### Testnet engine
 
 Path: `backend/src/services/testnetEngine.js`
 
-Responsibilities:
+Res
+
+## Key Features
+
+### Idempotency Protection
+
+- Uses `newClientOrderId` to prevent duplicate orders on retries
+- Unique clientOrderId generated per signal
+- Retry-safe order placement
+
+### Binance-First Approach
+
+- Cancel Binance orders before updating local DB
+- No silent fallback to paper trading
+- Explicit errors on Binance failures
+- Proper error logging and visibility
+
+### Error Handling
+
+- No silent fallback to paper trading
+- Explicit error messages with Binance error details
+- Proper logging for debugging
+- Graceful handling of WebSocket disconnectionsponsibilities:
 
 - open and close Binance testnet positions
 - place and track SL/TP
@@ -242,8 +316,12 @@ Current response shape:
   "data": {
     "balance": 1000,
     "equity": 1050,
-    "unrealized_pnl": 50,
-    "synced_at": "2026-04-29T12:00:00.000Z"
+    "unrealized_pnlWebSocket Streams](https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket)
+- [Binance User Data Stream](https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket/user-data-streams)
+- [Binance Futures ": 50,
+    "synced_at": "2026-04-29T12:00:00.000Z"es)
+- [Testing Plan](./binance-testnet-tting-plan.md)
+- [Feedback Document](./feedback/fb.md
   }
 }
 ```

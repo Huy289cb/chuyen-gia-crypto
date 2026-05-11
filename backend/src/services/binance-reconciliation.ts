@@ -1,0 +1,264 @@
+/**
+ * Binance Futures Startup Reconciliation Service
+ * 
+ * Syncs local database state with Binance state on backend startup
+ * Handles server crashes, restarts, network failures, missed WebSocket events
+ */
+
+import { getTestnetPendingOrders, updateTestnetPendingOrder, getTestnetPositions, updateTestnetPosition } from '../repositories/testnet.repository';
+import { getOpenOrders, getPositionRisk } from './binanceClient';
+
+/**
+ * Perform startup reconciliation between local DB and Binance
+ * 
+ * This should be called when the backend starts up if BINANCE_ENABLED=true
+ */
+export async function performStartupReconciliation(): Promise<void> {
+  if (process.env.BINANCE_ENABLED !== 'true') {
+    console.log('[BinanceReconciliation] BINANCE_ENABLED is not true, skipping reconciliation');
+    return;
+  }
+
+  console.log('[BinanceReconciliation] Starting startup reconciliation...');
+
+  try {
+    await reconcilePendingOrders();
+    await reconcilePositions();
+    
+    console.log('[BinanceReconciliation] Startup reconciliation completed successfully');
+  } catch (error: any) {
+    console.error('[BinanceReconciliation] Startup reconciliation failed:', error.message);
+    // Don't throw - allow the backend to start even if reconciliation fails
+    // The WebSocket sync will eventually correct any inconsistencies
+  }
+}
+
+/**
+ * Reconcile pending orders between local DB and Binance
+ */
+async function reconcilePendingOrders(): Promise<void> {
+  console.log('[BinanceReconciliation] Reconciling pending orders...');
+
+  const localPendingOrders = await getTestnetPendingOrders({ status: 'pending' });
+  
+  if (localPendingOrders.length === 0) {
+    console.log('[BinanceReconciliation] No local pending orders to reconcile');
+    return;
+  }
+
+  const client = {} as any; // Binance client is not needed for module functions
+
+  // Fetch open orders from Binance
+  const binanceOrders: any[] = [];
+  for (const order of localPendingOrders) {
+    try {
+      const orders = await getOpenOrders(client, `${order.symbol}USDT`);
+      binanceOrders.push(...orders);
+    } catch (error: any) {
+      console.error(`[BinanceReconciliation] Failed to fetch open orders for ${order.symbol}:`, error.message);
+    }
+  }
+
+  // Create a map of Binance order IDs for quick lookup
+  const binanceOrderIds = new Set(binanceOrders.map((o: any) => String(o.orderId)));
+
+  // Check each local pending order
+  for (const localOrder of localPendingOrders) {
+    if (!localOrder.binance_order_id) {
+      // Local order without Binance ID - this shouldn't happen if BINANCE_ENABLED=true
+      console.warn(`[BinanceReconciliation] Local order ${localOrder.order_id} has no binance_order_id, marking as failed`);
+      await updateTestnetPendingOrder(localOrder.order_id, {
+        status: 'failed_no_binance_id',
+      });
+      continue;
+    }
+
+    const existsOnBinance = binanceOrderIds.has(localOrder.binance_order_id);
+
+    if (!existsOnBinance) {
+      // Order exists locally but not on Binance
+      // Possible scenarios:
+      // 1. Order was filled/cancelled while backend was down
+      // 2. Order was rejected by Binance
+      // 3. Network issue caused order to not be placed
+      
+      console.warn(`[BinanceReconciliation] Local order ${localOrder.order_id} (binance: ${localOrder.binance_order_id}) not found on Binance`);
+      
+      // Mark as potentially failed - user should verify
+      await updateTestnetPendingOrder(localOrder.order_id, {
+        status: 'reconciliation_failed_not_on_binance',
+      });
+    } else {
+      // Order exists on both sides - verify status
+      const binanceOrder = binanceOrders.find((o: any) => String(o.orderId) === localOrder.binance_order_id);
+      if (binanceOrder) {
+        const binanceStatus = binanceOrder.status;
+        console.log(`[BinanceReconciliation] Order ${localOrder.order_id} exists on Binance with status ${binanceStatus}`);
+        
+        // If Binance shows FILLED but local shows pending, local state is stale
+        if (binanceStatus === 'FILLED' && localOrder.status === 'pending') {
+          console.warn(`[BinanceReconciliation] Order ${localOrder.order_id} is FILLED on Binance but PENDING locally - state inconsistency`);
+          // The WebSocket should eventually catch this, but we could proactively fix it
+          // For now, just log it
+        }
+      }
+    }
+  }
+
+  // Check for orders on Binance that don't exist locally
+  // This could happen if the order was placed but DB write failed
+  for (const binanceOrder of binanceOrders) {
+    const binanceOrderId = String(binanceOrder.orderId);
+    const existsLocally = localPendingOrders.some(o => o.binance_order_id === binanceOrderId);
+    
+    if (!existsLocally) {
+      console.warn(`[BinanceReconciliation] Binance order ${binanceOrderId} not found in local DB - orphaned order`);
+      // Could create a local record for this order, but that's complex
+      // For now, just log it - user can manually clean up
+    }
+  }
+}
+
+/**
+ * Reconcile positions between local DB and Binance
+ */
+async function reconcilePositions(): Promise<void> {
+  console.log('[BinanceReconciliation] Reconciling positions...');
+
+  const localPositions = await getTestnetPositions({ status: 'open' });
+  
+  if (localPositions.length === 0) {
+    console.log('[BinanceReconciliation] No local open positions to reconcile');
+    return;
+  }
+
+  const client = {} as any; // Binance client is not needed for module functions
+
+  // Fetch position risk from Binance
+  const binancePositions: any[] = [];
+  const symbols = [...new Set(localPositions.map(p => p.symbol))];
+  
+  for (const symbol of symbols) {
+    try {
+      const positions = await getPositionRisk(client, `${symbol}USDT`);
+      binancePositions.push(...positions);
+    } catch (error: any) {
+      console.error(`[BinanceReconciliation] Failed to fetch position risk for ${symbol}:`, error.message);
+    }
+  }
+
+  // Filter to only positions with non-zero position amount
+  const activeBinancePositions = binancePositions.filter((p: any) => parseFloat(p.positionAmt) !== 0);
+
+  // Create a map for quick lookup
+  const binancePositionMap = new Map(
+    activeBinancePositions.map((p: any) => [`${p.symbol}_${p.positionSide}`, p])
+  );
+
+  // Check each local position
+  for (const localPosition of localPositions) {
+    const positionSide = localPosition.side === 'long' ? 'LONG' : 'SHORT';
+    const key = `${localPosition.symbol}USDT_${positionSide}`;
+    
+    const binancePosition = binancePositionMap.get(key);
+
+    if (!binancePosition) {
+      // Position exists locally but not on Binance
+      // Possible scenarios:
+      // 1. Position was closed while backend was down
+      // 2. Position was never opened on Binance
+      // 3. Position side mismatch
+      
+      console.warn(`[BinanceReconciliation] Local position ${localPosition.position_id} not found on Binance`);
+      
+      // Mark as potentially closed - user should verify
+      await updateTestnetPosition(localPosition.position_id, {
+        status: 'reconciliation_failed_not_on_binance',
+      });
+    } else {
+      // Position exists on both sides - verify details
+      const binanceAmt = parseFloat(binancePosition.positionAmt);
+      const localAmt = localPosition.size_qty;
+      
+      // Check if quantities match approximately (allow for small rounding differences)
+      const qtyDiff = Math.abs(binanceAmt - localAmt);
+      if (qtyDiff > 0.0001) {
+        console.warn(`[BinanceReconciliation] Position ${localPosition.position_id} quantity mismatch: local=${localAmt}, binance=${binanceAmt}`);
+        await updateTestnetPosition(localPosition.position_id, {
+          size_qty: binanceAmt,
+          size_usd: binanceAmt * localPosition.entry_price,
+        });
+      }
+      
+      console.log(`[BinanceReconciliation] Position ${localPosition.position_id} reconciled successfully`);
+    }
+  }
+
+  // Check for positions on Binance that don't exist locally
+  for (const [key, binancePosition] of binancePositionMap) {
+    const symbol = binancePosition.symbol.replace('USDT', '');
+    const positionSide = binancePosition.positionSide.toLowerCase();
+    const side = positionSide === 'long' ? 'long' : 'short';
+    
+    const existsLocally = localPositions.some(
+      p => p.symbol === symbol && p.side === side && p.status === 'open'
+    );
+    
+    if (!existsLocally) {
+      console.warn(`[BinanceReconciliation] Binance position ${key} not found in local DB - orphaned position`);
+      // Could create a local record for this position, but that's complex
+      // For now, just log it - user can manually clean up
+    }
+  }
+}
+
+/**
+ * Initialize the startup reconciliation
+ * This should be called when the backend starts
+ */
+export async function initializeBinanceReconciliation(): Promise<void> {
+  if (process.env.BINANCE_ENABLED !== 'true') {
+    return;
+  }
+
+  // Wait a bit for the backend to fully start
+  setTimeout(async () => {
+    await performStartupReconciliation();
+  }, 5000); // 5 seconds delay
+
+  // Start periodic recovery polling
+  startPeriodicReconciliation();
+}
+
+let periodicReconciliationInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Start periodic reconciliation polling
+ * Runs every 60 seconds to verify local state matches Binance
+ */
+function startPeriodicReconciliation(): void {
+  if (periodicReconciliationInterval) {
+    return; // Already running
+  }
+
+  console.log('[BinanceReconciliation] Starting periodic reconciliation polling (60s interval)');
+
+  periodicReconciliationInterval = setInterval(async () => {
+    try {
+      await performStartupReconciliation();
+    } catch (error: any) {
+      console.error('[BinanceReconciliation] Periodic reconciliation failed:', error.message);
+    }
+  }, 60000); // 60 seconds
+}
+
+/**
+ * Stop periodic reconciliation polling
+ */
+export function stopPeriodicReconciliation(): void {
+  if (periodicReconciliationInterval) {
+    clearInterval(periodicReconciliationInterval);
+    periodicReconciliationInterval = null;
+    console.log('[BinanceReconciliation] Periodic reconciliation polling stopped');
+  }
+}

@@ -352,24 +352,50 @@ router.post('/cleanup/:accountId', async (req: Request, res: Response) => {
 
     let client: any = null;
     let cancelOrder: any = null;
-    try {
-      const helpers: any = await getBinanceHelpers();
-      client = helpers.initTestnetClient();
-      cancelOrder = helpers.cancelOrder;
-    } catch (_error) {
-      client = null;
+    
+    if (process.env.BINANCE_ENABLED === 'true') {
+      try {
+        const helpers: any = await getBinanceHelpers();
+        client = helpers.initTestnetClient();
+        cancelOrder = helpers.cancelOrder;
+        if (!client) {
+          console.error('[TestnetRoutes] Binance client unavailable for cleanup');
+          return res.status(503).json({ 
+            success: false, 
+            error: 'Binance client unavailable - cannot cancel real orders' 
+          });
+        }
+      } catch (error: any) {
+        console.error('[TestnetRoutes] Failed to initialize Binance client for cleanup:', error.message);
+        return res.status(503).json({ 
+          success: false, 
+          error: `Binance client initialization failed: ${error.message}` 
+        });
+      }
     }
 
     const cancelledOrderIds: number[] = [];
+    const binanceCancelErrors: any[] = [];
+
     for (const order of pendingOrders) {
-      if (client && cancelOrder && order.binance_order_id) {
+      // Binance-first: Cancel Binance order first
+      if (process.env.BINANCE_ENABLED === 'true' && client && cancelOrder && order.binance_order_id) {
         try {
-          await cancelOrder(client, `${order.symbol}USDT`, order.binance_order_id);
-        } catch (_error) {
-          // Keep local cleanup progressing even if Binance cancellation fails.
+          console.log(`[TestnetRoutes] Cleanup: Cancelling Binance order ${order.binance_order_id} for local order ${order.order_id}`);
+          await cancelOrder(client, `${order.symbol}USDT`, Number(order.binance_order_id));
+          console.log(`[TestnetRoutes] Cleanup: Binance order ${order.binance_order_id} cancelled successfully`);
+        } catch (error: any) {
+          console.error(`[TestnetRoutes] Cleanup: Failed to cancel Binance order ${order.binance_order_id}:`, error.message);
+          binanceCancelErrors.push({
+            order_id: order.order_id,
+            binance_order_id: order.binance_order_id,
+            error: error.message,
+          });
+          // Continue with other orders even if one fails
         }
       }
 
+      // Only update local DB after Binance cancellation (or if BINANCE_ENABLED is false)
       await cancelTestnetPendingOrder(String(order.order_id), 'cleanup');
       cancelledOrderIds.push(Number(order.order_id));
     }
@@ -391,17 +417,21 @@ router.post('/cleanup/:accountId', async (req: Request, res: Response) => {
     }
 
     return res.json({
-      success: true,
-      message: 'Testnet cleanup completed successfully',
+      success: binanceCancelErrors.length === 0,
+      message: binanceCancelErrors.length > 0 
+        ? 'Testnet cleanup completed with some Binance cancellation errors' 
+        : 'Testnet cleanup completed successfully',
       data: {
         cancelled_order_ids: cancelledOrderIds,
         wallet_balance: account?.current_balance ?? null,
         equity: account?.equity ?? null,
         unrealized_pnl: account?.unrealized_pnl ?? null,
         cleaned_at: new Date().toISOString(),
+        binance_cancel_errors: binanceCancelErrors.length > 0 ? binanceCancelErrors : undefined,
       },
     });
   } catch (error: any) {
+    console.error('[TestnetRoutes] Error during cleanup:', error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -529,17 +559,36 @@ router.post('/pending-orders/:id/cancel', async (req: Request, res: Response) =>
       return res.status(400).json({ success: false, error: 'Order is not pending' });
     }
 
-    try {
-      const { initTestnetClient, cancelOrder }: any = await getBinanceHelpers();
-      const client = initTestnetClient();
-      if (client && order.binance_order_id) {
-        await cancelOrder(client, `${order.symbol}USDT`, order.binance_order_id);
+    // Binance-first approach: Cancel Binance order first, then update local DB
+    if (process.env.BINANCE_ENABLED === 'true' && order.binance_order_id) {
+      try {
+        const { initTestnetClient, cancelOrder }: any = await getBinanceHelpers();
+        const client = initTestnetClient();
+        if (!client) {
+          console.error(`[TestnetRoutes] Binance client unavailable for order ${order.order_id}`);
+          return res.status(503).json({ 
+            success: false, 
+            error: 'Binance client unavailable - cannot cancel real order' 
+          });
+        }
+
+        console.log(`[TestnetRoutes] Cancelling Binance order ${order.binance_order_id} for local order ${order.order_id}`);
+        await cancelOrder(client, `${order.symbol}USDT`, Number(order.binance_order_id));
+        console.log(`[TestnetRoutes] Binance order ${order.binance_order_id} cancelled successfully`);
+      } catch (error: any) {
+        console.error(`[TestnetRoutes] Failed to cancel Binance order ${order.binance_order_id}:`, error.message);
+        // Phase 9: Do NOT silently fallback - return explicit error
+        return res.status(500).json({ 
+          success: false, 
+          error: `Binance order cancellation failed: ${error.message}`,
+          binance_order_id: order.binance_order_id,
+        });
       }
-    } catch (_error) {
-      // Keep local cancellation working even if Binance order cancellation fails.
     }
 
+    // Only update local DB after successful Binance cancellation (or if BINANCE_ENABLED is false)
     await cancelTestnetPendingOrder(order.order_id, cancelReason);
+    console.log(`[TestnetRoutes] Local order ${order.order_id} marked as cancelled`);
 
     return res.json({
       success: true,
@@ -547,9 +596,11 @@ router.post('/pending-orders/:id/cancel', async (req: Request, res: Response) =>
       data: {
         order_id: order.order_id,
         cancel_reason: cancelReason,
+        binance_order_id: order.binance_order_id,
       },
     });
   } catch (error: any) {
+    console.error('[TestnetRoutes] Error cancelling pending order:', error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 });

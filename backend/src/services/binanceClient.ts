@@ -127,7 +127,7 @@ export async function placeMarketOrder(_client: any, symbol: string, side: strin
 /**
  * Place limit order
  */
-export async function placeLimitOrder(_client: any, symbol: string, side: string, quantity: number, price: number, positionSide: string | null = null): Promise<any> {
+export async function placeLimitOrder(_client: any, symbol: string, side: string, quantity: number, price: number, positionSide: string | null = null, newClientOrderId: string | null = null): Promise<any> {
   try {
     const params: any = {
       symbol,
@@ -143,9 +143,14 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
       params.positionSide = positionSide;
     }
     
+    // Add newClientOrderId for idempotency protection
+    if (newClientOrderId) {
+      params.newClientOrderId = newClientOrderId;
+    }
+    
     const response = await placeOrderAPI(params);
     
-    console.log(`[BinanceClient] Limit order placed: ${side} ${quantity} ${symbol} @ ${price}${positionSide ? ` (positionSide: ${positionSide})` : ''}`);
+    console.log(`[BinanceClient] Limit order placed: ${side} ${quantity} ${symbol} @ ${price}${positionSide ? ` (positionSide: ${positionSide})` : ''}${newClientOrderId ? ` (clientOrderId: ${newClientOrderId})` : ''}`);
     return response;
   } catch (error: any) {
     console.error('[BinanceClient] Failed to place limit order:', error.message);

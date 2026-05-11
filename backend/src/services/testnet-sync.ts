@@ -127,6 +127,12 @@ async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promis
 }
 
 export async function syncTestnetForSymbol(symbol: string, candle: RealtimeCandle): Promise<void> {
+  // Disable local execution when Binance integration is enabled
+  // Binance becomes the execution authority; local execution causes duplicate fills and state divergence
+  if (process.env.BINANCE_ENABLED === 'true') {
+    return;
+  }
+  
   await executeTriggeredPendingOrders(symbol, candle);
   await syncOpenPositions(symbol, candle);
 }

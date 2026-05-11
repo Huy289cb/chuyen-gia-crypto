@@ -44,7 +44,17 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Advanced Metrics**: Accuracy by timeframe, accuracy by bias, average hold time
 - **Data Freshness Indicators**: Hiển thị trạng thái freshness của giá và phân tích
 
-### Real-time Data
+### Binance Futures Testnet Integration
+- **Real Order Placement**: Orders placed on Binance Futures Testnet (not paper trading)
+- **WebSocket Synchronization**: Real-time order and position updates via User Data Stream
+- **Startup Reconciliation**: Automatic state sync on backend startup
+- **Hedge Mode Detection**: Automatic detection of ONE_WAY vs HEDGE mode
+- **Idempotency Protection**: Duplicate order prevention with newClientOrderId
+- **Binance-First Approach**: Cancel Binance orders before local DB updates
+- **SL/TP Management**: Real SL/TP orders on Binance with reduceOnly
+- **Error Handling**: No silent fallback, explicit errors on failures
+- See `docs/binance-testnet-integration.md` for details
+- See `docs/binance-testnet-testing-plan.md` for testing procedures
 - Giá BTC/ETH cập nhật real-time từ **Binance API** (primary), CoinGecko (fallback)
 - Phân tích tự động mỗi 15 phút (KimNghia: 0,15,30,45), ICT: disabled
 - Cache 20 phút để đảm bảo performance

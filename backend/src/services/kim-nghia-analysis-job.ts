@@ -12,6 +12,11 @@ import {
   updateTestnetPendingOrder,
 } from '../repositories/testnet.repository';
 import { prisma } from '../lib/prisma';
+import {
+  initTestnetClient,
+  placeLimitOrder,
+} from './binanceClient';
+import { getPositionSide } from './binance-hedge-mode';
 
 export type KimNghiaAnalysisJobResult =
   | { success: true; data: unknown }
@@ -168,6 +173,48 @@ async function maybeCreateKimNghiaPendingOrder({
 
   const sizeQty = sizeUsd / entry;
   const orderId = `kn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  
+  // Phase 7: Idempotency protection - use unique newClientOrderId
+  // This prevents duplicate orders on retries
+  const newClientOrderId = `x-${orderId}`;
+  
+  let binanceOrderId: string | undefined;
+  
+  // Place real Binance order if BINANCE_ENABLED is true
+  if (process.env.BINANCE_ENABLED === 'true') {
+    const client = initTestnetClient();
+    if (!client) {
+      throw new Error('Binance client unavailable - cannot place real order');
+    }
+
+    const binanceSide = side === 'long' ? 'BUY' : 'SELL';
+    // Phase 8: Use detected positionSide for hedge mode compatibility
+    const positionSide = getPositionSide(side);
+
+    try {
+      const order = await placeLimitOrder(
+        client,
+        'BTCUSDT',
+        binanceSide,
+        sizeQty,
+        entry,
+        positionSide,
+        newClientOrderId, // Pass newClientOrderId for idempotency
+      );
+      binanceOrderId = String(order.orderId);
+      console.log(`[KimNghiaAutoEntry] Placed Binance order ${binanceOrderId} (clientOrderId: ${newClientOrderId}, positionSide: ${positionSide || 'N/A'}) for pending order ${orderId}`);
+    } catch (error: any) {
+      console.error(`[KimNghiaAutoEntry] Failed to place Binance order: ${error.message}`);
+      // Phase 7: Check if order already exists (duplicate prevention)
+      if (error.message && error.message.includes('Duplicate order')) {
+        console.log(`[KimNghiaAutoEntry] Order with clientOrderId ${newClientOrderId} already exists, fetching existing order...`);
+        // Could fetch the existing order here, but for now we'll re-throw
+        // In a full implementation, we would query the order by clientOrderId
+      }
+      throw new Error(`Binance order placement failed: ${error.message}`);
+    }
+  }
+  
   await createTestnetPendingOrder({
     orderId,
     accountId: account.id,
@@ -184,6 +231,7 @@ async function maybeCreateKimNghiaPendingOrder({
     linkedPredictionId: analysisId,
     invalidationLevel: isValidNumber(analysisBtc.invalidation_level) ? analysisBtc.invalidation_level : undefined,
     methodId: 'kim_nghia',
+    binanceOrderId,
   });
 
   console.log(

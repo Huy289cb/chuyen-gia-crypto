@@ -44,6 +44,34 @@ async function startServer() {
     console.log('');
     console.log('Health check: http://localhost:' + appConfig.port + '/health');
     console.log('=================================');
+
+    // Initialize Binance services if enabled
+    if (process.env.BINANCE_ENABLED === 'true') {
+      console.log('[Server] BINANCE_ENABLED is true, initializing Binance services...');
+      import('./services/binance-websocket-sync').then(({ startBinanceWebSocketSync }) => {
+        startBinanceWebSocketSync().catch((error) => {
+          console.error('[Server] Failed to start Binance WebSocket sync:', error);
+        });
+      }).catch((error) => {
+        console.error('[Server] Failed to import Binance WebSocket sync:', error);
+      });
+
+      import('./services/binance-reconciliation').then(({ initializeBinanceReconciliation }) => {
+        initializeBinanceReconciliation().catch((error) => {
+          console.error('[Server] Failed to initialize Binance reconciliation:', error);
+        });
+      }).catch((error) => {
+        console.error('[Server] Failed to import Binance reconciliation:', error);
+      });
+
+      import('./services/binance-hedge-mode').then(({ initializeHedgeModeDetection }) => {
+        initializeHedgeModeDetection().catch((error) => {
+          console.error('[Server] Failed to initialize hedge mode detection:', error);
+        });
+      }).catch((error) => {
+        console.error('[Server] Failed to import hedge mode detection:', error);
+      });
+    }
   });
 
   // Handle server errors
@@ -73,6 +101,25 @@ async function startServer() {
   // Graceful shutdown
   const gracefulShutdown = async (signal: string) => {
     console.log(`[Server] ${signal} received. Shutting down gracefully...`);
+    
+    // Stop Binance WebSocket sync if enabled
+    if (process.env.BINANCE_ENABLED === 'true') {
+      try {
+        const { stopBinanceWebSocketSync } = await import('./services/binance-websocket-sync');
+        await stopBinanceWebSocketSync();
+        console.log('[Server] Binance WebSocket sync stopped');
+      } catch (error) {
+        console.error('[Server] Error stopping Binance WebSocket sync:', error);
+      }
+      
+      try {
+        const { stopPeriodicReconciliation } = await import('./services/binance-reconciliation');
+        stopPeriodicReconciliation();
+        console.log('[Server] Periodic reconciliation stopped');
+      } catch (error) {
+        console.error('[Server] Error stopping periodic reconciliation:', error);
+      }
+    }
     
     server.close(async () => {
       console.log('[Server] HTTP server closed');
