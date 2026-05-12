@@ -286,7 +286,7 @@ CRITICAL SL/TP PLACEMENT:
       cooldownDuration: 240,
       maxConsecutiveLosses: 3,
       cooldownHours: 6, // Increased from 4 to 6 hours for longer cooldown
-      enabledSymbols: ['BTC', 'ETH'],
+      enabledSymbols: ['BTC'], // BTC-only per Big Update Plan v3
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.6, // Increased from 0.5 to 0.6 for stricter HTF alignment

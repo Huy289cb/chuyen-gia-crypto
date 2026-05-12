@@ -100,6 +100,57 @@ export function validateAppConfig(): void {
 }
 
 /**
+ * Validate safety requirements per Big Update Plan v3
+ * This ensures critical safety features cannot be disabled
+ */
+export function validateSafetyRequirements(): void {
+  const errors: string[] = [];
+
+  // Import method config to check BTC-only scope
+  try {
+    const { METHODS } = require('./methods');
+    const enabledMethods = Object.values(METHODS).filter((m: any) => m.enabled);
+    
+    for (const method of enabledMethods) {
+      const methodConfig = method as any;
+      const symbols = methodConfig.autoEntry?.enabledSymbols || [];
+      
+      // Check for ETH in enabled symbols (violates BTC-only requirement)
+      if (symbols.includes('ETH')) {
+        errors.push(`Method ${methodConfig.methodId} has ETH in enabledSymbols - violates BTC-only requirement per Big Update Plan v3`);
+      }
+      
+      // Ensure BTC is in enabled symbols
+      if (!symbols.includes('BTC')) {
+        errors.push(`Method ${methodConfig.methodId} does not have BTC in enabledSymbols - BTC is required per Big Update Plan v3`);
+      }
+    }
+  } catch (error) {
+    console.warn('[SafetyValidation] Could not validate method configuration:', error);
+  }
+
+  // Check that safety features cannot be disabled via environment
+  // These are hardcoded in groq-dispatch.service.ts, but we validate intent
+  const unsafeConfigs = [
+    'DISABLE_SIGNAL_GATE',
+    'DISABLE_RISK_CHECK',
+    'DISABLE_MEMORY_LAYER'
+  ];
+  
+  for (const config of unsafeConfigs) {
+    if (process.env[config] === 'true') {
+      errors.push(`Environment variable ${config} is set to true - critical safety features cannot be disabled per Big Update Plan v3`);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Safety validation failed: ${errors.join(', ')}`);
+  }
+  
+  console.log('[SafetyValidation] All safety requirements validated successfully');
+}
+
+/**
  * Check if this is the API process
  */
 export function isApiProcess(): boolean {

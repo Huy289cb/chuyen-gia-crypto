@@ -1,6 +1,6 @@
 import { createApp } from './app';
 import { appConfig, isApiProcess } from './config/app';
-import { validateAppConfig } from './config/app';
+import { validateAppConfig, validateSafetyRequirements } from './config/app';
 import dotenv from 'dotenv';
 dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
@@ -20,6 +20,14 @@ async function startServer() {
     validateAppConfig();
   } catch (error: any) {
     console.error('[Server] Configuration validation failed:', error.message);
+    process.exit(1);
+  }
+
+  // Validate safety requirements per Big Update Plan v3
+  try {
+    validateSafetyRequirements();
+  } catch (error: any) {
+    console.error('[Server] Safety validation failed:', error.message);
     process.exit(1);
   }
 

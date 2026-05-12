@@ -1,5 +1,5 @@
 import { appConfig, isWorkerProcess } from './config/app';
-import { validateAppConfig } from './config/app';
+import { validateAppConfig, validateSafetyRequirements } from './config/app';
 import { disconnectPrisma } from './lib/prisma';
 import { startWorkerScheduler, stopWorkerScheduler } from './services/worker-scheduler';
 import dotenv from 'dotenv';
@@ -67,6 +67,14 @@ async function startWorker() {
     validateAppConfig();
   } catch (error: any) {
     console.error('[Worker] Configuration validation failed:', error.message);
+    process.exit(1);
+  }
+
+  // Validate safety requirements per Big Update Plan v3
+  try {
+    validateSafetyRequirements();
+  } catch (error: any) {
+    console.error('[Worker] Safety validation failed:', error.message);
     process.exit(1);
   }
 
