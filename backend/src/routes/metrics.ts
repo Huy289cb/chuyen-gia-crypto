@@ -122,7 +122,7 @@ router.get('/costs', async (_req: Request, res: Response) => {
  * GET /api/metrics/signal-gate
  * Get signal gate statistics
  */
-router.get('/signal-gate', async (req: Request, res: Response) => {
+router.get('/signal-gate', async (_req: Request, res: Response) => {
   try {
     const config = signalGateService.getConfig();
     

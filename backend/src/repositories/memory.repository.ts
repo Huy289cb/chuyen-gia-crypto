@@ -140,10 +140,7 @@ export async function getRecentFailures(symbol: string, limit: number = 3) {
 export async function getPlaybookStats(playbook_key: string, symbol: string) {
   let stats = await prisma.playbookStats.findUnique({
     where: {
-      playbook_key_symbol: {
-        playbook_key,
-        symbol
-      }
+      playbook_key
     }
   });
 
@@ -181,10 +178,7 @@ export async function updatePlaybookStats(
 
   return await prisma.playbookStats.update({
     where: {
-      playbook_key_symbol: {
-        playbook_key,
-        symbol
-      }
+      playbook_key
     },
     data: {
       total_trades: totalTrades,
