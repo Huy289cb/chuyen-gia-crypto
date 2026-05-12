@@ -9,7 +9,6 @@ import WebSocket from 'ws';
 import { startListenKey, keepAliveListenKey, closeListenKey } from './binance/stream';
 import { getTestnetPendingOrders, updateTestnetPendingOrder, createTestnetPosition, executeTestnetPendingOrder, recordTestnetTradeEvent, updateTestnetPosition } from '../repositories/testnet.repository';
 import { placeStopLossOrder, placeTakeProfitOrder } from './binanceClient';
-import { OrderIntent } from './binance-hedge-mode';
 
 let ws: WebSocket | null = null;
 let listenKey: string | null = null;

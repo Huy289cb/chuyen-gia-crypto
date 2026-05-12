@@ -16,7 +16,6 @@ import {
   initTestnetClient,
   placeLimitOrder,
 } from './binanceClient';
-import { OrderIntent } from './binance-hedge-mode';
 
 export type KimNghiaAnalysisJobResult =
   | { success: true; data: unknown }

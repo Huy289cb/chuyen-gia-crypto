@@ -1,0 +1,53 @@
+'use client';
+
+import { cn } from '@/lib/utils';
+import { CheckCircle, XCircle, AlertCircle, Info, Clock } from 'lucide-react';
+
+type EventSeverity = 'info' | 'success' | 'warning' | 'error';
+
+interface EventLogItemProps {
+  timestamp: string;
+  module: string;
+  message: string;
+  severity?: EventSeverity;
+  details?: string;
+}
+
+const severityConfig = {
+  info: { icon: Info, color: 'text-info', bg: 'bg-info-dim' },
+  success: { icon: CheckCircle, color: 'text-success', bg: 'bg-success-dim' },
+  warning: { icon: AlertCircle, color: 'text-warning', bg: 'bg-warning-dim' },
+  error: { icon: XCircle, color: 'text-danger', bg: 'bg-danger-dim' },
+};
+
+export function EventLogItem({ 
+  timestamp, 
+  module, 
+  message, 
+  severity = 'info',
+  details 
+}: EventLogItemProps) {
+  const config = severityConfig[severity];
+  const Icon = config.icon;
+
+  return (
+    <div className={cn('p-3 rounded-lg border', config.bg, 'border-transparent')}>
+      <div className="flex items-start gap-3">
+        <Icon className={cn('w-4 h-4 mt-0.5 flex-shrink-0', config.color)} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-xs font-medium text-foreground-secondary">{module}</span>
+            <span className="text-xs text-foreground-tertiary flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {timestamp}
+            </span>
+          </div>
+          <p className="text-sm text-foreground">{message}</p>
+          {details && (
+            <p className="text-xs text-foreground-tertiary mt-1">{details}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

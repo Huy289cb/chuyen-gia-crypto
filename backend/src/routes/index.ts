@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma';
 import performanceRouter from './performance';
 import testnetRouter from './testnet';
 import metricsRouter from './metrics';
+import dashboardRouter from './dashboard';
 // CRITICAL: Legacy kim_nghia auto-entry DISABLED per Big Update v3
 // import { runKimNghiaAnalysisJob } from '../services/kim-nghia-analysis-job';
 
@@ -381,5 +382,13 @@ router.use('/testnet', testnetRouter);
  * Endpoints: GET /api/metrics/risk, GET /api/metrics/playbooks, GET /api/metrics/no-trade, GET /api/metrics/costs
  */
 router.use('/metrics', metricsRouter);
+
+/**
+ * Mount dashboard router
+ * Endpoints: GET /api/dashboard/system, GET /api/dashboard/schedulers, GET /api/dashboard/signals, etc.
+ * Endpoints: GET /api/account/balance, GET /api/account/positions, GET /api/account/orders, GET /api/account/trades
+ */
+router.use('/dashboard', dashboardRouter);
+router.use('/account', dashboardRouter);
 
 export default router;
