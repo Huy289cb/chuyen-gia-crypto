@@ -7,7 +7,8 @@ import { prisma } from '../lib/prisma';
 import performanceRouter from './performance';
 import testnetRouter from './testnet';
 import metricsRouter from './metrics';
-import { runKimNghiaAnalysisJob } from '../services/kim-nghia-analysis-job';
+// CRITICAL: Legacy kim_nghia auto-entry DISABLED per Big Update v3
+// import { runKimNghiaAnalysisJob } from '../services/kim-nghia-analysis-job';
 
 const router = Router();
 
@@ -239,19 +240,14 @@ router.get('/predictions/:coin', async (req: Request, res: Response): Promise<vo
 
 /**
  * POST /api/analysis/run - Manual trigger for analysis
+ * CRITICAL: DISABLED per Big Update v3 - use new pipeline only
  */
 router.post('/analysis/run', async (_req: Request, res: Response): Promise<void> => {
   try {
-    console.log('[Routes] Manual analysis trigger requested');
-    const result = await runKimNghiaAnalysisJob();
-    if (!result.success) {
-      res.status(500).json({ success: false, error: result.error });
-      return;
-    }
-    res.json({
-      success: true,
-      data: result.data,
-      message: 'Analysis completed successfully',
+    console.log('[Routes] Manual analysis trigger requested - DISABLED per Big Update v3');
+    res.status(403).json({
+      success: false,
+      error: 'Legacy analysis trigger DISABLED per Big Update v3. Use new Signal Gate → Risk Engine → Groq pipeline.',
     });
   } catch (error: any) {
     res.status(500).json({

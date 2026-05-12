@@ -10,7 +10,8 @@ import {
 import { createTradingSnapshots, runDataRetention } from './runtime-maintenance';
 import { syncTestnetForSymbol } from './testnet-sync';
 import { fetchRealTimePrices } from './price-fetcher';
-import { runKimNghiaAnalysisJob } from './kim-nghia-analysis-job';
+// CRITICAL: Legacy kim_nghia auto-entry DISABLED per Big Update v3
+// import { runKimNghiaAnalysisJob } from './kim-nghia-analysis-job';
 import { startMarketScanScheduler } from '../schedulers/market-scan.scheduler';
 import { startLLMDispatchScheduler } from '../schedulers/llm-dispatch.scheduler';
 import { startPositionMonitorScheduler } from '../schedulers/position-monitor.scheduler';
@@ -18,7 +19,6 @@ import { startPositionMonitorScheduler } from '../schedulers/position-monitor.sc
 let priceSyncInterval: NodeJS.Timeout | null = null;
 const cronTasks: ScheduledTask[] = [];
 let priceSyncJobRunning = false;
-let analysisJobRunning = false;
 
 async function runPriceSyncJob() {
   if (priceSyncJobRunning) {
@@ -117,26 +117,6 @@ async function runMaintenanceJob() {
   }
 }
 
-async function runKimNghiaCronJob() {
-  if (analysisJobRunning) {
-    console.warn('[WorkerScheduler] Previous Kim Nghia analysis still running, skipping CRON_SCHEDULE tick');
-    return;
-  }
-  analysisJobRunning = true;
-  try {
-    const result = await runKimNghiaAnalysisJob();
-    if (result.success) {
-      console.log('[WorkerScheduler] Kim Nghia analysis (CRON_SCHEDULE) completed');
-    } else {
-      console.error('[WorkerScheduler] Kim Nghia analysis (CRON_SCHEDULE) failed:', result.error);
-    }
-  } catch (error) {
-    console.error('[WorkerScheduler] Kim Nghia analysis job threw:', error);
-  } finally {
-    analysisJobRunning = false;
-  }
-}
-
 export async function startWorkerScheduler(): Promise<void> {
   console.log('[WorkerScheduler] Starting scheduler...');
   validateWorkerConfig();
@@ -163,10 +143,11 @@ export async function startWorkerScheduler(): Promise<void> {
   });
   cronTasks.push(maintenanceTask);
 
-  const analysisTask = cron.schedule(appConfig.analysisCronSchedule, () => {
-    void runKimNghiaCronJob();
-  });
-  cronTasks.push(analysisTask);
+  // CRITICAL: Legacy kim_nghia analysis cron task DISABLED per Big Update v3
+  // const analysisTask = cron.schedule(appConfig.analysisCronSchedule, () => {
+  //   void runKimNghiaCronJob();
+  // });
+  // cronTasks.push(analysisTask);
 
   // Start new Big Update v3 schedulers
   console.log('[WorkerScheduler] Starting Big Update v3 schedulers...');

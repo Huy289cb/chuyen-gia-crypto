@@ -259,6 +259,10 @@ async function maybeProcessPendingOrderDecisions({
 }: {
   analysisBtc: any;
 }): Promise<void> {
+  // CRITICAL: Legacy kim_nghia auto-entry DISABLED per Big Update v3
+  console.log('[KimNghiaPendingOrderDecision] CRITICAL: Legacy pending order decisions DISABLED per Big Update v3');
+  return;
+
   if (!analysisBtc) return;
 
   const decisions = analysisBtc?.pending_order_decisions;
@@ -373,6 +377,10 @@ async function maybeProcessPositionDecisions({
 }: {
   analysisBtc: any;
 }): Promise<void> {
+  // CRITICAL: Legacy kim_nghia auto-entry DISABLED per Big Update v3
+  console.log('[KimNghiaPositionDecision] CRITICAL: Legacy position decisions DISABLED per Big Update v3');
+  return;
+
   if (!analysisBtc) return;
 
   const decisions = analysisBtc?.position_decisions;
