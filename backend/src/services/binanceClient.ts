@@ -205,14 +205,15 @@ export async function placeMarketOrder(_client: any, symbol: string, side: strin
  * Place limit order
  */
 export async function placeLimitOrder(_client: any, symbol: string, side: string, quantity: number, price: number, positionSide: string | null = null, newClientOrderId: string | null = null): Promise<any> {
-  try {
-    // Get precision filters and normalize values
-    const filters = await getSymbolFilters(symbol);
-    const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
-    const normalizedPrice = normalizeToTickSize(price, filters.tickSize);
-    
-    console.log(`[BinanceClient] Precision normalization: quantity ${quantity} -> ${normalizedQuantity} (stepSize: ${filters.stepSize}), price ${price} -> ${normalizedPrice} (tickSize: ${filters.tickSize})`);
+  // Get precision filters and normalize values
+  const filters = await getSymbolFilters(symbol);
+  const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
+  const normalizedPrice = normalizeToTickSize(price, filters.tickSize);
+  
+  console.log(`[BinanceClient] Precision normalization: quantity ${quantity} -> ${normalizedQuantity} (stepSize: ${filters.stepSize}), price ${price} -> ${normalizedPrice} (tickSize: ${filters.tickSize})`);
 
+  try {
+    // Try without positionSide first (ONE_WAY mode)
     const params: any = {
       symbol,
       side,
@@ -222,14 +223,14 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
       timeInForce: 'GTC',
     };
     
-    // Add positionSide for hedge mode (dual position side)
-    if (positionSide) {
-      params.positionSide = positionSide;
-    }
-    
     // Add newClientOrderId for idempotency protection
     if (newClientOrderId) {
       params.newClientOrderId = newClientOrderId;
+    }
+    
+    // Only add positionSide if explicitly provided (HEDGE mode)
+    if (positionSide) {
+      params.positionSide = positionSide;
     }
     
     const response = await placeOrderAPI(params);
@@ -237,6 +238,32 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
     console.log(`[BinanceClient] Limit order placed: ${side} ${normalizedQuantity} ${symbol} @ ${normalizedPrice}${positionSide ? ` (positionSide: ${positionSide})` : ''}${newClientOrderId ? ` (clientOrderId: ${newClientOrderId})` : ''}`);
     return response;
   } catch (error: any) {
+    // If error is -4061 (position side mismatch), retry with positionSide
+    if (error.message.includes('-4061') || error.message.includes('position side does not match')) {
+      console.log(`[BinanceClient] Order failed with -4061, retrying with positionSide (HEDGE mode)`);
+      
+      // Get positionSide from hedge mode detection or default based on side
+      const hedgePositionSide = positionSide || (side === 'BUY' ? 'LONG' : 'SHORT');
+      
+      const params: any = {
+        symbol,
+        side,
+        type: 'LIMIT',
+        quantity: normalizedQuantity.toString(),
+        price: normalizedPrice.toString(),
+        timeInForce: 'GTC',
+        positionSide: hedgePositionSide,
+      };
+      
+      if (newClientOrderId) {
+        params.newClientOrderId = newClientOrderId;
+      }
+      
+      const response = await placeOrderAPI(params);
+      console.log(`[BinanceClient] Limit order placed with positionSide: ${side} ${normalizedQuantity} ${symbol} @ ${normalizedPrice} (positionSide: ${hedgePositionSide})`);
+      return response;
+    }
+    
     console.error('[BinanceClient] Failed to place limit order:', error.message);
     throw error;
   }
