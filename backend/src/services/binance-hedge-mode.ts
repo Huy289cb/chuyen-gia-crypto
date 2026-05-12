@@ -8,15 +8,18 @@
 import { getPositionRisk } from './binanceClient';
 
 export type PositionMode = 'ONE_WAY' | 'HEDGE';
+export type OrderIntent = 'OPEN' | 'CLOSE';
 
 let detectedMode: PositionMode | null = null;
+let detectionPromise: Promise<PositionMode> | null = null;
 
 /**
  * Detect the account's position mode from Binance
  * 
  * Returns 'ONE_WAY' or 'HEDGE' based on the account's current mode
+ * This is called ONCE at startup and cached
  */
-export async function detectPositionMode(): Promise<PositionMode> {
+async function detectPositionModeInternal(): Promise<PositionMode> {
   const client = {} as any; // Binance client is not needed for module functions
 
   try {
@@ -47,25 +50,124 @@ export async function detectPositionMode(): Promise<PositionMode> {
 }
 
 /**
- * Get the detected position mode
+ * Ensure position mode is detected (called once at startup)
  */
-export function getPositionMode(): PositionMode | null {
+export async function ensurePositionModeDetected(): Promise<PositionMode> {
+  if (detectedMode) {
+    return detectedMode;
+  }
+  
+  if (detectionPromise) {
+    return detectionPromise;
+  }
+  
+  detectionPromise = detectPositionModeInternal();
+  return detectionPromise;
+}
+
+/**
+ * Get the detected position mode (must be called after ensurePositionModeDetected)
+ */
+export function getPositionMode(): PositionMode {
+  if (!detectedMode) {
+    throw new Error('[BinanceHedgeMode] Position mode not detected. Call ensurePositionModeDetected() first.');
+  }
   return detectedMode;
 }
 
 /**
- * Get the correct positionSide for a given side based on the detected mode
+ * Resolve the correct positionSide based on side, intent, and current position
  * 
- * In HEDGE mode: 'long' -> 'LONG', 'short' -> 'SHORT'
- * In ONE_WAY mode: returns null (positionSide should not be sent)
+ * @param side - Order side: 'BUY' or 'SELL'
+ * @param intent - Order intent: 'OPEN' or 'CLOSE'
+ * @param currentPosition - Current position info: { positionAmt: number, positionSide?: string }
+ * @returns positionSide ('LONG' or 'SHORT') or null for ONE_WAY mode
+ * @throws Error if context is missing or invalid
  */
-export function getPositionSide(side: string): string | null {
-  if (detectedMode === 'HEDGE') {
-    return side === 'long' ? 'LONG' : 'SHORT';
+export function resolvePositionSide(
+  side: 'BUY' | 'SELL',
+  intent: OrderIntent,
+  currentPosition: { positionAmt: number; positionSide?: string } | null
+): string | null {
+  const mode = getPositionMode();
+  
+  // In ONE_WAY mode, positionSide should not be sent
+  if (mode === 'ONE_WAY') {
+    return null;
   }
   
-  // In ONE_WAY mode, don't send positionSide
-  return null;
+  // In HEDGE mode, positionSide is REQUIRED
+  if (mode === 'HEDGE') {
+    // Validate inputs
+    if (side !== 'BUY' && side !== 'SELL') {
+      throw new Error(`[BinanceHedgeMode] Invalid side: ${side}. Must be 'BUY' or 'SELL'.`);
+    }
+    
+    if (intent !== 'OPEN' && intent !== 'CLOSE') {
+      throw new Error(`[BinanceHedgeMode] Invalid intent: ${intent}. Must be 'OPEN' or 'CLOSE'.`);
+    }
+    
+    // For OPEN positions
+    if (intent === 'OPEN') {
+      // BUY -> LONG, SELL -> SHORT
+      if (side === 'BUY') {
+        return 'LONG';
+      } else {
+        return 'SHORT';
+      }
+    }
+    
+    // For CLOSE positions
+    if (intent === 'CLOSE') {
+      // Must have current position info
+      if (!currentPosition) {
+        throw new Error('[BinanceHedgeMode] Current position info required for CLOSE intent');
+      }
+      
+      const { positionAmt, positionSide: currentSide } = currentPosition;
+      
+      // If we have positionSide from current position, use it
+      if (currentSide && (currentSide === 'LONG' || currentSide === 'SHORT')) {
+        return currentSide;
+      }
+      
+      // Otherwise, infer from positionAmt
+      // positionAmt > 0 means LONG position, positionAmt < 0 means SHORT position
+      if (positionAmt > 0) {
+        return 'LONG';
+      } else if (positionAmt < 0) {
+        return 'SHORT';
+      } else {
+        throw new Error('[BinanceHedgeMode] Cannot close position: positionAmt is 0 (no position to close)');
+      }
+    }
+  }
+  
+  // Should never reach here
+  throw new Error(`[BinanceHedgeMode] Unexpected mode: ${mode}`);
+}
+
+/**
+ * Validate that positionSide is correctly set based on mode
+ * 
+ * @param positionSide - positionSide value to validate
+ * @throws Error if validation fails
+ */
+export function validatePositionSide(positionSide: string | null): void {
+  const mode = getPositionMode();
+  
+  if (mode === 'HEDGE') {
+    if (!positionSide) {
+      throw new Error('[BinanceHedgeMode] positionSide is REQUIRED in HEDGE mode');
+    }
+    if (positionSide !== 'LONG' && positionSide !== 'SHORT') {
+      throw new Error(`[BinanceHedgeMode] Invalid positionSide: ${positionSide}. Must be 'LONG' or 'SHORT'.`);
+    }
+  } else if (mode === 'ONE_WAY') {
+    if (positionSide) {
+      throw new Error('[BinanceHedgeMode] positionSide must NOT be sent in ONE_WAY mode');
+    }
+  }
 }
 
 /**
@@ -75,33 +177,31 @@ export function getPositionSide(side: string): string | null {
  * when their account is in one-way mode
  */
 export function validateModeCompatibility(expectedMode: PositionMode): boolean {
-  if (!detectedMode) {
-    console.warn('[BinanceHedgeMode] Mode not yet detected, cannot validate');
-    return false;
-  }
+  const mode = getPositionMode();
   
-  const isCompatible = detectedMode === expectedMode;
+  const isCompatible = mode === expectedMode;
   
   if (!isCompatible) {
-    console.warn(`[BinanceHedgeMode] Mode mismatch: expected ${expectedMode}, detected ${detectedMode}`);
+    console.warn(`[BinanceHedgeMode] Mode mismatch: expected ${expectedMode}, detected ${mode}`);
   }
   
   return isCompatible;
 }
 
 /**
- * Initialize hedge mode detection on startup
+ * Initialize hedge mode detection on startup (synchronous)
+ * This must be called before any trading operations
  */
 export async function initializeHedgeModeDetection(): Promise<void> {
   if (process.env.BINANCE_ENABLED !== 'true') {
     console.log('[BinanceHedgeMode] BINANCE_ENABLED is not true, skipping hedge mode detection');
+    detectedMode = 'ONE_WAY'; // Default to ONE_WAY if Binance is disabled
     return;
   }
 
   console.log('[BinanceHedgeMode] Initializing hedge mode detection...');
   
-  // Wait a bit for the backend to fully start
-  setTimeout(async () => {
-    await detectPositionMode();
-  }, 3000); // 3 seconds delay
+  // Detect synchronously (no delay)
+  await ensurePositionModeDetected();
+  console.log(`[BinanceHedgeMode] Position mode detection complete: ${detectedMode}`);
 }

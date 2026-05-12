@@ -13,6 +13,38 @@ import { placeOrder as placeOrderAPI, cancelOrder as cancelOrderAPI, cancelAllOr
 import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeStopMarketOrder as placeStopMarketOrderAPI, placeTakeProfitMarketOrder as placeTakeProfitMarketOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI, getOpenAlgoOrders as getOpenAlgoOrdersAPI } from './binance/trading';
 import { get } from './binance/client';
 import { endpoints } from './binance/endpoints';
+import { resolvePositionSide, validatePositionSide, OrderIntent } from './binance-hedge-mode';
+
+/**
+ * Fetch real position from Binance for a symbol
+ * Optional function to validate currentPosition before CLOSE orders
+ * 
+ * @param symbol - Trading symbol (e.g., BTCUSDT)
+ * @returns Current position info: { positionAmt: number, positionSide?: string }
+ */
+export async function fetchRealPositionFromBinance(symbol: string): Promise<{ positionAmt: number; positionSide?: string } | null> {
+  try {
+    const position = await getCurrentPositionAPI(symbol);
+    
+    if (!position) {
+      return null;
+    }
+    
+    const positionAmt = typeof position.positionAmt === 'string' ? parseFloat(position.positionAmt) : position.positionAmt;
+    
+    if (!positionAmt || positionAmt === 0) {
+      return null;
+    }
+    
+    return {
+      positionAmt: positionAmt,
+      positionSide: position.positionSide,
+    };
+  } catch (error: any) {
+    console.error(`[BinanceClient] Failed to fetch real position for ${symbol}:`, error.message);
+    return null;
+  }
+}
 
 // Cache for exchange info to avoid repeated API calls
 let exchangeInfoCache: any = null;
@@ -163,8 +195,37 @@ export async function getCurrentPosition(_client: any, symbol: string): Promise<
 /**
  * Place market order
  */
-export async function placeMarketOrder(_client: any, symbol: string, side: string, quantity: number, positionSide: string | null = null): Promise<any> {
+export async function placeMarketOrder(
+  _client: any,
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  quantity: number,
+  intent: OrderIntent,
+  currentPosition: { positionAmt: number; positionSide?: string } | null = null,
+  positionSide: string | null = null
+): Promise<any> {
+  // Validate intent is provided
+  if (!intent) {
+    throw new Error('[BinanceClient] Order rejected: intent is required (OPEN or CLOSE)');
+  }
+
+  // Validate currentPosition is provided for CLOSE orders
+  if (intent === 'CLOSE' && !currentPosition) {
+    throw new Error('[BinanceClient] Order rejected: currentPosition is required for CLOSE orders');
+  }
+
+  // Log order details before placing
+  console.log(`[BinanceClient] MARKET ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}`);
+
   try {
+    // If positionSide is explicitly provided, validate it
+    if (positionSide !== null) {
+      validatePositionSide(positionSide);
+    } else {
+      // Resolve positionSide based on side, intent, and current position
+      positionSide = resolvePositionSide(side, intent, currentPosition);
+    }
+
     const params: any = {
       symbol,
       side,
@@ -172,7 +233,7 @@ export async function placeMarketOrder(_client: any, symbol: string, side: strin
       quantity: quantity.toString(),
     };
     
-    // Add positionSide for hedge mode (dual position side)
+    // Add positionSide if in HEDGE mode
     if (positionSide) {
       params.positionSide = positionSide;
     }
@@ -187,7 +248,7 @@ export async function placeMarketOrder(_client: any, symbol: string, side: strin
     const takerFeeRate = 0.0004; // 0.04%
     const estimatedFee = orderValue * takerFeeRate;
     
-    console.log(`[BinanceClient] Market order placed: ${side} ${quantity} ${symbol}${positionSide ? ` (positionSide: ${positionSide})` : ''}, estimated fee: ${estimatedFee.toFixed(4)} USDT`);
+    console.log(`[BinanceClient] MARKET ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} positionSide=${positionSide || 'N/A'} orderId=${response.orderId} estimated fee: ${estimatedFee.toFixed(4)} USDT`);
     
     return {
       ...response,
@@ -196,7 +257,7 @@ export async function placeMarketOrder(_client: any, symbol: string, side: strin
       commissionUsdt: estimatedFee,
     };
   } catch (error: any) {
-    console.error('[BinanceClient] Failed to place market order:', error.message);
+    console.error(`[BinanceClient] MARKET ORDER FAILED: symbol=${symbol} side=${side} intent=${intent} error=${error.message}`);
     throw error;
   }
 }
@@ -204,7 +265,27 @@ export async function placeMarketOrder(_client: any, symbol: string, side: strin
 /**
  * Place limit order
  */
-export async function placeLimitOrder(_client: any, symbol: string, side: string, quantity: number, price: number, positionSide: string | null = null, newClientOrderId: string | null = null): Promise<any> {
+export async function placeLimitOrder(
+  _client: any,
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  quantity: number,
+  price: number,
+  intent: OrderIntent,
+  currentPosition: { positionAmt: number; positionSide?: string } | null = null,
+  positionSide: string | null = null,
+  newClientOrderId: string | null = null
+): Promise<any> {
+  // Validate intent is provided
+  if (!intent) {
+    throw new Error('[BinanceClient] Order rejected: intent is required (OPEN or CLOSE)');
+  }
+
+  // Validate currentPosition is provided for CLOSE orders
+  if (intent === 'CLOSE' && !currentPosition) {
+    throw new Error('[BinanceClient] Order rejected: currentPosition is required for CLOSE orders');
+  }
+
   // Get precision filters and normalize values
   const filters = await getSymbolFilters(symbol);
   const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
@@ -212,8 +293,18 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
   
   console.log(`[BinanceClient] Precision normalization: quantity ${quantity} -> ${normalizedQuantity} (stepSize: ${filters.stepSize}), price ${price} -> ${normalizedPrice} (tickSize: ${filters.tickSize})`);
 
+  // Log order details before placing
+  console.log(`[BinanceClient] LIMIT ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} price=${price} positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}${newClientOrderId ? ` clientOrderId=${newClientOrderId}` : ''}`);
+
   try {
-    // Try without positionSide first (ONE_WAY mode)
+    // If positionSide is explicitly provided, validate it
+    if (positionSide !== null) {
+      validatePositionSide(positionSide);
+    } else {
+      // Resolve positionSide based on side, intent, and current position
+      positionSide = resolvePositionSide(side, intent, currentPosition);
+    }
+
     const params: any = {
       symbol,
       side,
@@ -228,43 +319,17 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
       params.newClientOrderId = newClientOrderId;
     }
     
-    // Only add positionSide if explicitly provided (HEDGE mode)
+    // Add positionSide if in HEDGE mode
     if (positionSide) {
       params.positionSide = positionSide;
     }
     
     const response = await placeOrderAPI(params);
     
-    console.log(`[BinanceClient] Limit order placed: ${side} ${normalizedQuantity} ${symbol} @ ${normalizedPrice}${positionSide ? ` (positionSide: ${positionSide})` : ''}${newClientOrderId ? ` (clientOrderId: ${newClientOrderId})` : ''}`);
+    console.log(`[BinanceClient] LIMIT ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} quantity=${normalizedQuantity} price=${normalizedPrice} positionSide=${positionSide || 'N/A'} orderId=${response.orderId}${newClientOrderId ? ` clientOrderId=${newClientOrderId}` : ''}`);
     return response;
   } catch (error: any) {
-    // If error is -4061 (position side mismatch), retry with positionSide
-    if (error.message.includes('-4061') || error.message.includes('position side does not match')) {
-      console.log(`[BinanceClient] Order failed with -4061, retrying with positionSide (HEDGE mode)`);
-      
-      // Get positionSide from hedge mode detection or default based on side
-      const hedgePositionSide = positionSide || (side === 'BUY' ? 'LONG' : 'SHORT');
-      
-      const params: any = {
-        symbol,
-        side,
-        type: 'LIMIT',
-        quantity: normalizedQuantity.toString(),
-        price: normalizedPrice.toString(),
-        timeInForce: 'GTC',
-        positionSide: hedgePositionSide,
-      };
-      
-      if (newClientOrderId) {
-        params.newClientOrderId = newClientOrderId;
-      }
-      
-      const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] Limit order placed with positionSide: ${side} ${normalizedQuantity} ${symbol} @ ${normalizedPrice} (positionSide: ${hedgePositionSide})`);
-      return response;
-    }
-    
-    console.error('[BinanceClient] Failed to place limit order:', error.message);
+    console.error(`[BinanceClient] LIMIT ORDER FAILED: symbol=${symbol} side=${side} intent=${intent} error=${error.message}`);
     throw error;
   }
 }
@@ -273,7 +338,26 @@ export async function placeLimitOrder(_client: any, symbol: string, side: string
  * Place stop loss order (STOP_MARKET)
  * Uses specific Algo Order API endpoints when positionSide is set (hedge mode)
  */
-export async function placeStopLossOrder(_client: any, symbol: string, side: string, quantity: number, stopPrice: number, positionSide: string | null = null): Promise<any> {
+export async function placeStopLossOrder(
+  _client: any,
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  quantity: number,
+  stopPrice: number,
+  intent: OrderIntent,
+  currentPosition: { positionAmt: number; positionSide?: string } | null = null,
+  positionSide: string | null = null
+): Promise<any> {
+  // Validate intent is provided
+  if (!intent) {
+    throw new Error('[BinanceClient] Order rejected: intent is required (OPEN or CLOSE)');
+  }
+
+  // Validate currentPosition is provided for CLOSE orders
+  if (intent === 'CLOSE' && !currentPosition) {
+    throw new Error('[BinanceClient] Order rejected: currentPosition is required for CLOSE orders');
+  }
+
   try {
     // Get precision filters and normalize values
     const filters = await getSymbolFilters(symbol);
@@ -281,6 +365,17 @@ export async function placeStopLossOrder(_client: any, symbol: string, side: str
     const normalizedStopPrice = normalizeToTickSize(stopPrice, filters.tickSize);
     
     console.log(`[BinanceClient] Precision normalization for SL: quantity ${quantity} -> ${normalizedQuantity}, stopPrice ${stopPrice} -> ${normalizedStopPrice}`);
+
+    // Log order details before placing
+    console.log(`[BinanceClient] STOP LOSS ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} stopPrice=${stopPrice} positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}`);
+
+    // If positionSide is explicitly provided, validate it
+    if (positionSide !== null) {
+      validatePositionSide(positionSide);
+    } else {
+      // Resolve positionSide based on side, intent, and current position
+      positionSide = resolvePositionSide(side, intent, currentPosition);
+    }
 
     const params: any = {
       symbol,
@@ -294,18 +389,18 @@ export async function placeStopLossOrder(_client: any, symbol: string, side: str
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
       const response = await placeStopMarketOrderAPI(params);
-      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=STOP_MARKET stopPrice=${normalizedStopPrice}`);
+      console.log(`[BinanceClient] STOP LOSS ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} positionSide=${positionSide} type=STOP_MARKET stopPrice=${normalizedStopPrice} orderId=${response.orderId || response.algoId}`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.type = 'STOP_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] Stop loss order placed: symbol=${symbol} side=${side} type=STOP_MARKET stopPrice=${normalizedStopPrice}`);
+      console.log(`[BinanceClient] STOP LOSS ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} type=STOP_MARKET stopPrice=${normalizedStopPrice} orderId=${response.orderId}`);
       return response;
     }
   } catch (error: any) {
-    console.error('[BinanceClient] Failed to place stop loss order:', error.message);
+    console.error(`[BinanceClient] STOP LOSS ORDER FAILED: symbol=${symbol} side=${side} intent=${intent} error=${error.message}`);
     throw error;
   }
 }
@@ -314,7 +409,26 @@ export async function placeStopLossOrder(_client: any, symbol: string, side: str
  * Place take profit order (TAKE_PROFIT_MARKET)
  * Uses specific Algo Order API endpoints when positionSide is set (hedge mode)
  */
-export async function placeTakeProfitOrder(_client: any, symbol: string, side: string, quantity: number, price: number, positionSide: string | null = null): Promise<any> {
+export async function placeTakeProfitOrder(
+  _client: any,
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  quantity: number,
+  price: number,
+  intent: OrderIntent,
+  currentPosition: { positionAmt: number; positionSide?: string } | null = null,
+  positionSide: string | null = null
+): Promise<any> {
+  // Validate intent is provided
+  if (!intent) {
+    throw new Error('[BinanceClient] Order rejected: intent is required (OPEN or CLOSE)');
+  }
+
+  // Validate currentPosition is provided for CLOSE orders
+  if (intent === 'CLOSE' && !currentPosition) {
+    throw new Error('[BinanceClient] Order rejected: currentPosition is required for CLOSE orders');
+  }
+
   try {
     // Get precision filters and normalize values
     const filters = await getSymbolFilters(symbol);
@@ -322,6 +436,17 @@ export async function placeTakeProfitOrder(_client: any, symbol: string, side: s
     const normalizedPrice = normalizeToTickSize(price, filters.tickSize);
     
     console.log(`[BinanceClient] Precision normalization for TP: quantity ${quantity} -> ${normalizedQuantity}, price ${price} -> ${normalizedPrice}`);
+
+    // Log order details before placing
+    console.log(`[BinanceClient] TAKE PROFIT ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} price=${price} positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}`);
+
+    // If positionSide is explicitly provided, validate it
+    if (positionSide !== null) {
+      validatePositionSide(positionSide);
+    } else {
+      // Resolve positionSide based on side, intent, and current position
+      positionSide = resolvePositionSide(side, intent, currentPosition);
+    }
 
     const params: any = {
       symbol,
@@ -335,18 +460,18 @@ export async function placeTakeProfitOrder(_client: any, symbol: string, side: s
       params.positionSide = positionSide;
       params.closePosition = true; // Close position when triggered
       const response = await placeTakeProfitMarketOrderAPI(params);
-      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} positionSide=${positionSide} type=TAKE_PROFIT_MARKET price=${normalizedPrice}`);
+      console.log(`[BinanceClient] TAKE PROFIT ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} positionSide=${positionSide} type=TAKE_PROFIT_MARKET price=${normalizedPrice} orderId=${response.orderId || response.algoId}`);
       return response;
     } else {
       // In single position mode, use reduceOnly to close position
       params.type = 'TAKE_PROFIT_MARKET';
       params.reduceOnly = true;
       const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] Take profit order placed: symbol=${symbol} side=${side} type=TAKE_PROFIT_MARKET price=${normalizedPrice}`);
+      console.log(`[BinanceClient] TAKE PROFIT ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} type=TAKE_PROFIT_MARKET price=${normalizedPrice} orderId=${response.orderId}`);
       return response;
     }
   } catch (error: any) {
-    console.error('[BinanceClient] Failed to place take profit order:', error.message);
+    console.error(`[BinanceClient] TAKE PROFIT ORDER FAILED: symbol=${symbol} side=${side} intent=${intent} error=${error.message}`);
     throw error;
   }
 }

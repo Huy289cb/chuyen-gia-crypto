@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import { startListenKey, keepAliveListenKey, closeListenKey } from './binance/stream';
 import { getTestnetPendingOrders, updateTestnetPendingOrder, createTestnetPosition, executeTestnetPendingOrder, recordTestnetTradeEvent, updateTestnetPosition } from '../repositories/testnet.repository';
 import { placeStopLossOrder, placeTakeProfitOrder } from './binanceClient';
+import { OrderIntent } from './binance-hedge-mode';
 
 let ws: WebSocket | null = null;
 let listenKey: string | null = null;
@@ -292,6 +293,12 @@ async function placeStopLossAndTakeProfitOrders(
     const side = localOrder.side === 'long' ? 'SELL' : 'BUY';
     const positionSide = localOrder.side === 'long' ? 'LONG' : 'SHORT';
 
+    // Construct current position info for CLOSE intent
+    const currentPosition = {
+      positionAmt: localOrder.side === 'long' ? executedQty : -executedQty,
+      positionSide: positionSide,
+    };
+
     // Place Stop Loss order
     const slOrder = await placeStopLossOrder(
       client,
@@ -299,7 +306,9 @@ async function placeStopLossAndTakeProfitOrders(
       side,
       executedQty,
       localOrder.stop_loss,
-      positionSide
+      'CLOSE', // Closing position
+      currentPosition,
+      null // Let resolvePositionSide determine positionSide
     );
 
     // Place Take Profit order
@@ -309,7 +318,9 @@ async function placeStopLossAndTakeProfitOrders(
       side,
       executedQty,
       localOrder.take_profit,
-      positionSide
+      'CLOSE', // Closing position
+      currentPosition,
+      null // Let resolvePositionSide determine positionSide
     );
 
     // Update position with Binance SL/TP order IDs

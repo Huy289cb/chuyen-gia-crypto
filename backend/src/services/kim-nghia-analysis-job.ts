@@ -16,7 +16,7 @@ import {
   initTestnetClient,
   placeLimitOrder,
 } from './binanceClient';
-import { getPositionSide } from './binance-hedge-mode';
+import { OrderIntent } from './binance-hedge-mode';
 
 export type KimNghiaAnalysisJobResult =
   | { success: true; data: unknown }
@@ -203,8 +203,6 @@ async function maybeCreateKimNghiaPendingOrder({
     }
 
     const binanceSide = side === 'long' ? 'BUY' : 'SELL';
-    // Phase 8: Use detected positionSide for hedge mode compatibility
-    const positionSide = getPositionSide(side);
 
     try {
       const order = await placeLimitOrder(
@@ -213,11 +211,13 @@ async function maybeCreateKimNghiaPendingOrder({
         binanceSide,
         sizeQty,
         entry,
-        positionSide,
+        'OPEN', // Opening a new position
+        null, // No current position for opening
+        null, // Let resolvePositionSide determine positionSide
         newClientOrderId, // Pass newClientOrderId for idempotency
       );
       binanceOrderId = String(order.orderId);
-      console.log(`[KimNghiaAutoEntry] Placed Binance order ${binanceOrderId} (clientOrderId: ${newClientOrderId}, positionSide: ${positionSide || 'N/A'}) for pending order ${orderId}`);
+      console.log(`[KimNghiaAutoEntry] Placed Binance order ${binanceOrderId} (clientOrderId: ${newClientOrderId}) for pending order ${orderId}`);
     } catch (error: any) {
       console.error(`[KimNghiaAutoEntry] Failed to place Binance order: ${error.message}`);
       // Phase 7: Check if order already exists (duplicate prevention)
