@@ -11,6 +11,25 @@ import { TestnetPanel } from './components/crypto/TestnetPanel';
 import { PredictionsSection } from './sections/PredictionsSection';
 import { useTrends } from './hooks/useTrends';
 import { Loader2, AlertCircle } from 'lucide-react';
+import { Card } from './components/ui/Card';
+import { SectionHeader } from './components/SectionHeader';
+import { EmptyState } from './components/EmptyState';
+import { Activity } from 'lucide-react';
+import { SystemOverview } from './sections/SystemOverview';
+import { SchedulerStatusPanel } from './sections/SchedulerStatusPanel';
+import { CandleWarmupPanel } from './sections/CandleWarmupPanel';
+import { MarketChartPanel } from './sections/MarketChartPanel';
+import { IndicatorPanel } from './sections/IndicatorPanel';
+import { TestnetBalancePanel } from './sections/TestnetBalancePanel';
+import { OpenPositionsPanel } from './sections/OpenPositionsPanel';
+import { ActiveOrdersPanel } from './sections/ActiveOrdersPanel';
+import { TradeHistoryPanel } from './sections/TradeHistoryPanel';
+import { SignalGatePanel } from './sections/SignalGatePanel';
+import { NoTradeReasonsPanel } from './sections/NoTradeReasonsPanel';
+import { RiskEnginePanel } from './sections/RiskEnginePanel';
+import { LlmDispatchPanel } from './sections/LlmDispatchPanel';
+import { MemoryInsightsPanel } from './sections/MemoryInsightsPanel';
+import { EventLogFeed } from './sections/EventLogFeed';
 
 export default function Home() {
   return (
@@ -111,12 +130,45 @@ function HomeContent() {
           method="kim_nghia"
         />
 
-
         {/* Signal Timeline */}
         <PredictionsSection symbol="BTC" method="kim_nghia" />
 
         {/* Testnet Panel */}
         <TestnetPanel />
+
+        {/* NEW: 3-Column Dashboard Layout for Big Update v3 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+          {/* Column 1: System Overview + Risk Engine + No-Trade Reasons */}
+          <div className="space-y-6">
+            <SystemOverview />
+            <SchedulerStatusPanel />
+            <CandleWarmupPanel />
+            <RiskEnginePanel />
+            <NoTradeReasonsPanel />
+          </div>
+
+          {/* Column 2: Market Chart + Indicators + Setup markers */}
+          <div className="space-y-6">
+            <MarketChartPanel symbol="BTC" method="kim_nghia" />
+            <IndicatorPanel />
+          </div>
+
+          {/* Column 3: Testnet Account Center + Positions + Orders + LLM/Memory */}
+          <div className="space-y-6">
+            <TestnetBalancePanel />
+            <OpenPositionsPanel />
+            <ActiveOrdersPanel />
+            <TradeHistoryPanel />
+            <SignalGatePanel />
+            <LlmDispatchPanel />
+            <MemoryInsightsPanel />
+          </div>
+        </div>
+
+        {/* Event Log Feed - Full Width */}
+        <div className="mt-8">
+          <EventLogFeed />
+        </div>
       </main>
 
       <Footer />
