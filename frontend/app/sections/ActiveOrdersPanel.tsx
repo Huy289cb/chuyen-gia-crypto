@@ -6,26 +6,43 @@ import { EmptyState } from '../components/EmptyState';
 import { StatusBadge } from '../components/StatusBadge';
 import { ShoppingBag, Clock } from 'lucide-react';
 import { cn, formatPrice, formatVietnamTime } from '@/lib/utils';
+import { useAccountData } from '../hooks/useAccountData';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface ActiveOrdersPanelProps {
   className?: string;
 }
 
 export function ActiveOrdersPanel({ className }: ActiveOrdersPanelProps) {
-  // TODO: Replace with actual data from API
-  const orders = [
-    {
-      id: '12345',
-      symbol: 'BTC',
-      side: 'BUY' as const,
-      type: 'LIMIT' as const,
-      status: 'NEW' as const,
-      price: 94000,
-      quantity: 0.1,
-      reduceOnly: false,
-      createdAt: new Date(Date.now() - 300000).toISOString(),
-    },
-  ];
+  const { data, loading, error } = useAccountData();
+
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Active Orders"
+          subtitle="Loading..."
+          icon={<ShoppingBag className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Active Orders"
+          subtitle="Error loading data"
+          icon={<ShoppingBag className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  const orders = data?.orders || [];
 
   if (orders.length === 0) {
     return (
@@ -51,30 +68,30 @@ export function ActiveOrdersPanel({ className }: ActiveOrdersPanelProps) {
         subtitle={`Pending: ${orders.length}`}
         icon={<ShoppingBag className="w-5 h-5" />}
       />
-      
+
       <div className="space-y-3">
         {orders.map((order) => (
-          <div 
+          <div
             key={order.id}
             className="p-3 bg-surface-1/50 rounded-lg space-y-2"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground">{order.symbol}</span>
-                <StatusBadge 
-                  status={order.side === 'BUY' ? 'trading_enabled' : 'blocked'}
-                  label={order.side}
+                <StatusBadge
+                  status={order.side === 'buy' ? 'trading_enabled' : 'blocked'}
+                  label={order.side.toUpperCase()}
                   size="sm"
                 />
                 <span className="text-xs text-foreground-tertiary">{order.type}</span>
               </div>
-              <StatusBadge 
-                status={order.status === 'NEW' ? 'healthy' : 'trading_paused'}
-                label={order.status}
+              <StatusBadge
+                status={order.status === 'pending' ? 'healthy' : 'trading_paused'}
+                label={order.status.toUpperCase()}
                 size="sm"
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <span className="text-foreground-tertiary">Price:</span>

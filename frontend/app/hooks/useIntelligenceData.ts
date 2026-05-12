@@ -62,35 +62,30 @@ export function useIntelligenceData(): UseIntelligenceDataReturn {
     try {
       setLoading(true);
       setError(null);
-      
-      const [signalsResponse, riskResponse, llmResponse, memoryResponse] = await Promise.all([
-        fetch('/api/dashboard/signals'),
+
+      const [signalsResponse, riskResponse, llmResponse, memoryResponse, noTradeResponse] = await Promise.all([
+        fetch('/api/dashboard/signals?limit=1'),
         fetch('/api/dashboard/risk'),
         fetch('/api/dashboard/llm'),
         fetch('/api/dashboard/memory'),
+        fetch('/api/dashboard/no-trade-reasons'),
       ]);
 
       const signalsData = await signalsResponse.json();
       const riskData = await riskResponse.json();
       const llmData = await llmResponse.json();
       const memoryData = await memoryResponse.json();
+      const noTradeData = await noTradeResponse.json();
 
       // Get latest signal
-      const latestSignal = signalsData.data[0] || {
-        grade: 'N/A',
-        confidence: 0,
-        playbook: 'N/A',
-        regime: 'N/A',
-        pass: false,
-        reasonCodes: [],
-      };
+      const latestSignal = signalsData.data?.[0] || null;
 
       setData({
         signalGate: latestSignal,
-        riskEngine: riskData.data,
-        noTradeReasons: [], // TODO: Implement no-trade reasons aggregation
-        llm: llmData.data,
-        memory: memoryData.data,
+        riskEngine: riskData.data || null,
+        noTradeReasons: noTradeData.data || [],
+        llm: llmData.data || null,
+        memory: memoryData.data || null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch intelligence data');

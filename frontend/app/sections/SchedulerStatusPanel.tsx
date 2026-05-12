@@ -4,33 +4,43 @@ import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { Clock, PlayCircle, PauseCircle } from 'lucide-react';
+import { useDashboardSummary } from '../hooks/useDashboardSummary';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface SchedulerStatusPanelProps {
   className?: string;
 }
 
 export function SchedulerStatusPanel({ className }: SchedulerStatusPanelProps) {
-  // TODO: Replace with actual data from API
-  const schedulers = [
-    {
-      name: 'MarketScan',
-      status: 'running' as const,
-      lastRun: '2 min ago',
-      nextRun: 'in 3 min',
-    },
-    {
-      name: 'LLMDispatch',
-      status: 'running' as const,
-      lastRun: '5 min ago',
-      nextRun: 'in 8 min',
-    },
-    {
-      name: 'PositionMonitor',
-      status: 'running' as const,
-      lastRun: '1 min ago',
-      nextRun: 'in 1 min',
-    },
-  ];
+  const { data, loading, error } = useDashboardSummary();
+
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Scheduler Status"
+          subtitle="Loading..."
+          icon={<Clock className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error || !data?.schedulers) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Scheduler Status"
+          subtitle="Error loading data"
+          icon={<Clock className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error || 'Failed to load scheduler data'}</div>
+      </Card>
+    );
+  }
+
+  const schedulers = data.schedulers;
 
   return (
     <Card className={className}>
@@ -39,10 +49,10 @@ export function SchedulerStatusPanel({ className }: SchedulerStatusPanelProps) {
         subtitle="Background task status"
         icon={<Clock className="w-5 h-5" />}
       />
-      
+
       <div className="space-y-3">
         {schedulers.map((scheduler) => (
-          <div 
+          <div
             key={scheduler.name}
             className="p-3 bg-surface-1/50 rounded-lg space-y-2"
           >
@@ -54,8 +64,8 @@ export function SchedulerStatusPanel({ className }: SchedulerStatusPanelProps) {
                 ) : (
                   <PauseCircle className="w-4 h-4 text-warning" />
                 )}
-                <StatusBadge 
-                  status={scheduler.status === 'running' ? 'trading_enabled' : 'trading_paused'} 
+                <StatusBadge
+                  status={scheduler.status === 'running' ? 'trading_enabled' : 'trading_paused'}
                   label={scheduler.status === 'running' ? 'Running' : 'Paused'}
                   size="sm"
                 />

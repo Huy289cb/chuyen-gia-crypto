@@ -52,7 +52,7 @@ router.get('/system', async (_req: Request, res: Response) => {
     };
 
     res.json({
-      success: true,
+      ok: true,
       data: systemHealth,
     });
   } catch (error: any) {
@@ -88,6 +88,7 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
           ? `${Math.floor((Date.now() - new Date(recentCandles.timestamp).getTime()) / 60000)} min ago`
           : 'never',
         nextRun: 'in 1 min',
+        cron: '*/5 * * * *',
       },
       {
         name: 'LLMDispatch',
@@ -98,17 +99,19 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
           ? `${Math.floor((Date.now() - new Date(recentAnalysis.timestamp).getTime()) / 60000)} min ago`
           : 'never',
         nextRun: 'in 5 min',
+        cron: '*/15 * * * *',
       },
       {
         name: 'PositionMonitor',
         status: 'running',
         lastRun: '1 min ago',
         nextRun: 'in 1 min',
+        cron: '*/1 * * * *',
       },
     ];
 
     res.json({
-      success: true,
+      ok: true,
       data: schedulers,
     });
   } catch (error: any) {
@@ -131,12 +134,59 @@ router.get('/scope', async (_req: Request, res: Response) => {
     };
 
     res.json({
-      success: true,
+      ok: true,
       data: scope,
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching scope status:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch scope status' });
+  }
+});
+
+/**
+ * GET /api/dashboard/warmup
+ * Get candle warmup progress
+ */
+router.get('/warmup', async (_req: Request, res: Response) => {
+  try {
+    const timeframes = ['15m', '1h', '4h', '1d'];
+    const symbol = 'BTC';
+    const requiredCandles = { '15m': 1000, '1h': 500, '4h': 300, '1d': 200 };
+
+    const timeframeStatus = await Promise.all(
+      timeframes.map(async (tf) => {
+        const count = await prisma.ohlcvCandle.count({
+          where: {
+            coin: symbol,
+            timeframe: tf,
+          },
+        });
+        return {
+          name: tf,
+          loaded: count,
+          required: requiredCandles[tf as keyof typeof requiredCandles],
+        };
+      })
+    );
+
+    const totalLoaded = timeframeStatus.reduce((sum, tf) => sum + tf.loaded, 0);
+    const totalRequired = timeframeStatus.reduce((sum, tf) => sum + tf.required, 0);
+    const isWarmedUp = timeframeStatus.every((tf) => tf.loaded >= tf.required);
+
+    const warmup = {
+      totalCandles: totalLoaded,
+      requiredCandles: totalRequired,
+      isWarmedUp,
+      timeframes: timeframeStatus,
+    };
+
+    res.json({
+      ok: true,
+      data: warmup,
+    });
+  } catch (error: any) {
+    console.error('[Dashboard] Error fetching warmup status:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch warmup status' });
   }
 });
 
@@ -166,7 +216,7 @@ router.get('/signals', async (req: Request, res: Response) => {
     }));
 
     res.json({
-      success: true,
+      ok: true,
       data: signals,
     });
   } catch (error: any) {
@@ -198,7 +248,7 @@ router.get('/risk', async (_req: Request, res: Response) => {
     };
 
     res.json({
-      success: true,
+      ok: true,
       data: riskState,
     });
   } catch (error: any) {
@@ -230,7 +280,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
     };
 
     res.json({
-      success: true,
+      ok: true,
       data: llmStats,
     });
   } catch (error: any) {
@@ -285,7 +335,7 @@ router.get('/memory', async (_req: Request, res: Response) => {
     };
 
     res.json({
-      success: true,
+      ok: true,
       data: memory,
     });
   } catch (error: any) {
@@ -295,12 +345,71 @@ router.get('/memory', async (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/dashboard/no-trade-reasons
+ * Get aggregated no-trade reasons
+ */
+router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
+  try {
+    // Get recent trade decisions that were blocked
+    const recentDecisions = await prisma.tradeDecision.findMany({
+      where: {
+        decision: 'no_trade',
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 100,
+    });
+
+    // Aggregate by reason
+    const reasonCounts: Record<string, number> = {};
+    recentDecisions.forEach((decision) => {
+      const reason = decision.reason || 'unknown';
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+
+    // Map to frontend format
+    const noTradeReasons = Object.entries(reasonCounts).map(([reason, count]) => {
+      let variant: 'warning' | 'danger' | 'default' = 'default';
+      if (reason.toLowerCase().includes('loss') || reason.toLowerCase().includes('limit')) {
+        variant = 'danger';
+      } else if (reason.toLowerCase().includes('insufficient') || reason.toLowerCase().includes('spread')) {
+        variant = 'warning';
+      }
+      return { reason, count, variant };
+    });
+
+    // Add default reasons with 0 count if not present
+    const defaultReasons = [
+      { reason: 'Insufficient candles', count: 0, variant: 'warning' as const },
+      { reason: 'Grade below A', count: 0, variant: 'default' as const },
+      { reason: 'Spread too high', count: 0, variant: 'warning' as const },
+      { reason: 'Daily loss limit hit', count: 0, variant: 'danger' as const },
+      { reason: 'Consecutive losses limit', count: 0, variant: 'danger' as const },
+    ];
+
+    defaultReasons.forEach((defaultReason) => {
+      const existing = noTradeReasons.find((r) => r.reason.toLowerCase() === defaultReason.reason.toLowerCase());
+      if (!existing) {
+        noTradeReasons.push(defaultReason);
+      }
+    });
+
+    res.json({
+      ok: true,
+      data: noTradeReasons,
+    });
+  } catch (error: any) {
+    console.error('[Dashboard] Error fetching no-trade reasons:', error.message);
+    res.status(500).json({ ok: false, error: 'Failed to fetch no-trade reasons' });
+  }
+});
+
+/**
  * GET /api/dashboard/events
  * Get recent system events
  */
 router.get('/events', async (req: Request, res: Response) => {
   try {
-    const { limit = 20 } = req.query;
+    const { limit = 20, module } = req.query;
 
     // Get recent trade events from testnet positions
     const tradeEvents = await prisma.testnetTradeEvent.findMany({
@@ -308,7 +417,7 @@ router.get('/events', async (req: Request, res: Response) => {
       take: parseInt(limit as string),
     });
 
-    const events = tradeEvents.map((event) => ({
+    let events = tradeEvents.map((event) => ({
       id: event.id,
       timestamp: event.timestamp.toISOString(),
       module: 'Position Monitor',
@@ -317,8 +426,13 @@ router.get('/events', async (req: Request, res: Response) => {
       details: event.event_data?.substring(0, 100) || '',
     }));
 
+    // Filter by module if specified
+    if (module && typeof module === 'string') {
+      events = events.filter((e) => e.module.toLowerCase().includes(module.toLowerCase()));
+    }
+
     res.json({
-      success: true,
+      ok: true,
       data: events,
     });
   } catch (error: any) {
@@ -364,7 +478,7 @@ router.get('/balance', async (req: Request, res: Response) => {
     };
 
     res.json({
-      success: true,
+      ok: true,
       data: balance,
     });
   } catch (error: any) {
@@ -414,7 +528,7 @@ router.get('/positions', async (req: Request, res: Response) => {
     });
 
     res.json({
-      success: true,
+      ok: true,
       data: formattedPositions,
     });
   } catch (error: any) {
@@ -454,7 +568,7 @@ router.get('/orders', async (req: Request, res: Response) => {
     }));
 
     res.json({
-      success: true,
+      ok: true,
       data: formattedOrders,
     });
   } catch (error: any) {
@@ -494,7 +608,7 @@ router.get('/trades', async (req: Request, res: Response) => {
     }));
 
     res.json({
-      success: true,
+      ok: true,
       data: formattedTrades,
     });
   } catch (error: any) {

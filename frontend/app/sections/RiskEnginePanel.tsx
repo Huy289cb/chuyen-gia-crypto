@@ -3,25 +3,46 @@
 import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { StatusBadge } from '../components/StatusBadge';
-import { ShieldAlert, TrendingDown, Lock } from 'lucide-react';
-import { formatPrice, formatPercentage } from '@/lib/utils';
+import { ShieldAlert, Lock } from 'lucide-react';
+import { formatPrice } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { useIntelligenceData } from '../hooks/useIntelligenceData';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface RiskEnginePanelProps {
   className?: string;
 }
 
 export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
-  // TODO: Replace with actual data from API
-  const riskData = {
-    riskPerTrade: 1.0,
-    dailyLossCap: 500,
-    maxConsecutiveLosses: 3,
-    currentStreak: 0,
-    currentLockState: 'unlocked' as const,
-    allowedReason: null as string | null,
-  };
+  const { data, loading, error } = useIntelligenceData();
 
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Risk Engine"
+          subtitle="Loading..."
+          icon={<ShieldAlert className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error || !data?.riskEngine) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Risk Engine"
+          subtitle="Error loading data"
+          icon={<ShieldAlert className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error || 'Failed to load risk data'}</div>
+      </Card>
+    );
+  }
+
+  const riskData = data.riskEngine;
   const isLocked = riskData.currentLockState !== 'unlocked';
 
   return (
@@ -31,7 +52,7 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
         subtitle="Risk controls and limits"
         icon={<ShieldAlert className="w-5 h-5" />}
       />
-      
+
       <div className="space-y-4">
         {/* Lock Status */}
         <div className={cn(
@@ -51,7 +72,7 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
               {isLocked ? 'Trading Locked' : 'Trading Unlocked'}
             </span>
           </div>
-          <StatusBadge 
+          <StatusBadge
             status={isLocked ? 'blocked' : 'trading_enabled'}
             size="sm"
           />

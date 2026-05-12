@@ -42,22 +42,49 @@ export function useMarketData(symbol: string = 'BTC', timeframe: string = '15m')
     try {
       setLoading(true);
       setError(null);
-      
-      // TODO: Replace with actual API calls
-      // const candlesResponse = await fetch(`/api/market/candles?symbol=${symbol}&timeframe=${timeframe}`);
-      // const indicatorsResponse = await fetch(`/api/market/indicators?symbol=${symbol}`);
-      // const signalsResponse = await fetch(`/api/market/signals?symbol=${symbol}`);
-      
-      // Mock data for now
+
+      const [candlesResponse, indicatorsResponse, signalsResponse] = await Promise.all([
+        fetch(`/api/market/candles?symbol=${symbol}&timeframe=${timeframe}&limit=100`),
+        fetch(`/api/market/indicators?symbol=${symbol}&timeframe=${timeframe}`),
+        fetch(`/api/market/signals?symbol=${symbol}&limit=5`),
+      ]);
+
+      const candlesData = await candlesResponse.json();
+      const indicatorsData = await indicatorsResponse.json();
+      const signalsData = await signalsResponse.json();
+
+      // Format candles for the chart
+      const formattedCandles = candlesData.candles?.map((candle: any) => ({
+        time: candle.time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      })) || [];
+
+      // Get latest indicator values
+      const indicators = indicatorsData.indicators || {};
+      const latestIndicators = {
+        ma50: indicators.sma50?.filter((v: any) => v !== null).pop() || 0,
+        ma200: indicators.sma50?.filter((v: any) => v !== null).slice(-200)[0] || 0,
+        rsi: indicators.rsi14?.filter((v: any) => v !== null).pop() || 50,
+        macd: 0, // TODO: Implement MACD calculation
+      };
+
+      // Format signals
+      const formattedSignals = signalsData.signals?.map((signal: any) => ({
+        id: signal.id,
+        grade: signal.grade,
+        confidence: signal.confidence,
+        playbook: signal.playbook,
+        regime: signal.regime,
+        pass: signal.pass,
+      })) || [];
+
       setData({
-        candles: [],
-        indicators: {
-          ma50: 94250,
-          ma200: 92100,
-          rsi: 58.5,
-          macd: 125.5,
-        },
-        signals: [],
+        candles: formattedCandles,
+        indicators: latestIndicators,
+        signals: formattedSignals,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch market data');

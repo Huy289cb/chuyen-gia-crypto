@@ -3,25 +3,46 @@
 import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { MetricCard } from '../components/MetricCard';
-import { Wallet, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import { formatPrice, formatPercentage } from '@/lib/utils';
+import { Wallet, TrendingUp, DollarSign } from 'lucide-react';
+import { formatPrice } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { useAccountData } from '../hooks/useAccountData';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface TestnetBalancePanelProps {
   className?: string;
 }
 
 export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
-  // TODO: Replace with actual data from API
-  const balanceData = {
-    totalBalance: 100000,
-    availableBalance: 95000,
-    equity: 100500,
-    usedMargin: 5000,
-    freeMargin: 95000,
-    dailyPnL: 500,
-    weeklyPnL: 1200,
-  };
+  const { data, loading, error } = useAccountData();
+
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Testnet Account"
+          subtitle="Loading..."
+          icon={<Wallet className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error || !data?.balance) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Testnet Account"
+          subtitle="Error loading data"
+          icon={<Wallet className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error || 'Failed to load balance data'}</div>
+      </Card>
+    );
+  }
+
+  const balanceData = data.balance;
 
   return (
     <Card className={className}>
@@ -30,7 +51,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
         subtitle="Balance and equity"
         icon={<Wallet className="w-5 h-5" />}
       />
-      
+
       <div className="grid grid-cols-2 gap-3">
         <MetricCard
           title="Total Balance"

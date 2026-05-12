@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { TimeframeSwitcher } from '../components/TimeframeSwitcher';
 import { ChartToolbar } from '../components/ChartToolbar';
 import { PriceChart } from '../components/crypto/PriceChart';
 import { TrendingUp } from 'lucide-react';
+import { useMarketData } from '../hooks/useMarketData';
 import type { Prediction, Analysis } from '@/app/types';
 
 type TimeFrame = '15m' | '1h' | '4h' | '1d';
@@ -37,37 +38,18 @@ export function MarketChartPanel({
   className 
 }: MarketChartPanelProps) {
   const [timeframe, setTimeframe] = useState<TimeFrame>('15m');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [data, setData] = useState<ChartDataPoint[]>([]);
+  const { data: marketData, loading, refresh } = useMarketData(symbol, timeframe);
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      const API_BASE = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3000/api' 
-        : '/api';
-      
-      const response = await fetch(`${API_BASE}/ohlc/${symbol.toLowerCase()}?timeframe=${timeframe}&limit=100`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          const formattedData = result.data.map((candle: any) => ({
-            time: candle.time,
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
-            close: candle.close,
-          }));
-          setData(formattedData);
-        }
-      }
-    } catch (error) {
-      console.error('Error refreshing chart:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
+  const handleRefresh = () => {
+    refresh();
   };
+
+  // Update chart data when timeframe changes
+  useEffect(() => {
+    refresh();
+  }, [timeframe, refresh]);
+
+  const chartData: ChartDataPoint[] = marketData?.candles || [];
 
   return (
     <Card className={className}>
@@ -79,14 +61,18 @@ export function MarketChartPanel({
         />
         <div className="flex items-center gap-3">
           <TimeframeSwitcher value={timeframe} onChange={setTimeframe} />
-          <ChartToolbar onRefresh={handleRefresh} isRefreshing={isRefreshing} />
+          <ChartToolbar onRefresh={handleRefresh} isRefreshing={loading} />
         </div>
       </div>
       
       <div className="h-[300px]">
-        {data.length > 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-full text-foreground-secondary">
+            Loading chart data...
+          </div>
+        ) : chartData.length > 0 ? (
           <PriceChart 
-            data={data}
+            data={chartData}
             predictions={predictions}
             analysis={analysis}
             color={color}
@@ -98,7 +84,7 @@ export function MarketChartPanel({
           />
         ) : (
           <div className="flex items-center justify-center h-full text-foreground-secondary">
-            Loading chart data...
+            No chart data available
           </div>
         )}
       </div>

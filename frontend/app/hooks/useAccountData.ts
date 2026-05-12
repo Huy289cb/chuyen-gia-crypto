@@ -65,12 +65,12 @@ export function useAccountData(): UseAccountDataReturn {
     try {
       setLoading(true);
       setError(null);
-      
+
       const [balanceResponse, positionsResponse, ordersResponse, tradesResponse] = await Promise.all([
-        fetch('/api/account/balance'),
-        fetch('/api/account/positions'),
-        fetch('/api/account/orders'),
-        fetch('/api/account/trades'),
+        fetch('/api/account/balance?symbol=BTC&method=kim_nghia'),
+        fetch('/api/account/positions?symbol=BTC&method=kim_nghia'),
+        fetch('/api/account/orders?symbol=BTC&method=kim_nghia'),
+        fetch('/api/account/trades?symbol=BTC&method=kim_nghia&limit=20'),
       ]);
 
       const balanceData = await balanceResponse.json();
@@ -79,10 +79,10 @@ export function useAccountData(): UseAccountDataReturn {
       const tradesData = await tradesResponse.json();
 
       setData({
-        balance: balanceData.data,
-        positions: positionsData.data,
-        orders: ordersData.data,
-        trades: tradesData.data,
+        balance: balanceData.data || null,
+        positions: positionsData.data || [],
+        orders: ordersData.data || [],
+        trades: tradesData.data || [],
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch account data');

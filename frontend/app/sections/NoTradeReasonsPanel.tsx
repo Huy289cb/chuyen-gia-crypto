@@ -4,21 +4,43 @@ import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { ReasonChip } from '../components/ReasonChip';
 import { Ban } from 'lucide-react';
+import { useIntelligenceData } from '../hooks/useIntelligenceData';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface NoTradeReasonsPanelProps {
   className?: string;
 }
 
 export function NoTradeReasonsPanel({ className }: NoTradeReasonsPanelProps) {
-  // TODO: Replace with actual data from API
-  const noTradeReasons = [
-    { reason: 'Insufficient candles', count: 5, variant: 'warning' as const },
-    { reason: 'Grade below A', count: 3, variant: 'default' as const },
-    { reason: 'Spread too high', count: 2, variant: 'warning' as const },
-    { reason: 'Daily loss limit hit', count: 0, variant: 'danger' as const },
-    { reason: 'Consecutive losses limit', count: 0, variant: 'danger' as const },
-  ];
+  const { data, loading, error } = useIntelligenceData();
 
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="No-Trade Reasons"
+          subtitle="Loading..."
+          icon={<Ban className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="No-Trade Reasons"
+          subtitle="Error loading data"
+          icon={<Ban className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  const noTradeReasons = data?.noTradeReasons || [];
   const totalBlocks = noTradeReasons.reduce((sum, r) => sum + r.count, 0);
 
   return (
@@ -39,7 +61,7 @@ export function NoTradeReasonsPanel({ className }: NoTradeReasonsPanelProps) {
             <ReasonChip 
               label={item.count > 0 ? `${item.count} blocks` : 'No blocks'} 
               count={item.count}
-              variant={item.variant}
+              variant={item.variant as 'default' | 'warning' | 'danger' | 'info'}
             />
           </div>
         ))}

@@ -4,25 +4,43 @@ import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { BarChart3 } from 'lucide-react';
+import { useDashboardSummary } from '../hooks/useDashboardSummary';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface CandleWarmupPanelProps {
   className?: string;
 }
 
 export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
-  // TODO: Replace with actual data from API
-  const warmupData = {
-    totalCandles: 1250,
-    requiredCandles: 2000,
-    isWarmedUp: false,
-    timeframes: [
-      { name: '15m', loaded: 500, required: 1000 },
-      { name: '1h', loaded: 400, required: 500 },
-      { name: '4h', loaded: 250, required: 300 },
-      { name: '1d', loaded: 100, required: 200 },
-    ],
-  };
+  const { data, loading, error } = useDashboardSummary();
 
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Candle Warmup"
+          subtitle="Loading..."
+          icon={<BarChart3 className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error || !data?.candleWarmup) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Candle Warmup"
+          subtitle="Error loading data"
+          icon={<BarChart3 className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error || 'Failed to load warmup data'}</div>
+      </Card>
+    );
+  }
+
+  const warmupData = data.candleWarmup;
   const overallProgress = (warmupData.totalCandles / warmupData.requiredCandles) * 100;
 
   return (
@@ -32,7 +50,7 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
         subtitle="Data collection progress"
         icon={<BarChart3 className="w-5 h-5" />}
       />
-      
+
       <div className="space-y-4">
         {/* Overall Status */}
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
@@ -42,8 +60,8 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
               {warmupData.totalCandles} / {warmupData.requiredCandles} candles
             </div>
           </div>
-          <StatusBadge 
-            status={warmupData.isWarmedUp ? 'healthy' : 'warming_up'} 
+          <StatusBadge
+            status={warmupData.isWarmedUp ? 'healthy' : 'warming_up'}
             size="sm"
           />
         </div>
@@ -55,7 +73,7 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
             <span>{overallProgress.toFixed(1)}%</span>
           </div>
           <div className="h-2 bg-surface-2 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-accent-primary transition-all duration-500"
               style={{ width: `${overallProgress}%` }}
             />
@@ -74,7 +92,7 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
                   <span className="text-foreground-tertiary">{tf.loaded}/{tf.required}</span>
                 </div>
                 <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className={`h-full transition-all duration-500 ${
                       progress >= 100 ? 'bg-success' : 'bg-accent-primary'
                     }`}

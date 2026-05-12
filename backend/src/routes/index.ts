@@ -8,6 +8,7 @@ import performanceRouter from './performance';
 import testnetRouter from './testnet';
 import metricsRouter from './metrics';
 import dashboardRouter from './dashboard';
+import marketRouter from './market';
 // CRITICAL: Legacy kim_nghia auto-entry DISABLED per Big Update v3
 // import { runKimNghiaAnalysisJob } from '../services/kim-nghia-analysis-job';
 
@@ -390,5 +391,11 @@ router.use('/metrics', metricsRouter);
  */
 router.use('/dashboard', dashboardRouter);
 router.use('/account', dashboardRouter);
+
+/**
+ * Mount market router
+ * Endpoints: GET /api/market/candles, GET /api/market/indicators, GET /api/market/setups, GET /api/market/signals
+ */
+router.use('/market', marketRouter);
 
 export default router;

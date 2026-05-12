@@ -5,22 +5,43 @@ import { SectionHeader } from '../components/SectionHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { Bot, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
 import { formatVietnamTime } from '@/lib/utils';
+import { useIntelligenceData } from '../hooks/useIntelligenceData';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface LlmDispatchPanelProps {
   className?: string;
 }
 
 export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
-  // TODO: Replace with actual data from API
-  const llmData = {
-    lastCall: new Date(Date.now() - 300000).toISOString(),
-    modelName: 'llama-3.3-70b-versatile',
-    promptVersion: 'v2.1',
-    responseStatus: 'success' as const,
-    invalidJsonCount: 0,
-    noTradeCount: 2,
-    skippedCallCount: 1,
-  };
+  const { data, loading, error } = useIntelligenceData();
+
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="LLM Dispatch"
+          subtitle="Loading..."
+          icon={<Bot className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error || !data?.llm) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="LLM Dispatch"
+          subtitle="Error loading data"
+          icon={<Bot className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error || 'Failed to load LLM data'}</div>
+      </Card>
+    );
+  }
+
+  const llmData = data.llm;
 
   return (
     <Card className={className}>
@@ -29,7 +50,7 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
         subtitle="Groq AI usage stats"
         icon={<Bot className="w-5 h-5" />}
       />
-      
+
       <div className="space-y-4">
         {/* Last Call Info */}
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
@@ -37,7 +58,9 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
             <Clock className="w-4 h-4 text-accent-primary" />
             <span className="text-sm text-foreground-secondary">Last Call</span>
           </div>
-          <span className="text-xs text-foreground-tertiary">{formatVietnamTime(llmData.lastCall)}</span>
+          <span className="text-xs text-foreground-tertiary">
+            {llmData.lastCall ? formatVietnamTime(llmData.lastCall) : 'Never'}
+          </span>
         </div>
 
         {/* Model Info */}
@@ -55,7 +78,7 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
         {/* Response Status */}
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
           <span className="text-sm text-foreground-secondary">Response Status</span>
-          <StatusBadge 
+          <StatusBadge
             status={llmData.responseStatus === 'success' ? 'healthy' : 'error'}
             label={llmData.responseStatus}
             size="sm"

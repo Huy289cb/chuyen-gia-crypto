@@ -44,32 +44,21 @@ export function useDashboardSummary(): UseDashboardSummaryReturn {
     try {
       setLoading(true);
       setError(null);
-      
-      const [systemResponse, schedulersResponse] = await Promise.all([
+
+      const [systemResponse, schedulersResponse, warmupResponse] = await Promise.all([
         fetch('/api/dashboard/system'),
         fetch('/api/dashboard/schedulers'),
+        fetch('/api/dashboard/warmup'),
       ]);
 
       const systemData = await systemResponse.json();
       const schedulersData = await schedulersResponse.json();
-
-      // TODO: Fetch candle warmup data when endpoint is available
-      const candleWarmup = {
-        totalCandles: 1250,
-        requiredCandles: 2000,
-        isWarmedUp: false,
-        timeframes: [
-          { name: '15m', loaded: 500, required: 1000 },
-          { name: '1h', loaded: 400, required: 500 },
-          { name: '4h', loaded: 250, required: 300 },
-          { name: '1d', loaded: 100, required: 200 },
-        ],
-      };
+      const warmupData = await warmupResponse.json();
 
       setData({
         systemHealth: systemData.data,
         schedulers: schedulersData.data,
-        candleWarmup,
+        candleWarmup: warmupData.data,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch dashboard summary');

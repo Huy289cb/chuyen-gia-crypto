@@ -6,21 +6,43 @@ import { StatusBadge } from '../components/StatusBadge';
 import { ReasonChip } from '../components/ReasonChip';
 import { Signal, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIntelligenceData } from '../hooks/useIntelligenceData';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 interface SignalGatePanelProps {
   className?: string;
 }
 
 export function SignalGatePanel({ className }: SignalGatePanelProps) {
-  // TODO: Replace with actual data from API
-  const signalData = {
-    grade: 'A',
-    confidence: 85,
-    playbook: 'Liquidity Sweep',
-    regime: 'Bullish',
-    pass: true,
-    reasonCodes: ['valid_setup', 'high_confidence', 'regime_aligned'],
-  };
+  const { data, loading, error } = useIntelligenceData();
+
+  if (loading) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Signal Gate"
+          subtitle="Loading..."
+          icon={<Signal className="w-5 h-5" />}
+        />
+        <LoadingSkeleton />
+      </Card>
+    );
+  }
+
+  if (error || !data?.signalGate) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Signal Gate"
+          subtitle="Error loading data"
+          icon={<Signal className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">{error || 'Failed to load signal data'}</div>
+      </Card>
+    );
+  }
+
+  const signalData = data.signalGate;
 
   return (
     <Card className={className}>
@@ -29,7 +51,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         subtitle="Latest signal evaluation"
         icon={<Signal className="w-5 h-5" />}
       />
-      
+
       <div className="space-y-4">
         {/* Pass/Block Status */}
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
@@ -43,7 +65,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
               {signalData.pass ? 'Signal Passed' : 'Signal Blocked'}
             </span>
           </div>
-          <StatusBadge 
+          <StatusBadge
             status={signalData.pass ? 'trading_enabled' : 'blocked'}
             size="sm"
           />
@@ -73,9 +95,13 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         <div>
           <p className="text-xs text-foreground-tertiary mb-2 uppercase tracking-wide">Reason Codes</p>
           <div className="flex flex-wrap gap-2">
-            {signalData.reasonCodes.map((code) => (
-              <ReasonChip key={code} label={code} variant="info" />
-            ))}
+            {signalData.reasonCodes && signalData.reasonCodes.length > 0 ? (
+              signalData.reasonCodes.map((code) => (
+                <ReasonChip key={code} label={code} variant="info" />
+              ))
+            ) : (
+              <span className="text-xs text-foreground-tertiary">No reason codes available</span>
+            )}
           </div>
         </div>
       </div>
