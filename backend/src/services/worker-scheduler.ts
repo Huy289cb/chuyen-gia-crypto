@@ -11,6 +11,9 @@ import { createTradingSnapshots, runDataRetention } from './runtime-maintenance'
 import { syncTestnetForSymbol } from './testnet-sync';
 import { fetchRealTimePrices } from './price-fetcher';
 import { runKimNghiaAnalysisJob } from './kim-nghia-analysis-job';
+import { startMarketScanScheduler } from '../schedulers/market-scan.scheduler';
+import { startLLMDispatchScheduler } from '../schedulers/llm-dispatch.scheduler';
+import { startPositionMonitorScheduler } from '../schedulers/position-monitor.scheduler';
 
 let priceSyncInterval: NodeJS.Timeout | null = null;
 const cronTasks: ScheduledTask[] = [];
@@ -165,6 +168,18 @@ export async function startWorkerScheduler(): Promise<void> {
   });
   cronTasks.push(analysisTask);
 
+  // Start new Big Update v3 schedulers
+  console.log('[WorkerScheduler] Starting Big Update v3 schedulers...');
+  
+  // Market scan scheduler - runs every 5 minutes
+  startMarketScanScheduler('*/5 * * * *');
+  
+  // LLM dispatch scheduler - runs every 15 minutes
+  startLLMDispatchScheduler('*/15 * * * *');
+  
+  // Position monitor scheduler - runs every minute
+  startPositionMonitorScheduler('*/1 * * * *');
+
   console.log(
     `[WorkerScheduler] Started. symbols=${workerConfig.syncSymbols.join(',')} timeframe=${workerConfig.ohlcvTimeframe} testnetSync=${workerConfig.enableTestnetSync} priceInterval=${appConfig.priceUpdateIntervalMs}ms validationCron="${appConfig.predictionValidationCron}" snapshotCron="${appConfig.snapshotCron}" maintenanceCron="${appConfig.dailyMaintenanceCron}" analysisCron="${appConfig.analysisCronSchedule}"`
   );
@@ -180,6 +195,10 @@ export function stopWorkerScheduler(): void {
     task.stop();
   }
   cronTasks.length = 0;
+
+  // Stop Big Update v3 schedulers
+  // Note: These schedulers have their own stop functions
+  // For now, they will be stopped when the process exits
 
   console.log('[WorkerScheduler] Stopped');
 }

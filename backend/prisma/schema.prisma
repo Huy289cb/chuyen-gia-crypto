@@ -419,3 +419,89 @@ model TestnetPendingOrder {
   @@index([symbol, status])
   @@map("testnet_pending_orders")
 }
+
+// ============================================
+// MEMORY & LEARNING SYSTEM
+// ============================================
+
+model TradeDecision {
+  id              Int      @id @default(autoincrement())
+  symbol          String
+  timeframe       String
+  playbook_key    String
+  grade           String   // A, B, C, D
+  confidence      Float
+  regime          String   // trend, range, chop
+  decision        String   // trade, no_trade
+  reason          String   @db.Text
+  entry_price     Float?
+  stop_loss       Float?
+  take_profit     Float?
+  expected_rr     Float?
+  timestamp       DateTime @default(now())
+  candle_hash     String?
+  method_id       String   @default("kim_nghia")
+
+  trade_outcome   TradeOutcome?
+
+  @@index([symbol, timestamp])
+  @@index([playbook_key])
+  @@index([decision])
+  @@index([method_id])
+  @@map("trade_decisions")
+}
+
+model TradeOutcome {
+  id              Int      @id @default(autoincrement())
+  decision_id     Int      @unique
+  symbol          String
+  outcome         String   // win, loss, breakeven
+  entry_price     Float
+  exit_price      Float
+  realized_pnl    Float
+  realized_rr     Float
+  execution_cost  Float    @default(0)
+  duration_minutes Int?
+  close_reason    String
+  timestamp       DateTime @default(now())
+
+  decision        TradeDecision @relation(fields: [decision_id], references: [id], onDelete: Cascade)
+  reflection      TradeReflection?
+
+  @@index([decision_id])
+  @@index([symbol, outcome])
+  @@map("trade_outcomes")
+}
+
+model TradeReflection {
+  id              Int      @id @default(autoincrement())
+  outcome_id      Int      @unique
+  symbol          String
+  what_went_wrong String?  @db.Text
+  what_worked     String?  @db.Text
+  lesson_learned  String?  @db.Text
+  timestamp       DateTime @default(now())
+
+  outcome         TradeOutcome @relation(fields: [outcome_id], references: [id], onDelete: Cascade)
+
+  @@index([outcome_id])
+  @@map("trade_reflections")
+}
+
+model PlaybookStats {
+  id              Int      @id @default(autoincrement())
+  playbook_key    String   @unique
+  symbol          String
+  total_trades    Int      @default(0)
+  winning_trades  Int      @default(0)
+  losing_trades   Int      @default(0)
+  win_rate        Float    @default(0)
+  avg_rr          Float    @default(0)
+  avg_pnl         Float    @default(0)
+  total_pnl       Float    @default(0)
+  last_updated    DateTime @default(now())
+
+  @@index([playbook_key])
+  @@index([symbol])
+  @@map("playbook_stats")
+}

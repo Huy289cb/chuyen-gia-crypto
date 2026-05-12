@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma';
 // Import TypeScript sub-routers
 import performanceRouter from './performance';
 import testnetRouter from './testnet';
+import metricsRouter from './metrics';
 import { runKimNghiaAnalysisJob } from '../services/kim-nghia-analysis-job';
 
 const router = Router();
@@ -378,5 +379,11 @@ router.use('/performance', performanceRouter);
  * Endpoints: GET /api/testnet/accounts, GET /api/testnet/positions, etc.
  */
 router.use('/testnet', testnetRouter);
+
+/**
+ * Mount metrics router
+ * Endpoints: GET /api/metrics/risk, GET /api/metrics/playbooks, GET /api/metrics/no-trade, GET /api/metrics/costs
+ */
+router.use('/metrics', metricsRouter);
 
 export default router;
