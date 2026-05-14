@@ -41,6 +41,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
   }
 
   const systemData = data.systemHealth;
+  const safetyOk = systemData.safetyValidation === 'passed';
 
   return (
     <Card className={className}>
@@ -58,7 +59,20 @@ export function SystemOverview({ className }: SystemOverviewProps) {
             <span className="text-sm text-foreground-secondary">Worker Status</span>
           </div>
           <StatusBadge
-            status={systemData.workerStatus === 'healthy' ? 'healthy' : 'error'}
+            status={
+              systemData.workerStatus === 'healthy'
+                ? 'healthy'
+                : systemData.workerStatus === 'stale'
+                  ? 'trading_paused'
+                  : 'unknown'
+            }
+            label={
+              systemData.workerStatus === 'healthy'
+                ? 'Healthy'
+                : systemData.workerStatus === 'stale'
+                  ? 'Stale'
+                  : 'Idle'
+            }
             size="sm"
           />
         </div>
@@ -82,11 +96,14 @@ export function SystemOverview({ className }: SystemOverviewProps) {
             <span className="text-sm text-foreground-secondary">Safety Validation</span>
           </div>
           <StatusBadge
-            status={systemData.safetyValidation === 'passed' ? 'healthy' : 'error'}
-            label={systemData.safetyValidation === 'passed' ? 'Passed' : 'Failed'}
+            status={safetyOk ? 'healthy' : 'error'}
+            label={safetyOk ? 'Passed' : 'Failed'}
             size="sm"
           />
         </div>
+        {!safetyOk && (
+          <p className="text-xs text-danger px-1">{systemData.safetyValidation}</p>
+        )}
 
         {/* BTC-only Scope */}
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">

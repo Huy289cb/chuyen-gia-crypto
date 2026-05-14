@@ -41,7 +41,7 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
   }
 
   const warmupData = data.candleWarmup;
-  const overallProgress = (warmupData.totalCandles / warmupData.requiredCandles) * 100;
+  const overallProgress = Math.min(100, (warmupData.totalCandles / warmupData.requiredCandles) * 100);
 
   return (
     <Card className={className}>

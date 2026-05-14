@@ -15,6 +15,8 @@ interface DashboardSummaryData {
     status: string;
     lastRun: string;
     nextRun: string;
+    cron: string;
+    lastRunAt?: string | null;
   }>;
   candleWarmup: {
     totalCandles: number;
@@ -35,6 +37,14 @@ interface UseDashboardSummaryReturn {
   refresh: () => void;
 }
 
+async function readOkJson(res: Response) {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || body.message || `HTTP ${res.status}`);
+  }
+  return body;
+}
+
 export function useDashboardSummary(): UseDashboardSummaryReturn {
   const [data, setData] = useState<DashboardSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,14 +61,16 @@ export function useDashboardSummary(): UseDashboardSummaryReturn {
         fetch('/api/dashboard/warmup'),
       ]);
 
-      const systemData = await systemResponse.json();
-      const schedulersData = await schedulersResponse.json();
-      const warmupData = await warmupResponse.json();
+      const [systemBody, schedulersBody, warmupBody] = await Promise.all([
+        readOkJson(systemResponse),
+        readOkJson(schedulersResponse),
+        readOkJson(warmupResponse),
+      ]);
 
       setData({
-        systemHealth: systemData.data,
-        schedulers: schedulersData.data,
-        candleWarmup: warmupData.data,
+        systemHealth: systemBody.data,
+        schedulers: schedulersBody.data,
+        candleWarmup: warmupBody.data,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch dashboard summary');

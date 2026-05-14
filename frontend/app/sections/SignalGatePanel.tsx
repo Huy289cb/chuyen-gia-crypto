@@ -29,7 +29,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
     );
   }
 
-  if (error || !data?.signalGate) {
+  if (error) {
     return (
       <Card className={className}>
         <SectionHeader
@@ -37,12 +37,31 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           subtitle="Error loading data"
           icon={<Signal className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load signal data'}</div>
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  if (!data?.signalGate) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Signal Gate"
+          subtitle="No evaluations recorded yet"
+          icon={<Signal className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-foreground-tertiary text-center">
+          Run the worker pipeline to populate trade decisions.
+        </div>
       </Card>
     );
   }
 
   const signalData = data.signalGate;
+  const confidencePct =
+    signalData.confidence > 0 && signalData.confidence <= 1
+      ? signalData.confidence * 100
+      : signalData.confidence;
 
   return (
     <Card className={className}>
@@ -79,7 +98,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           </div>
           <div className="p-3 bg-surface-1/50 rounded-lg">
             <p className="text-xs text-foreground-tertiary mb-1">Confidence</p>
-            <p className="text-lg font-semibold text-foreground">{signalData.confidence}%</p>
+            <p className="text-lg font-semibold text-foreground">{confidencePct.toFixed(0)}%</p>
           </div>
           <div className="p-3 bg-surface-1/50 rounded-lg">
             <p className="text-xs text-foreground-tertiary mb-1">Playbook</p>

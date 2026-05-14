@@ -79,7 +79,7 @@ export function OpenPositionsPanel({ className }: OpenPositionsPanelProps) {
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground">{position.symbol}</span>
                 <StatusBadge
-                  status={position.side === 'long' ? 'trading_enabled' : 'blocked'}
+                  status={position.side.toLowerCase() === 'long' ? 'trading_enabled' : 'blocked'}
                   label={position.side.toUpperCase()}
                   size="sm"
                 />

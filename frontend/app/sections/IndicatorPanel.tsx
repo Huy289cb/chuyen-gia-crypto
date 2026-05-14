@@ -44,11 +44,16 @@ export function IndicatorPanel({ className, symbol = 'BTC', timeframe = '15m' }:
 
   const indicators = data.indicators;
 
+  const fmt = (v: number | null, kind: 'price' | 'number') => {
+    if (v === null || Number.isNaN(v)) return '—';
+    return kind === 'price' ? formatPrice(v) : v.toFixed(2);
+  };
+
   const indicatorList = [
-    { name: 'SMA (50)', value: indicators.ma50 || 0, format: 'price' },
-    { name: 'SMA (200)', value: indicators.ma200 || 0, format: 'price' },
-    { name: 'RSI (14)', value: indicators.rsi || 50, format: 'number' },
-    { name: 'MACD', value: indicators.macd || 0, format: 'number' },
+    { name: 'SMA (20)', value: indicators.sma20, format: 'price' as const },
+    { name: 'SMA (50)', value: indicators.sma50, format: 'price' as const },
+    { name: 'RSI (14)', value: indicators.rsi14, format: 'number' as const },
+    { name: 'ATR (14)', value: indicators.atr14, format: 'number' as const },
   ];
 
   return (
@@ -61,10 +66,20 @@ export function IndicatorPanel({ className, symbol = 'BTC', timeframe = '15m' }:
 
       <div className="space-y-3">
         {indicatorList.map((indicator) => {
-          const value = indicator.format === 'price' ? formatPrice(indicator.value) : indicator.value.toFixed(2);
-          const trend = indicator.name === 'RSI (14)'
-            ? indicator.value > 70 ? 'down' : indicator.value < 30 ? 'up' : 'neutral'
-            : indicator.value > 0 ? 'up' : indicator.value < 0 ? 'down' : 'neutral';
+          const numeric = indicator.value;
+          const value = fmt(numeric, indicator.format);
+          const trend =
+            indicator.name === 'RSI (14)' && numeric !== null
+              ? numeric > 70
+                ? 'down'
+                : numeric < 30
+                  ? 'up'
+                  : 'neutral'
+              : numeric !== null && numeric > 0
+                ? 'up'
+                : numeric !== null && numeric < 0
+                  ? 'down'
+                  : 'neutral';
 
           return (
             <div

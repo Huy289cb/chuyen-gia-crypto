@@ -78,18 +78,30 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
           />
         </div>
 
-        {isLocked && riskData.allowedReason && (
+        {isLocked && (riskData.lockReason || riskData.allowedReason) && (
           <div className="p-3 bg-surface-1/50 rounded-lg">
             <p className="text-xs text-foreground-tertiary mb-1">Lock Reason</p>
-            <p className="text-sm text-foreground">{riskData.allowedReason}</p>
+            <p className="text-sm text-foreground">{riskData.lockReason || riskData.allowedReason}</p>
           </div>
         )}
+
+        <div className="p-3 bg-surface-1/50 rounded-lg">
+          <p className="text-xs text-foreground-tertiary mb-1">Today&apos;s drawdown (realized vs day open)</p>
+          <p className="text-sm font-mono text-foreground">
+            {formatPrice(riskData.dailyLossCurrent ?? 0)} / {formatPrice(riskData.dailyLossCap)}
+            {typeof riskData.dailyLossLimitPercent === 'number' && (
+              <span className="text-foreground-tertiary text-xs ml-2">
+                ({riskData.dailyLossLimitPercent}% of balance cap)
+              </span>
+            )}
+          </p>
+        </div>
 
         {/* Risk Parameters */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-surface-1/50 rounded-lg">
             <p className="text-xs text-foreground-tertiary mb-1">Risk Per Trade</p>
-            <p className="text-lg font-semibold text-foreground">{riskData.riskPerTrade}%</p>
+            <p className="text-lg font-semibold text-foreground">{riskData.riskPerTrade.toFixed(2)}%</p>
           </div>
           <div className="p-3 bg-surface-1/50 rounded-lg">
             <p className="text-xs text-foreground-tertiary mb-1">Daily Loss Cap</p>

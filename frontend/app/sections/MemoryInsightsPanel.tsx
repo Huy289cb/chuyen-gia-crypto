@@ -3,7 +3,7 @@
 import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { Brain, AlertCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatVietnamTime } from '@/lib/utils';
 import { useIntelligenceData } from '../hooks/useIntelligenceData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
@@ -65,13 +65,15 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
                     <span className="text-sm font-medium text-foreground">{setup.playbook}</span>
                     <span className={cn(
                       'text-xs font-semibold px-2 py-0.5 rounded',
-                      setup.result === 'WIN' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
+                      setup.result === 'WIN' ? 'bg-success/15 text-success' :
+                      setup.result === 'LOSS' ? 'bg-danger/15 text-danger' :
+                      'bg-surface-2 text-foreground-tertiary'
                     )}>
                       {setup.result}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-foreground-tertiary">{setup.date}</span>
+                    <span className="text-foreground-tertiary">{formatVietnamTime(setup.date)}</span>
                     <span className={cn(
                       'font-mono',
                       setup.pnl >= 0 ? 'text-success' : 'text-danger'

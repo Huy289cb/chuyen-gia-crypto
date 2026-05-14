@@ -62,7 +62,11 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
         <MetricCard
           title="Equity"
           value={formatPrice(balanceData.equity)}
-          change={((balanceData.equity - balanceData.totalBalance) / balanceData.totalBalance) * 100}
+          change={
+            balanceData.totalBalance > 0
+              ? ((balanceData.equity - balanceData.totalBalance) / balanceData.totalBalance) * 100
+              : 0
+          }
           changeLabel="vs balance"
           icon={<TrendingUp className="w-4 h-4" />}
           trend={balanceData.equity >= balanceData.totalBalance ? 'up' : 'down'}

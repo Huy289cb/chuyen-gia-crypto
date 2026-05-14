@@ -79,7 +79,7 @@ export function ActiveOrdersPanel({ className }: ActiveOrdersPanelProps) {
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground">{order.symbol}</span>
                 <StatusBadge
-                  status={order.side === 'buy' ? 'trading_enabled' : 'blocked'}
+                  status={order.side.toLowerCase() === 'buy' || order.side.toLowerCase() === 'long' ? 'trading_enabled' : 'blocked'}
                   label={order.side.toUpperCase()}
                   size="sm"
                 />

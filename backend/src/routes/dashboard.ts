@@ -1,8 +1,68 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { getTestnetAccount } from '../repositories/testnet.repository';
+import { validateSafetyRequirements } from '../config/app';
+import { getRiskPolicy } from '../config/risk-policy';
+import { METHODS } from '../config/methods';
 
 const router = Router();
+
+function formatRelativeAgo(ts: Date | null): string {
+  if (!ts) return 'never';
+  const ms = Date.now() - ts.getTime();
+  if (ms < 45_000) return 'just now';
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 120) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 48) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function inferSchedulerStatus(last: Date | null, staleAfterMs: number): string {
+  if (!last) return 'idle';
+  return Date.now() - last.getTime() < staleAfterMs ? 'running' : 'idle';
+}
+
+/** Rough next-fire hint for star-slash-N minute step crons (matches worker v3). */
+function estimateNextCronHint(last: Date | null, cronExpr: string): string {
+  if (!last) return '—';
+  const part = cronExpr.trim().split(/\s+/)[0] || '';
+  const m = part.match(/^\*\/(\d+)$/);
+  if (!m) return '—';
+  const stepMs = parseInt(m[1], 10) * 60_000;
+  const elapsed = Date.now() - last.getTime();
+  const until = Math.max(0, stepMs - (elapsed % stepMs || stepMs));
+  const untilMin = Math.ceil(until / 60_000);
+  if (untilMin <= 1) return 'within 1 min';
+  return `~${untilMin} min`;
+}
+
+function toReasonCodes(reason: string | null | undefined): string[] {
+  if (!reason || !reason.trim()) return [];
+  const byNl = reason
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (byNl.length > 1) return byNl;
+  const bySemi = reason
+    .split(/;\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (bySemi.length > 1) return bySemi;
+  return [reason.trim()];
+}
+
+function btcOnlyFromConfig(): boolean {
+  if (process.env.BTC_ONLY === 'true') return true;
+  const enabled = Object.values(METHODS).filter((m) => m.enabled);
+  if (enabled.length === 0) return false;
+  return !enabled.some((m) => m.autoEntry?.enabledSymbols?.includes('ETH'));
+}
+
+function isSignalGateOnlyReason(reason: string): boolean {
+  const r = reason || '';
+  return r.startsWith('Signal gate:') || r.startsWith('Signal gate blocked:');
+}
 
 /**
  * GET /api/dashboard/system
@@ -10,43 +70,67 @@ const router = Router();
  */
 router.get('/system', async (_req: Request, res: Response) => {
   try {
-    // Check database connection
     let databaseStatus = 'healthy';
     try {
       await prisma.$queryRaw`SELECT 1`;
-    } catch (error) {
+    } catch {
       databaseStatus = 'error';
     }
 
-    // Check if worker is running (based on recent activity)
-    const recentAnalysis = await prisma.analysisHistory.findFirst({
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true },
-    });
+    const [lastCandle, lastDecision, lastAccountTouch] = await Promise.all([
+      prisma.ohlcvCandle.findFirst({
+        where: { coin: 'BTC' },
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true },
+      }),
+      prisma.tradeDecision.findFirst({
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true },
+      }),
+      prisma.testnetAccount.findFirst({
+        orderBy: { updated_at: 'desc' },
+        select: { updated_at: true },
+      }),
+    ]);
 
-    const workerStatus = recentAnalysis 
-      ? (Date.now() - new Date(recentAnalysis.timestamp).getTime() < 300000 ? 'healthy' : 'stale')
+    const activityTimes = [
+      lastCandle?.timestamp,
+      lastDecision?.timestamp,
+      lastAccountTouch?.updated_at,
+    ]
+      .filter(Boolean)
+      .map((t) => new Date(t as Date).getTime());
+    const lastActivity = activityTimes.length ? new Date(Math.max(...activityTimes)) : null;
+
+    const workerStatus = lastActivity
+      ? Date.now() - lastActivity.getTime() < 300_000
+        ? 'healthy'
+        : 'stale'
       : 'idle';
 
-    // Check BTC-only scope from config
-    const btcOnlyScope = process.env.BTC_ONLY === 'true';
+    const btcOnlyScope = btcOnlyFromConfig();
 
-    // Check lock status from testnet accounts
+    const now = new Date();
     const lockedAccounts = await prisma.testnetAccount.count({
       where: {
-        OR: [
-          { cooldown_until: { gt: new Date() } },
-          { precision_cooldown_until: { gt: new Date() } },
-        ],
+        OR: [{ cooldown_until: { gt: now } }, { precision_cooldown_until: { gt: now } }],
       },
     });
 
     const lockStatus = lockedAccounts > 0 ? 'locked' : 'unlocked';
 
+    let safetyValidation = 'unknown';
+    try {
+      validateSafetyRequirements();
+      safetyValidation = 'passed';
+    } catch (e: any) {
+      safetyValidation = `failed: ${e?.message || 'validation error'}`;
+    }
+
     const systemHealth = {
       workerStatus,
       databaseStatus,
-      safetyValidation: 'passed',
+      safetyValidation,
       btcOnlyScope,
       lockStatus,
     };
@@ -67,46 +151,63 @@ router.get('/system', async (_req: Request, res: Response) => {
  */
 router.get('/schedulers', async (_req: Request, res: Response) => {
   try {
-    // Check recent activity for each scheduler type
-    const recentAnalysis = await prisma.analysisHistory.findFirst({
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true, method_id: true },
-    });
+    const MARKET_CRON = '*/5 * * * *';
+    const LLM_CRON = '*/15 * * * *';
+    const POS_CRON = '*/1 * * * *';
 
-    const recentCandles = await prisma.ohlcvCandle.findFirst({
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true },
-    });
+    const [lastBtcCandle, lastKimDecision, lastTradeEvent, lastOpenPosTouch] = await Promise.all([
+      prisma.ohlcvCandle.findFirst({
+        where: { coin: 'BTC' },
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true },
+      }),
+      prisma.tradeDecision.findFirst({
+        where: { method_id: 'kim_nghia' },
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true },
+      }),
+      prisma.testnetTradeEvent.findFirst({
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true },
+      }),
+      prisma.testnetPosition.findFirst({
+        where: { status: { in: ['open', 'OPEN'] } },
+        orderBy: { entry_time: 'desc' },
+        select: { entry_time: true },
+      }),
+    ]);
+
+    const marketLast = lastBtcCandle?.timestamp ? new Date(lastBtcCandle.timestamp) : null;
+    const llmLast = lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null;
+    const posTimes = [lastTradeEvent?.timestamp, lastOpenPosTouch?.entry_time]
+      .filter(Boolean)
+      .map((t) => new Date(t as Date).getTime());
+    const posLast = posTimes.length ? new Date(Math.max(...posTimes)) : null;
 
     const schedulers = [
       {
         name: 'MarketScan',
-        status: recentCandles 
-          ? (Date.now() - new Date(recentCandles.timestamp).getTime() < 60000 ? 'running' : 'idle')
-          : 'idle',
-        lastRun: recentCandles 
-          ? `${Math.floor((Date.now() - new Date(recentCandles.timestamp).getTime()) / 60000)} min ago`
-          : 'never',
-        nextRun: 'in 1 min',
-        cron: '*/5 * * * *',
+        cron: MARKET_CRON,
+        status: inferSchedulerStatus(marketLast, 6 * 60_000),
+        lastRun: formatRelativeAgo(marketLast),
+        lastRunAt: marketLast?.toISOString() ?? null,
+        nextRun: estimateNextCronHint(marketLast, MARKET_CRON),
       },
       {
         name: 'LLMDispatch',
-        status: recentAnalysis 
-          ? (Date.now() - new Date(recentAnalysis.timestamp).getTime() < 300000 ? 'running' : 'idle')
-          : 'idle',
-        lastRun: recentAnalysis 
-          ? `${Math.floor((Date.now() - new Date(recentAnalysis.timestamp).getTime()) / 60000)} min ago`
-          : 'never',
-        nextRun: 'in 5 min',
-        cron: '*/15 * * * *',
+        cron: LLM_CRON,
+        status: inferSchedulerStatus(llmLast, 20 * 60_000),
+        lastRun: formatRelativeAgo(llmLast),
+        lastRunAt: llmLast?.toISOString() ?? null,
+        nextRun: estimateNextCronHint(llmLast, LLM_CRON),
       },
       {
         name: 'PositionMonitor',
-        status: 'running',
-        lastRun: '1 min ago',
-        nextRun: 'in 1 min',
-        cron: '*/1 * * * *',
+        cron: POS_CRON,
+        status: inferSchedulerStatus(posLast, 3 * 60_000),
+        lastRun: formatRelativeAgo(posLast),
+        lastRunAt: posLast?.toISOString() ?? null,
+        nextRun: estimateNextCronHint(posLast, POS_CRON),
       },
     ];
 
@@ -126,11 +227,17 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
  */
 router.get('/scope', async (_req: Request, res: Response) => {
   try {
-    // TODO: Implement actual scope check
+    const enabledMethods = Object.values(METHODS)
+      .filter((m) => m.enabled)
+      .map((m) => m.methodId);
+    const disabledMethods = Object.values(METHODS)
+      .filter((m) => !m.enabled)
+      .map((m) => m.methodId);
+
     const scope = {
-      btcOnly: true,
-      enabledMethods: ['kim_nghia'],
-      disabledMethods: ['ict'],
+      btcOnly: btcOnlyFromConfig(),
+      enabledMethods,
+      disabledMethods,
     };
 
     res.json({
@@ -211,7 +318,7 @@ router.get('/signals', async (req: Request, res: Response) => {
       playbook: decision.playbook_key,
       regime: decision.regime,
       pass: decision.decision === 'trade',
-      reasonCodes: [decision.reason?.substring(0, 50) || 'no_reason'],
+      reasonCodes: toReasonCodes(decision.reason),
       timestamp: decision.timestamp.toISOString(),
     }));
 
@@ -231,20 +338,48 @@ router.get('/signals', async (req: Request, res: Response) => {
  */
 router.get('/risk', async (_req: Request, res: Response) => {
   try {
-    // Get risk state from testnet accounts
+    const policy = getRiskPolicy();
     const accounts = await prisma.testnetAccount.findMany({
       where: { symbol: 'BTC' },
     });
 
     const account = accounts[0];
+    const now = new Date();
+
+    const lossCooldown = account?.cooldown_until && account.cooldown_until > now;
+    const precisionCooldown = account?.precision_cooldown_until && account.precision_cooldown_until > now;
+    const isLocked = Boolean(lossCooldown || precisionCooldown);
+
+    let lockReason: string | null = null;
+    if (lossCooldown) lockReason = 'Loss cooldown active (consecutive losses threshold)';
+    else if (precisionCooldown) lockReason = 'Precision / API error cooldown active';
+
+    const balanceBase = account?.current_balance || account?.equity || 0;
+    const dailyLossCapUsd = balanceBase * (policy.dailyLossLimitPercent / 100);
+
+    let dailyLossCurrent = 0;
+    if (account) {
+      const dayStart = new Date();
+      dayStart.setUTCHours(0, 0, 0, 0);
+      const baseline = await prisma.testnetAccountSnapshot.findFirst({
+        where: { account_id: account.id, timestamp: { lt: dayStart } },
+        orderBy: { timestamp: 'desc' },
+      });
+      const startEquity = baseline?.equity ?? account.equity;
+      const delta = (account.equity ?? 0) - startEquity;
+      dailyLossCurrent = delta < 0 ? Math.abs(delta) : 0;
+    }
 
     const riskState = {
-      riskPerTrade: 1.0, // TODO: Get from config
-      dailyLossCap: 500, // TODO: Get from config
-      maxConsecutiveLosses: 3, // TODO: Get from config
+      riskPerTrade: policy.riskPerTradePercent,
+      dailyLossCap: dailyLossCapUsd,
+      dailyLossLimitPercent: policy.dailyLossLimitPercent,
+      dailyLossCurrent: dailyLossCurrent,
+      maxConsecutiveLosses: policy.maxConsecutiveLosses,
       currentStreak: account?.consecutive_losses || 0,
-      currentLockState: account?.cooldown_until && account.cooldown_until > new Date() ? 'locked' : 'unlocked',
-      allowedReason: account?.cooldown_until ? 'consecutive_losses' : null,
+      currentLockState: isLocked ? 'locked' : 'unlocked',
+      lockReason,
+      allowedReason: lockReason,
     };
 
     res.json({
@@ -263,20 +398,67 @@ router.get('/risk', async (_req: Request, res: Response) => {
  */
 router.get('/llm', async (_req: Request, res: Response) => {
   try {
-    // Get recent analysis to estimate LLM usage
-    const recentAnalysis = await prisma.analysisHistory.findFirst({
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true, raw_answer: true },
+    const methodId = 'kim_nghia';
+    const startUtc = new Date();
+    startUtc.setUTCHours(0, 0, 0, 0);
+
+    const decisionsToday = await prisma.tradeDecision.findMany({
+      where: { method_id: methodId, timestamp: { gte: startUtc } },
+      select: { reason: true, decision: true, timestamp: true },
     });
 
+    let skippedCallCount = 0;
+    let noTradeCount = 0;
+    let invalidJsonCount = 0;
+    let llmEngagedCount = 0;
+    let lastEngaged: Date | null = null;
+
+    for (const d of decisionsToday) {
+      const r = d.reason || '';
+      if (isSignalGateOnlyReason(r)) {
+        skippedCallCount += 1;
+        continue;
+      }
+      llmEngagedCount += 1;
+      if (!lastEngaged || d.timestamp > lastEngaged) lastEngaged = d.timestamp;
+      if (d.decision === 'no_trade') noTradeCount += 1;
+      if (r.includes('LLM: invalid JSON') || r.includes('invalid or unparseable')) {
+        invalidJsonCount += 1;
+      }
+    }
+
+    const lastAny = await prisma.tradeDecision.findFirst({
+      where: { method_id: methodId },
+      orderBy: { timestamp: 'desc' },
+      select: { timestamp: true },
+    });
+
+    const lastCallTs = lastEngaged || lastAny?.timestamp || null;
+
+    const recentAnalysis = await prisma.analysisHistory.findFirst({
+      where: { coin: 'BTC', method_id: methodId },
+      orderBy: { timestamp: 'desc' },
+      select: { raw_answer: true },
+    });
+
+    const modelName =
+      process.env.GROQ_MODEL_PRIMARY ||
+      process.env.GROQ_MODEL ||
+      'meta-llama/llama-4-scout-17b-16e-instruct';
+    const promptVersion = process.env.PROMPT_VERSION || 'v3';
+
+    const responseStatus =
+      llmEngagedCount > 0 ? (invalidJsonCount > 0 ? 'degraded' : 'success') : recentAnalysis?.raw_answer ? 'success' : 'none';
+
     const llmStats = {
-      lastCall: recentAnalysis?.timestamp?.toISOString() || null,
-      modelName: 'llama-3.3-70b-versatile', // TODO: Get from config
-      promptVersion: 'v2.1', // TODO: Get from config
-      responseStatus: recentAnalysis?.raw_answer ? 'success' : 'none',
-      invalidJsonCount: 0, // TODO: Track invalid JSON responses
-      noTradeCount: 0, // TODO: Track no-trade decisions
-      skippedCallCount: 0, // TODO: Track skipped calls
+      callsToday: llmEngagedCount,
+      lastCall: lastCallTs ? lastCallTs.toISOString() : null,
+      modelName,
+      promptVersion,
+      responseStatus,
+      invalidJsonCount,
+      noTradeCount,
+      skippedCallCount,
     };
 
     res.json({
@@ -305,9 +487,9 @@ router.get('/memory', async (_req: Request, res: Response) => {
     const similarSetups = recentDecisions.map((decision) => ({
       id: decision.id,
       playbook: decision.playbook_key,
-      result: decision.trade_outcome?.outcome?.toUpperCase() || 'PENDING',
+      result: (decision.trade_outcome?.outcome || 'pending').toUpperCase(),
       pnl: decision.trade_outcome?.realized_pnl || 0,
-      date: `${Math.floor((Date.now() - new Date(decision.timestamp).getTime()) / (1000 * 60 * 60 * 24))} days ago`,
+      date: decision.timestamp.toISOString(),
     }));
 
     // Get playbook stats
@@ -367,31 +549,15 @@ router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
     });
 
     // Map to frontend format
-    const noTradeReasons = Object.entries(reasonCounts).map(([reason, count]) => {
-      let variant: 'warning' | 'danger' | 'default' = 'default';
-      if (reason.toLowerCase().includes('loss') || reason.toLowerCase().includes('limit')) {
-        variant = 'danger';
-      } else if (reason.toLowerCase().includes('insufficient') || reason.toLowerCase().includes('spread')) {
-        variant = 'warning';
-      }
-      return { reason, count, variant };
-    });
-
-    // Add default reasons with 0 count if not present
-    const defaultReasons = [
-      { reason: 'Insufficient candles', count: 0, variant: 'warning' as const },
-      { reason: 'Grade below A', count: 0, variant: 'default' as const },
-      { reason: 'Spread too high', count: 0, variant: 'warning' as const },
-      { reason: 'Daily loss limit hit', count: 0, variant: 'danger' as const },
-      { reason: 'Consecutive losses limit', count: 0, variant: 'danger' as const },
-    ];
-
-    defaultReasons.forEach((defaultReason) => {
-      const existing = noTradeReasons.find((r) => r.reason.toLowerCase() === defaultReason.reason.toLowerCase());
-      if (!existing) {
-        noTradeReasons.push(defaultReason);
-      }
-    });
+    const noTradeReasons = Object.entries(reasonCounts)
+      .map(([reason, count]) => {
+        let variant: 'warning' | 'danger' | 'default' = 'default';
+        const rl = reason.toLowerCase();
+        if (rl.includes('loss') || rl.includes('limit') || rl.includes('risk')) variant = 'danger';
+        else if (rl.includes('insufficient') || rl.includes('spread') || rl.includes('candle')) variant = 'warning';
+        return { reason, count, variant };
+      })
+      .sort((a, b) => b.count - a.count);
 
     res.json({
       ok: true,
@@ -409,31 +575,69 @@ router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
  */
 router.get('/events', async (req: Request, res: Response) => {
   try {
-    const { limit = 20, module } = req.query;
+    const limit = Math.min(parseInt(String(req.query.limit || 20), 10) || 20, 100);
+    const moduleFilter = typeof req.query.module === 'string' ? req.query.module.toLowerCase() : '';
 
-    // Get recent trade events from testnet positions
-    const tradeEvents = await prisma.testnetTradeEvent.findMany({
-      orderBy: { timestamp: 'desc' },
-      take: parseInt(limit as string),
-    });
+    const [tradeEvents, decisions] = await Promise.all([
+      prisma.testnetTradeEvent.findMany({
+        orderBy: { timestamp: 'desc' },
+        take: limit,
+      }),
+      prisma.tradeDecision.findMany({
+        orderBy: { timestamp: 'desc' },
+        take: Math.min(limit, 25),
+        select: {
+          id: true,
+          timestamp: true,
+          decision: true,
+          reason: true,
+          symbol: true,
+          method_id: true,
+        },
+      }),
+    ]);
 
-    let events = tradeEvents.map((event) => ({
-      id: event.id,
+    const fromEvents = tradeEvents.map((event) => ({
+      id: `te-${event.id}`,
       timestamp: event.timestamp.toISOString(),
-      module: 'Position Monitor',
+      module: 'Testnet',
       message: event.event_type,
-      severity: event.event_type.toLowerCase().includes('error') ? 'error' : 'info',
-      details: event.event_data?.substring(0, 100) || '',
+      severity: (event.event_type.toLowerCase().includes('error') ? 'error' : 'info') as 'info' | 'warning' | 'error',
+      details: event.event_data?.substring(0, 500) || '',
     }));
 
-    // Filter by module if specified
-    if (module && typeof module === 'string') {
-      events = events.filter((e) => e.module.toLowerCase().includes(module.toLowerCase()));
+    const fromDecisions = decisions.map((d) => {
+      const r = d.reason || '';
+      let module = 'Decision';
+      if (isSignalGateOnlyReason(r)) module = 'SignalGate';
+      else if (r.startsWith('Risk engine:')) module = 'RiskEngine';
+      else if (r.startsWith('LLM:')) module = 'LLM';
+      const sev: 'info' | 'warning' | 'error' =
+        d.decision === 'no_trade' && (r.includes('blocked') || r.includes('invalid')) ? 'warning' : 'info';
+      return {
+        id: `td-${d.id}`,
+        timestamp: d.timestamp.toISOString(),
+        module,
+        message: `${d.symbol} ${d.decision}`,
+        severity: sev,
+        details: (d.reason || '').substring(0, 500),
+        metadata: { method_id: d.method_id },
+      };
+    });
+
+    let merged = [...fromEvents, ...fromDecisions].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    if (moduleFilter) {
+      merged = merged.filter((e) => e.module.toLowerCase().includes(moduleFilter));
     }
+
+    merged = merged.slice(0, limit);
 
     res.json({
       ok: true,
-      data: events,
+      data: merged,
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching events:', error.message);
@@ -453,6 +657,7 @@ router.get('/balance', async (req: Request, res: Response) => {
 
     if (!account) {
       res.json({
+        ok: true,
         success: true,
         data: {
           totalBalance: 0,
@@ -467,18 +672,52 @@ router.get('/balance', async (req: Request, res: Response) => {
       return;
     }
 
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const weekStart = new Date();
+    weekStart.setUTCDate(weekStart.getUTCDate() - 7);
+    weekStart.setUTCHours(0, 0, 0, 0);
+
+    const [baselineDay, baselineWeek, marginAgg] = await Promise.all([
+      prisma.testnetAccountSnapshot.findFirst({
+        where: { account_id: account.id, timestamp: { lt: dayStart } },
+        orderBy: { timestamp: 'desc' },
+      }),
+      prisma.testnetAccountSnapshot.findFirst({
+        where: { account_id: account.id, timestamp: { lt: weekStart } },
+        orderBy: { timestamp: 'desc' },
+      }),
+      prisma.testnetPosition.aggregate({
+        where: {
+          account_id: account.id,
+          status: { in: ['open', 'OPEN'] },
+        },
+        _sum: { risk_usd: true },
+      }),
+    ]);
+
+    const startDayEquity = baselineDay?.equity ?? account.equity;
+    const startWeekEquity = baselineWeek?.equity ?? account.equity;
+    const dailyPnL = (account.equity ?? 0) - startDayEquity;
+    const weeklyPnL = (account.equity ?? 0) - startWeekEquity;
+
+    const usedMargin = marginAgg._sum.risk_usd || 0;
+    const equity = account.equity ?? account.current_balance ?? 0;
+    const freeMargin = Math.max(0, equity - usedMargin);
+
     const balance = {
       totalBalance: account.current_balance || 0,
-      availableBalance: account.current_balance || 0,
-      equity: account.equity || 0,
-      usedMargin: 0, // TODO: Calculate from positions
-      freeMargin: account.current_balance || 0,
-      dailyPnL: account.realized_pnl || 0,
-      weeklyPnL: account.realized_pnl || 0, // TODO: Calculate from snapshots
+      availableBalance: Math.max(0, (account.current_balance || 0) - usedMargin),
+      equity,
+      usedMargin,
+      freeMargin,
+      dailyPnL,
+      weeklyPnL,
     };
 
     res.json({
       ok: true,
+      success: true,
       data: balance,
     });
   } catch (error: any) {
@@ -494,21 +733,27 @@ router.get('/balance', async (req: Request, res: Response) => {
 router.get('/positions', async (req: Request, res: Response) => {
   try {
     const { symbol, method } = req.query;
-    const where: any = { status: 'OPEN' };
-    
-    if (symbol) where.symbol = String(symbol).toUpperCase();
-    if (method) where.method_id = String(method);
 
     const positions = await prisma.testnetPosition.findMany({
-      where,
+      where: {
+        status: { in: ['open', 'OPEN'] },
+        ...(symbol ? { symbol: String(symbol).toUpperCase() } : {}),
+        ...(method
+          ? {
+              account: {
+                method_id: String(method),
+              },
+            }
+          : {}),
+      },
       orderBy: { entry_time: 'desc' },
     });
 
     const formattedPositions = positions.map((pos) => {
       const unrealizedPnL = pos.unrealized_pnl || 0;
       const entryPrice = pos.entry_price || 0;
-      const pnlPercentage = entryPrice > 0 ? (unrealizedPnL / entryPrice) * 100 : 0;
-      const timeInPosition = pos.entry_time 
+      const pnlPercentage = entryPrice > 0 ? (unrealizedPnL / (entryPrice * (pos.size_qty || 1))) * 100 : 0;
+      const timeInPosition = pos.entry_time
         ? `${Math.floor((Date.now() - new Date(pos.entry_time).getTime()) / 60000)}m`
         : '0m';
 
@@ -544,14 +789,13 @@ router.get('/positions', async (req: Request, res: Response) => {
 router.get('/orders', async (req: Request, res: Response) => {
   try {
     const { symbol, method, status } = req.query;
-    const where: any = {};
-    
-    if (symbol) where.symbol = String(symbol).toUpperCase();
-    if (method) where.method_id = String(method);
-    if (status) where.status = String(status);
 
-    const orders = await prisma.pendingOrder.findMany({
-      where,
+    const orders = await prisma.testnetPendingOrder.findMany({
+      where: {
+        ...(symbol ? { symbol: String(symbol).toUpperCase() } : {}),
+        ...(method ? { method_id: String(method) } : {}),
+        ...(status ? { status: String(status) } : { status: { in: ['pending', 'PENDING'] } }),
+      },
       orderBy: { created_at: 'desc' },
     });
 
@@ -584,27 +828,33 @@ router.get('/orders', async (req: Request, res: Response) => {
 router.get('/trades', async (req: Request, res: Response) => {
   try {
     const { limit = 20, symbol, method } = req.query;
-    const where: any = { status: 'CLOSED' };
-    
-    if (symbol) where.symbol = String(symbol).toUpperCase();
-    if (method) where.method_id = String(method);
 
     const positions = await prisma.testnetPosition.findMany({
-      where,
-      orderBy: { entry_time: 'desc' },
-      take: parseInt(limit as string),
+      where: {
+        status: { in: ['closed', 'CLOSED'] },
+        ...(symbol ? { symbol: String(symbol).toUpperCase() } : {}),
+        ...(method
+          ? {
+              account: {
+                method_id: String(method),
+              },
+            }
+          : {}),
+      },
+      orderBy: { close_time: 'desc' },
+      take: parseInt(limit as string, 10),
     });
 
     const formattedTrades = positions.map((pos) => ({
       id: pos.position_id,
       symbol: pos.symbol,
       side: pos.side,
-      price: pos.entry_price || 0,
+      price: pos.close_price || pos.entry_price || 0,
       quantity: pos.size_qty || 0,
-      fee: pos.entry_fee || 0,
+      fee: (pos.entry_fee || 0) + (pos.exit_fee || 0) + (pos.funding_fee || 0),
       realizedPnL: pos.realized_pnl || 0,
       status: pos.status,
-      closedAt: pos.close_time?.toISOString() || new Date().toISOString(),
+      closedAt: pos.close_time?.toISOString() || '',
     }));
 
     res.json({

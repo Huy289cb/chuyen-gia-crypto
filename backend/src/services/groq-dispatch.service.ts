@@ -126,6 +126,19 @@ export class GroqDispatchService {
     const analysis = await this.callGroqWithValidation(systemPrompt, userPrompt);
 
     if (!analysis) {
+      if (this.config.enableMemory) {
+        await memoryService.storeDecision({
+          symbol,
+          timeframe,
+          playbook_key: 'unknown',
+          grade: 'D',
+          confidence: 0,
+          regime: 'unknown',
+          decision: 'no_trade',
+          reason: 'LLM: invalid JSON or failed validation after retries',
+          method_id,
+        });
+      }
       return {
         decision: 'no_trade',
         reason: 'Groq validation failed or returned invalid response',

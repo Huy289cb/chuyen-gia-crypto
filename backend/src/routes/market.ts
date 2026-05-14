@@ -97,6 +97,12 @@ router.get('/indicators', async (req: Request, res: Response): Promise<void> => 
           rsi14: [],
           atr14: [],
         },
+        latest: {
+          sma20: null,
+          sma50: null,
+          rsi14: null,
+          atr14: null,
+        },
       });
       return;
     }
@@ -182,6 +188,14 @@ router.get('/indicators', async (req: Request, res: Response): Promise<void> => 
 
     const atr14 = calculateATR(candles, 14);
 
+    const lastNum = (arr: (number | null)[]): number | null => {
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const v = arr[i];
+        if (v !== null && v !== undefined && Number.isFinite(v)) return v;
+      }
+      return null;
+    };
+
     res.json({
       ok: true,
       symbol: String(symbol).toUpperCase(),
@@ -191,6 +205,12 @@ router.get('/indicators', async (req: Request, res: Response): Promise<void> => 
         sma50,
         rsi14,
         atr14,
+      },
+      latest: {
+        sma20: lastNum(sma20),
+        sma50: lastNum(sma50),
+        rsi14: lastNum(rsi14),
+        atr14: lastNum(atr14),
       },
     });
   } catch (error: any) {

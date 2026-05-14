@@ -11,10 +11,10 @@ interface MarketData {
     close: number;
   }>;
   indicators: {
-    ma50: number;
-    ma200: number;
-    rsi: number;
-    macd: number;
+    sma20: number | null;
+    sma50: number | null;
+    rsi14: number | null;
+    atr14: number | null;
   };
   signals: Array<{
     id: string;
@@ -53,37 +53,46 @@ export function useMarketData(symbol: string = 'BTC', timeframe: string = '15m')
       const indicatorsData = await indicatorsResponse.json();
       const signalsData = await signalsResponse.json();
 
-      // Format candles for the chart
-      const formattedCandles = candlesData.candles?.map((candle: any) => ({
-        time: candle.time,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-      })) || [];
+      if (!candlesResponse.ok) {
+        throw new Error(candlesData.error || 'Failed to load candles');
+      }
+      if (!indicatorsResponse.ok) {
+        throw new Error(indicatorsData.error || 'Failed to load indicators');
+      }
+      if (!signalsResponse.ok) {
+        throw new Error(signalsData.error || 'Failed to load signals');
+      }
 
-      // Get latest indicator values
-      const indicators = indicatorsData.indicators || {};
-      const latestIndicators = {
-        ma50: indicators.sma50?.filter((v: any) => v !== null).pop() || 0,
-        ma200: indicators.sma50?.filter((v: any) => v !== null).slice(-200)[0] || 0,
-        rsi: indicators.rsi14?.filter((v: any) => v !== null).pop() || 50,
-        macd: 0, // TODO: Implement MACD calculation
+      const formattedCandles =
+        candlesData.candles?.map((candle: Record<string, number>) => ({
+          time: candle.time,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        })) || [];
+
+      const latest = indicatorsData.latest || {};
+      const indicators = {
+        sma20: typeof latest.sma20 === 'number' ? latest.sma20 : null,
+        sma50: typeof latest.sma50 === 'number' ? latest.sma50 : null,
+        rsi14: typeof latest.rsi14 === 'number' ? latest.rsi14 : null,
+        atr14: typeof latest.atr14 === 'number' ? latest.atr14 : null,
       };
 
-      // Format signals
-      const formattedSignals = signalsData.signals?.map((signal: any) => ({
-        id: signal.id,
-        grade: signal.grade,
-        confidence: signal.confidence,
-        playbook: signal.playbook,
-        regime: signal.regime,
-        pass: signal.pass,
-      })) || [];
+      const formattedSignals =
+        signalsData.signals?.map((signal: Record<string, unknown>) => ({
+          id: String(signal.id),
+          grade: String(signal.grade ?? ''),
+          confidence: Number(signal.confidence ?? 0),
+          playbook: String(signal.playbook ?? ''),
+          regime: String(signal.regime ?? ''),
+          pass: Boolean(signal.pass),
+        })) || [];
 
       setData({
         candles: formattedCandles,
-        indicators: latestIndicators,
+        indicators,
         signals: formattedSignals,
       });
     } catch (err) {

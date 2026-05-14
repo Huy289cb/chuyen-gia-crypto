@@ -79,7 +79,9 @@ export function TradeHistoryPanel({ className }: TradeHistoryPanelProps) {
                 <span className="font-semibold text-foreground">{trade.symbol}</span>
                 <span className={cn(
                   'text-xs font-medium px-2 py-0.5 rounded',
-                  trade.side === 'long' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
+                  trade.side.toLowerCase() === 'long' || trade.side.toLowerCase() === 'buy'
+                    ? 'bg-success/15 text-success'
+                    : 'bg-danger/15 text-danger'
                 )}>
                   {trade.side.toUpperCase()}
                 </span>

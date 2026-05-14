@@ -2,37 +2,44 @@
 
 import { useState, useEffect } from 'react';
 
+export interface SignalGateView {
+  grade: string;
+  confidence: number;
+  playbook: string;
+  regime: string;
+  pass: boolean;
+  reasonCodes: string[];
+  timestamp?: string;
+}
+
 interface IntelligenceData {
-  signalGate: {
-    grade: string;
-    confidence: number;
-    playbook: string;
-    regime: string;
-    pass: boolean;
-    reasonCodes: string[];
-  };
+  signalGate: SignalGateView | null;
   riskEngine: {
     riskPerTrade: number;
     dailyLossCap: number;
+    dailyLossLimitPercent?: number;
+    dailyLossCurrent?: number;
     maxConsecutiveLosses: number;
     currentStreak: number;
     currentLockState: string;
     allowedReason: string | null;
-  };
+    lockReason?: string | null;
+  } | null;
   noTradeReasons: Array<{
     reason: string;
     count: number;
     variant: string;
   }>;
   llm: {
-    lastCall: string;
+    callsToday?: number;
+    lastCall: string | null;
     modelName: string;
     promptVersion: string;
     responseStatus: string;
     invalidJsonCount: number;
     noTradeCount: number;
     skippedCallCount: number;
-  };
+  } | null;
   memory: {
     similarSetups: Array<{
       id: number;
@@ -43,7 +50,7 @@ interface IntelligenceData {
     }>;
     playbookWinrate: Record<string, number>;
     failurePatterns: string[];
-  };
+  } | null;
 }
 
 interface UseIntelligenceDataReturn {
@@ -51,6 +58,30 @@ interface UseIntelligenceDataReturn {
   loading: boolean;
   error: string | null;
   refresh: () => void;
+}
+
+async function readOkJson(res: Response) {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || body.message || `HTTP ${res.status}`);
+  }
+  return body;
+}
+
+function mapSignal(raw: Record<string, unknown> | null | undefined): SignalGateView | null {
+  if (!raw) return null;
+  const reasonCodes = Array.isArray(raw.reasonCodes)
+    ? (raw.reasonCodes as unknown[]).map((c) => String(c))
+    : [];
+  return {
+    grade: String(raw.grade ?? '—'),
+    confidence: Number(raw.confidence ?? 0),
+    playbook: String(raw.playbook ?? '—'),
+    regime: String(raw.regime ?? '—'),
+    pass: Boolean(raw.pass),
+    reasonCodes,
+    timestamp: raw.timestamp ? String(raw.timestamp) : undefined,
+  };
 }
 
 export function useIntelligenceData(): UseIntelligenceDataReturn {
@@ -71,17 +102,18 @@ export function useIntelligenceData(): UseIntelligenceDataReturn {
         fetch('/api/dashboard/no-trade-reasons'),
       ]);
 
-      const signalsData = await signalsResponse.json();
-      const riskData = await riskResponse.json();
-      const llmData = await llmResponse.json();
-      const memoryData = await memoryResponse.json();
-      const noTradeData = await noTradeResponse.json();
+      const [signalsData, riskData, llmData, memoryData, noTradeData] = await Promise.all([
+        readOkJson(signalsResponse),
+        readOkJson(riskResponse),
+        readOkJson(llmResponse),
+        readOkJson(memoryResponse),
+        readOkJson(noTradeResponse),
+      ]);
 
-      // Get latest signal
-      const latestSignal = signalsData.data?.[0] || null;
+      const latestSignal = signalsData.data?.[0];
 
       setData({
-        signalGate: latestSignal,
+        signalGate: mapSignal(latestSignal),
         riskEngine: riskData.data || null,
         noTradeReasons: noTradeData.data || [],
         llm: llmData.data || null,

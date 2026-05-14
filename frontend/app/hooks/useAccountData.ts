@@ -56,6 +56,14 @@ interface UseAccountDataReturn {
   refresh: () => void;
 }
 
+async function readAccountJson(res: Response) {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || body.message || `HTTP ${res.status}`);
+  }
+  return body;
+}
+
 export function useAccountData(): UseAccountDataReturn {
   const [data, setData] = useState<AccountData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,13 +81,23 @@ export function useAccountData(): UseAccountDataReturn {
         fetch('/api/account/trades?symbol=BTC&method=kim_nghia&limit=20'),
       ]);
 
-      const balanceData = await balanceResponse.json();
-      const positionsData = await positionsResponse.json();
-      const ordersData = await ordersResponse.json();
-      const tradesData = await tradesResponse.json();
+      const [balanceData, positionsData, ordersData, tradesData] = await Promise.all([
+        readAccountJson(balanceResponse),
+        readAccountJson(positionsResponse),
+        readAccountJson(ordersResponse),
+        readAccountJson(tradesResponse),
+      ]);
 
       setData({
-        balance: balanceData.data || null,
+        balance: balanceData.data ?? {
+          totalBalance: 0,
+          availableBalance: 0,
+          equity: 0,
+          usedMargin: 0,
+          freeMargin: 0,
+          dailyPnL: 0,
+          weeklyPnL: 0,
+        },
         positions: positionsData.data || [],
         orders: ordersData.data || [],
         trades: tradesData.data || [],

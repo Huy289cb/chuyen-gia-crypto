@@ -52,7 +52,11 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
       />
 
       <div className="space-y-4">
-        {/* Last Call Info */}
+        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
+          <span className="text-sm text-foreground-secondary">Calls today (LLM path)</span>
+          <span className="text-sm font-mono text-foreground">{llmData.callsToday ?? 0}</span>
+        </div>
+
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-accent-primary" />
@@ -79,7 +83,15 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
           <span className="text-sm text-foreground-secondary">Response Status</span>
           <StatusBadge
-            status={llmData.responseStatus === 'success' ? 'healthy' : 'error'}
+            status={
+              llmData.responseStatus === 'success'
+                ? 'healthy'
+                : llmData.responseStatus === 'degraded'
+                  ? 'trading_paused'
+                  : llmData.responseStatus === 'none'
+                    ? 'unknown'
+                    : 'error'
+            }
             label={llmData.responseStatus}
             size="sm"
           />
