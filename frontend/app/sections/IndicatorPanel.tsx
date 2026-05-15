@@ -10,11 +10,11 @@ import { LoadingSkeleton } from '../components/LoadingSkeleton';
 interface IndicatorPanelProps {
   className?: string;
   symbol?: string;
-  timeframe?: string;
 }
 
-export function IndicatorPanel({ className, symbol = 'BTC', timeframe = '15m' }: IndicatorPanelProps) {
-  const { data, loading, error } = useMarketData(symbol, timeframe);
+/** Uses the same market timeframe as `MarketChartPanel` when wrapped in `V3DashboardDataProvider`. */
+export function IndicatorPanel({ className, symbol = 'BTC' }: IndicatorPanelProps) {
+  const { data, loading, error } = useMarketData(symbol);
 
   if (loading) {
     return (

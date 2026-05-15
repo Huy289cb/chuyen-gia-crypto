@@ -30,6 +30,7 @@ import { RiskEnginePanel } from './sections/RiskEnginePanel';
 import { LlmDispatchPanel } from './sections/LlmDispatchPanel';
 import { MemoryInsightsPanel } from './sections/MemoryInsightsPanel';
 import { EventLogFeed } from './sections/EventLogFeed';
+import { V3DashboardDataProvider } from './contexts/V3DashboardDataContext';
 
 export default function Home() {
   return (
@@ -136,34 +137,36 @@ function HomeContent() {
         {/* Testnet Panel */}
         <TestnetPanel />
 
-        {/* NEW: 3-Column Dashboard Layout for Big Update v3 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
-          {/* Column 1: System Overview + Risk Engine + No-Trade Reasons */}
-          <div className="space-y-6">
-            <SystemOverview />
-            <SchedulerStatusPanel />
-            <CandleWarmupPanel />
-            <RiskEnginePanel />
-            <NoTradeReasonsPanel />
-          </div>
+        {/* NEW: 3-Column Dashboard Layout for Big Update v3 — single shared data fetches per domain */}
+        <V3DashboardDataProvider marketSymbol="BTC">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+            {/* Column 1: System Overview + Risk Engine + No-Trade Reasons */}
+            <div className="space-y-6">
+              <SystemOverview />
+              <SchedulerStatusPanel />
+              <CandleWarmupPanel />
+              <RiskEnginePanel />
+              <NoTradeReasonsPanel />
+            </div>
 
-          {/* Column 2: Market Chart + Indicators + Setup markers */}
-          <div className="space-y-6">
-            <MarketChartPanel symbol="BTC" method="kim_nghia" />
-            <IndicatorPanel />
-          </div>
+            {/* Column 2: Market Chart + Indicators + Setup markers */}
+            <div className="space-y-6">
+              <MarketChartPanel symbol="BTC" method="kim_nghia" />
+              <IndicatorPanel />
+            </div>
 
-          {/* Column 3: Testnet Account Center + Positions + Orders + LLM/Memory */}
-          <div className="space-y-6">
-            <TestnetBalancePanel />
-            <OpenPositionsPanel />
-            <ActiveOrdersPanel />
-            <TradeHistoryPanel />
-            <SignalGatePanel />
-            <LlmDispatchPanel />
-            <MemoryInsightsPanel />
+            {/* Column 3: Testnet Account Center + Positions + Orders + LLM/Memory */}
+            <div className="space-y-6">
+              <TestnetBalancePanel />
+              <OpenPositionsPanel />
+              <ActiveOrdersPanel />
+              <TradeHistoryPanel />
+              <SignalGatePanel />
+              <LlmDispatchPanel />
+              <MemoryInsightsPanel />
+            </div>
           </div>
-        </div>
+        </V3DashboardDataProvider>
 
         {/* Event Log Feed - Full Width */}
         <div className="mt-8">
