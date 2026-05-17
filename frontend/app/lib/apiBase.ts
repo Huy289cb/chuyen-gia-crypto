@@ -2,7 +2,7 @@
  * Base URL for Express `/api` routes.
  * Browser: same-origin `/api` (Vercel/nginx rewrite) — avoids mixed-content when
  * NEXT_PUBLIC_API_URL points at http://VPS.
- * Dev server: direct backend on :3000 (same as useTrends / useTestnet).
+ * Dev server: direct backend on :3000.
  */
 export function getApiBase(): string {
   if (typeof window !== 'undefined') {
