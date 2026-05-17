@@ -38,15 +38,20 @@ async function runLLMDispatch() {
           continue;
         }
 
-        // Only process if signal gate passed
-        if (!scanResult.signalResult.pass) {
+        const { signalResult } = scanResult;
+
+        if (signalResult.isDuplicate) {
+          console.log(`[LLMDispatch] ${symbol} ${timeframe}: Duplicate candle state, skipping`);
+          continue;
+        }
+
+        if (!signalResult.pass) {
           console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate blocked, skipping`);
           continue;
         }
 
-        // Avoid repeated Groq calls for the exact same duplicated candle state
-        if (!scanResult.signalResult.shouldCallGroq) {
-          console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate passed but is a duplicate, skipping Groq dispatch`);
+        if (!signalResult.shouldCallGroq) {
+          console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate skip (no Groq), continuing`);
           continue;
         }
 
@@ -59,7 +64,8 @@ async function runLLMDispatch() {
           timeframe,
           candles: scanResult.candles,
           systemPrompt: methodConfig.systemPrompt,
-          method_id: 'kim_nghia'
+          method_id: 'kim_nghia',
+          signalResult: scanResult.signalResult,
         });
 
         console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);

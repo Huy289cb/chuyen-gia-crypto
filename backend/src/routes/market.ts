@@ -5,65 +5,110 @@
 
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { fetchHistoricalCandles } from '../services/price-fetcher';
-import { getOhlcvCandles } from '../repositories/market.repository';
+import { getCandles, toChartCandles, type UnifiedCandle } from '../services/candle.service';
 
 const router = Router();
 
-const TIMEFRAME_MS: Record<string, number> = {
-  '15m': 15 * 60 * 1000,
-  '1h': 60 * 60 * 1000,
-  '4h': 4 * 60 * 60 * 1000,
-  '1d': 24 * 60 * 60 * 1000,
-};
+function computeLatestIndicators(candles: UnifiedCandle[]) {
+  const emptyLatest = {
+    sma20: null as number | null,
+    sma50: null as number | null,
+    rsi14: null as number | null,
+    atr14: null as number | null,
+  };
 
-/** DB scan rows are saved every ~5m with wrong bar alignment — reject before serving charts. */
-function hasValidCandleSpacing(
-  candles: { timestamp: Date }[],
-  timeframe: string
-): boolean {
-  if (candles.length < 10) return false;
-  const expected = TIMEFRAME_MS[timeframe];
-  if (!expected) return false;
-
-  const times = candles
-    .map((c) => new Date(c.timestamp).getTime())
-    .filter((t) => Number.isFinite(t))
-    .sort((a, b) => a - b);
-
-  if (times.length < 10) return false;
-
-  const sampleCount = Math.min(times.length - 1, 24);
-  const deltas: number[] = [];
-  for (let i = times.length - sampleCount; i < times.length; i++) {
-    deltas.push(times[i] - times[i - 1]);
+  if (candles.length < 50) {
+    return emptyLatest;
   }
 
-  const sorted = [...deltas].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  return median >= expected * 0.75 && median <= expected * 1.25;
-}
+  const calculateSMA = (data: number[], period: number): number[] => {
+    const result: number[] = [];
+    for (let i = period - 1; i < data.length; i++) {
+      const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+      result.push(sum / period);
+    }
+    return Array(period - 1).fill(null).concat(result);
+  };
 
-function formatDbCandles(candles: { timestamp: Date; open: number; high: number; low: number; close: number; volume?: number | null }[]) {
-  return candles.map((candle) => ({
-    time: Math.floor(new Date(candle.timestamp).getTime() / 1000),
-    open: candle.open,
-    high: candle.high,
-    low: candle.low,
-    close: candle.close,
-    volume: candle.volume || 0,
-  }));
-}
+  const closes = candles.map((c) => c.close);
+  const sma20 = calculateSMA(closes, 20);
+  const sma50 = calculateSMA(closes, 50);
 
-function formatBinanceCandles(klines: any[][]) {
-  return klines.map((kline) => ({
-    time: Math.floor(kline[0] / 1000),
-    open: parseFloat(kline[1]),
-    high: parseFloat(kline[2]),
-    low: parseFloat(kline[3]),
-    close: parseFloat(kline[4]),
-    volume: parseFloat(kline[5]),
-  }));
+  const calculateRSI = (data: number[], period = 14): number[] => {
+    const result: number[] = [];
+    let gains = 0;
+    let losses = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      const change = data[i] - data[i - 1];
+      if (change > 0) {
+        gains += change;
+      } else {
+        losses -= change;
+      }
+
+      if (i >= period) {
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+        const rsi = 100 - 100 / (1 + rs);
+        result.push(rsi);
+
+        const oldChange = data[i - period + 1] - data[i - period];
+        if (oldChange > 0) {
+          gains -= oldChange;
+        } else {
+          losses += oldChange;
+        }
+      }
+    }
+
+    return Array(period).fill(null).concat(result);
+  };
+
+  const rsi14 = calculateRSI(closes, 14);
+
+  const calculateATR = (bars: UnifiedCandle[], period = 14): number[] => {
+    const result: number[] = [];
+    const trueRanges: number[] = [];
+
+    for (let i = 1; i < bars.length; i++) {
+      const high = bars[i].high;
+      const low = bars[i].low;
+      const prevClose = bars[i - 1].close;
+
+      const tr = Math.max(
+        high - low,
+        Math.abs(high - prevClose),
+        Math.abs(low - prevClose)
+      );
+      trueRanges.push(tr);
+    }
+
+    for (let i = period - 1; i < trueRanges.length; i++) {
+      const sum = trueRanges.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+      result.push(sum / period);
+    }
+
+    return Array(period).fill(null).concat(result);
+  };
+
+  const atr14 = calculateATR(candles, 14);
+
+  const lastNum = (arr: (number | null)[]): number | null => {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const v = arr[i];
+      if (v !== null && v !== undefined && Number.isFinite(v)) return v;
+    }
+    return null;
+  };
+
+  return {
+    sma20: lastNum(sma20),
+    sma50: lastNum(sma50),
+    rsi14: lastNum(rsi14),
+    atr14: lastNum(atr14),
+  };
 }
 
 /**
@@ -76,41 +121,22 @@ router.get('/candles', async (req: Request, res: Response): Promise<void> => {
     const tf = String(timeframe);
     const limitNum = parseInt(String(limit), 10);
 
-    const dbCandles = await getOhlcvCandles(String(symbol), 168, tf);
-
-    const useDb =
-      dbCandles.length >= limitNum && hasValidCandleSpacing(dbCandles, tf);
-
-    if (useDb) {
-      const formattedCandles = formatDbCandles(dbCandles.slice(-limitNum));
-      res.json({
-        ok: true,
-        symbol: String(symbol).toUpperCase(),
-        timeframe: tf,
-        candles: formattedCandles,
-        source: 'database',
-      });
-      return;
-    }
-
-    if (dbCandles.length >= limitNum) {
-      console.warn(
-        `[MarketRoutes] DB candles for ${symbol} ${tf} fail spacing check — using Binance`
-      );
-    }
-
-    const binanceCandles = await fetchHistoricalCandles(String(symbol), tf, limitNum);
-    const formattedCandles = formatBinanceCandles(binanceCandles);
+    const { candles, source } = await getCandles({
+      symbol: String(symbol),
+      timeframe: tf,
+      limit: limitNum,
+    });
 
     res.json({
       ok: true,
       symbol: String(symbol).toUpperCase(),
       timeframe: tf,
-      candles: formattedCandles,
-      source: 'binance',
+      candles: toChartCandles(candles),
+      source,
     });
-  } catch (error: any) {
-    console.error('[MarketRoutes] Error fetching candles:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch candles';
+    console.error('[MarketRoutes] Error fetching candles:', message);
     res.status(500).json({ ok: false, error: 'Failed to fetch candles' });
   }
 });
@@ -122,129 +148,27 @@ router.get('/candles', async (req: Request, res: Response): Promise<void> => {
 router.get('/indicators', async (req: Request, res: Response): Promise<void> => {
   try {
     const { symbol = 'BTC', timeframe = '15m' } = req.query;
+    const sym = String(symbol).toUpperCase();
+    const tf = String(timeframe);
 
-    // Fetch candles
-    const candles = await getOhlcvCandles(String(symbol), 168, String(timeframe));
+    const { candles, source } = await getCandles({
+      symbol: sym,
+      timeframe: tf,
+      limit: 100,
+    });
 
-    const emptyLatest = {
-      sma20: null as number | null,
-      sma50: null as number | null,
-      rsi14: null as number | null,
-      atr14: null as number | null,
-    };
-
-    if (candles.length < 50) {
-      res.json({
-        ok: true,
-        symbol: String(symbol).toUpperCase(),
-        timeframe: String(timeframe),
-        latest: emptyLatest,
-      });
-      return;
-    }
-
-    // Calculate SMA
-    const calculateSMA = (data: number[], period: number): number[] => {
-      const result: number[] = [];
-      for (let i = period - 1; i < data.length; i++) {
-        const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
-        result.push(sum / period);
-      }
-      // Pad with null for the first period-1 values
-      return Array(period - 1).fill(null).concat(result);
-    };
-
-    const closes = candles.map((c) => c.close);
-    const sma20 = calculateSMA(closes, 20);
-    const sma50 = calculateSMA(closes, 50);
-
-    // Calculate RSI
-    const calculateRSI = (data: number[], period = 14): number[] => {
-      const result: number[] = [];
-      let gains = 0;
-      let losses = 0;
-
-      for (let i = 1; i < data.length; i++) {
-        const change = data[i] - data[i - 1];
-        if (change > 0) {
-          gains += change;
-        } else {
-          losses -= change;
-        }
-
-        if (i >= period) {
-          const avgGain = gains / period;
-          const avgLoss = losses / period;
-          const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-          const rsi = 100 - 100 / (1 + rs);
-          result.push(rsi);
-
-          // Remove oldest from averages
-          const oldChange = data[i - period + 1] - data[i - period];
-          if (oldChange > 0) {
-            gains -= oldChange;
-          } else {
-            losses += oldChange;
-          }
-        }
-      }
-
-      // Pad with null for the first period values
-      return Array(period).fill(null).concat(result);
-    };
-
-    const rsi14 = calculateRSI(closes, 14);
-
-    // Calculate ATR
-    const calculateATR = (candles: any[], period = 14): number[] => {
-      const result: number[] = [];
-      const trueRanges: number[] = [];
-
-      for (let i = 1; i < candles.length; i++) {
-        const high = candles[i].high;
-        const low = candles[i].low;
-        const prevClose = candles[i - 1].close;
-
-        const tr = Math.max(
-          high - low,
-          Math.abs(high - prevClose),
-          Math.abs(low - prevClose)
-        );
-        trueRanges.push(tr);
-      }
-
-      for (let i = period - 1; i < trueRanges.length; i++) {
-        const sum = trueRanges.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
-        result.push(sum / period);
-      }
-
-      // Pad with null for the first period values
-      return Array(period).fill(null).concat(result);
-    };
-
-    const atr14 = calculateATR(candles, 14);
-
-    const lastNum = (arr: (number | null)[]): number | null => {
-      for (let i = arr.length - 1; i >= 0; i--) {
-        const v = arr[i];
-        if (v !== null && v !== undefined && Number.isFinite(v)) return v;
-      }
-      return null;
-    };
+    const latest = computeLatestIndicators(candles);
 
     res.json({
       ok: true,
-      symbol: String(symbol).toUpperCase(),
-      timeframe: String(timeframe),
-      latest: {
-        sma20: lastNum(sma20),
-        sma50: lastNum(sma50),
-        rsi14: lastNum(rsi14),
-        atr14: lastNum(atr14),
-      },
+      symbol: sym,
+      timeframe: tf,
+      latest,
+      source,
     });
-  } catch (error: any) {
-    console.error('[MarketRoutes] Error calculating indicators:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to calculate indicators';
+    console.error('[MarketRoutes] Error calculating indicators:', message);
     res.status(200).json({
       ok: true,
       symbol: String(req.query.symbol || 'BTC').toUpperCase(),
@@ -282,7 +206,7 @@ router.get('/setups', async (req: Request, res: Response) => {
       take_profit: analysis.suggested_take_profit,
       expected_rr: analysis.expected_rr,
       invalidation_level: analysis.invalidation_level,
-      reason_summary: (analysis as any).reason_summary || analysis.narrative,
+      reason_summary: (analysis as { reason_summary?: string }).reason_summary || analysis.narrative,
     }));
 
     res.json({
@@ -290,8 +214,9 @@ router.get('/setups', async (req: Request, res: Response) => {
       symbol: String(symbol).toUpperCase(),
       setups,
     });
-  } catch (error: any) {
-    console.error('[MarketRoutes] Error fetching setups:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch setups';
+    console.error('[MarketRoutes] Error fetching setups:', message);
     res.status(500).json({ ok: false, error: 'Failed to fetch setups' });
   }
 });
@@ -328,8 +253,9 @@ router.get('/signals', async (req: Request, res: Response) => {
       symbol: String(symbol).toUpperCase(),
       signals,
     });
-  } catch (error: any) {
-    console.error('[MarketRoutes] Error fetching signals:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch signals';
+    console.error('[MarketRoutes] Error fetching signals:', message);
     res.status(500).json({ ok: false, error: 'Failed to fetch signals' });
   }
 });

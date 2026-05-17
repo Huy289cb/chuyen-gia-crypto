@@ -6,15 +6,18 @@
 
 import { createGroqClient, GroqAnalysis } from './groq-client';
 import { memoryService, MemoryContext } from './memory.service';
-import { signalGateService } from './signal-gate.service';
+import { signalGateService, type SignalGateOutput } from './signal-gate.service';
 import { riskManagerService } from './risk-manager.service';
+import type { UnifiedCandle } from './candle.service';
 
 export interface GroqDispatchInput {
   symbol: string;
   timeframe: string;
-  candles: any[];
+  candles: UnifiedCandle[];
   systemPrompt: string;
   method_id?: string;
+  /** Precomputed by MarketScan — avoids second signal-gate evaluation */
+  signalResult?: SignalGateOutput;
 }
 
 export interface GroqDispatchOutput {
@@ -65,19 +68,29 @@ export class GroqDispatchService {
    * Main dispatch method - evaluates whether to call Groq and executes if approved
    */
   async dispatch(input: GroqDispatchInput): Promise<GroqDispatchOutput> {
-    const { symbol, timeframe, candles, systemPrompt, method_id = 'kim_nghia' } = input;
+    const { symbol, timeframe, candles, systemPrompt, method_id = 'kim_nghia', signalResult: precomputed } = input;
 
-    // Step 1: Signal Gate Check
+    let signalResult: SignalGateOutput | undefined = precomputed;
+
+    // Step 1: Signal Gate — use MarketScan result when provided (single evaluation per cycle)
     if (this.config.enableSignalGate) {
-      const signalResult = await signalGateService.evaluate({
-        candles,
-        symbol,
-        timeframe
-      });
+      if (!signalResult) {
+        signalResult = await signalGateService.evaluate({
+          candles,
+          symbol,
+          timeframe
+        });
+      }
+
+      if (signalResult.isDuplicate) {
+        return {
+          decision: 'no_trade',
+          reason: `Signal gate duplicate skip: ${signalResult.reason}`,
+        };
+      }
 
       if (!signalResult.shouldCallGroq) {
-        // Store no-trade decision
-        if (this.config.enableMemory) {
+        if (this.config.enableMemory && !signalResult.isDuplicate) {
           await memoryService.storeDecision({
             symbol,
             timeframe,
@@ -98,16 +111,9 @@ export class GroqDispatchService {
       }
     }
 
-    // Step 2: Build Memory Context
+    // Step 2: Build Memory Context (reuse signal gate result — no second evaluate)
     let memoryContext: MemoryContext | undefined;
-    if (this.config.enableMemory) {
-      // Get setup info from signal gate
-      const signalResult = await signalGateService.evaluate({
-        candles,
-        symbol,
-        timeframe
-      });
-
+    if (this.config.enableMemory && signalResult) {
       memoryContext = await memoryService.buildContextForLLM(
         symbol,
         signalResult.setupResult.playbookKey || 'unknown',
@@ -242,8 +248,9 @@ export class GroqDispatchService {
         console.log('[GroqDispatch] Successfully validated response');
         return analysis;
 
-      } catch (error: any) {
-        console.error(`[GroqDispatch] Attempt ${attempt + 1} failed:`, error.message);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[GroqDispatch] Attempt ${attempt + 1} failed:`, message);
 
         if (attempt < this.config.maxRetries) {
           const delay = Math.pow(2, attempt) * 1000;
@@ -260,7 +267,7 @@ export class GroqDispatchService {
   /**
    * Validate Groq response structure
    */
-  private validateResponse(analysis: any): boolean {
+  private validateResponse(analysis: GroqAnalysis | null): boolean {
     if (!analysis) return false;
     
     // Check required fields
@@ -290,7 +297,7 @@ export class GroqDispatchService {
   /**
    * Build base prompt from candle data
    */
-  private buildBasePrompt(candles: any[], symbol: string, timeframe: string): string {
+  private buildBasePrompt(candles: UnifiedCandle[], symbol: string, timeframe: string): string {
     const recentCandles = candles.slice(-60); // Last 60 candles
     const currentPrice = recentCandles[recentCandles.length - 1]?.close || 0;
 

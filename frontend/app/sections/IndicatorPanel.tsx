@@ -14,14 +14,14 @@ interface IndicatorPanelProps {
 
 /** Uses the same market timeframe as `MarketChartPanel` when wrapped in `V3DashboardDataProvider`. */
 export function IndicatorPanel({ className, symbol = 'BTC' }: IndicatorPanelProps) {
-  const { data, loading, error } = useMarketData(symbol);
+  const { data, loading, error, timeframe } = useMarketData(symbol);
 
   if (loading) {
     return (
       <Card className={className}>
         <SectionHeader
           title="Indicators"
-          subtitle="Loading..."
+          subtitle={`${symbol} ${timeframe} — loading…`}
           icon={<Activity className="w-5 h-5" />}
         />
         <LoadingSkeleton />
@@ -73,7 +73,7 @@ export function IndicatorPanel({ className, symbol = 'BTC' }: IndicatorPanelProp
     <Card className={className}>
       <SectionHeader
         title="Indicators"
-        subtitle="Technical analysis overlays"
+        subtitle={`${symbol} ${timeframe} — same candles as chart`}
         icon={<Activity className="w-5 h-5" />}
       />
 

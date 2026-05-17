@@ -18,6 +18,8 @@ export interface SignalGateOutput {
   setupResult: SetupGateResult;
   reason: string;
   shouldCallGroq: boolean;
+  /** True when this evaluation reused in-memory cache (not a fresh setup read). */
+  isDuplicate: boolean;
 }
 
 export interface CandleData {
@@ -111,7 +113,8 @@ export class SignalGateService {
           pass,
           setupResult: cached.result,
           reason: 'Duplicate signal - using cached result',
-          shouldCallGroq: false // Do not call LLM again for the exact same setup
+          shouldCallGroq: false,
+          isDuplicate: true,
         };
       }
     }
@@ -149,7 +152,8 @@ export class SignalGateService {
       pass,
       setupResult,
       reason,
-      shouldCallGroq: pass
+      shouldCallGroq: pass,
+      isDuplicate: false,
     };
   }
 
