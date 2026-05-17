@@ -27,7 +27,7 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
     );
   }
 
-  if (error || !data?.memory) {
+  if (error) {
     return (
       <Card className={className}>
         <SectionHeader
@@ -35,7 +35,20 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
           subtitle="Error loading data"
           icon={<Brain className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load memory data'}</div>
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  if (!data?.memory) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Memory Insights"
+          subtitle="No memory insights yet"
+          icon={<Brain className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-foreground-secondary">No trade memory recorded yet.</div>
       </Card>
     );
   }

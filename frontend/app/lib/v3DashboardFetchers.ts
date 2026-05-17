@@ -2,6 +2,8 @@
  * Shared fetch helpers for the v3 dashboard (single-flight via V3DashboardDataProvider).
  */
 
+import { getApiBase } from './apiBase';
+
 export interface DashboardSummaryData {
   systemHealth: {
     workerStatus: string;
@@ -153,20 +155,39 @@ export interface DashboardMarketData {
   }>;
 }
 
-export async function readOkJson(res: Response) {
-  const body = await res.json().catch(() => ({}));
+type ApiBody = {
+  ok?: boolean;
+  success?: boolean;
+  error?: string;
+  message?: string;
+  data?: unknown;
+  candles?: unknown;
+  signals?: unknown;
+  latest?: Record<string, unknown>;
+};
+
+export async function readOkJson(res: Response, label?: string): Promise<ApiBody> {
+  const body = (await res.json().catch(() => ({}))) as ApiBody;
+
   if (!res.ok) {
-    throw new Error((body as { error?: string; message?: string }).error || (body as { message?: string }).message || `HTTP ${res.status}`);
+    const msg = body.error || body.message || `HTTP ${res.status}`;
+    console.error(`[v3] ${label ?? res.url} HTTP error:`, msg);
+    throw new Error(msg);
   }
+
+  if (body.ok === false || body.success === false) {
+    const msg = body.error || body.message || 'Request failed';
+    console.error(`[v3] ${label ?? res.url} API error:`, msg, body);
+    throw new Error(msg);
+  }
+
   return body;
 }
 
-async function readAccountJson(res: Response) {
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((body as { error?: string; message?: string }).error || (body as { message?: string }).message || `HTTP ${res.status}`);
-  }
-  return body;
+async function fetchJson(path: string, label: string): Promise<ApiBody> {
+  const url = `${getApiBase()}${path.startsWith('/') ? path : `/${path}`}`;
+  const res = await fetch(url);
+  return readOkJson(res, label);
 }
 
 export function mapSignal(raw: Record<string, unknown> | null | undefined): SignalGateView | null {
@@ -185,117 +206,149 @@ export function mapSignal(raw: Record<string, unknown> | null | undefined): Sign
   };
 }
 
+async function settleJson(
+  path: string,
+  label: string
+): Promise<{ body: ApiBody | null; error: string | null }> {
+  try {
+    return { body: await fetchJson(path, label), error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[v3] ${label} failed:`, msg);
+    return { body: null, error: msg };
+  }
+}
+
+function firstError(errors: (string | null)[]): string {
+  return errors.find(Boolean) ?? 'Request failed';
+}
+
 export async function loadDashboardSummary(): Promise<DashboardSummaryData> {
-  const [systemResponse, schedulersResponse, warmupResponse] = await Promise.all([
-    fetch('/api/dashboard/system'),
-    fetch('/api/dashboard/schedulers'),
-    fetch('/api/dashboard/warmup'),
+  const [system, schedulers, warmup] = await Promise.all([
+    settleJson('/dashboard/system', 'dashboard/system'),
+    settleJson('/dashboard/schedulers', 'dashboard/schedulers'),
+    settleJson('/dashboard/warmup', 'dashboard/warmup'),
   ]);
 
-  const [systemBody, schedulersBody, warmupBody] = await Promise.all([
-    readOkJson(systemResponse),
-    readOkJson(schedulersResponse),
-    readOkJson(warmupResponse),
-  ]);
+  const errors = [system.error, schedulers.error, warmup.error].filter(Boolean) as string[];
+  if (errors.length === 3) {
+    throw new Error(firstError(errors));
+  }
+
+  if (!system.body?.data || !schedulers.body?.data || !warmup.body?.data) {
+    throw new Error(firstError([system.error, schedulers.error, warmup.error]));
+  }
 
   return {
-    systemHealth: systemBody.data,
-    schedulers: schedulersBody.data,
-    candleWarmup: warmupBody.data,
+    systemHealth: system.body.data as DashboardSummaryData['systemHealth'],
+    schedulers: schedulers.body.data as DashboardSummaryData['schedulers'],
+    candleWarmup: warmup.body.data as DashboardSummaryData['candleWarmup'],
   };
 }
 
 export async function loadAccountData(): Promise<AccountData> {
-  const [balanceResponse, positionsResponse, ordersResponse, tradesResponse] = await Promise.all([
-    fetch('/api/account/balance?symbol=BTC&method=kim_nghia'),
-    fetch('/api/account/positions?symbol=BTC&method=kim_nghia'),
-    fetch('/api/account/orders?symbol=BTC&method=kim_nghia'),
-    fetch('/api/account/trades?symbol=BTC&method=kim_nghia&limit=20'),
+  const q = 'symbol=BTC&method=kim_nghia';
+  const [balance, positions, orders, trades] = await Promise.all([
+    settleJson(`/account/balance?${q}`, 'account/balance'),
+    settleJson(`/account/positions?${q}`, 'account/positions'),
+    settleJson(`/account/orders?${q}`, 'account/orders'),
+    settleJson(`/account/trades?${q}&limit=20`, 'account/trades'),
   ]);
 
-  const [balanceData, positionsData, ordersData, tradesData] = await Promise.all([
-    readAccountJson(balanceResponse),
-    readAccountJson(positionsResponse),
-    readAccountJson(ordersResponse),
-    readAccountJson(tradesResponse),
-  ]);
+  const errors = [balance.error, positions.error, orders.error, trades.error].filter(Boolean) as string[];
+  if (errors.length === 4) {
+    throw new Error(firstError(errors));
+  }
+
+  if (balance.error && !balance.body?.data) {
+    throw new Error(balance.error);
+  }
+
+  const emptyBalance: AccountData['balance'] = {
+    isInitialized: false,
+    totalBalance: 0,
+    availableBalance: 0,
+    equity: 0,
+    usedMargin: 0,
+    freeMargin: 0,
+    dailyPnL: 0,
+    weeklyPnL: 0,
+  };
 
   return {
-    balance: balanceData.data ?? {
-      isInitialized: false,
-      totalBalance: 0,
-      availableBalance: 0,
-      equity: 0,
-      usedMargin: 0,
-      freeMargin: 0,
-      dailyPnL: 0,
-      weeklyPnL: 0,
-    },
-    positions: positionsData.data || [],
-    orders: ordersData.data || [],
-    trades: tradesData.data || [],
+    balance: (balance.body?.data as AccountData['balance'] | undefined) ?? emptyBalance,
+    positions: (positions.body?.data as AccountData['positions'] | undefined) ?? [],
+    orders: (orders.body?.data as AccountData['orders'] | undefined) ?? [],
+    trades: (trades.body?.data as AccountData['trades'] | undefined) ?? [],
   };
 }
 
 export async function loadIntelligenceData(): Promise<IntelligenceData> {
-  const [signalsResponse, riskResponse, llmResponse, memoryResponse, noTradeResponse] = await Promise.all([
-    fetch('/api/dashboard/signals?limit=1'),
-    fetch('/api/dashboard/risk'),
-    fetch('/api/dashboard/llm'),
-    fetch('/api/dashboard/memory'),
-    fetch('/api/dashboard/no-trade-reasons'),
+  const [signals, risk, llm, memory, noTrade] = await Promise.all([
+    settleJson('/dashboard/signals?limit=1', 'dashboard/signals'),
+    settleJson('/dashboard/risk', 'dashboard/risk'),
+    settleJson('/dashboard/llm', 'dashboard/llm'),
+    settleJson('/dashboard/memory', 'dashboard/memory'),
+    settleJson('/dashboard/no-trade-reasons', 'dashboard/no-trade-reasons'),
   ]);
 
-  const [signalsData, riskData, llmData, memoryData, noTradeData] = await Promise.all([
-    readOkJson(signalsResponse),
-    readOkJson(riskResponse),
-    readOkJson(llmResponse),
-    readOkJson(memoryResponse),
-    readOkJson(noTradeResponse),
-  ]);
+  const errors = [signals.error, risk.error, llm.error, memory.error, noTrade.error].filter(
+    Boolean
+  ) as string[];
+  if (errors.length === 5) {
+    throw new Error(firstError(errors));
+  }
 
-  const latestSignal = signalsData.data?.[0];
+  if (risk.error && !risk.body?.data) {
+    throw new Error(risk.error);
+  }
+
+  const signalList = (signals.body?.data as Record<string, unknown>[] | undefined) ?? [];
+  const latestSignal = signalList[0];
 
   return {
     signalGate: mapSignal(latestSignal),
-    riskEngine: riskData.data || null,
-    noTradeReasons: noTradeData.data || [],
-    llm: llmData.data || null,
-    memory: memoryData.data || null,
+    riskEngine: (risk.body?.data as IntelligenceData['riskEngine']) ?? null,
+    noTradeReasons: (noTrade.body?.data as IntelligenceData['noTradeReasons']) ?? [],
+    llm: (llm.body?.data as IntelligenceData['llm']) ?? null,
+    memory: (memory.body?.data as IntelligenceData['memory']) ?? null,
   };
 }
 
 export async function loadMarketData(symbol: string, timeframe: string): Promise<DashboardMarketData> {
-  const [candlesResponse, indicatorsResponse, signalsResponse] = await Promise.all([
-    fetch(`/api/market/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=100`),
-    fetch(`/api/market/indicators?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`),
-    fetch(`/api/market/signals?symbol=${encodeURIComponent(symbol)}&limit=5`),
+  const encSymbol = encodeURIComponent(symbol);
+  const encTf = encodeURIComponent(timeframe);
+
+  const [candlesResult, indicatorsResult, signalsResult] = await Promise.all([
+    settleJson(`/market/candles?symbol=${encSymbol}&timeframe=${encTf}&limit=100`, 'market/candles'),
+    settleJson(`/market/indicators?symbol=${encSymbol}&timeframe=${encTf}`, 'market/indicators'),
+    settleJson(`/market/signals?symbol=${encSymbol}&limit=5`, 'market/signals'),
   ]);
 
-  const candlesData = await candlesResponse.json();
-  const indicatorsData = await indicatorsResponse.json();
-  const signalsData = await signalsResponse.json();
-
-  if (!candlesResponse.ok) {
-    throw new Error(candlesData.error || 'Failed to load candles');
-  }
-  if (!indicatorsResponse.ok) {
-    throw new Error(indicatorsData.error || 'Failed to load indicators');
-  }
-  if (!signalsResponse.ok) {
-    throw new Error(signalsData.error || 'Failed to load signals');
+  const errors = [candlesResult.error, indicatorsResult.error, signalsResult.error].filter(
+    Boolean
+  ) as string[];
+  if (errors.length === 3) {
+    throw new Error(firstError(errors));
   }
 
-  const formattedCandles =
-    candlesData.candles?.map((candle: Record<string, number>) => ({
-      time: candle.time,
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
-    })) || [];
+  if (candlesResult.error && !candlesResult.body?.candles) {
+    throw new Error(candlesResult.error);
+  }
+  if (indicatorsResult.error && !indicatorsResult.body?.latest) {
+    throw new Error(indicatorsResult.error);
+  }
 
-  const latest = indicatorsData.latest || {};
+  const rawCandles = (candlesResult.body?.candles as Record<string, number>[] | undefined) ?? [];
+  const formattedCandles = rawCandles.map((candle) => ({
+    time: candle.time,
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
+  }));
+
+  const latest = (indicatorsResult.body?.latest as Record<string, unknown> | undefined) ?? {};
   const indicators = {
     sma20: typeof latest.sma20 === 'number' ? latest.sma20 : null,
     sma50: typeof latest.sma50 === 'number' ? latest.sma50 : null,
@@ -303,15 +356,15 @@ export async function loadMarketData(symbol: string, timeframe: string): Promise
     atr14: typeof latest.atr14 === 'number' ? latest.atr14 : null,
   };
 
-  const formattedSignals =
-    signalsData.signals?.map((signal: Record<string, unknown>) => ({
-      id: String(signal.id),
-      grade: String(signal.grade ?? ''),
-      confidence: Number(signal.confidence ?? 0),
-      playbook: String(signal.playbook ?? ''),
-      regime: String(signal.regime ?? ''),
-      pass: Boolean(signal.pass),
-    })) || [];
+  const rawSignals = (signalsResult.body?.signals as Record<string, unknown>[] | undefined) ?? [];
+  const formattedSignals = rawSignals.map((signal) => ({
+    id: String(signal.id),
+    grade: String(signal.grade ?? ''),
+    confidence: Number(signal.confidence ?? 0),
+    playbook: String(signal.playbook ?? ''),
+    regime: String(signal.regime ?? ''),
+    pass: Boolean(signal.pass),
+  }));
 
   return {
     candles: formattedCandles,

@@ -28,7 +28,7 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
     );
   }
 
-  if (error || !data?.llm) {
+  if (error) {
     return (
       <Card className={className}>
         <SectionHeader
@@ -36,7 +36,20 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
           subtitle="Error loading data"
           icon={<Bot className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load LLM data'}</div>
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  if (!data?.llm) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="LLM Dispatch"
+          subtitle="No LLM activity recorded yet"
+          icon={<Bot className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-foreground-secondary">Waiting for first LLM dispatch.</div>
       </Card>
     );
   }

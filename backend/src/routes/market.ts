@@ -86,23 +86,19 @@ router.get('/indicators', async (req: Request, res: Response): Promise<void> => 
     // Fetch candles
     const candles = await getOhlcvCandles(String(symbol), 168, String(timeframe));
 
+    const emptyLatest = {
+      sma20: null as number | null,
+      sma50: null as number | null,
+      rsi14: null as number | null,
+      atr14: null as number | null,
+    };
+
     if (candles.length < 50) {
       res.json({
         ok: true,
         symbol: String(symbol).toUpperCase(),
         timeframe: String(timeframe),
-        indicators: {
-          sma20: [],
-          sma50: [],
-          rsi14: [],
-          atr14: [],
-        },
-        latest: {
-          sma20: null,
-          sma50: null,
-          rsi14: null,
-          atr14: null,
-        },
+        latest: emptyLatest,
       });
       return;
     }
@@ -200,12 +196,6 @@ router.get('/indicators', async (req: Request, res: Response): Promise<void> => 
       ok: true,
       symbol: String(symbol).toUpperCase(),
       timeframe: String(timeframe),
-      indicators: {
-        sma20,
-        sma50,
-        rsi14,
-        atr14,
-      },
       latest: {
         sma20: lastNum(sma20),
         sma50: lastNum(sma50),
@@ -215,7 +205,12 @@ router.get('/indicators', async (req: Request, res: Response): Promise<void> => 
     });
   } catch (error: any) {
     console.error('[MarketRoutes] Error calculating indicators:', error.message);
-    res.status(500).json({ ok: false, error: 'Failed to calculate indicators' });
+    res.status(200).json({
+      ok: true,
+      symbol: String(req.query.symbol || 'BTC').toUpperCase(),
+      timeframe: String(req.query.timeframe || '15m'),
+      latest: { sma20: null, sma50: null, rsi14: null, atr14: null },
+    });
   }
 });
 

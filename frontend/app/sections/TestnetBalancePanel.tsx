@@ -29,7 +29,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
     );
   }
 
-  if (error || !data?.balance) {
+  if (error) {
     return (
       <Card className={className}>
         <SectionHeader
@@ -37,7 +37,20 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           subtitle="Error loading data"
           icon={<Wallet className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load balance data'}</div>
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  if (!data?.balance) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Testnet Account"
+          subtitle="Error loading data"
+          icon={<Wallet className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-red-500">Failed to load balance data</div>
       </Card>
     );
   }

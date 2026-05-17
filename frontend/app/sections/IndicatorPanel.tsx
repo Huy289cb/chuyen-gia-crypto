@@ -29,7 +29,7 @@ export function IndicatorPanel({ className, symbol = 'BTC' }: IndicatorPanelProp
     );
   }
 
-  if (error || !data?.indicators) {
+  if (error) {
     return (
       <Card className={className}>
         <SectionHeader
@@ -37,7 +37,20 @@ export function IndicatorPanel({ className, symbol = 'BTC' }: IndicatorPanelProp
           subtitle="Error loading data"
           icon={<Activity className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load indicator data'}</div>
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  if (!data?.indicators) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Indicators"
+          subtitle="No indicator data"
+          icon={<Activity className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-foreground-secondary">Not enough candles to compute indicators.</div>
       </Card>
     );
   }

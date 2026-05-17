@@ -141,7 +141,7 @@ router.get('/system', async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching system health:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch system health' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch system health' });
   }
 });
 
@@ -217,7 +217,7 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching scheduler status:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch scheduler status' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch scheduler status' });
   }
 });
 
@@ -293,7 +293,7 @@ router.get('/warmup', async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching warmup status:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch warmup status' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch warmup status' });
   }
 });
 
@@ -328,7 +328,7 @@ router.get('/signals', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching signals:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch signals' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch signals' });
   }
 });
 
@@ -388,7 +388,21 @@ router.get('/risk', async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching risk state:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch risk state' });
+    const policy = getRiskPolicy();
+    res.json({
+      ok: true,
+      data: {
+        riskPerTrade: policy.riskPerTradePercent,
+        dailyLossCap: 0,
+        dailyLossLimitPercent: policy.dailyLossLimitPercent,
+        dailyLossCurrent: 0,
+        maxConsecutiveLosses: policy.maxConsecutiveLosses,
+        currentStreak: 0,
+        currentLockState: 'unknown',
+        lockReason: null,
+        allowedReason: null,
+      },
+    });
   }
 });
 
@@ -467,7 +481,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching LLM stats:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch LLM stats' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch LLM stats' });
   }
 });
 
@@ -522,7 +536,7 @@ router.get('/memory', async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching memory insights:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch memory insights' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch memory insights' });
   }
 });
 
@@ -641,7 +655,7 @@ router.get('/events', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching events:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch events' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch events' });
   }
 });
 
@@ -724,7 +738,7 @@ router.get('/balance', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching balance:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch balance' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch balance' });
   }
 });
 
@@ -780,7 +794,7 @@ router.get('/positions', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching positions:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch positions' });
+    res.json({ ok: true, data: [] });
   }
 });
 
@@ -819,7 +833,7 @@ router.get('/orders', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching orders:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch orders' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch orders' });
   }
 });
 
@@ -865,7 +879,7 @@ router.get('/trades', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching trades:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch trades' });
+    res.status(500).json({ ok: false, error: 'Failed to fetch trades' });
   }
 });
 

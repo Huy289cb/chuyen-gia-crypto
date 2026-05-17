@@ -29,7 +29,7 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
     );
   }
 
-  if (error || !data?.riskEngine) {
+  if (error) {
     return (
       <Card className={className}>
         <SectionHeader
@@ -37,7 +37,20 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
           subtitle="Error loading data"
           icon={<ShieldAlert className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load risk data'}</div>
+        <div className="p-4 text-sm text-red-500">{error}</div>
+      </Card>
+    );
+  }
+
+  if (!data?.riskEngine) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Risk Engine"
+          subtitle="Risk state unavailable"
+          icon={<ShieldAlert className="w-5 h-5" />}
+        />
+        <div className="p-4 text-sm text-foreground-secondary">Could not load risk engine state.</div>
       </Card>
     );
   }

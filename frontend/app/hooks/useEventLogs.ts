@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getApiBase } from '../lib/apiBase';
 
 interface EventLog {
   id: string;
@@ -24,6 +25,9 @@ async function readOkJson(res: Response) {
   if (!res.ok) {
     throw new Error(body.error || body.message || `HTTP ${res.status}`);
   }
+  if (body.ok === false || body.success === false) {
+    throw new Error(body.error || body.message || 'Request failed');
+  }
   return body;
 }
 
@@ -37,9 +41,10 @@ export function useEventLogs(module?: string, limit: number = 20): UseEventLogsR
       setLoading(true);
       setError(null);
 
+      const base = getApiBase();
       const url = module
-        ? `/api/dashboard/events?limit=${limit}&module=${encodeURIComponent(module)}`
-        : `/api/dashboard/events?limit=${limit}`;
+        ? `${base}/dashboard/events?limit=${limit}&module=${encodeURIComponent(module)}`
+        : `${base}/dashboard/events?limit=${limit}`;
 
       const response = await fetch(url);
       const result = await readOkJson(response);
