@@ -1,0 +1,34 @@
+---
+description: Environment variables, security boundaries, DB contracts, and API compatibility
+globs: "{backend/**/*,frontend/**/*,docs/**/*}"
+alwaysApply: false
+---
+
+# Security, env, DB, and contracts
+
+## Environment
+- Copy from `backend/.env.example`; never commit secrets (`BINANCE_API_SECRET`, `GROQ_API_KEY*`, `DATABASE_URL`)
+- Production requires `DATABASE_URL`; optional `PRISMA_CONNECTION_LIMIT` for Neon pool sizing (`lib/prisma.ts`)
+- CORS: `ALLOWED_ORIGINS` (see `config/cors.ts`)
+- Binance: gated by `BINANCE_ENABLED=true`; base URL, keys, `BINANCE_SYMBOL` in `.env.example`
+- Safety flags `DISABLE_SIGNAL_GATE`, `DISABLE_RISK_CHECK`, `DISABLE_MEMORY_LAYER` must stay unset/false — enforced at startup
+
+## Auth
+- No session/JWT auth on Express API in current codebase — do not add auth assumptions to public routes unless implementing it
+
+## Database contract
+- Source of truth: `backend/prisma/schema.prisma` (PostgreSQL, `@@map` table names)
+- Apply changes: `npm run prisma:migrate` (dev), `npm run prisma:generate` before build
+- **No committed migration history in repo yet** — create migrations with `prisma migrate dev` and commit new `prisma/migrations/` when schema changes
+- Deprecated models: `Account` (paper) vs active `TestnetAccount` for live testnet flows
+- JSON-ish columns stored as `String` `@db.Text` (e.g. `position_decisions`) — parse/stringify in services, not ad hoc in routes
+
+## API contracts
+- Base path: `/api` (see `docs/api-spec.md`); sub-routers: `/dashboard`, `/testnet`, `/metrics`, `/market`, `/performance`
+- Query params often use `method`, `methodId`, `symbol`, `status` — keep names stable for frontend fetchers
+- Default analysis method in routes: `kim_nghia`; ICT data may exist but method is disabled in `config/methods.ts`
+- Backward compatibility: preserve `success` + `data` envelopes and field names consumed by `v3DashboardFetchers.ts`
+
+## Multi-method & BTC scope
+- `method_id` on analysis, predictions, orders, and testnet rows must stay consistent
+- Big Update v3: BTC-only for enabled methods — do not re-enable ETH in `enabledSymbols` without explicit product approval

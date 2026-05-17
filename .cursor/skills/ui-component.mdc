@@ -1,0 +1,28 @@
+---
+name: ui-component
+description: Create or refine reusable React UI in the Next.js app (components, cards, icons, Tailwind styling). Use for shared visual primitives, not business logic.
+---
+
+# UI component
+
+## When to use
+- New shared component under `app/components/` or `app/components/ui/`
+- Refactor repeated panel chrome (headers, badges, tables)
+
+## Inspect first
+- `app/components/ui/Card.tsx` and similar primitives
+- `frontend/lib/utils.ts` (`cn` helper)
+- `app/globals.css` for design tokens
+- Parent section for spacing and typography patterns
+
+## Steps
+1. Define explicit props interface (no `any`).
+2. Use `cn()` for optional `className` merging.
+3. Keep components stateless when possible; lift data to section or context.
+4. Ensure keyboard/focus for interactive controls; use semantic HTML.
+5. Support dark theme via existing CSS variables / ThemeProvider.
+
+## Verification
+- [ ] Renders in at least one section without layout shift
+- [ ] Responsive at `sm` / `lg` breakpoints used on dashboard
+- [ ] No direct `fetch` or trading rules inside UI component

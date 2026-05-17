@@ -1,51 +1,33 @@
-# Crypto Analysis Agent Skill
+---
+name: crypto-analysis
+description: Multi-timeframe crypto analysis and signal semantics for Kim Nghia / ICT-style outputs. Use when interpreting or generating analysis JSON, trends, or Groq prompt outputs—not for generic CRUD.
+---
 
-## Description
-Agent skill for performing multi-timeframe technical analysis on cryptocurrency price data using Groq LLM.
+# Crypto analysis (domain)
 
-## When to Use
-- When analyzing BTC/ETH price trends
-- When determining buy/sell/hold signals
-- When confidence scoring is needed
+## When to use
+- Groq analysis output shape, bias/action rules, or timeframe interpretation
+- Signal gate / setup grading context (see `setup-gate.analyzer.ts`, `signal-gate.service.ts`)
 
-## Analysis Rules
+## Timeframe priority
+`4h` > `1d` > `1h` > `15m` (HTF bias drives decisions)
 
-### Timeframe Priority
-Priority order (high to low): 4h > 1d > 1h > 15m
+## Active method
+- **`kim_nghia`**: active; confidence thresholds from env (`KIM_NGHIA_CONFIDENCE_THRESHOLD`, default ~0.82 for actions)
+- **`ict`**: disabled in `config/methods.ts` but schema/prompts preserved
 
-### Trend Classifications
-- `strong_uptrend`: >5% gain in timeframe
-- `uptrend`: 2-5% gain
-- `bullish`: 0.5-2% gain
-- `neutral`: -0.5% to +0.5%
-- `consolidating`: tight range, awaiting breakout
-- `bearish`: -2% to -0.5%
-- `downtrend`: -5% to -2%
-- `strong_downtrend`: <-5% loss
-- `volatile`: high swings, no clear direction
+## Consistency rules
+- `bullish` → `buy`; `bearish` → `sell`; `neutral` → `hold`
+- Long: `stop_loss < entry < take_profit`; short: `take_profit < entry < stop_loss`
+- Position decisions must align with bias (see tests in `biasConsistencyValidation.test.js`)
 
-### Decision Rules
-- **BUY**: 4h bullish+ AND 2+ other timeframes bullish+, confidence >= 0.6
-- **SELL**: 4h bearish+ AND 2+ other timeframes bearish+, confidence >= 0.6
-- **HOLD**: mixed signals OR 4h neutral OR confidence < 0.5
-- **UNCERTAIN**: high volatility, conflicting strong signals
+## LLM JSON (Kim Nghia / ICT prompts)
+- Raw JSON only — no markdown fences or prose outside `{...}`
+- BTC object includes `bias`, `action`, `confidence`, `suggested_*`, optional `position_decisions` / `pending_order_decisions`
 
-## Output Format
-```json
-{
-  "action": "buy|sell|hold|uncertain",
-  "confidence": 0.0-1.0,
-  "reasoning": "max 50 words",
-  "trends": {
-    "15m": "trend_value",
-    "1h": "trend_value",
-    "4h": "trend_value", 
-    "1d": "trend_value"
-  },
-  "risk": "risk warning max 20 words"
-}
-```
+## Pipeline (v3)
+Market scan → **Signal gate** → **Risk engine** → **Groq dispatch** → testnet execution (when enabled). Do not bypass gate/risk via env flags.
 
-## Example Usage
-Input: BTC price $67,000, 24h change -0.5%, 7d sparkline data
-Output: {"action": "hold", "confidence": 0.45, "reasoning": "Mixed signals across timeframes. 4h neutral, 1d slightly bearish.", "trends": {"15m": "neutral", "1h": "bearish", "4h": "neutral", "1d": "bearish"}, "risk": "Sideways movement expected, low conviction."}
+## Verification
+- [ ] Output validates against prompt rules in `config/methods.ts`
+- [ ] `method_id` stored and queried consistently in DB/API

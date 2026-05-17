@@ -1,0 +1,33 @@
+---
+description: Monorepo layout, stack, and global TypeScript conventions
+alwaysApply: true
+---
+
+# Repo overview
+
+## Layout
+- `backend/` — Express + TypeScript + Prisma (primary API/worker)
+- `frontend/` — Next.js 15 App Router dashboard (port **3001**)
+- `docs/` — API, architecture, setup (`docs/api-spec.md`, `docs/architecture.md`)
+- `backend-go/` — separate Go service; do not assume it when editing Node backend unless the task says so
+- `frontend-old/` — legacy Vite app; avoid unless migrating
+
+## Stack (verified)
+- DB: **PostgreSQL** via Prisma (`backend/prisma/schema.prisma`, `DATABASE_URL`)
+- API: Express 4, entry `backend/src/server.ts` (HTTP) and `backend/src/worker.ts` (cron/schedulers)
+- Process split: `API_ONLY` / `WORKER_ONLY` — never run conflicting roles in one production process
+- Frontend: React 19, Tailwind, path aliases `@/*`, `@/lib/*`, `@/app/*`
+
+## Global coding rules
+- Match `strict: true` in both `tsconfig.json` files; avoid `any` on public APIs, DTOs, and props
+- Smallest safe change; reuse existing modules before new abstractions
+- No new dependencies unless required
+- Do not invent env vars, endpoints, or models — read `backend/.env.example`, routes, and Prisma schema first
+- Trading domain: preserve `method_id` (`ict` preserved/disabled, `kim_nghia` active); keep `bias` / `action` / `side` consistent
+- Long: `stop_loss < entry < take_profit`; short: `take_profit < entry < stop_loss`
+- Docs may lag code; prefer `backend/src/config`, live routes, and Prisma over stale README claims (e.g. SQLite-only)
+
+## Commands
+- Backend dev: `cd backend && npm run dev` (API), `npm run dev:worker` (worker)
+- Backend build/test: `npm run build`, `npm test` / `npm run test:run`
+- Frontend dev: `cd frontend && npm run dev`

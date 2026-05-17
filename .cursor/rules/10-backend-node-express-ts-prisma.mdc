@@ -1,0 +1,36 @@
+---
+description: Express routes, services, repositories, Prisma, and worker patterns
+globs: backend/**/*
+alwaysApply: false
+---
+
+# Backend (Express + TS + Prisma)
+
+## Layering
+- **Routes** (`backend/src/routes/*.ts`): parse params/query/body, map HTTP status, call services/repos; keep thin
+- **Services** (`backend/src/services/`): business logic, orchestration, external APIs (Binance, Groq)
+- **Analyzers** (`backend/src/analyzers/`): pure-ish signal/setup evaluation; no Express types
+- **Repositories** (`backend/src/repositories/`): Prisma reads/writes only; export typed helpers/interfaces
+- **Config** (`backend/src/config/`): env-backed settings; validate in `validateAppConfig()` / `validateSafetyRequirements()`
+- **Schedulers** (`backend/src/schedulers/`): worker-only; register from `worker.ts` / `worker-scheduler.ts`
+
+## Prisma
+- Import singleton from `backend/src/lib/prisma.ts`; use `disconnectPrisma()` on shutdown
+- Respect `@@map` / snake_case DB columns vs camelCase Prisma fields
+- Filter trading data by `method_id` when the feature is method-scoped
+- Use `$transaction` when multiple writes must succeed or fail together
+
+## HTTP responses
+- Prefer `{ success: true, data, meta? }` for dashboard-style endpoints
+- Errors: `{ success: false, error: string }` or `{ error: string }`; use 404 when resource missing, 403 when intentionally disabled
+- Log with prefixed tags: `[Routes]`, `[Server]`, `[SafetyValidation]`
+- Global handler in `app.ts` hides stack traces outside development
+
+## Imports & style
+- CommonJS output (`module: commonjs`); use `import`/`export` in source
+- Named exports for services/repos; default export for route routers
+- Extend `Request` sparingly; prefer explicit function args over `req: any` when touching new code
+
+## Legacy
+- `allowJs: true` — some tests/scripts remain JS; new production code should be `.ts`
+- Legacy kim_nghia auto-entry and `POST /api/analysis/run` are **disabled** — do not re-enable without explicit task scope

@@ -1,0 +1,33 @@
+---
+description: Next.js App Router, dashboard data flow, and UI conventions
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Frontend (Next.js 15 + TS)
+
+## App Router
+- App lives under `frontend/app/`; root layout is Server Component (`layout.tsx` metadata + fonts)
+- Dashboard page (`app/page.tsx`) is **`'use client'`** — v3 panels need hooks, polling, and charts
+- Add `'use client'` only when using state, effects, browser APIs, or event handlers
+
+## Data fetching
+- Use `getApiBase()` from `app/lib/apiBase.ts` for all `/api` calls
+- Browser: same-origin `/api` (proxy/rewrite); SSR/dev server: `NEXT_PUBLIC_API_URL` or `http://localhost:3000/api`
+- Batch dashboard loads via `V3DashboardDataProvider` + `app/lib/v3DashboardFetchers.ts` — extend fetchers/types there instead of duplicating `fetch` in panels
+- Shared UI types: `app/types/index.ts`; panel-specific shapes stay next to fetchers when API-only
+
+## UI structure
+- **Sections** (`app/sections/`): page panels (e.g. `MarketChartPanel`, `SignalGatePanel`)
+- **Components** (`app/components/`, `app/components/ui/`): reusable pieces; use `Card`, `CardHeader`, `cn()` from `@/lib/utils`
+- **Contexts** (`app/contexts/`): cross-panel state (v3 dashboard slices)
+- **Hooks** (`app/hooks/`): reusable client logic
+- Default method/symbol in UI: `kim_nghia`, `BTC` unless product scope changes
+
+## Styling
+- Tailwind utility classes; theme tokens like `bg-bg-primary`, `text-accent-primary`, `border-border-default`
+- Keep layout responsive (`sm:`, `lg:` breakpoints); no business rules in JSX — compute in hooks/lib helpers
+
+## Imports
+- Prefer `@/app/...`, `@/lib/...` aliases from `tsconfig.json`
+- `clsx` + `tailwind-merge` via `cn()` for class composition
