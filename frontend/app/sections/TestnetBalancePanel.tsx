@@ -44,6 +44,27 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
 
   const balanceData = data.balance;
 
+  if (balanceData.isInitialized === false) {
+    return (
+      <Card className={className}>
+        <SectionHeader
+          title="Testnet Account"
+          subtitle="Status"
+          icon={<Wallet className="w-5 h-5" />}
+        />
+        <div className="p-8 flex flex-col items-center justify-center text-center">
+          <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center mb-3">
+            <Wallet className="w-6 h-6 text-foreground-tertiary" />
+          </div>
+          <p className="text-sm font-medium text-foreground-secondary mb-1">Account Not Initialized</p>
+          <p className="text-xs text-foreground-tertiary max-w-[200px]">
+            The testnet account for this method has not been set up or connected to a live source yet.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card className={className}>
       <SectionHeader

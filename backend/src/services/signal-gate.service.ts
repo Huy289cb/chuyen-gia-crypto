@@ -100,12 +100,18 @@ export class SignalGateService {
     if (this.config.enableDuplicateFilter) {
       const cached = signalCache.get(cacheKey);
       if (cached) {
-        console.log(`[SignalGate] Duplicate signal detected for ${symbol} ${timeframe}, using cached result`);
+        // Use proper evaluation logic for the cached result
+        const gradePass = this.isGradeAcceptable(cached.result.grade);
+        const confidencePass = cached.result.confidence >= this.config.minConfidence;
+        const regimePass = this.config.allowedRegimes.includes(cached.result.regime);
+        const pass = gradePass && confidencePass && regimePass;
+
+        console.log(`[SignalGate] Duplicate signal detected for ${symbol} ${timeframe}, using cached result. Pass: ${pass}`);
         return {
-          pass: cached.result.grade === this.config.minGrade,
+          pass,
           setupResult: cached.result,
           reason: 'Duplicate signal - using cached result',
-          shouldCallGroq: false
+          shouldCallGroq: false // Do not call LLM again for the exact same setup
         };
       }
     }

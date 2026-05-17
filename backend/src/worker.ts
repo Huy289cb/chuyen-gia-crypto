@@ -2,6 +2,7 @@ import { appConfig, isWorkerProcess } from './config/app';
 import { validateAppConfig, validateSafetyRequirements } from './config/app';
 import { disconnectPrisma } from './lib/prisma';
 import { startWorkerScheduler, stopWorkerScheduler } from './services/worker-scheduler';
+import { getOrCreateTestnetAccount } from './repositories/testnet.repository';
 import dotenv from 'dotenv';
 dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
@@ -104,6 +105,15 @@ async function startWorker() {
   console.log(`Leader Lock Key: ${appConfig.workerLeaderLockKey}`);
   console.log(`Database: ${appConfig.databaseUrl ? 'configured' : 'NOT CONFIGURED'}`);
   console.log('=================================');
+
+  // Initialize main testnet account for end-to-end pipeline
+  try {
+    console.log('[Worker] Initializing default testnet account...');
+    await getOrCreateTestnetAccount('BTC', 'kim_nghia', 10000);
+    console.log('[Worker] Testnet account BTC/kim_nghia initialized successfully');
+  } catch (err: any) {
+    console.error('[Worker] Failed to initialize default testnet account:', err.message);
+  }
 
   // Start scheduler
   await startWorkerScheduler();

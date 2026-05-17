@@ -8,6 +8,7 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { groqDispatchService } from '../services/groq-dispatch.service';
 import { getScanResult } from './market-scan.scheduler';
 import { getMethodConfig } from '../config/methods';
+import { getOrCreateTestnetAccount, createTestnetPosition } from '../repositories/testnet.repository';
 
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -43,6 +44,12 @@ async function runLLMDispatch() {
           continue;
         }
 
+        // Avoid repeated Groq calls for the exact same duplicated candle state
+        if (!scanResult.signalResult.shouldCallGroq) {
+          console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate passed but is a duplicate, skipping Groq dispatch`);
+          continue;
+        }
+
         // Get method config for prompt
         const methodConfig = getMethodConfig('kim_nghia'); // Use active method
         
@@ -57,13 +64,48 @@ async function runLLMDispatch() {
 
         console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);
 
-        // If trade decision, execute trade logic (will be implemented in integration phase)
+        // If trade decision, execute trade logic by creating a position
         if (dispatchResult.decision === 'trade' && dispatchResult.analysis) {
           console.log(`[LLMDispatch] Trade signal received for ${symbol} ${timeframe}`);
           console.log(`[LLMDispatch] Action: ${dispatchResult.analysis.action}, Bias: ${dispatchResult.analysis.bias}, Confidence: ${(dispatchResult.analysis.confidence * 100).toFixed(0)}%`);
           
           if (dispatchResult.analysis.suggested_entry) {
             console.log(`[LLMDispatch] Entry: ${dispatchResult.analysis.suggested_entry}, SL: ${dispatchResult.analysis.suggested_stop_loss}, TP: ${dispatchResult.analysis.suggested_take_profit}`);
+            
+            try {
+              // Ensure account exists
+              const account = await getOrCreateTestnetAccount(symbol, 'kim_nghia', 10000);
+              
+              const entryPrice = dispatchResult.analysis.suggested_entry;
+              const stopLoss = dispatchResult.analysis.suggested_stop_loss || (entryPrice * 0.99);
+              const takeProfit = dispatchResult.analysis.suggested_take_profit || (entryPrice * 1.02);
+              const side = dispatchResult.analysis.action === 'buy' ? 'LONG' : 'SHORT';
+              
+              // Calculate fixed $100 size for now
+              const sizeUsd = 100;
+              const sizeQty = sizeUsd / entryPrice;
+              const expectedRr = Math.abs(takeProfit - entryPrice) / Math.abs(entryPrice - stopLoss);
+              
+              await createTestnetPosition({
+                positionId: `pos_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+                accountId: account.id,
+                symbol: symbol,
+                side: side,
+                entryPrice: entryPrice,
+                stopLoss: stopLoss,
+                takeProfit: takeProfit,
+                sizeUsd: sizeUsd,
+                sizeQty: sizeQty,
+                riskUsd: sizeUsd * 0.1, // 10% risk
+                riskPercent: 1.0,
+                expectedRr: expectedRr,
+                linkedPredictionId: undefined
+              });
+              
+              console.log(`[LLMDispatch] Successfully created testnet position for ${symbol}`);
+            } catch (tradeErr: any) {
+              console.error(`[LLMDispatch] Failed to create testnet position:`, tradeErr.message);
+            }
           }
         }
       }

@@ -32,6 +32,7 @@ export interface DashboardSummaryData {
 
 export interface AccountData {
   balance: {
+    isInitialized?: boolean;
     totalBalance: number;
     availableBalance: number;
     equity: number;
@@ -221,6 +222,7 @@ export async function loadAccountData(): Promise<AccountData> {
 
   return {
     balance: balanceData.data ?? {
+      isInitialized: false,
       totalBalance: 0,
       availableBalance: 0,
       equity: 0,

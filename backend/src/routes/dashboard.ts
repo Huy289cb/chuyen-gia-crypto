@@ -660,6 +660,7 @@ router.get('/balance', async (req: Request, res: Response) => {
         ok: true,
         success: true,
         data: {
+          isInitialized: false,
           totalBalance: 0,
           availableBalance: 0,
           equity: 0,
@@ -706,6 +707,7 @@ router.get('/balance', async (req: Request, res: Response) => {
     const freeMargin = Math.max(0, equity - usedMargin);
 
     const balance = {
+      isInitialized: true,
       totalBalance: account.current_balance || 0,
       availableBalance: Math.max(0, (account.current_balance || 0) - usedMargin),
       equity,
