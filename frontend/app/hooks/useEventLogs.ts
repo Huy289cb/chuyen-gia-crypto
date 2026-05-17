@@ -25,7 +25,10 @@ async function readOkJson(res: Response) {
   if (!res.ok) {
     throw new Error(body.error || body.message || `HTTP ${res.status}`);
   }
-  if (body.ok === false || body.success === false) {
+  if (body.ok === false) {
+    throw new Error(body.error || body.message || 'Request failed');
+  }
+  if (body.ok !== true && body.success === false) {
     throw new Error(body.error || body.message || 'Request failed');
   }
   return body;

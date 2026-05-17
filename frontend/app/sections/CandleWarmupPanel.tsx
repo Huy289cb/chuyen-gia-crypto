@@ -27,7 +27,7 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
     );
   }
 
-  if (error || !data?.candleWarmup) {
+  if (error || !data) {
     return (
       <Card className={className}>
         <SectionHeader

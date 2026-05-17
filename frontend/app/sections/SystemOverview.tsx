@@ -27,7 +27,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
     );
   }
 
-  if (error || !data?.systemHealth) {
+  if (error || !data) {
     return (
       <Card className={className}>
         <SectionHeader

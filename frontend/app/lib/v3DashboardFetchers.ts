@@ -175,7 +175,12 @@ export async function readOkJson(res: Response, label?: string): Promise<ApiBody
     throw new Error(msg);
   }
 
-  if (body.ok === false || body.success === false) {
+  if (body.ok === false) {
+    const msg = body.error || body.message || 'Request failed';
+    console.error(`[v3] ${label ?? res.url} API error:`, msg, body);
+    throw new Error(msg);
+  }
+  if (body.ok !== true && body.success === false) {
     const msg = body.error || body.message || 'Request failed';
     console.error(`[v3] ${label ?? res.url} API error:`, msg, body);
     throw new Error(msg);
@@ -223,6 +228,26 @@ function firstError(errors: (string | null)[]): string {
   return errors.find(Boolean) ?? 'Request failed';
 }
 
+const DEFAULT_SYSTEM_HEALTH: DashboardSummaryData['systemHealth'] = {
+  workerStatus: 'unknown',
+  databaseStatus: 'unknown',
+  safetyValidation: 'unknown',
+  btcOnlyScope: false,
+  lockStatus: 'unknown',
+};
+
+const DEFAULT_WARMUP: DashboardSummaryData['candleWarmup'] = {
+  totalCandles: 0,
+  requiredCandles: 2000,
+  isWarmedUp: false,
+  timeframes: [
+    { name: '15m', loaded: 0, required: 1000 },
+    { name: '1h', loaded: 0, required: 500 },
+    { name: '4h', loaded: 0, required: 300 },
+    { name: '1d', loaded: 0, required: 200 },
+  ],
+};
+
 export async function loadDashboardSummary(): Promise<DashboardSummaryData> {
   const [system, schedulers, warmup] = await Promise.all([
     settleJson('/dashboard/system', 'dashboard/system'),
@@ -231,18 +256,28 @@ export async function loadDashboardSummary(): Promise<DashboardSummaryData> {
   ]);
 
   const errors = [system.error, schedulers.error, warmup.error].filter(Boolean) as string[];
-  if (errors.length === 3) {
+  const hasAnyData = Boolean(system.body?.data || schedulers.body?.data || warmup.body?.data);
+
+  if (!hasAnyData && errors.length > 0) {
     throw new Error(firstError(errors));
   }
 
-  if (!system.body?.data || !schedulers.body?.data || !warmup.body?.data) {
-    throw new Error(firstError([system.error, schedulers.error, warmup.error]));
+  if (warmup.error) {
+    console.warn('[v3] dashboard/warmup failed, using defaults:', warmup.error);
+  }
+  if (system.error) {
+    console.warn('[v3] dashboard/system failed, using defaults:', system.error);
+  }
+  if (schedulers.error) {
+    console.warn('[v3] dashboard/schedulers failed, using defaults:', schedulers.error);
   }
 
   return {
-    systemHealth: system.body.data as DashboardSummaryData['systemHealth'],
-    schedulers: schedulers.body.data as DashboardSummaryData['schedulers'],
-    candleWarmup: warmup.body.data as DashboardSummaryData['candleWarmup'],
+    systemHealth:
+      (system.body?.data as DashboardSummaryData['systemHealth'] | undefined) ?? DEFAULT_SYSTEM_HEALTH,
+    schedulers: (schedulers.body?.data as DashboardSummaryData['schedulers'] | undefined) ?? [],
+    candleWarmup:
+      (warmup.body?.data as DashboardSummaryData['candleWarmup'] | undefined) ?? DEFAULT_WARMUP,
   };
 }
 
@@ -256,12 +291,16 @@ export async function loadAccountData(): Promise<AccountData> {
   ]);
 
   const errors = [balance.error, positions.error, orders.error, trades.error].filter(Boolean) as string[];
-  if (errors.length === 4) {
+  const hasAnyData = Boolean(
+    balance.body?.data || positions.body?.data || orders.body?.data || trades.body?.data
+  );
+
+  if (!hasAnyData && errors.length === 4) {
     throw new Error(firstError(errors));
   }
 
-  if (balance.error && !balance.body?.data) {
-    throw new Error(balance.error);
+  if (balance.error) {
+    console.warn('[v3] account/balance failed, using empty balance:', balance.error);
   }
 
   const emptyBalance: AccountData['balance'] = {

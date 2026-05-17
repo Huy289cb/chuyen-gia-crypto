@@ -27,7 +27,7 @@ export function SchedulerStatusPanel({ className }: SchedulerStatusPanelProps) {
     );
   }
 
-  if (error || !data?.schedulers) {
+  if (error || !data) {
     return (
       <Card className={className}>
         <SectionHeader
