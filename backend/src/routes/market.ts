@@ -10,6 +10,62 @@ import { getOhlcvCandles } from '../repositories/market.repository';
 
 const router = Router();
 
+const TIMEFRAME_MS: Record<string, number> = {
+  '15m': 15 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '4h': 4 * 60 * 60 * 1000,
+  '1d': 24 * 60 * 60 * 1000,
+};
+
+/** DB scan rows are saved every ~5m with wrong bar alignment — reject before serving charts. */
+function hasValidCandleSpacing(
+  candles: { timestamp: Date }[],
+  timeframe: string
+): boolean {
+  if (candles.length < 10) return false;
+  const expected = TIMEFRAME_MS[timeframe];
+  if (!expected) return false;
+
+  const times = candles
+    .map((c) => new Date(c.timestamp).getTime())
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+
+  if (times.length < 10) return false;
+
+  const sampleCount = Math.min(times.length - 1, 24);
+  const deltas: number[] = [];
+  for (let i = times.length - sampleCount; i < times.length; i++) {
+    deltas.push(times[i] - times[i - 1]);
+  }
+
+  const sorted = [...deltas].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  return median >= expected * 0.75 && median <= expected * 1.25;
+}
+
+function formatDbCandles(candles: { timestamp: Date; open: number; high: number; low: number; close: number; volume?: number | null }[]) {
+  return candles.map((candle) => ({
+    time: Math.floor(new Date(candle.timestamp).getTime() / 1000),
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
+    volume: candle.volume || 0,
+  }));
+}
+
+function formatBinanceCandles(klines: any[][]) {
+  return klines.map((kline) => ({
+    time: Math.floor(kline[0] / 1000),
+    open: parseFloat(kline[1]),
+    high: parseFloat(kline[2]),
+    low: parseFloat(kline[3]),
+    close: parseFloat(kline[4]),
+    volume: parseFloat(kline[5]),
+  }));
+}
+
 /**
  * GET /api/market/candles
  * Get candle data for a symbol and timeframe
@@ -17,57 +73,41 @@ const router = Router();
 router.get('/candles', async (req: Request, res: Response): Promise<void> => {
   try {
     const { symbol = 'BTC', timeframe = '15m', limit = 100 } = req.query;
+    const tf = String(timeframe);
+    const limitNum = parseInt(String(limit), 10);
 
-    // Try to fetch from database first
-    const dbCandles = await getOhlcvCandles(
-      String(symbol),
-      168, // 7 days back
-      String(timeframe)
-    );
+    const dbCandles = await getOhlcvCandles(String(symbol), 168, tf);
 
-    // If we have enough candles in DB, return them
-    if (dbCandles.length >= parseInt(String(limit))) {
-      const formattedCandles = dbCandles
-        .slice(-parseInt(String(limit)))
-        .map((candle) => ({
-          time: Math.floor(new Date(candle.timestamp).getTime() / 1000),
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-          volume: candle.volume || 0,
-        }));
+    const useDb =
+      dbCandles.length >= limitNum && hasValidCandleSpacing(dbCandles, tf);
 
+    if (useDb) {
+      const formattedCandles = formatDbCandles(dbCandles.slice(-limitNum));
       res.json({
         ok: true,
         symbol: String(symbol).toUpperCase(),
-        timeframe: String(timeframe),
+        timeframe: tf,
         candles: formattedCandles,
+        source: 'database',
       });
       return;
     }
 
-    // Otherwise, fetch from Binance API
-    const binanceCandles = await fetchHistoricalCandles(
-      String(symbol),
-      String(timeframe),
-      parseInt(String(limit))
-    );
+    if (dbCandles.length >= limitNum) {
+      console.warn(
+        `[MarketRoutes] DB candles for ${symbol} ${tf} fail spacing check — using Binance`
+      );
+    }
 
-    const formattedCandles = binanceCandles.map((kline: any[]) => ({
-      time: Math.floor(kline[0] / 1000),
-      open: parseFloat(kline[1]),
-      high: parseFloat(kline[2]),
-      low: parseFloat(kline[3]),
-      close: parseFloat(kline[4]),
-      volume: parseFloat(kline[5]),
-    }));
+    const binanceCandles = await fetchHistoricalCandles(String(symbol), tf, limitNum);
+    const formattedCandles = formatBinanceCandles(binanceCandles);
 
     res.json({
       ok: true,
       symbol: String(symbol).toUpperCase(),
-      timeframe: String(timeframe),
+      timeframe: tf,
       candles: formattedCandles,
+      source: 'binance',
     });
   } catch (error: any) {
     console.error('[MarketRoutes] Error fetching candles:', error.message);

@@ -3,6 +3,7 @@
  */
 
 import { getApiBase } from './apiBase';
+import { normalizeChartCandles } from './chartCandles';
 
 export interface DashboardSummaryData {
   systemHealth: {
@@ -379,13 +380,15 @@ export async function loadMarketData(symbol: string, timeframe: string): Promise
   }
 
   const rawCandles = (candlesResult.body?.candles as Record<string, number>[] | undefined) ?? [];
-  const formattedCandles = rawCandles.map((candle) => ({
-    time: candle.time,
-    open: candle.open,
-    high: candle.high,
-    low: candle.low,
-    close: candle.close,
-  }));
+  const formattedCandles = normalizeChartCandles(
+    rawCandles.map((candle) => ({
+      time: candle.time,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+    }))
+  );
 
   const latest = (indicatorsResult.body?.latest as Record<string, unknown> | undefined) ?? {};
   const indicators = {

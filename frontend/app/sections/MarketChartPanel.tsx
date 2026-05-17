@@ -7,6 +7,7 @@ import { ChartToolbar } from '../components/ChartToolbar';
 import { PriceChart } from '../components/crypto/PriceChart';
 import { TrendingUp } from 'lucide-react';
 import { useMarketData } from '../hooks/useMarketData';
+import { normalizeChartCandles } from '../lib/chartCandles';
 import type { Prediction, Analysis } from '@/app/types';
 
 interface MarketChartPanelProps {
@@ -40,7 +41,7 @@ export function MarketChartPanel({
     refresh();
   };
 
-  const chartData: ChartDataPoint[] = marketData?.candles || [];
+  const chartData: ChartDataPoint[] = normalizeChartCandles(marketData?.candles || []);
 
   return (
     <Card className={className}>
@@ -63,13 +64,14 @@ export function MarketChartPanel({
           </div>
         ) : chartData.length > 0 ? (
           <PriceChart
+            key={timeframe}
             data={chartData}
             predictions={predictions}
             analysis={analysis}
             color={color}
             height={300}
             symbol={symbol}
-            showPredictions={true}
+            showPredictions={Boolean(predictions?.length)}
             timeframe={timeframe}
             method={method}
           />
