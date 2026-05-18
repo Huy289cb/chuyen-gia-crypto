@@ -233,14 +233,14 @@ export class GroqDispatchService {
       try {
         console.log(`[GroqDispatch] Attempt ${attempt + 1}/${this.config.maxRetries + 1}`);
         
-        const analysis = await client.analyze({
+        const raw = await client.analyze({
           systemPrompt,
           userPrompt,
           temperature: 0.2,
           maxRetries: 0 // We handle retries at dispatch level
         });
 
-        // Validate response structure
+        const analysis = this.normalizeGroqAnalysis(raw);
         if (!this.validateResponse(analysis)) {
           throw new Error('Invalid response structure from Groq');
         }
@@ -265,6 +265,38 @@ export class GroqDispatchService {
   }
 
   /**
+   * Unwrap symbol-keyed payloads ({ "btc": { ... } }) from Kim Nghia / ICT prompts.
+   */
+  private normalizeGroqAnalysis(raw: GroqAnalysis | null): GroqAnalysis | null {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const record = raw as Record<string, unknown>;
+    const nested =
+      record.btc ??
+      record.BTC ??
+      record.eth ??
+      record.ETH ??
+      (typeof record.symbol === 'string'
+        ? record[record.symbol.toLowerCase()]
+        : undefined);
+
+    const base =
+      nested && typeof nested === 'object' && !Array.isArray(nested)
+        ? ({ ...(nested as Record<string, unknown>) } as GroqAnalysis)
+        : raw;
+
+    if (typeof base.confidence === 'string') {
+      const parsed = parseFloat(base.confidence);
+      if (!Number.isNaN(parsed)) base.confidence = parsed;
+    }
+    if (typeof base.confidence === 'number' && base.confidence > 1) {
+      base.confidence = base.confidence / 100;
+    }
+
+    return base;
+  }
+
+  /**
    * Validate Groq response structure
    */
   private validateResponse(analysis: GroqAnalysis | null): boolean {
@@ -273,7 +305,7 @@ export class GroqDispatchService {
     // Check required fields
     if (typeof analysis.bias !== 'string') return false;
     if (typeof analysis.action !== 'string') return false;
-    if (typeof analysis.confidence !== 'number') return false;
+    if (typeof analysis.confidence !== 'number' || Number.isNaN(analysis.confidence)) return false;
 
     // Check bias-action consistency
     if (analysis.bias === 'bullish' && analysis.action !== 'buy') return false;

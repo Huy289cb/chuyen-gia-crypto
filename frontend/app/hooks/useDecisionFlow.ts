@@ -110,10 +110,17 @@ export function computeDecisionFlow(
     health?.lockStatus === 'unlocked';
 
   const warmupReady = Boolean(warmup?.isWarmedUp);
+  const warmupTfProgress =
+    warmup?.timeframes?.map((tf) =>
+      tf.required > 0 ? Math.min(100, Math.round((tf.loaded / tf.required) * 100)) : 100
+    ) ?? [];
   const warmupProgress =
-    warmup && warmup.requiredCandles > 0
-      ? Math.round((warmup.totalCandles / warmup.requiredCandles) * 100)
-      : 0;
+    warmupTfProgress.length > 0
+      ? Math.round(warmupTfProgress.reduce((a, b) => a + b, 0) / warmupTfProgress.length)
+      : warmup && warmup.requiredCandles > 0
+        ? Math.min(100, Math.round((warmup.totalCandles / warmup.requiredCandles) * 100))
+        : 0;
+  const warmupBlockingTf = warmup?.timeframes?.find((tf) => tf.loaded < tf.required);
 
   const setupDetected =
     marketSignals.length > 0 ||
@@ -160,7 +167,9 @@ export function computeDecisionFlow(
     else if (health?.workerStatus === 'stale') blockedReason = 'Worker activity is stale';
     else blockedReason = 'System not ready';
   } else if (!warmupReady) {
-    blockedReason = `Candle warmup incomplete (${warmupProgress}% loaded)`;
+    blockedReason = warmupBlockingTf
+      ? `Candle warmup incomplete — ${warmupBlockingTf.name} ${warmupBlockingTf.loaded}/${warmupBlockingTf.required}`
+      : `Candle warmup incomplete (${warmupProgress}% ready)`;
   } else if (!setupDetected) {
     blockedReason = 'No market setup detected yet';
   } else if (signalEvaluated && !signalPassed) {
@@ -205,7 +214,7 @@ export function computeDecisionFlow(
     {
       id: 'warmupReady',
       passed: warmupReady,
-      blocked: false,
+      blocked: systemReady && !warmupReady,
       skipped: !systemReady,
       reason: warmupReady
         ? 'Required candle history loaded'

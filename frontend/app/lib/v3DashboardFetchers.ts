@@ -239,13 +239,12 @@ const DEFAULT_SYSTEM_HEALTH: DashboardSummaryData['systemHealth'] = {
 
 const DEFAULT_WARMUP: DashboardSummaryData['candleWarmup'] = {
   totalCandles: 0,
-  requiredCandles: 2000,
+  requiredCandles: 1800,
   isWarmedUp: false,
   timeframes: [
     { name: '15m', loaded: 0, required: 1000 },
     { name: '1h', loaded: 0, required: 500 },
     { name: '4h', loaded: 0, required: 300 },
-    { name: '1d', loaded: 0, required: 200 },
   ],
 };
 

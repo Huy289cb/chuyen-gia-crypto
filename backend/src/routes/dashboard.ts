@@ -4,6 +4,8 @@ import { getTestnetAccount } from '../repositories/testnet.repository';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
+import { getCandles } from '../services/candle.service';
+import { signalGateService } from '../services/signal-gate.service';
 
 const router = Router();
 
@@ -182,7 +184,12 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
     const posTimes = [lastTradeEvent?.timestamp, lastOpenPosTouch?.entry_time]
       .filter(Boolean)
       .map((t) => new Date(t as Date).getTime());
-    const posLast = posTimes.length ? new Date(Math.max(...posTimes)) : null;
+    // Position monitor runs every minute when worker is healthy; use candle activity as proxy
+    // when no testnet positions/trades exist yet.
+    const posLast =
+      posTimes.length > 0
+        ? new Date(Math.max(...posTimes))
+        : marketLast;
 
     const schedulers = [
       {
@@ -255,13 +262,14 @@ router.get('/scope', async (_req: Request, res: Response) => {
  * Get candle warmup progress
  */
 router.get('/warmup', async (_req: Request, res: Response) => {
-  const timeframes = ['15m', '1h', '4h', '1d'] as const;
+  // Align with MarketScan / LLMDispatch worker timeframes (no 1d fetch in v3 pipeline).
+  const timeframes = ['15m', '1h', '4h'] as const;
   const symbol = 'BTC';
-  const requiredCandles = { '15m': 1000, '1h': 500, '4h': 300, '1d': 200 };
+  const requiredCandles = { '15m': 1000, '1h': 500, '4h': 300 };
 
   const emptyWarmup = () => ({
     totalCandles: 0,
-    requiredCandles: 2000,
+    requiredCandles: 1800,
     isWarmedUp: false,
     timeframes: timeframes.map((name) => ({
       name,
@@ -306,21 +314,48 @@ router.get('/warmup', async (_req: Request, res: Response) => {
   }
 });
 
+async function buildLiveSignalGateView(symbol: string) {
+  const timeframe = '4h';
+  const { candles } = await getCandles({ symbol, timeframe, limit: 100 });
+  if (candles.length < 50) return null;
+
+  const result = await signalGateService.evaluate({ candles, symbol, timeframe });
+  return {
+    id: 'live',
+    grade: result.setupResult.grade,
+    confidence: result.setupResult.confidence,
+    playbook: result.setupResult.playbookKey || 'unknown',
+    regime: result.setupResult.regime,
+    pass: result.pass,
+    reasonCodes: [result.reason],
+    timestamp: new Date().toISOString(),
+  };
+}
+
 /**
  * GET /api/dashboard/signals
- * Get latest signal gate decisions
+ * Get latest signal gate decisions (live evaluation + persisted history)
  */
 router.get('/signals', async (req: Request, res: Response) => {
   try {
-    const { limit = 5 } = req.query;
+    const { limit = 5, symbol = 'BTC' } = req.query;
+    const take = parseInt(String(limit), 10);
+    const sym = String(symbol).toUpperCase();
 
-    // Get recent trade decisions from memory system
+    const live = await buildLiveSignalGateView(sym);
+
     const decisions = await prisma.tradeDecision.findMany({
+      where: {
+        OR: [
+          { reason: { startsWith: 'Signal gate:' } },
+          { reason: { startsWith: 'Signal gate blocked:' } },
+        ],
+      },
       orderBy: { timestamp: 'desc' },
-      take: parseInt(limit as string),
+      take: Math.max(take, 5),
     });
 
-    const signals = decisions.map((decision) => ({
+    const historical = decisions.map((decision) => ({
       id: decision.id.toString(),
       grade: decision.grade,
       confidence: decision.confidence,
@@ -330,6 +365,10 @@ router.get('/signals', async (req: Request, res: Response) => {
       reasonCodes: toReasonCodes(decision.reason),
       timestamp: decision.timestamp.toISOString(),
     }));
+
+    const signals = live
+      ? [live, ...historical.filter((h) => h.timestamp !== live.timestamp)].slice(0, take)
+      : historical.slice(0, take);
 
     res.json({
       ok: true,
