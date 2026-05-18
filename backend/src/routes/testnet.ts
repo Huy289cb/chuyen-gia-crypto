@@ -16,6 +16,7 @@ import {
   getTestnetPosition,
   resetPrecisionErrorTracking,
 } from '../repositories/testnet.repository';
+import { calculateUnrealizedPnl as calculatePnl } from '../services/position-mark';
 
 const router = Router();
 
@@ -34,11 +35,6 @@ function parsePositiveInt(value: any, fallback: number | null = null): number | 
     return fallback;
   }
   return parsed;
-}
-
-function calculatePnl(side: string, entryPrice: number, closePrice: number, sizeQty: number): number {
-  const raw = (closePrice - entryPrice) * sizeQty;
-  return String(side).toLowerCase() === 'long' ? raw : -raw;
 }
 
 async function getBinanceHelpers() {

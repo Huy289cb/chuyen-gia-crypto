@@ -5,14 +5,21 @@ export function isLongSide(side: string): boolean {
   return side.toLowerCase() === 'long' || side.toLowerCase() === 'buy';
 }
 
+/** Normalize qty: DB may store shorts as negative size or positive size + side. */
+export function signedPositionQty(side: string, sizeQty: number): number {
+  const abs = Math.abs(sizeQty);
+  if (abs === 0) return 0;
+  if (sizeQty < 0) return sizeQty;
+  return isLongSide(side) ? abs : -abs;
+}
+
 export function calculateUnrealizedPnl(
   side: string,
   entryPrice: number,
   markPrice: number,
   sizeQty: number
 ): number {
-  const raw = (markPrice - entryPrice) * sizeQty;
-  return isLongSide(side) ? raw : -raw;
+  return (markPrice - entryPrice) * signedPositionQty(side, sizeQty);
 }
 
 /** Price move % in the position's favor (not ROE on margin). */
