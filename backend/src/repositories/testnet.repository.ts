@@ -548,6 +548,24 @@ export async function getTestnetPendingOrders(filters: {
 }
 
 /**
+ * Find pending order by Binance order id (active or recoverable statuses).
+ */
+export async function getTestnetPendingOrderByBinanceId(
+  binanceOrderId: string,
+  symbol?: string
+): Promise<any | null> {
+  return prisma.testnetPendingOrder.findFirst({
+    where: {
+      binance_order_id: binanceOrderId,
+      ...(symbol ? { symbol: symbol.toUpperCase() } : {}),
+      status: {
+        in: ['pending', 'partially_filled', 'reconciliation_failed_not_on_binance'],
+      },
+    },
+  });
+}
+
+/**
  * Execute testnet pending order
  */
 export async function executeTestnetPendingOrder(

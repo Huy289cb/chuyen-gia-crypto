@@ -102,6 +102,25 @@ async function main() {
     removedPositionIds.push(pos.position_id);
   }
 
+  const { recoverPendingOrderFromBinance } = await import('../src/services/binance-order-fill.service');
+  const recoverableOrders = await prisma.testnetPendingOrder.findMany({
+    where: {
+      account_id: account.id,
+      status: { in: ['reconciliation_failed_not_on_binance', 'pending'] },
+    },
+  });
+
+  const recoveredOrderIds: string[] = [];
+  for (const order of recoverableOrders) {
+    if (order.status === 'reconciliation_failed_not_on_binance') {
+      const outcome = await recoverPendingOrderFromBinance(order);
+      if (outcome === 'filled') {
+        recoveredOrderIds.push(order.order_id);
+        continue;
+      }
+    }
+  }
+
   const openPositionsCount = await prisma.testnetPosition.count({
     where: { account_id: account.id, status: 'open' },
   });
@@ -122,6 +141,7 @@ async function main() {
     JSON.stringify({
       cancelledOrderIds,
       removedPhantomPositions: removedPositionIds,
+      recoveredFilledOrders: recoveredOrderIds,
       walletBalance: balanceSummary.walletBalance,
       equity: balanceSummary.equity,
       unrealizedPnl: balanceSummary.unrealizedPnl,

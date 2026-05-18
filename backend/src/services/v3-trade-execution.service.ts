@@ -115,8 +115,14 @@ export async function executeV3Trade(
     };
   }
 
-  const openVolume = openPositions.reduce((sum, p) => sum + (Number(p.size_usd) || 0), 0);
-  const pendingVolume = pendingOrders.reduce((sum, o) => sum + (Number(o.size_usd) || 0), 0);
+  const openVolume = openPositions.reduce(
+    (sum, p) => sum + Math.abs(Number(p.size_usd) || 0),
+    0
+  );
+  const pendingVolume = pendingOrders.reduce(
+    (sum, o) => sum + Math.abs(Number(o.size_usd) || 0),
+    0
+  );
   const totalExposure = openVolume + pendingVolume;
   const maxExposure = riskPolicy.maxTotalExposureUsd;
 

@@ -5,7 +5,14 @@
  * Handles server crashes, restarts, network failures, missed WebSocket events
  */
 
-import { getTestnetPendingOrders, updateTestnetPendingOrder, getTestnetPositions, updateTestnetPosition } from '../repositories/testnet.repository';
+import { prisma } from '../lib/prisma';
+import {
+  getTestnetPendingOrders,
+  updateTestnetPendingOrder,
+  getTestnetPositions,
+  updateTestnetPosition,
+} from '../repositories/testnet.repository';
+import { recoverPendingOrderFromBinance } from './binance-order-fill.service';
 import { getOpenOrders, getPositionRisk } from './binanceClient';
 
 /**
@@ -23,6 +30,7 @@ export async function performStartupReconciliation(): Promise<void> {
 
   try {
     await reconcilePendingOrders();
+    await recoverMislabeledPendingOrders();
     await reconcilePositions();
     
     console.log('[BinanceReconciliation] Startup reconciliation completed successfully');
@@ -76,18 +84,19 @@ async function reconcilePendingOrders(): Promise<void> {
     const existsOnBinance = binanceOrderIds.has(localOrder.binance_order_id);
 
     if (!existsOnBinance) {
-      // Order exists locally but not on Binance
-      // Possible scenarios:
-      // 1. Order was filled/cancelled while backend was down
-      // 2. Order was rejected by Binance
-      // 3. Network issue caused order to not be placed
-      
-      console.warn(`[BinanceReconciliation] Local order ${localOrder.order_id} (binance: ${localOrder.binance_order_id}) not found on Binance`);
-      
-      // Mark as potentially failed - user should verify
-      await updateTestnetPendingOrder(localOrder.order_id, {
-        status: 'reconciliation_failed_not_on_binance',
-      });
+      console.warn(
+        `[BinanceReconciliation] Local order ${localOrder.order_id} (binance: ${localOrder.binance_order_id}) not in open orders — checking fill status`
+      );
+      const outcome = await recoverPendingOrderFromBinance(localOrder);
+      if (outcome === 'filled') {
+        console.log(`[BinanceReconciliation] Recovered filled order ${localOrder.order_id}`);
+      } else if (outcome === 'cancelled') {
+        console.log(`[BinanceReconciliation] Order ${localOrder.order_id} closed on Binance (${outcome})`);
+      } else if (outcome === 'failed') {
+        await updateTestnetPendingOrder(localOrder.order_id, {
+          status: 'reconciliation_failed_not_on_binance',
+        });
+      }
     } else {
       // Order exists on both sides - verify status
       const binanceOrder = binanceOrders.find((o: any) => String(o.orderId) === localOrder.binance_order_id);
@@ -97,9 +106,10 @@ async function reconcilePendingOrders(): Promise<void> {
         
         // If Binance shows FILLED but local shows pending, local state is stale
         if (binanceStatus === 'FILLED' && localOrder.status === 'pending') {
-          console.warn(`[BinanceReconciliation] Order ${localOrder.order_id} is FILLED on Binance but PENDING locally - state inconsistency`);
-          // The WebSocket should eventually catch this, but we could proactively fix it
-          // For now, just log it
+          console.warn(
+            `[BinanceReconciliation] Order ${localOrder.order_id} FILLED on Binance but PENDING locally — recovering`
+          );
+          await recoverPendingOrderFromBinance(localOrder);
         }
       }
     }
@@ -116,6 +126,26 @@ async function reconcilePendingOrders(): Promise<void> {
       // Could create a local record for this order, but that's complex
       // For now, just log it - user can manually clean up
     }
+  }
+}
+
+/**
+ * Retry orders previously marked reconciliation_failed (e.g. filled while WS had NaN price).
+ */
+async function recoverMislabeledPendingOrders(): Promise<void> {
+  const stale = await prisma.testnetPendingOrder.findMany({
+    where: { status: 'reconciliation_failed_not_on_binance' },
+    orderBy: { created_at: 'desc' },
+    take: 20,
+  });
+
+  if (stale.length === 0) return;
+
+  console.log(`[BinanceReconciliation] Recovering ${stale.length} mislabeled pending order(s)...`);
+
+  for (const localOrder of stale) {
+    const outcome = await recoverPendingOrderFromBinance(localOrder);
+    console.log(`[BinanceReconciliation] Recover ${localOrder.order_id}: ${outcome}`);
   }
 }
 
