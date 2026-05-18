@@ -9,6 +9,8 @@ import { memoryService, MemoryContext } from './memory.service';
 import { signalGateService, type SignalGateOutput } from './signal-gate.service';
 import { riskManagerService } from './risk-manager.service';
 import { getOrCreateTestnetAccount } from '../repositories/testnet.repository';
+import { getMethodConfig } from '../config/methods';
+import { reconcileExpectedRr } from '../utils/trade-levels';
 import type { UnifiedCandle } from './candle.service';
 
 export interface GroqDispatchInput {
@@ -151,6 +153,35 @@ export class GroqDispatchService {
         reason: 'Groq validation failed or returned invalid response',
         memory_context: memoryContext
       };
+    }
+
+    // Step 5a: Enforce minimum R:R from prices (LLM claims are not trusted)
+    if (analysis.action !== 'hold' && analysis.suggested_entry && analysis.suggested_stop_loss && analysis.suggested_take_profit) {
+      const { computedRr } = reconcileExpectedRr(analysis);
+      const methodConfig = getMethodConfig(method_id);
+      const minRr = methodConfig.autoEntry.minRRRatio;
+
+      if (computedRr != null && computedRr < minRr) {
+        const reason = `R:R ${computedRr.toFixed(2)} below minimum ${minRr} (from entry/SL/TP)`;
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: 'unknown',
+            grade: 'A',
+            confidence: analysis.confidence || 0,
+            regime: 'unknown',
+            decision: 'no_trade',
+            reason: `Risk engine: ${reason}`,
+            method_id,
+          });
+        }
+        return {
+          decision: 'no_trade',
+          reason: `Risk engine blocked: ${reason}`,
+          memory_context: memoryContext,
+        };
+      }
     }
 
     // Step 5: Risk Check before allowing trade
@@ -299,7 +330,8 @@ export class GroqDispatchService {
       base.confidence = base.confidence / 100;
     }
 
-    return base;
+    const { analysis: withRr } = reconcileExpectedRr(base);
+    return withRr;
   }
 
   /**
@@ -344,10 +376,14 @@ export class GroqDispatchService {
     prompt += `Timeframe: ${timeframe}\n`;
     prompt += `Current Price: ${currentPrice}\n\n`;
     prompt += `RECENT CANDLES (last 20):\n`;
-    
+
     recentCandles.slice(-20).forEach((candle, i) => {
       prompt += `${i + 1}. O: ${candle.open} H: ${candle.high} L: ${candle.low} C: ${candle.close} V: ${candle.volume}\n`;
     });
+
+    prompt +=
+      '\nCRITICAL: expected_rr MUST equal |take_profit - entry| / |entry - stop_loss| (2 decimal places). ' +
+      'Do not invent expected_rr; compute it from your suggested_entry, suggested_stop_loss, suggested_take_profit.\n';
 
     return prompt;
   }

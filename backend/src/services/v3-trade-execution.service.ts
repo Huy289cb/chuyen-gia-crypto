@@ -13,6 +13,7 @@ import {
   getTestnetPositions,
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
+import { computeExpectedRrFromPrices } from '../utils/trade-levels';
 import { initTestnetClient, placeLimitOrder } from './binanceClient';
 
 export interface V3TradeExecutionInput {
@@ -143,8 +144,9 @@ export async function executeV3Trade(
 
   const sizeQty = sizeUsd / entry;
   const expectedRr =
-    Number(analysis.expected_rr) ||
-    Math.abs(takeProfit - entry) / Math.abs(entry - stopLoss);
+    computeExpectedRrFromPrices(entry, stopLoss, takeProfit) ??
+    Number(analysis.expected_rr) ??
+    0;
 
   const orderId = `v3_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const newClientOrderId = `x-${orderId}`;
