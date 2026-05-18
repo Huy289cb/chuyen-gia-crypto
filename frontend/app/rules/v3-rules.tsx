@@ -1,0 +1,470 @@
+'use client';
+
+import {
+  BookOpen,
+  Layers,
+  Shield,
+  ArrowRight,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Ban,
+} from 'lucide-react';
+import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { SectionHeader } from '../components/SectionHeader';
+
+export type RulesLanguage = 'vi' | 'en';
+
+const copy = {
+  vi: {
+    architecture: {
+      title: 'Kiến trúc 4 lớp',
+      subtitle: 'Mỗi lớp có vai trò riêng — không bỏ qua bước',
+      layers: [
+        {
+          name: 'Signal Gate',
+          desc: 'Lọc setup bằng code (không LLM). Chỉ setup đủ điều kiện mới gọi Groq.',
+          tag: 'Không LLM',
+        },
+        {
+          name: 'Risk Engine',
+          desc: 'Cổng cứng: daily loss, chuỗi lỗ, spread/slippage, giới hạn vị thế.',
+          tag: 'Bắt buộc',
+        },
+        {
+          name: 'LLM Dispatch (Groq)',
+          desc: 'Chỉ chạy khi Signal Gate PASS. JSON có cấu trúc, retry tối đa 1 lần.',
+          tag: 'Có chọn lọc',
+        },
+        {
+          name: 'Memory Layer',
+          desc: 'Lưu quyết định, kết quả, playbook stats — tiêm ngữ cảnh ngắn vào prompt.',
+          tag: 'Học từ lịch sử',
+        },
+      ],
+    },
+    pipeline: {
+      title: 'Decision Pipeline (từng bước)',
+      subtitle: 'Khớp với panel Decision Pipeline trên Dashboard',
+      steps: [
+        { n: 1, name: 'System Ready', desc: 'Worker healthy, DB OK, safety validation passed, không bị lock.' },
+        { n: 2, name: 'Candle Warmup Ready', desc: 'Đủ nến BTC: 15m (1000), 1h (500), 4h (300) trong DB.' },
+        { n: 3, name: 'Market Setup Detected', desc: 'MarketScan tìm playbook (liquidity sweep / breakout volume).' },
+        { n: 4, name: 'Signal Gate Passed', desc: 'Grade ≥ A, confidence ≥ 75%, regime trend hoặc range (không chop).' },
+        { n: 5, name: 'Risk Approved', desc: 'Risk engine unlocked, chưa chạm daily loss cap.' },
+        { n: 6, name: 'LLM Dispatch Triggered', desc: 'Groq phân tích với memory context; bias/action phải nhất quán.' },
+        { n: 7, name: 'Position Created', desc: 'Testnet position mở khi LLM quyết định trade + risk OK.' },
+        { n: 8, name: 'Position Monitor Active', desc: 'Theo dõi vị thế mỗi phút: HOLD / REDUCE / EXIT.' },
+      ],
+    },
+    schedulers: {
+      title: 'Worker & Lịch chạy',
+      subtitle: 'Chỉ worker leader mới chạy scheduler (PostgreSQL advisory lock)',
+      rows: [
+        { name: 'MarketScan', cron: '*/5 * * * *', role: 'Lấy nến Binance, chạy Signal Gate, cache kết quả cho LLM.' },
+        { name: 'LLMDispatch', cron: '*/15 * * * *', role: 'Đọc cache scan; chỉ gọi Groq nếu PASS và không duplicate.' },
+        { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Kiểm tra SL/TP và sức khỏe vị thế testnet.' },
+        { name: 'Price sync', cron: '~30s', role: 'Cập nhật giá BTC cho chart và risk.' },
+      ],
+    },
+    phases: [
+      {
+        id: 'p1',
+        title: 'Bước 1 — Đơn giản hóa chiến lược',
+        items: [
+          'Chỉ BTCUSDT perpetual; ETH và ICT method tắt.',
+          'Method hoạt động: Kim Nghia (SMC + Volume + Fibonacci).',
+          'Playbook tối đa 2: Liquidity Sweep + Reclaim; Breakout + Volume.',
+          'Setup được chấm A / B / C / D — chỉ Grade A đi tiếp pipeline.',
+        ],
+      },
+      {
+        id: 'p2',
+        title: 'Bước 2 — Signal Gate (trước LLM)',
+        items: [
+          'MarketScan đánh giá 15m, 1h, 4h — không gọi Groq ở bước này.',
+          'Duplicate filter: cùng nến (hash) trong 15 phút → skip, không gọi LLM.',
+          'Không PASS → no_trade (lý do lưu memory), không tốn token Groq.',
+          'Lý do block thường gặp: Grade D/B dưới A, confidence thấp, regime chop.',
+        ],
+      },
+      {
+        id: 'p3',
+        title: 'Bước 3 — Risk Engine',
+        items: [
+          'Risk mỗi lệnh: ~1% tài khoản (cấu hình env).',
+          'Daily loss cap: ~2% — khóa giao dịch khi đạt.',
+          'Tối đa 3 lỗ liên tiếp → cooldown 4 giờ.',
+          'Lọc spread / slippage / phí trước khi mở lệnh.',
+        ],
+      },
+      {
+        id: 'p4',
+        title: 'Bước 4 — LLM Dispatch (Groq)',
+        items: [
+          'Chỉ chạy khi Signal Gate PASS trên timeframe scan (thường 4h).',
+          'Prompt v3: JSON thuần `{ "btc": { bias, action, confidence, ... } }`.',
+          'Validate: bias/action khớp; SL/TP đúng hướng long/short.',
+          'Thất bại parse/validate → NO_TRADE (không retry vô hạn).',
+          'Confidence LLM ≥ 82% mới xem xét entry (Kim Nghia prompt).',
+        ],
+      },
+      {
+        id: 'p5',
+        title: 'Bước 5 — Memory Layer',
+        items: [
+          'Lưu trade_decision: grade, playbook, regime, lý do no_trade.',
+          'Lưu trade_outcome & trade_reflection sau khi đóng lệnh.',
+          'playbook_stats: win rate theo setup.',
+          'Groq chỉ nhận ~3 setup tương tự + 2 failure gần nhất — không dump full history.',
+        ],
+      },
+      {
+        id: 'p6',
+        title: 'Bước 6 — Quản lý vị thế (đơn giản)',
+        items: [
+          'Hành động cho phép: HOLD, REDUCE (partial), EXIT.',
+          'Không reverse/aggressive trail trừ khi có setup mới hợp lệ.',
+          'Chỉ can thiệp khi có lời hoặc cấu trúc thị trường đổi.',
+        ],
+      },
+      {
+        id: 'p7',
+        title: 'Bước 7 — Dashboard v3',
+        items: [
+          'Decision Pipeline, Candle Warmup, Signal Gate, Risk, LLM, Memory, Event Log.',
+          'Testnet Account: balance, positions, orders, trade history.',
+          'No-Trade Reasons: tổng hợp lý do skip (duplicate, gate, LLM, risk).',
+          'Market chart: nến + SMA/RSI/ATR từ API /market.',
+        ],
+      },
+    ],
+    disabled: {
+      title: 'Đã tắt (Legacy — không còn trong v3)',
+      items: [
+        'POST /api/analysis/run và kim_nghia auto-entry cron cũ.',
+        'ICT method (method_id: ict) — disabled.',
+        'Giao dịch ETH / multi-symbol auto-entry.',
+        'Gọi Groq mỗi 15 phút bất kể setup.',
+        'Paper Account legacy — dùng TestnetAccount + Binance demo API.',
+        'UI frontend-old (Vite) — thay bằng Next.js dashboard v3.',
+      ],
+    },
+    config: {
+      title: 'Cấu hình tham chiếu (production)',
+      rows: [
+        ['Symbol', 'BTC only'],
+        ['Timeframes scan', '15m, 1h, 4h'],
+        ['Signal Gate min grade', 'A'],
+        ['Signal Gate min confidence', '75%'],
+        ['Allowed regimes', 'trend, range'],
+        ['Duplicate cache TTL', '15 phút'],
+        ['LLM model', 'Groq (meta-llama / llama family)'],
+        ['Prompt version', 'v3'],
+        ['Execution', 'Binance Futures Testnet'],
+      ],
+    },
+    notes: {
+      title: 'Lưu ý',
+      items: [
+        'Đây là môi trường testnet / giáo dục — không phải tư vấn tài chính.',
+        'Panel “LLM invalid JSON” = Groq trả về hoặc validate thất bại; xem Event Log.',
+        'Scheduler LLM “idle” là bình thường khi không có setup PASS.',
+      ],
+    },
+  },
+  en: {
+    architecture: {
+      title: 'Four-layer architecture',
+      subtitle: 'Each layer has a distinct role — no skipped steps',
+      layers: [
+        {
+          name: 'Signal Gate',
+          desc: 'Deterministic setup filters (no LLM). Only qualified setups reach Groq.',
+          tag: 'No LLM',
+        },
+        {
+          name: 'Risk Engine',
+          desc: 'Hard gate: daily loss, loss streak, spread/slippage, position limits.',
+          tag: 'Mandatory',
+        },
+        {
+          name: 'LLM Dispatch (Groq)',
+          desc: 'Runs only after Signal Gate PASS. Structured JSON, max 1 retry.',
+          tag: 'Selective',
+        },
+        {
+          name: 'Memory Layer',
+          desc: 'Stores decisions, outcomes, playbook stats — short context in prompts.',
+          tag: 'Learning',
+        },
+      ],
+    },
+    pipeline: {
+      title: 'Decision Pipeline (step by step)',
+      subtitle: 'Matches the Decision Pipeline panel on the Dashboard',
+      steps: [
+        { n: 1, name: 'System Ready', desc: 'Worker healthy, DB OK, safety validation passed, not locked.' },
+        { n: 2, name: 'Candle Warmup Ready', desc: 'Enough BTC candles in DB: 15m (1000), 1h (500), 4h (300).' },
+        { n: 3, name: 'Market Setup Detected', desc: 'MarketScan finds a playbook (liquidity sweep / breakout volume).' },
+        { n: 4, name: 'Signal Gate Passed', desc: 'Grade ≥ A, confidence ≥ 75%, regime trend or range (not chop).' },
+        { n: 5, name: 'Risk Approved', desc: 'Risk engine unlocked, daily loss cap not hit.' },
+        { n: 6, name: 'LLM Dispatch Triggered', desc: 'Groq analyzes with memory context; bias/action must be consistent.' },
+        { n: 7, name: 'Position Created', desc: 'Testnet position opens when LLM says trade and risk allows.' },
+        { n: 8, name: 'Position Monitor Active', desc: 'Monitors positions every minute: HOLD / REDUCE / EXIT.' },
+      ],
+    },
+    schedulers: {
+      title: 'Worker & schedules',
+      subtitle: 'Only the worker leader runs schedulers (PostgreSQL advisory lock)',
+      rows: [
+        { name: 'MarketScan', cron: '*/5 * * * *', role: 'Fetch Binance candles, run Signal Gate, cache for LLM.' },
+        { name: 'LLMDispatch', cron: '*/15 * * * *', role: 'Read scan cache; call Groq only if PASS and not duplicate.' },
+        { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Check testnet SL/TP and position health.' },
+        { name: 'Price sync', cron: '~30s', role: 'Update BTC price for chart and risk.' },
+      ],
+    },
+    phases: [
+      {
+        id: 'p1',
+        title: 'Step 1 — Strategy simplification',
+        items: [
+          'BTCUSDT perpetual only; ETH and ICT method disabled.',
+          'Active method: Kim Nghia (SMC + Volume + Fibonacci).',
+          'Max 2 playbooks: Liquidity Sweep + Reclaim; Breakout + Volume.',
+          'Setups graded A / B / C / D — only Grade A proceeds.',
+        ],
+      },
+      {
+        id: 'p2',
+        title: 'Step 2 — Signal Gate (before LLM)',
+        items: [
+          'MarketScan evaluates 15m, 1h, 4h — no Groq at this step.',
+          'Duplicate filter: same candle hash within 15 min → skip, no LLM call.',
+          'No PASS → no_trade (reason stored), no Groq tokens spent.',
+          'Common blocks: Grade D/B below A, low confidence, choppy regime.',
+        ],
+      },
+      {
+        id: 'p3',
+        title: 'Step 3 — Risk Engine',
+        items: [
+          'Risk per trade: ~1% of account (env config).',
+          'Daily loss cap: ~2% — trading locked when hit.',
+          'Max 3 consecutive losses → 4 hour cooldown.',
+          'Spread / slippage / fee filters before entry.',
+        ],
+      },
+      {
+        id: 'p4',
+        title: 'Step 4 — LLM Dispatch (Groq)',
+        items: [
+          'Runs only when Signal Gate PASS on scanned timeframe (often 4h).',
+          'Prompt v3: plain JSON `{ "btc": { bias, action, confidence, ... } }`.',
+          'Validate: bias/action match; SL/TP correct for long/short.',
+          'Parse/validate failure → NO_TRADE (no infinite retries).',
+          'LLM confidence ≥ 82% required for entry (Kim Nghia prompt).',
+        ],
+      },
+      {
+        id: 'p5',
+        title: 'Step 5 — Memory Layer',
+        items: [
+          'Stores trade_decision: grade, playbook, regime, no_trade reason.',
+          'Stores trade_outcome & trade_reflection after close.',
+          'playbook_stats: win rate per setup.',
+          'Groq gets ~3 similar setups + 2 recent failures — not full history.',
+        ],
+      },
+      {
+        id: 'p6',
+        title: 'Step 6 — Position management (simplified)',
+        items: [
+          'Allowed actions: HOLD, REDUCE (partial), EXIT.',
+          'No aggressive reverse/trail unless a new valid setup exists.',
+          'Intervene only when in profit or market structure changed.',
+        ],
+      },
+      {
+        id: 'p7',
+        title: 'Step 7 — Dashboard v3',
+        items: [
+          'Decision Pipeline, Candle Warmup, Signal Gate, Risk, LLM, Memory, Event Log.',
+          'Testnet Account: balance, positions, orders, trade history.',
+          'No-Trade Reasons: aggregated skip reasons (duplicate, gate, LLM, risk).',
+          'Market chart: candles + SMA/RSI/ATR from /market API.',
+        ],
+      },
+    ],
+    disabled: {
+      title: 'Disabled (Legacy — not in v3)',
+      items: [
+        'POST /api/analysis/run and legacy kim_nghia auto-entry cron.',
+        'ICT method (method_id: ict) — disabled.',
+        'ETH trading / multi-symbol auto-entry.',
+        'Groq every 15 minutes regardless of setup.',
+        'Legacy Paper Account — use TestnetAccount + Binance demo API.',
+        'frontend-old (Vite) UI — replaced by Next.js v3 dashboard.',
+      ],
+    },
+    config: {
+      title: 'Reference configuration (production)',
+      rows: [
+        ['Symbol', 'BTC only'],
+        ['Scan timeframes', '15m, 1h, 4h'],
+        ['Signal Gate min grade', 'A'],
+        ['Signal Gate min confidence', '75%'],
+        ['Allowed regimes', 'trend, range'],
+        ['Duplicate cache TTL', '15 minutes'],
+        ['LLM model', 'Groq (meta-llama / llama family)'],
+        ['Prompt version', 'v3'],
+        ['Execution', 'Binance Futures Testnet'],
+      ],
+    },
+    notes: {
+      title: 'Notes',
+      items: [
+        'Testnet / educational environment — not financial advice.',
+        '“LLM invalid JSON” panel means Groq response or validation failed; see Event Log.',
+        'LLM scheduler “idle” is normal when no setup PASSes the gate.',
+      ],
+    },
+  },
+} as const;
+
+interface V3RulesProps {
+  language: RulesLanguage;
+}
+
+export function V3Rules({ language }: V3RulesProps) {
+  const t = copy[language];
+
+  return (
+    <div className="space-y-10" >
+      <section>
+        <SectionHeader
+          title={t.architecture.title}
+          subtitle={t.architecture.subtitle}
+          icon={<Layers className="w-5 h-5" />}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {t.architecture.layers.map((layer) => (
+            <Card key={layer.name} padding="md">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h4 className="font-semibold text-foreground">{layer.name}</h4>
+                <Badge variant="info" size="sm">
+                  {layer.tag}
+                </Badge>
+              </div>
+              <p className="text-sm text-foreground-secondary">{layer.desc}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeader
+          title={t.pipeline.title}
+          subtitle={t.pipeline.subtitle}
+          icon={<ArrowRight className="w-5 h-5" />}
+        />
+        <Card padding="md">
+          <ol className="space-y-3">
+            {t.pipeline.steps.map((step) => (
+              <li key={step.n} className="flex gap-3">
+                <span className="flex-shrink-0 w-7 h-7 rounded-full bg-accent-primary/20 text-accent-primary text-sm font-bold flex items-center justify-center">
+                  {step.n}
+                </span>
+                <div>
+                  <p className="font-medium text-foreground text-sm">{step.name}</p>
+                  <p className="text-sm text-foreground-secondary mt-0.5">{step.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      </section>
+
+      <section>
+        <SectionHeader
+          title={t.schedulers.title}
+          subtitle={t.schedulers.subtitle}
+          icon={<Clock className="w-5 h-5" />}
+        />
+        <Card padding="md">
+          <div className="space-y-4">
+            {t.schedulers.rows.map((row) => (
+              <div key={row.name} className="border-b border-border-default last:border-0 pb-4 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="font-medium text-foreground">{row.name}</span>
+                  <code className="text-xs px-2 py-0.5 rounded bg-surface-2 text-foreground-tertiary">
+                    {row.cron}
+                  </code>
+                </div>
+                <p className="text-sm text-foreground-secondary">{row.role}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
+
+      {t.phases.map((phase) => (
+        <section key={phase.id}>
+          <SectionHeader title={phase.title} icon={<CheckCircle2 className="w-5 h-5" />} />
+          <Card padding="md">
+            <ul className="space-y-2">
+              {phase.items.map((item) => (
+                <li key={item} className="flex gap-2 text-sm text-foreground-secondary">
+                  <span className="text-accent-primary mt-0.5">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      ))}
+
+      <section>
+        <SectionHeader title={t.disabled.title} icon={<Ban className="w-5 h-5 text-danger" />} />
+        <Card padding="md" className="border-danger/30 bg-danger/5">
+          <ul className="space-y-2">
+            {t.disabled.items.map((item) => (
+              <li key={item} className="flex gap-2 text-sm text-foreground-secondary">
+                <XCircle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </section>
+
+      <section>
+        <SectionHeader title={t.config.title} icon={<BookOpen className="w-5 h-5" />} />
+        <Card padding="md">
+          <dl className="divide-y divide-border-default">
+            {t.config.rows.map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+                <dt className="text-sm text-foreground-secondary">{label}</dt>
+                <dd className="text-sm font-medium text-foreground text-right">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      </section>
+
+      <section>
+        <SectionHeader title={t.notes.title} icon={<Shield className="w-5 h-5" />} />
+        <Card padding="md">
+          <ul className="space-y-2">
+            {t.notes.items.map((item) => (
+              <li key={item} className="text-sm text-foreground-secondary">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </section>
+    </div>
+  );
+}
