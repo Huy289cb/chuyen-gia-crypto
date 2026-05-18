@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { getTestnetAccount } from '../repositories/testnet.repository';
+import { getTestnetAccount, updateTestnetPosition } from '../repositories/testnet.repository';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
@@ -12,7 +12,11 @@ import {
   V3_SIGNAL_GATE_TIMEFRAMES,
 } from '../config/v3-schedulers';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
-
+import {
+  calculatePnlPercent,
+  calculateUnrealizedPnl,
+  resolveMarkPrice,
+} from '../services/position-mark';
 const router = Router();
 
 function formatRelativeAgo(ts: Date | null): string {
@@ -879,28 +883,54 @@ router.get('/positions', async (req: Request, res: Response) => {
       orderBy: { entry_time: 'desc' },
     });
 
-    const formattedPositions = positions.map((pos) => {
-      const unrealizedPnL = pos.unrealized_pnl || 0;
-      const entryPrice = pos.entry_price || 0;
-      const pnlPercentage = entryPrice > 0 ? (unrealizedPnL / (entryPrice * (pos.size_qty || 1))) * 100 : 0;
-      const timeInPosition = pos.entry_time
-        ? `${Math.floor((Date.now() - new Date(pos.entry_time).getTime()) / 60000)}m`
-        : '0m';
+    const markBySymbol = new Map<string, number>();
+    const uniqueSymbols = [...new Set(positions.map((p) => p.symbol))];
+    await Promise.all(
+      uniqueSymbols.map(async (sym) => {
+        const fallback =
+          positions.find((p) => p.symbol === sym)?.current_price ||
+          positions.find((p) => p.symbol === sym)?.entry_price ||
+          0;
+        markBySymbol.set(sym, await resolveMarkPrice(sym, fallback));
+      })
+    );
 
-      return {
-        id: pos.position_id,
-        symbol: pos.symbol,
-        side: pos.side,
-        size: pos.size_qty || 0,
-        entryPrice: pos.entry_price || 0,
-        markPrice: pos.current_price || pos.entry_price || 0,
-        unrealizedPnL,
-        pnlPercentage: pnlPercentage.toFixed(2),
-        stopLoss: pos.stop_loss || 0,
-        takeProfit: pos.take_profit || 0,
-        timeInPosition,
-      };
-    });
+    const formattedPositions = await Promise.all(
+      positions.map(async (pos) => {
+        const entryPrice = pos.entry_price || 0;
+        const sizeQty = pos.size_qty || 0;
+        const storedMark = pos.current_price || entryPrice;
+        const markPrice = markBySymbol.get(pos.symbol) ?? storedMark;
+        const unrealizedPnL = calculateUnrealizedPnl(pos.side, entryPrice, markPrice, sizeQty);
+        const pnlPercentage = calculatePnlPercent(pos.side, entryPrice, markPrice);
+        const timeInPosition = pos.entry_time
+          ? `${Math.floor((Date.now() - new Date(pos.entry_time).getTime()) / 60000)}m`
+          : '0m';
+
+        if (Math.abs(markPrice - storedMark) > 0.0001 || Math.abs(unrealizedPnL - (pos.unrealized_pnl || 0)) > 0.0001) {
+          void updateTestnetPosition(pos.position_id, {
+            current_price: markPrice,
+            unrealized_pnl: unrealizedPnL,
+          }).catch((err: Error) => {
+            console.warn(`[Dashboard] Failed to persist mark for ${pos.position_id}:`, err.message);
+          });
+        }
+
+        return {
+          id: pos.position_id,
+          symbol: pos.symbol,
+          side: pos.side,
+          size: sizeQty,
+          entryPrice,
+          markPrice,
+          unrealizedPnL,
+          pnlPercentage: pnlPercentage.toFixed(2),
+          stopLoss: pos.stop_loss || 0,
+          takeProfit: pos.take_profit || 0,
+          timeInPosition,
+        };
+      })
+    );
 
     res.json({
       ok: true,

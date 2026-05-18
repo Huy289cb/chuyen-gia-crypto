@@ -71,7 +71,7 @@ async function runPriceSyncJob() {
       });
 
       const candle = symbolToCandle[item.coin as keyof typeof symbolToCandle];
-      if (workerConfig.enableTestnetSync && process.env.BINANCE_ENABLED === 'true' && candle) {
+      if (workerConfig.enableTestnetSync && candle) {
         await syncTestnetForSymbol(item.coin, candle);
       }
     }

@@ -1,11 +1,14 @@
-import { cn } from '@/lib/utils';
+import { cn, formatPercentage } from '@/lib/utils';
 import { Card } from './ui/Card';
 
 interface MetricCardProps {
   title: string;
   value: string | number;
+  /** Percentage delta (rendered with formatPercentage) */
   change?: number;
   changeLabel?: string;
+  /** Plain-text subline (e.g. unrealized PnL in USD) — preferred over change when both could apply */
+  footnote?: string;
   icon?: React.ReactNode;
   trend?: 'up' | 'down' | 'neutral';
   className?: string;
@@ -19,6 +22,7 @@ export function MetricCard({
   value,
   change,
   changeLabel,
+  footnote,
   icon,
   trend = 'neutral',
   className,
@@ -56,10 +60,13 @@ export function MetricCard({
         <p className={cn('font-mono font-semibold truncate', valueSizeClasses[size], 'text-foreground')}>
           {value}
         </p>
-        {change !== undefined && (
+        {footnote && (
+          <p className={cn('text-xs font-medium mt-1', getTrendColor())}>{footnote}</p>
+        )}
+        {!footnote && change !== undefined && (
           <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 mt-1">
             <span className={cn('text-xs font-medium', getTrendColor())}>
-              {getTrendIcon()} {change > 0 ? '+' : ''}{change}%
+              {getTrendIcon()} {formatPercentage(change)}
             </span>
             {changeLabel && (
               <span className="text-xs text-foreground-tertiary">{changeLabel}</span>

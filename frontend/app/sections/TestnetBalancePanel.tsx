@@ -56,6 +56,11 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
   }
 
   const balanceData = data.balance;
+  const unrealizedPnL = balanceData.equity - balanceData.totalBalance;
+  const unrealizedFootnote =
+    Math.abs(unrealizedPnL) >= 0.01
+      ? `${unrealizedPnL >= 0 ? '+' : ''}${formatPrice(unrealizedPnL)} unrealized`
+      : undefined;
 
   if (balanceData.isInitialized === false) {
     return (
@@ -97,14 +102,15 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
         <MetricCard
           title="Equity"
           value={formatPrice(balanceData.equity)}
-          change={
-            balanceData.totalBalance > 0
-              ? ((balanceData.equity - balanceData.totalBalance) / balanceData.totalBalance) * 100
-              : 0
-          }
-          changeLabel="vs balance"
+          footnote={unrealizedFootnote}
           icon={<TrendingUp className="w-4 h-4" />}
-          trend={balanceData.equity >= balanceData.totalBalance ? 'up' : 'down'}
+          trend={
+            unrealizedFootnote
+              ? unrealizedPnL >= 0
+                ? 'up'
+                : 'down'
+              : 'neutral'
+          }
           size="sm"
           nested
         />

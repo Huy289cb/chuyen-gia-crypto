@@ -11,15 +11,12 @@ import {
   updateTestnetAccountStats,
   updateTestnetPosition,
 } from '../repositories/testnet.repository';
+import { calculateUnrealizedPnl, isLongSide } from './position-mark';
 
 export interface RealtimeCandle {
   price: number;
   high: number;
   low: number;
-}
-
-function isLong(side: string): boolean {
-  return side.toLowerCase() === 'long' || side.toLowerCase() === 'buy';
 }
 
 function shouldTriggerPendingOrder(
@@ -28,16 +25,11 @@ function shouldTriggerPendingOrder(
   currentPrice: number,
   candle: RealtimeCandle
 ): boolean {
-  if (isLong(side)) {
+  if (isLongSide(side)) {
     return candle.low <= entryPrice || currentPrice <= entryPrice;
   }
 
   return candle.high >= entryPrice || currentPrice >= entryPrice;
-}
-
-function calculatePnl(side: string, entryPrice: number, closePrice: number, sizeQty: number): number {
-  const raw = (closePrice - entryPrice) * sizeQty;
-  return isLong(side) ? raw : -raw;
 }
 
 async function executeTriggeredPendingOrders(symbol: string, candle: RealtimeCandle): Promise<void> {
@@ -83,7 +75,12 @@ async function executeTriggeredPendingOrders(symbol: string, candle: RealtimeCan
 async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promise<void> {
   const openPositions = await getTestnetPositions({ symbol, status: 'open' });
   for (const position of openPositions) {
-    const unrealizedPnl = calculatePnl(position.side, position.entry_price, candle.price, position.size_qty);
+    const unrealizedPnl = calculateUnrealizedPnl(
+      position.side,
+      position.entry_price,
+      candle.price,
+      position.size_qty
+    );
     const rrDenominator = position.risk_usd || 1;
 
     await updateTestnetPosition(position.position_id, {
@@ -91,15 +88,24 @@ async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promis
       unrealized_pnl: unrealizedPnl,
     });
 
-    const slHit = isLong(position.side) ? candle.low <= position.stop_loss : candle.high >= position.stop_loss;
-    const tpHit = isLong(position.side) ? candle.high >= position.take_profit : candle.low <= position.take_profit;
+    const slHit = isLongSide(position.side)
+      ? candle.low <= position.stop_loss
+      : candle.high >= position.stop_loss;
+    const tpHit = isLongSide(position.side)
+      ? candle.high >= position.take_profit
+      : candle.low <= position.take_profit;
     if (!slHit && !tpHit) {
       continue;
     }
 
     const closeReason = slHit ? 'stop_loss' : 'take_profit';
     const closePrice = slHit ? position.stop_loss : position.take_profit;
-    const realizedPnl = calculatePnl(position.side, position.entry_price, closePrice, position.size_qty);
+    const realizedPnl = calculateUnrealizedPnl(
+      position.side,
+      position.entry_price,
+      closePrice,
+      position.size_qty
+    );
 
     await closeTestnetPosition(position.position_id, closePrice, closeReason);
     await updateTestnetPosition(position.position_id, {
@@ -127,12 +133,9 @@ async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promis
 }
 
 export async function syncTestnetForSymbol(symbol: string, candle: RealtimeCandle): Promise<void> {
-  // Disable local execution when Binance integration is enabled
-  // Binance becomes the execution authority; local execution causes duplicate fills and state divergence
-  if (process.env.BINANCE_ENABLED === 'true') {
-    return;
+  // Binance handles order execution when enabled; still refresh mark/PnL on open positions.
+  if (process.env.BINANCE_ENABLED !== 'true') {
+    await executeTriggeredPendingOrders(symbol, candle);
   }
-  
-  await executeTriggeredPendingOrders(symbol, candle);
   await syncOpenPositions(symbol, candle);
 }
