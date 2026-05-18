@@ -5,7 +5,12 @@ import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
 import { getCandles } from '../services/candle.service';
-import { signalGateService } from '../services/signal-gate.service';
+import { signalGateService, type SignalGateOutput } from '../services/signal-gate.service';
+import {
+  V3_LLM_DISPATCH_CRON,
+  V3_MARKET_SCAN_CRON,
+  V3_SIGNAL_GATE_TIMEFRAMES,
+} from '../config/v3-schedulers';
 
 const router = Router();
 
@@ -25,18 +30,52 @@ function inferSchedulerStatus(last: Date | null, staleAfterMs: number): string {
   return Date.now() - last.getTime() < staleAfterMs ? 'running' : 'idle';
 }
 
-/** Rough next-fire hint for star-slash-N minute step crons (matches worker v3). */
+/** Rough next-fire hint for step or comma-minute crons (matches worker v3). */
 function estimateNextCronHint(last: Date | null, cronExpr: string): string {
   if (!last) return '—';
   const part = cronExpr.trim().split(/\s+/)[0] || '';
-  const m = part.match(/^\*\/(\d+)$/);
-  if (!m) return '—';
-  const stepMs = parseInt(m[1], 10) * 60_000;
-  const elapsed = Date.now() - last.getTime();
-  const until = Math.max(0, stepMs - (elapsed % stepMs || stepMs));
-  const untilMin = Math.ceil(until / 60_000);
-  if (untilMin <= 1) return 'within 1 min';
-  return `~${untilMin} min`;
+  const stepMatch = part.match(/^\*\/(\d+)$/);
+  if (stepMatch) {
+    const stepMs = parseInt(stepMatch[1], 10) * 60_000;
+    const elapsed = Date.now() - last.getTime();
+    const until = Math.max(0, stepMs - (elapsed % stepMs || stepMs));
+    const untilMin = Math.ceil(until / 60_000);
+    if (untilMin <= 1) return 'within 1 min';
+    return `~${untilMin} min`;
+  }
+
+  const minutes = part
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => !Number.isNaN(n));
+  if (minutes.length > 0) {
+    const now = new Date();
+    const currentMin = now.getUTCMinutes();
+    const sorted = [...minutes].sort((a, b) => a - b);
+    const nextInHour = sorted.find((m) => m > currentMin);
+    const minsUntil =
+      nextInHour !== undefined ? nextInHour - currentMin : 60 - currentMin + sorted[0];
+    if (minsUntil <= 1) return 'within 1 min';
+    return `~${minsUntil} min`;
+  }
+
+  return '—';
+}
+
+const GRADE_RANK: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+const TF_RANK: Record<string, number> = { '15m': 0, '1h': 1, '4h': 2 };
+
+function compareSignalGateEvaluations(
+  a: { timeframe: string; result: SignalGateOutput },
+  b: { timeframe: string; result: SignalGateOutput }
+): number {
+  if (a.result.pass !== b.result.pass) return a.result.pass ? -1 : 1;
+  const ga = GRADE_RANK[a.result.setupResult.grade] ?? 9;
+  const gb = GRADE_RANK[b.result.setupResult.grade] ?? 9;
+  if (ga !== gb) return ga - gb;
+  const confDiff = b.result.setupResult.confidence - a.result.setupResult.confidence;
+  if (confDiff !== 0) return confDiff;
+  return (TF_RANK[a.timeframe] ?? 9) - (TF_RANK[b.timeframe] ?? 9);
 }
 
 function toReasonCodes(reason: string | null | undefined): string[] {
@@ -153,8 +192,8 @@ router.get('/system', async (_req: Request, res: Response) => {
  */
 router.get('/schedulers', async (_req: Request, res: Response) => {
   try {
-    const MARKET_CRON = '*/5 * * * *';
-    const LLM_CRON = '*/15 * * * *';
+    const MARKET_CRON = V3_MARKET_SCAN_CRON;
+    const LLM_CRON = V3_LLM_DISPATCH_CRON;
     const POS_CRON = '*/1 * * * *';
 
     const [lastBtcCandle, lastKimDecision, lastTradeEvent, lastOpenPosTouch] = await Promise.all([
@@ -315,19 +354,36 @@ router.get('/warmup', async (_req: Request, res: Response) => {
 });
 
 async function buildLiveSignalGateView(symbol: string) {
-  const timeframe = '4h';
-  const { candles } = await getCandles({ symbol, timeframe, limit: 100 });
-  if (candles.length < 50) return null;
+  const evaluations: Array<{ timeframe: string; result: SignalGateOutput }> = [];
 
-  const result = await signalGateService.evaluate({ candles, symbol, timeframe });
+  await Promise.all(
+    V3_SIGNAL_GATE_TIMEFRAMES.map(async (timeframe) => {
+      const { candles } = await getCandles({ symbol, timeframe, limit: 100 });
+      if (candles.length < 50) return;
+      const result = await signalGateService.evaluate({ candles, symbol, timeframe });
+      evaluations.push({ timeframe, result });
+    })
+  );
+
+  if (evaluations.length === 0) return null;
+
+  const best = [...evaluations].sort(compareSignalGateEvaluations)[0];
+  const { timeframe, result } = best;
+
+  const reasonCodes = [result.reason];
+  if (evaluations.length > 1) {
+    reasonCodes.push(`Evaluated: ${evaluations.map((e) => e.timeframe).join(', ')} (best: ${timeframe})`);
+  }
+
   return {
     id: 'live',
+    timeframe,
     grade: result.setupResult.grade,
     confidence: result.setupResult.confidence,
     playbook: result.setupResult.playbookKey || 'unknown',
     regime: result.setupResult.regime,
     pass: result.pass,
-    reasonCodes: [result.reason],
+    reasonCodes,
     timestamp: new Date().toISOString(),
   };
 }

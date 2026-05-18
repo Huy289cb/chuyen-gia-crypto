@@ -246,9 +246,11 @@ export function computeDecisionFlow(
           : 'Awaiting signal gate evaluation',
       timestamp: signal?.timestamp,
       metric:
-        signal?.confidence != null
-          ? `${signal.confidence <= 1 ? Math.round(signal.confidence * 100) : Math.round(signal.confidence)}% conf`
-          : undefined,
+        signal?.timeframe && signal?.grade
+          ? `${signal.timeframe} · ${signal.grade}`
+          : signal?.confidence != null
+            ? `${signal.confidence <= 1 ? Math.round(signal.confidence * 100) : Math.round(signal.confidence)}% conf`
+            : undefined,
     },
     {
       id: 'riskApproved',

@@ -63,7 +63,7 @@ const copy = {
       subtitle: 'Chỉ worker leader mới chạy scheduler (PostgreSQL advisory lock)',
       rows: [
         { name: 'MarketScan', cron: '*/5 * * * *', role: 'Lấy nến Binance, chạy Signal Gate, cache kết quả cho LLM.' },
-        { name: 'LLMDispatch', cron: '*/15 * * * *', role: 'Đọc cache scan; chỉ gọi Groq nếu PASS và không duplicate.' },
+        { name: 'LLMDispatch', cron: '2,17,32,47 * * * *', role: 'Chạy +2 phút sau MarketScan; chỉ gọi Groq nếu PASS.' },
         { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Kiểm tra SL/TP và sức khỏe vị thế testnet.' },
         { name: 'Price sync', cron: '~30s', role: 'Cập nhật giá BTC cho chart và risk.' },
       ],
@@ -220,7 +220,7 @@ const copy = {
       subtitle: 'Only the worker leader runs schedulers (PostgreSQL advisory lock)',
       rows: [
         { name: 'MarketScan', cron: '*/5 * * * *', role: 'Fetch Binance candles, run Signal Gate, cache for LLM.' },
-        { name: 'LLMDispatch', cron: '*/15 * * * *', role: 'Read scan cache; call Groq only if PASS and not duplicate.' },
+        { name: 'LLMDispatch', cron: '2,17,32,47 * * * *', role: 'Runs +2 min after MarketScan; Groq only if PASS.' },
         { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Check testnet SL/TP and position health.' },
         { name: 'Price sync', cron: '~30s', role: 'Update BTC price for chart and risk.' },
       ],

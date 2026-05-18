@@ -67,7 +67,11 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
     <Card className={className}>
       <SectionHeader
         title="Signal Gate"
-        subtitle="Latest signal evaluation"
+        subtitle={
+          signalData.timeframe
+            ? `Best of 15m / 1h / 4h · showing ${signalData.timeframe}`
+            : 'Best of 15m / 1h / 4h'
+        }
         icon={<Signal className="w-5 h-5" />}
       />
 
@@ -108,6 +112,12 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
             <p className="text-xs text-foreground-tertiary mb-1">Regime</p>
             <p className="text-sm font-medium text-foreground">{signalData.regime}</p>
           </div>
+          {signalData.timeframe ? (
+            <div className="p-3 bg-surface-1/50 rounded-lg col-span-2">
+              <p className="text-xs text-foreground-tertiary mb-1">Source timeframe</p>
+              <p className="text-sm font-medium text-foreground">{signalData.timeframe}</p>
+            </div>
+          ) : null}
         </div>
 
         {/* Reason Codes */}

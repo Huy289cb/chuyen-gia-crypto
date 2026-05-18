@@ -88,6 +88,8 @@ export interface SignalGateView {
   regime: string;
   pass: boolean;
   reasonCodes: string[];
+  /** Timeframe that produced this view (live API picks best of 15m/1h/4h). */
+  timeframe?: string;
   timestamp?: string;
 }
 
@@ -208,6 +210,7 @@ export function mapSignal(raw: Record<string, unknown> | null | undefined): Sign
     regime: String(raw.regime ?? '—'),
     pass: Boolean(raw.pass),
     reasonCodes,
+    timeframe: raw.timeframe ? String(raw.timeframe) : undefined,
     timestamp: raw.timestamp ? String(raw.timestamp) : undefined,
   };
 }

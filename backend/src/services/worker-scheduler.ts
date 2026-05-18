@@ -14,6 +14,7 @@ import { fetchRealTimePrices } from './price-fetcher';
 // import { runKimNghiaAnalysisJob } from './kim-nghia-analysis-job';
 import { startMarketScanScheduler } from '../schedulers/market-scan.scheduler';
 import { startLLMDispatchScheduler } from '../schedulers/llm-dispatch.scheduler';
+import { V3_LLM_DISPATCH_CRON, V3_MARKET_SCAN_CRON } from '../config/v3-schedulers';
 import { startPositionMonitorScheduler } from '../schedulers/position-monitor.scheduler';
 
 let priceSyncInterval: NodeJS.Timeout | null = null;
@@ -153,10 +154,10 @@ export async function startWorkerScheduler(): Promise<void> {
   console.log('[WorkerScheduler] Starting Big Update v3 schedulers...');
   
   // Market scan scheduler - runs every 5 minutes
-  startMarketScanScheduler('*/5 * * * *');
-  
-  // LLM dispatch scheduler - runs every 15 minutes
-  startLLMDispatchScheduler('*/15 * * * *');
+  startMarketScanScheduler(V3_MARKET_SCAN_CRON);
+
+  // LLM dispatch — offset +2 min after market scan boundaries
+  startLLMDispatchScheduler(V3_LLM_DISPATCH_CRON);
   
   // Position monitor scheduler - runs every minute
   startPositionMonitorScheduler('*/1 * * * *');

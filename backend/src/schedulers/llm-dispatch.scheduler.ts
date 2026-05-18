@@ -5,6 +5,7 @@
  */
 
 import cron, { type ScheduledTask } from 'node-cron';
+import { V3_LLM_DISPATCH_CRON } from '../config/v3-schedulers';
 import { groqDispatchService } from '../services/groq-dispatch.service';
 import { getScanResult } from './market-scan.scheduler';
 import { getMethodConfig } from '../config/methods';
@@ -128,7 +129,7 @@ async function runLLMDispatch() {
 /**
  * Start LLM dispatch scheduler
  */
-export function startLLMDispatchScheduler(cronExpression: string = '*/15 * * * *') {
+export function startLLMDispatchScheduler(cronExpression: string = V3_LLM_DISPATCH_CRON) {
   if (llmDispatchTask) {
     console.warn('[LLMDispatch] Scheduler already running');
     return;
