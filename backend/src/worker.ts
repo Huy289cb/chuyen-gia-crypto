@@ -115,6 +115,16 @@ async function startWorker() {
     console.error('[Worker] Failed to initialize default testnet account:', err.message);
   }
 
+  if (process.env.BINANCE_ENABLED === 'true') {
+    try {
+      const { initializeHedgeModeDetection } = await import('./services/binance-hedge-mode');
+      await initializeHedgeModeDetection();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[Worker] Failed to initialize Binance hedge mode:', message);
+    }
+  }
+
   // Start scheduler
   await startWorkerScheduler();
 

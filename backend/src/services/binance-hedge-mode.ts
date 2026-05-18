@@ -5,7 +5,7 @@
  * Ensures correct positionSide values are sent to avoid rejected orders
  */
 
-import { getPositionRisk } from './binanceClient';
+import { getDualSidePosition } from './binance/trading';
 
 export type PositionMode = 'ONE_WAY' | 'HEDGE';
 export type OrderIntent = 'OPEN' | 'CLOSE';
@@ -20,29 +20,16 @@ let detectionPromise: Promise<PositionMode> | null = null;
  * This is called ONCE at startup and cached
  */
 async function detectPositionModeInternal(): Promise<PositionMode> {
-  const client = {} as any; // Binance client is not needed for module functions
-
   try {
-    // Get position risk for a symbol to determine mode
-    // In hedge mode, we'll see both LONG and SHORT positions for the same symbol
-    // In one-way mode, we'll only see one position per symbol
-    const positions = await getPositionRisk(client, 'BTCUSDT');
-    
-    // Check if we have positions with positionSide set
-    const hasPositionSide = positions.some((p: any) => p.positionSide && (p.positionSide === 'LONG' || p.positionSide === 'SHORT'));
-    
-    if (hasPositionSide) {
-      detectedMode = 'HEDGE';
-      console.log('[BinanceHedgeMode] Detected HEDGE mode (dual position side)');
-    } else {
-      detectedMode = 'ONE_WAY';
-      console.log('[BinanceHedgeMode] Detected ONE_WAY mode (single position side)');
-    }
-    
+    const dualSide = await getDualSidePosition();
+    detectedMode = dualSide ? 'HEDGE' : 'ONE_WAY';
+    console.log(
+      `[BinanceHedgeMode] Detected ${detectedMode} mode (dualSidePosition=${dualSide})`
+    );
     return detectedMode;
-  } catch (error: any) {
-    console.error('[BinanceHedgeMode] Failed to detect position mode:', error.message);
-    // Default to ONE_WAY if detection fails
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[BinanceHedgeMode] Failed to detect position mode:', message);
     detectedMode = 'ONE_WAY';
     console.log('[BinanceHedgeMode] Defaulting to ONE_WAY mode due to detection failure');
     return detectedMode;

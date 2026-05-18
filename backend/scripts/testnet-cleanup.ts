@@ -85,6 +85,23 @@ async function main() {
     }
   }
 
+  const phantomStatuses = [
+    'reconciliation_failed_not_on_binance',
+    'failed_no_binance_id',
+  ];
+  const phantomPositions = await prisma.testnetPosition.findMany({
+    where: {
+      account_id: account.id,
+      status: { in: phantomStatuses },
+    },
+  });
+
+  const removedPositionIds: string[] = [];
+  for (const pos of phantomPositions) {
+    await prisma.testnetPosition.delete({ where: { position_id: pos.position_id } });
+    removedPositionIds.push(pos.position_id);
+  }
+
   const openPositionsCount = await prisma.testnetPosition.count({
     where: { account_id: account.id, status: 'open' },
   });
@@ -104,6 +121,7 @@ async function main() {
     '[TestnetCleanup] Cleanup completed:',
     JSON.stringify({
       cancelledOrderIds,
+      removedPhantomPositions: removedPositionIds,
       walletBalance: balanceSummary.walletBalance,
       equity: balanceSummary.equity,
       unrealizedPnl: balanceSummary.unrealizedPnl,

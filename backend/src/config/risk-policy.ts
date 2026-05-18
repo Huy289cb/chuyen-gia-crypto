@@ -30,6 +30,9 @@ export interface RiskPolicyConfig {
   // Position limits
   maxPositionsPerSymbol: number;
   maxTotalPositions: number;
+
+  /** Max combined USD notional: open positions + pending limit orders */
+  maxTotalExposureUsd: number;
 }
 
 export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
@@ -45,7 +48,8 @@ export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
   minSignalGrade: 'A',
   minSignalConfidence: 0.75,
   maxPositionsPerSymbol: 1,
-  maxTotalPositions: 2
+  maxTotalPositions: 2,
+  maxTotalExposureUsd: 2000,
 };
 
 /**
@@ -64,7 +68,12 @@ export function getRiskPolicy(): RiskPolicyConfig {
     highVolatilityThreshold: parseFloat(process.env.HIGH_VOLATILITY_THRESHOLD || '1.0'),
     minSignalGrade: (process.env.MIN_SIGNAL_GRADE || 'A') as 'A' | 'B' | 'C' | 'D',
     minSignalConfidence: parseFloat(process.env.MIN_SIGNAL_CONFIDENCE || '0.75'),
-    maxPositionsPerSymbol: parseInt(process.env.MAX_POSITIONS_PER_SYMBOL || '1'),
-    maxTotalPositions: parseInt(process.env.MAX_TOTAL_POSITIONS || '2')
+    maxPositionsPerSymbol: parseInt(process.env.MAX_POSITIONS_PER_SYMBOL || '1', 10),
+    maxTotalPositions: parseInt(process.env.MAX_TOTAL_POSITIONS || '2', 10),
+    maxTotalExposureUsd: parseFloat(
+      process.env.MAX_TOTAL_EXPOSURE_USD ||
+        process.env.MAX_PENDING_VOLUME_USD ||
+        '2000'
+    ),
   };
 }

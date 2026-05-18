@@ -93,6 +93,14 @@ export async function setMarginType(symbol: string, marginType: string): Promise
 }
 
 /**
+ * Get current position mode (dual side = hedge mode)
+ */
+export async function getDualSidePosition(): Promise<boolean> {
+  const response: any = await get(endpoints.POSITION_MODE, {}, true);
+  return response.dualSidePosition === true || response.dualSidePosition === 'true';
+}
+
+/**
  * Set position mode (dual position side)
  * @param {boolean} dual - True for dual position side, false for hedge mode disabled
  * @returns {Promise<object>} Response data

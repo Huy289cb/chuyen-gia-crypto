@@ -8,6 +8,7 @@ import { createGroqClient, GroqAnalysis } from './groq-client';
 import { memoryService, MemoryContext } from './memory.service';
 import { signalGateService, type SignalGateOutput } from './signal-gate.service';
 import { riskManagerService } from './risk-manager.service';
+import { getOrCreateTestnetAccount } from '../repositories/testnet.repository';
 import type { UnifiedCandle } from './candle.service';
 
 export interface GroqDispatchInput {
@@ -154,6 +155,11 @@ export class GroqDispatchService {
 
     // Step 5: Risk Check before allowing trade
     if (this.config.enableRiskCheck && analysis.action !== 'hold') {
+      const account = await getOrCreateTestnetAccount(symbol, method_id, 10000);
+      const accountBalance = Number(
+        account.current_balance ?? account.equity ?? account.starting_balance ?? 10000
+      );
+
       const riskCheck = riskManagerService.canOpenTrade({
         symbol,
         grade: 'A', // Assume A-grade since we passed signal gate
@@ -161,7 +167,7 @@ export class GroqDispatchService {
         entryPrice: analysis.suggested_entry || 0,
         stopLoss: analysis.suggested_stop_loss || 0,
         takeProfit: analysis.suggested_take_profit || 0,
-        accountBalance: 100 // Default, should be passed from actual account
+        accountBalance,
       });
 
       if (!riskCheck.allowed) {

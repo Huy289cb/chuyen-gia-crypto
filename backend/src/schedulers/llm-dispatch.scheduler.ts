@@ -7,12 +7,57 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { V3_LLM_DISPATCH_CRON } from '../config/v3-schedulers';
 import { groqDispatchService } from '../services/groq-dispatch.service';
-import { getScanResult } from './market-scan.scheduler';
+import { getScanResult, type MarketScanResult } from './market-scan.scheduler';
 import { getMethodConfig } from '../config/methods';
-import { getOrCreateTestnetAccount, createTestnetPosition } from '../repositories/testnet.repository';
+import { executeV3Trade } from '../services/v3-trade-execution.service';
+import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
+
+const V3_TIMEFRAMES = ['15m', '1h', '4h'] as const;
+
+function pickBestScanResult(
+  symbol: string
+): { timeframe: string; scanResult: MarketScanResult } | null {
+  const candidates: Array<{ timeframe: string; scanResult: MarketScanResult }> = [];
+
+  for (const timeframe of V3_TIMEFRAMES) {
+    const scanResult = getScanResult(symbol, timeframe);
+    if (!scanResult) continue;
+
+    const { signalResult } = scanResult;
+    if (signalResult.isDuplicate) {
+      console.log(`[LLMDispatch] ${symbol} ${timeframe}: Duplicate candle state, skipping`);
+      continue;
+    }
+    if (!signalResult.pass) {
+      console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate blocked, skipping`);
+      continue;
+    }
+    if (!signalResult.shouldCallGroq) {
+      console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate skip (no Groq), skipping`);
+      continue;
+    }
+    candidates.push({ timeframe, scanResult });
+  }
+
+  if (candidates.length === 0) return null;
+
+  const sorted = [...candidates].sort((a, b) =>
+    compareSignalGateEvaluations(
+      { timeframe: a.timeframe, result: a.scanResult.signalResult },
+      { timeframe: b.timeframe, result: b.scanResult.signalResult }
+    )
+  );
+  const best = sorted[0];
+  if (candidates.length > 1) {
+    console.log(
+      `[LLMDispatch] ${symbol}: best of [${candidates.map((c) => c.timeframe).join(', ')}] → ${best.timeframe}`
+    );
+  }
+  return best;
+}
 
 /**
  * Run LLM dispatch for valid signals
@@ -27,93 +72,49 @@ async function runLLMDispatch() {
   try {
     console.log('[LLMDispatch] Starting LLM dispatch');
 
-    // Get scan results
-    const symbols = ['BTC']; // BTC-only per Big Update Plan v3
-    const timeframes = ['15m', '1h', '4h'];
+    const symbols = ['BTC'];
 
     for (const symbol of symbols) {
-      for (const timeframe of timeframes) {
-        const scanResult = getScanResult(symbol, timeframe);
-        
-        if (!scanResult) {
-          continue;
-        }
+      const picked = pickBestScanResult(symbol);
+      if (!picked) {
+        continue;
+      }
 
-        const { signalResult } = scanResult;
+      const { timeframe, scanResult } = picked;
+      const methodConfig = getMethodConfig('kim_nghia');
 
-        if (signalResult.isDuplicate) {
-          console.log(`[LLMDispatch] ${symbol} ${timeframe}: Duplicate candle state, skipping`);
-          continue;
-        }
+      const dispatchResult = await groqDispatchService.dispatch({
+        symbol,
+        timeframe,
+        candles: scanResult.candles,
+        systemPrompt: methodConfig.systemPrompt,
+        method_id: 'kim_nghia',
+        signalResult: scanResult.signalResult,
+      });
 
-        if (!signalResult.pass) {
-          console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate blocked, skipping`);
-          continue;
-        }
+      console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);
 
-        if (!signalResult.shouldCallGroq) {
-          console.log(`[LLMDispatch] ${symbol} ${timeframe}: Signal gate skip (no Groq), continuing`);
-          continue;
-        }
+      if (dispatchResult.decision === 'trade' && dispatchResult.analysis) {
+        console.log(`[LLMDispatch] Trade signal received for ${symbol} ${timeframe}`);
+        console.log(
+          `[LLMDispatch] Action: ${dispatchResult.analysis.action}, Bias: ${dispatchResult.analysis.bias}, ` +
+            `Confidence: ${((dispatchResult.analysis.confidence ?? 0) * 100).toFixed(0)}%`
+        );
 
-        // Get method config for prompt
-        const methodConfig = getMethodConfig('kim_nghia'); // Use active method
-        
-        // Dispatch to Groq
-        const dispatchResult = await groqDispatchService.dispatch({
+        const execResult = await executeV3Trade({
           symbol,
           timeframe,
-          candles: scanResult.candles,
-          systemPrompt: methodConfig.systemPrompt,
-          method_id: 'kim_nghia',
-          signalResult: scanResult.signalResult,
+          analysis: dispatchResult.analysis,
+          methodId: 'kim_nghia',
         });
 
-        console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);
-
-        // If trade decision, execute trade logic by creating a position
-        if (dispatchResult.decision === 'trade' && dispatchResult.analysis) {
-          console.log(`[LLMDispatch] Trade signal received for ${symbol} ${timeframe}`);
-          console.log(`[LLMDispatch] Action: ${dispatchResult.analysis.action}, Bias: ${dispatchResult.analysis.bias}, Confidence: ${(dispatchResult.analysis.confidence * 100).toFixed(0)}%`);
-          
-          if (dispatchResult.analysis.suggested_entry) {
-            console.log(`[LLMDispatch] Entry: ${dispatchResult.analysis.suggested_entry}, SL: ${dispatchResult.analysis.suggested_stop_loss}, TP: ${dispatchResult.analysis.suggested_take_profit}`);
-            
-            try {
-              // Ensure account exists
-              const account = await getOrCreateTestnetAccount(symbol, 'kim_nghia', 10000);
-              
-              const entryPrice = dispatchResult.analysis.suggested_entry;
-              const stopLoss = dispatchResult.analysis.suggested_stop_loss || (entryPrice * 0.99);
-              const takeProfit = dispatchResult.analysis.suggested_take_profit || (entryPrice * 1.02);
-              const side = dispatchResult.analysis.action === 'buy' ? 'LONG' : 'SHORT';
-              
-              // Calculate fixed $100 size for now
-              const sizeUsd = 100;
-              const sizeQty = sizeUsd / entryPrice;
-              const expectedRr = Math.abs(takeProfit - entryPrice) / Math.abs(entryPrice - stopLoss);
-              
-              await createTestnetPosition({
-                positionId: `pos_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-                accountId: account.id,
-                symbol: symbol,
-                side: side,
-                entryPrice: entryPrice,
-                stopLoss: stopLoss,
-                takeProfit: takeProfit,
-                sizeUsd: sizeUsd,
-                sizeQty: sizeQty,
-                riskUsd: sizeUsd * 0.1, // 10% risk
-                riskPercent: 1.0,
-                expectedRr: expectedRr,
-                linkedPredictionId: undefined
-              });
-              
-              console.log(`[LLMDispatch] Successfully created testnet position for ${symbol}`);
-            } catch (tradeErr: any) {
-              console.error(`[LLMDispatch] Failed to create testnet position:`, tradeErr.message);
-            }
-          }
+        if (execResult.success) {
+          console.log(
+            `[LLMDispatch] Binance pending order ${execResult.orderId} ` +
+              `(binance=${execResult.binanceOrderId}) for ${symbol}`
+          );
+        } else {
+          console.warn(`[LLMDispatch] Trade execution skipped: ${execResult.reason}`);
         }
       }
     }
@@ -137,7 +138,7 @@ export function startLLMDispatchScheduler(cronExpression: string = V3_LLM_DISPAT
 
   console.log(`[LLMDispatch] Starting scheduler with cron: ${cronExpression}`);
   llmDispatchTask = cron.schedule(cronExpression, runLLMDispatch);
-  
+
   // Don't run immediately - wait for market scan to populate data
 }
 
