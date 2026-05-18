@@ -55,9 +55,9 @@ export function NoTradeReasonsPanel({ className }: NoTradeReasonsPanelProps) {
         {noTradeReasons.map((item) => (
           <div 
             key={item.reason}
-            className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg"
+            className="flex items-center justify-between gap-3 p-3 bg-surface-1/50 rounded-lg"
           >
-            <span className="text-sm text-foreground-secondary">{item.reason}</span>
+            <span className="text-sm text-foreground-secondary min-w-0 truncate">{item.reason}</span>
             <ReasonChip 
               label={item.count > 0 ? `${item.count} blocks` : 'No blocks'} 
               count={item.count}

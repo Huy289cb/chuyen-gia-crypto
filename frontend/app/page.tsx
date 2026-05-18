@@ -66,11 +66,11 @@ function DashboardPage() {
         lastDashboardUpdate={lastDashboardUpdate}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden">
         <DecisionFlowPanel className="mb-6" />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             <SystemOverview />
             <SchedulerStatusPanel />
             <CandleWarmupPanel />
@@ -80,12 +80,12 @@ function DashboardPage() {
             <NoTradeReasonsPanel />
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             <MarketChartPanel symbol="BTC" method="kim_nghia" />
             <IndicatorPanel />
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             <TestnetBalancePanel />
             <div id="open-positions">
               <OpenPositionsPanel />

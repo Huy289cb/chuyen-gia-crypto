@@ -92,6 +92,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           value={formatPrice(balanceData.totalBalance)}
           icon={<DollarSign className="w-4 h-4" />}
           size="sm"
+          nested
         />
         <MetricCard
           title="Equity"
@@ -105,16 +106,19 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           icon={<TrendingUp className="w-4 h-4" />}
           trend={balanceData.equity >= balanceData.totalBalance ? 'up' : 'down'}
           size="sm"
+          nested
         />
         <MetricCard
           title="Available"
           value={formatPrice(balanceData.availableBalance)}
           size="sm"
+          nested
         />
         <MetricCard
           title="Used Margin"
           value={formatPrice(balanceData.usedMargin)}
           size="sm"
+          nested
         />
       </div>
 

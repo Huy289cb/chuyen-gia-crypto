@@ -11,7 +11,7 @@ export function Card({ children, className, glow = false, padding = 'md' }: Card
   return (
     <div
       className={cn(
-        'bg-bg-secondary border border-border-default rounded-xl',
+        'bg-bg-secondary border border-border-default rounded-xl min-w-0',
         'transition-all duration-300',
         'hover:border-border-strong',
         glow && 'animate-pulse-glow',

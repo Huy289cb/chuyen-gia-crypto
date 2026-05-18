@@ -77,8 +77,8 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
 
       <div className="space-y-4">
         {/* Pass/Block Status */}
-        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-3 p-3 bg-surface-1/50 rounded-lg">
+          <div className="flex items-center gap-2 min-w-0">
             {signalData.pass ? (
               <CheckCircle className="w-5 h-5 text-success" />
             ) : (
@@ -91,6 +91,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           <StatusBadge
             status={signalData.pass ? 'trading_enabled' : 'blocked'}
             size="sm"
+            className="shrink-0"
           />
         </div>
 

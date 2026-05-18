@@ -71,12 +71,13 @@ export function SchedulerStatusPanel({ className }: SchedulerStatusPanelProps) {
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between text-xs text-foreground-tertiary">
-              <span>Cron: {scheduler.cron}</span>
+            <div className="text-xs text-foreground-tertiary">
+              <span className="text-foreground-tertiary">Cron: </span>
+              <span className="font-mono break-all">{scheduler.cron}</span>
             </div>
-            <div className="flex items-center justify-between text-xs text-foreground-tertiary">
-              <span>Last: {scheduler.lastRun}</span>
-              <span>Next: {scheduler.nextRun}</span>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs text-foreground-tertiary">
+              <span className="truncate">Last: {scheduler.lastRun}</span>
+              <span className="truncate sm:text-right">Next: {scheduler.nextRun}</span>
             </div>
           </div>
         ))}

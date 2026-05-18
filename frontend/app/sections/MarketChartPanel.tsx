@@ -6,6 +6,7 @@ import { TimeframeSwitcher } from '../components/TimeframeSwitcher';
 import { ChartToolbar } from '../components/ChartToolbar';
 import { PriceChart } from '../components/crypto/PriceChart';
 import { TrendingUp } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useMarketData } from '../hooks/useMarketData';
 import { normalizeChartCandles } from '../lib/chartCandles';
 import type { Prediction, Analysis } from '@/app/types';
@@ -44,20 +45,20 @@ export function MarketChartPanel({
   const chartData: ChartDataPoint[] = normalizeChartCandles(marketData?.candles || []);
 
   return (
-    <Card className={className}>
-      <div className="flex items-center justify-between mb-4">
-        <SectionHeader
-          title="Market Chart"
-          subtitle={`${symbol} ${timeframe}`}
-          icon={<TrendingUp className="w-5 h-5" />}
-        />
-        <div className="flex items-center gap-3">
-          <TimeframeSwitcher value={timeframe} onChange={setTimeframe} />
-          <ChartToolbar onRefresh={handleRefresh} isRefreshing={loading} />
-        </div>
-      </div>
+    <Card className={cn('min-w-0', className)}>
+      <SectionHeader
+        title="Market Chart"
+        subtitle={`${symbol} ${timeframe}`}
+        icon={<TrendingUp className="w-5 h-5" />}
+        action={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <TimeframeSwitcher value={timeframe} onChange={setTimeframe} />
+            <ChartToolbar onRefresh={handleRefresh} isRefreshing={loading} />
+          </div>
+        }
+      />
 
-      <div className="h-[300px]">
+      <div className="h-[300px] min-w-0">
         {loading ? (
           <div className="flex items-center justify-center h-full text-foreground-secondary">
             Loading chart data...

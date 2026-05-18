@@ -100,10 +100,10 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
 
         <div className="p-3 bg-surface-1/50 rounded-lg">
           <p className="text-xs text-foreground-tertiary mb-1">Today&apos;s drawdown (realized vs day open)</p>
-          <p className="text-sm font-mono text-foreground">
+          <p className="text-sm font-mono text-foreground break-words leading-relaxed">
             {formatPrice(riskData.dailyLossCurrent ?? 0)} / {formatPrice(riskData.dailyLossCap)}
             {typeof riskData.dailyLossLimitPercent === 'number' && (
-              <span className="text-foreground-tertiary text-xs ml-2">
+              <span className="text-foreground-tertiary text-xs block sm:inline sm:ml-2 mt-0.5 sm:mt-0">
                 ({riskData.dailyLossLimitPercent}% of balance cap)
               </span>
             )}

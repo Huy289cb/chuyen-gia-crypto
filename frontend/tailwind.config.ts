@@ -19,6 +19,14 @@ const config: Config = {
           secondary: "var(--bg-secondary)",
           tertiary: "var(--bg-tertiary)",
         },
+        /** Matches utility classes used across panels: bg-bg-primary, bg-bg-secondary */
+        bg: {
+          primary: "var(--bg-primary)",
+          secondary: "var(--bg-secondary)",
+          tertiary: "var(--bg-tertiary)",
+        },
+        /** Matches border-border-default used on cards and dividers */
+        "border-default": "var(--border-default)",
         surface: {
           1: "var(--surface-1)",
           2: "var(--surface-2)",

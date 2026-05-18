@@ -50,7 +50,7 @@ export function EventLogFeed({ className, module }: EventLogFeedProps) {
         icon={<ScrollText className="w-5 h-5" />}
       />
 
-      <div className="space-y-2 max-h-[400px] overflow-y-auto">
+      <div className="space-y-2.5 max-h-[400px] overflow-y-auto overflow-x-hidden">
         {events.length === 0 ? (
           <div className="p-4 text-sm text-foreground-tertiary text-center">
             No events available

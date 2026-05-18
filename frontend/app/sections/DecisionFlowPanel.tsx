@@ -237,7 +237,8 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
           )}
         </div>
 
-        <ol className="flex flex-col lg:flex-row lg:items-start lg:gap-0 gap-0">
+        <div className="overflow-x-auto -mx-1 px-1 pb-1">
+        <ol className="flex flex-col lg:flex-row lg:items-start lg:gap-0 gap-0 lg:min-w-max">
           {flow.stages.map((stage, index) => (
             <PipelineStep
               key={stage.id}
@@ -246,6 +247,7 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
             />
           ))}
         </ol>
+        </div>
 
         <div className="pt-3 border-t border-border-default">
           <p className="text-xs text-foreground-tertiary uppercase tracking-wide mb-2">
