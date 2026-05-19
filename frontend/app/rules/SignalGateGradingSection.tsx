@@ -94,7 +94,7 @@ const copy = {
         title: 'Ví dụ env production',
         rows: [
           ['MIN_SIGNAL_GRADE', 'B → cần grade A hoặc B'],
-          ['MIN_SIGNAL_CONFIDENCE', '0.8 → B (conf 0.70) vẫn BLOCK; thường cần A (0.85)'],
+          ['MIN_SIGNAL_CONFIDENCE', '0.7 → cho phép B (0.70) và A (0.85)'],
         ],
       },
     },
@@ -190,7 +190,7 @@ const copy = {
         title: 'Example production env',
         rows: [
           ['MIN_SIGNAL_GRADE', 'B → needs grade A or B'],
-          ['MIN_SIGNAL_CONFIDENCE', '0.8 → B (conf 0.70) still BLOCK; usually need A (0.85)'],
+          ['MIN_SIGNAL_CONFIDENCE', '0.7 → allows B (0.70) and A (0.85)'],
         ],
       },
     },

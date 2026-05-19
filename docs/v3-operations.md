@@ -42,7 +42,7 @@ Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/schedul
 See `backend/.env.example`:
 
 - `MIN_SIGNAL_GRADE` — `A` \| `B` \| `C` \| `D` (gate minimum)
-- `MIN_SIGNAL_CONFIDENCE` — 0–1
+- `MIN_SIGNAL_CONFIDENCE` — 0–1 (production: `0.7` with `MIN_SIGNAL_GRADE=B` so grade B at conf 0.70 can pass)
 - `MAX_POSITIONS_PER_SYMBOL`, `MAX_TOTAL_EXPOSURE_USD`
 - `BINANCE_ENABLED=true` for real testnet orders
 - Safety: do **not** set `DISABLE_SIGNAL_GATE`, `DISABLE_RISK_CHECK`, `DISABLE_MEMORY_LAYER`
