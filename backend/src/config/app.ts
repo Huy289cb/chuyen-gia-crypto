@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { validateTelegramConfig } from './telegram';
 
 /**
  * Application Configuration
@@ -97,6 +98,8 @@ export function validateAppConfig(): void {
   if (errors.length > 0) {
     throw new Error(`Invalid configuration: ${errors.join(', ')}`);
   }
+
+  validateTelegramConfig();
 }
 
 /**

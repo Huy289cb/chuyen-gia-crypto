@@ -70,6 +70,18 @@ export class MemoryService {
     }
   }
 
+  /** After LLM approved trade but Binance/order path failed */
+  async recordExecutionBlocked(
+    decisionId: number,
+    _symbol: string,
+    summaryLine: string,
+    blockReason: string
+  ): Promise<void> {
+    const reason = `${summaryLine} | Execution blocked: ${blockReason}`;
+    await MemoryRepository.updateTradeDecisionReason(decisionId, reason);
+    console.log(`[MemoryService] Execution blocked for decision ${decisionId}: ${blockReason}`);
+  }
+
   /**
    * Store a trade outcome
    */

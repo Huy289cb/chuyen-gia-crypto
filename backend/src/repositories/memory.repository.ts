@@ -57,6 +57,13 @@ export async function storeTradeDecision(input: TradeDecisionInput) {
   });
 }
 
+export async function updateTradeDecisionReason(id: number, reason: string) {
+  return await prisma.tradeDecision.update({
+    where: { id },
+    data: { reason },
+  });
+}
+
 /**
  * Store a trade outcome
  */

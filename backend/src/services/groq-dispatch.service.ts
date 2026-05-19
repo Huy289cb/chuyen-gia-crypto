@@ -28,6 +28,8 @@ export interface GroqDispatchOutput {
   analysis?: GroqAnalysis;
   reason: string;
   memory_context?: MemoryContext;
+  /** DB row id when memory stored the decision */
+  decisionRecordId?: number;
 }
 
 export interface GroqDispatchConfig {
@@ -226,29 +228,37 @@ export class GroqDispatchService {
     }
 
     // Step 6: Store decision
+    let decisionRecordId: number | undefined;
+    const isTrade = analysis.action !== 'hold';
+    const llmSummary = isTrade
+      ? `LLM: ${analysis.action} · conf ${((analysis.confidence ?? 0) * 100).toFixed(0)}% · entry ${analysis.suggested_entry ?? '—'}`
+      : analysis.reason_summary || 'LLM: hold / no trade';
+
     if (this.config.enableMemory) {
-      await memoryService.storeDecision({
+      const row = await memoryService.storeDecision({
         symbol,
         timeframe,
         playbook_key: 'unknown',
         grade: 'A',
         confidence: analysis.confidence || 0,
         regime: 'unknown',
-        decision: analysis.action === 'hold' ? 'no_trade' : 'trade',
-        reason: analysis.reason_summary || 'LLM decision',
+        decision: isTrade ? 'trade' : 'no_trade',
+        reason: llmSummary,
         entry_price: analysis.suggested_entry,
         stop_loss: analysis.suggested_stop_loss,
         take_profit: analysis.suggested_take_profit,
         expected_rr: analysis.expected_rr,
         method_id
       });
+      decisionRecordId = row?.id;
     }
 
     return {
-      decision: analysis.action === 'hold' ? 'no_trade' : 'trade',
+      decision: isTrade ? 'trade' : 'no_trade',
       analysis,
       reason: analysis.reason_summary || 'LLM approved trade',
-      memory_context: memoryContext
+      memory_context: memoryContext,
+      decisionRecordId,
     };
   }
 

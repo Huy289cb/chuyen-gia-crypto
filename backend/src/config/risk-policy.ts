@@ -33,6 +33,9 @@ export interface RiskPolicyConfig {
 
   /** Max combined USD notional: open positions + pending limit orders */
   maxTotalExposureUsd: number;
+
+  /** Min |entry − SL| / entry before placing order (e.g. 0.005 = 0.5%) */
+  minSlDistancePercent: number;
 }
 
 export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
@@ -50,6 +53,7 @@ export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
   maxPositionsPerSymbol: 1,
   maxTotalPositions: 2,
   maxTotalExposureUsd: 2000,
+  minSlDistancePercent: 0.005,
 };
 
 /**
@@ -75,5 +79,6 @@ export function getRiskPolicy(): RiskPolicyConfig {
         process.env.MAX_PENDING_VOLUME_USD ||
         '2000'
     ),
+    minSlDistancePercent: parseFloat(process.env.MIN_SL_DISTANCE_PERCENT || '0.005'),
   };
 }

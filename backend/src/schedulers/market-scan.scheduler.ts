@@ -9,6 +9,10 @@ import { getCandles } from '../services/candle.service';
 import { signalGateService, type SignalGateOutput } from '../services/signal-gate.service';
 import type { UnifiedCandle } from '../services/candle.service';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
+import {
+  hookSignalGateBlock,
+  hookSignalGatePass,
+} from '../services/telegram/telegram-hooks';
 
 let marketScanTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -79,6 +83,16 @@ async function runMarketScan() {
         console.log(
           `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
         );
+
+        if (signalResult.pass && signalResult.shouldCallGroq && !signalResult.isDuplicate) {
+          hookSignalGatePass(
+            symbol,
+            timeframe,
+            signalResult.setupResult.grade || '?'
+          );
+        } else if (!signalResult.pass && !signalResult.isDuplicate) {
+          hookSignalGateBlock(symbol, timeframe, signalResult.reason);
+        }
       })
     );
 

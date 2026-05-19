@@ -81,4 +81,26 @@ Template: `backend/deploy/nginx.conf` or `deploy/nginx.conf`
 
 `[MarketScan] Previous scan still running, skipping cycle` — **warning** when a 5-minute cron fires while the previous scan (~60s after restart) is still running. Safe to ignore unless it happens every cycle (scan slower than 5 minutes).
 
+## Telegram bot (optional)
+
+Plan: `docs/plan/telegram-bot-notifications.md`
+
+1. Create bot via [@BotFather](https://t.me/BotFather), copy token.
+2. Message the bot, then read `chat_id` from `getUpdates` or [@userinfobot](https://t.me/userinfobot).
+3. Set in `backend/.env` on **both** PM2 processes (`crypto-api` + `crypto-worker`):
+
+```bash
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_IDS=123456789
+TELEGRAM_NOTIFY_LEVEL=verbose
+TELEGRAM_DAILY_REPORT_CRON=0 21 * * *
+```
+
+- **Worker**: daily report (21:00 ICT), bot commands (`/lenh`, `/show`, …), trade hooks from schedulers.
+- **API**: WebSocket fill/close notifications when `BINANCE_ENABLED=true`.
+- PnL in Telegram uses **GMT+7** day boundary (dashboard API stays UTC).
+
+Commands: `/help`, `/lenh`, `/show`, `/pnl`, `/pipeline`, `/sukien`, `/baocao`, `/tat`, `/bat`.
+
 See also: `docs/v3-operations.md`, `docs/setup.md`, `docs/binance-testnet-integration.md`.

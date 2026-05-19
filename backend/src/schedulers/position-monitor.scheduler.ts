@@ -12,6 +12,7 @@ import {
   closePositionOnBinanceMarket,
 } from '../services/position-close.service';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
+import { hookPositionMonitorAction } from '../services/telegram/telegram-hooks';
 
 let positionMonitorTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -67,6 +68,7 @@ async function runPositionMonitor() {
       console.log(`[PositionMonitor] Reason: ${health.reason}`);
 
       if (health.recommended_action === 'exit') {
+        hookPositionMonitorAction(position.symbol, 'EXIT', health.reason);
         await closePositionOnBinanceMarket(refreshed);
         await closeLocalPosition(
           { ...refreshed, account: refreshed.account },
@@ -74,6 +76,7 @@ async function runPositionMonitor() {
           'position_monitor_exit'
         );
       } else if (health.recommended_action === 'reduce') {
+        hookPositionMonitorAction(position.symbol, 'REDUCE', health.reason);
         const totalQty = Math.abs(refreshed.size_qty);
         const reduceQty = totalQty * 0.5;
         if (reduceQty > 0) {

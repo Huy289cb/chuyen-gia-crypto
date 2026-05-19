@@ -15,6 +15,10 @@ import {
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { computeExpectedRrFromPrices } from '../utils/trade-levels';
 import { initTestnetClient, placeLimitOrder } from './binanceClient';
+import {
+  hookPendingOrderPlaced,
+  hookTradeRejected,
+} from './telegram/telegram-hooks';
 
 export interface V3TradeExecutionInput {
   symbol: string;
@@ -66,10 +70,9 @@ export async function executeV3Trade(
   const { symbol, timeframe, analysis, methodId = 'kim_nghia' } = input;
 
   if (process.env.BINANCE_ENABLED !== 'true') {
-    return {
-      success: false,
-      reason: 'BINANCE_ENABLED is not true — cannot place live testnet order',
-    };
+    const reason = 'BINANCE_ENABLED is not true — cannot place live testnet order';
+    hookTradeRejected(symbol, reason);
+    return { success: false, reason };
   }
 
   const side = normalizeSide(String(analysis.action || ''));
@@ -91,12 +94,16 @@ export async function executeV3Trade(
 
   const auto = getMethodConfig(methodId).autoEntry;
   const riskPolicy = getRiskPolicy();
+  const minSlDistancePercent =
+    riskPolicy.minSlDistancePercent > 0
+      ? riskPolicy.minSlDistancePercent
+      : auto.minSLDistancePercent;
 
   const slDistancePct = Math.abs(entry - stopLoss) / entry;
-  if (slDistancePct < auto.minSLDistancePercent) {
+  if (slDistancePct < minSlDistancePercent) {
     return {
       success: false,
-      reason: `SL distance ${(slDistancePct * 100).toFixed(2)}% below min ${(auto.minSLDistancePercent * 100).toFixed(2)}%`,
+      reason: `SL distance ${(slDistancePct * 100).toFixed(2)}% below min ${(minSlDistancePercent * 100).toFixed(2)}%`,
     };
   }
 
@@ -201,6 +208,17 @@ export async function executeV3Trade(
       ? analysis.invalidation_level
       : undefined,
     methodId,
+    binanceOrderId,
+  });
+
+  hookPendingOrderPlaced({
+    symbol: symbol.toUpperCase(),
+    side,
+    timeframe,
+    entry,
+    stopLoss,
+    takeProfit,
+    orderId,
     binanceOrderId,
   });
 

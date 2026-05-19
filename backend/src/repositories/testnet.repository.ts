@@ -392,7 +392,7 @@ export async function closeTestnetPosition(
 export async function recordTestnetTradeEvent(
   positionId: string,
   eventType: string,
-  eventData?: any
+  eventData?: Record<string, unknown>
 ): Promise<number> {
   const event = await prisma.testnetTradeEvent.create({
     data: {
@@ -402,6 +402,13 @@ export async function recordTestnetTradeEvent(
       timestamp: new Date(),
     },
   });
+
+  try {
+    const { notifyFromTradeEvent } = await import('../services/telegram/telegram-notify.service');
+    notifyFromTradeEvent(eventType, eventData ?? null, positionId);
+  } catch {
+    // Telegram optional — never block trade path
+  }
 
   return event.id;
 }

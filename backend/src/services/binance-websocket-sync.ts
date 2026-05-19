@@ -21,6 +21,7 @@ import {
   closeOpenPositionFromBinanceFill,
   syncClosedPositionsFromAccountUpdate,
 } from './position-close.service';
+import { hookBinanceWsStatus, hookPendingCancelled } from './telegram/telegram-hooks';
 
 let ws: WebSocket | null = null;
 let listenKey: string | null = null;
@@ -62,6 +63,7 @@ async function connectWebSocket(): Promise<void> {
 
   ws.on('open', () => {
     console.log('[BinanceWebSocketSync] WebSocket connected');
+    hookBinanceWsStatus('connected');
   });
 
   ws.on('message', (data: WebSocket.Data) => {
@@ -70,10 +72,12 @@ async function connectWebSocket(): Promise<void> {
 
   ws.on('error', (error: Error) => {
     console.error('[BinanceWebSocketSync] WebSocket error:', error.message);
+    hookBinanceWsStatus('error', error.message);
   });
 
   ws.on('close', () => {
     console.log('[BinanceWebSocketSync] WebSocket closed, attempting reconnect...');
+    hookBinanceWsStatus('disconnected', 'reconnecting');
     handleReconnect();
   });
 }
@@ -148,6 +152,7 @@ async function handleOrderTradeUpdate(event: any): Promise<void> {
       if (localOrder) {
         await updateTestnetPendingOrder(localOrder.order_id, { status: 'cancelled' });
         console.log(`[BinanceWebSocketSync] Local order cancelled: ${localOrder.order_id}`);
+        hookPendingCancelled(localOrder.symbol, localOrder.order_id, 'binance_canceled');
       }
       break;
 

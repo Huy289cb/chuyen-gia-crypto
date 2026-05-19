@@ -2,6 +2,9 @@ import { appConfig, isWorkerProcess } from './config/app';
 import { validateAppConfig, validateSafetyRequirements } from './config/app';
 import { disconnectPrisma } from './lib/prisma';
 import { startWorkerScheduler, stopWorkerScheduler } from './services/worker-scheduler';
+import { startTelegramBot, stopTelegramBot } from './services/telegram/telegram-bot.service';
+import { startTelegramDailyReportScheduler, stopTelegramDailyReportScheduler } from './schedulers/telegram-daily-report.scheduler';
+import { isTelegramEnabled } from './config/telegram';
 import { getOrCreateTestnetAccount } from './repositories/testnet.repository';
 import dotenv from 'dotenv';
 dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
@@ -128,6 +131,11 @@ async function startWorker() {
   // Start scheduler
   await startWorkerScheduler();
 
+  if (isTelegramEnabled()) {
+    startTelegramDailyReportScheduler();
+    startTelegramBot();
+  }
+
   // Keep the process alive
   console.log('[Worker] Worker is running. Press Ctrl+C to stop.');
 }
@@ -137,6 +145,8 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`[Worker] ${signal} received. Shutting down gracefully...`);
 
   stopWorkerScheduler();
+  stopTelegramDailyReportScheduler();
+  stopTelegramBot();
 
   // Release leader lock
   await releaseLeaderLock();

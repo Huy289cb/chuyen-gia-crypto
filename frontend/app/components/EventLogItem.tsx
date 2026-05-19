@@ -44,7 +44,9 @@ export function EventLogItem({
           </div>
           <p className="text-sm text-foreground break-words leading-relaxed">{message}</p>
           {details && (
-            <p className="text-xs text-foreground-tertiary mt-1.5 break-all leading-relaxed">{details}</p>
+            <p className="text-xs text-foreground-tertiary mt-1.5 break-words leading-relaxed whitespace-pre-line">
+              {details}
+            </p>
           )}
         </div>
       </div>

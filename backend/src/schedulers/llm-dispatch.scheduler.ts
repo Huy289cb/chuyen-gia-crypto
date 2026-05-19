@@ -10,6 +10,9 @@ import { groqDispatchService } from '../services/groq-dispatch.service';
 import { getScanResult, type MarketScanResult } from './market-scan.scheduler';
 import { getMethodConfig } from '../config/methods';
 import { executeV3Trade } from '../services/v3-trade-execution.service';
+import { hookLlmExecuteFail, hookLlmNoTrade } from '../services/telegram/telegram-hooks';
+import { memoryService } from '../services/memory.service';
+import { recordTestnetTradeEvent } from '../repositories/testnet.repository';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 
@@ -96,6 +99,10 @@ async function runLLMDispatch() {
 
       console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);
 
+      if (dispatchResult.decision === 'no_trade') {
+        hookLlmNoTrade(symbol, dispatchResult.reason);
+      }
+
       if (dispatchResult.decision === 'trade' && dispatchResult.analysis) {
         console.log(`[LLMDispatch] Trade signal received for ${symbol} ${timeframe}`);
         console.log(
@@ -117,6 +124,29 @@ async function runLLMDispatch() {
           );
         } else {
           console.warn(`[LLMDispatch] Trade execution skipped: ${execResult.reason}`);
+          hookLlmExecuteFail(symbol, execResult.reason);
+
+          const summary = `LLM: ${dispatchResult.analysis.action} · conf ${((dispatchResult.analysis.confidence ?? 0) * 100).toFixed(0)}% · entry ${dispatchResult.analysis.suggested_entry ?? '—'}`;
+          if (dispatchResult.decisionRecordId) {
+            await memoryService.recordExecutionBlocked(
+              dispatchResult.decisionRecordId,
+              symbol,
+              summary,
+              execResult.reason
+            );
+          }
+          const eventKey = dispatchResult.decisionRecordId
+            ? `decision_${dispatchResult.decisionRecordId}`
+            : `llm_${symbol}_${timeframe}`;
+          await recordTestnetTradeEvent(eventKey, 'execution_blocked', {
+            symbol,
+            timeframe,
+            reason: execResult.reason,
+            action: dispatchResult.analysis.action,
+            entry: dispatchResult.analysis.suggested_entry,
+            stop_loss: dispatchResult.analysis.suggested_stop_loss,
+            take_profit: dispatchResult.analysis.suggested_take_profit,
+          });
         }
       }
     }

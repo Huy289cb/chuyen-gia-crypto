@@ -95,6 +95,67 @@ function isSignalGateOnlyReason(reason: string): boolean {
   return r.startsWith('Signal gate:') || r.startsWith('Signal gate blocked:');
 }
 
+function parseExecutionBlockedReason(reason: string): string | null {
+  const marker = '| Execution blocked:';
+  const idx = reason.indexOf(marker);
+  if (idx >= 0) return reason.slice(idx + marker.length).trim();
+  if (reason.includes('Execution blocked:')) {
+    return reason.split('Execution blocked:').pop()?.trim() || null;
+  }
+  return null;
+}
+
+function mapTradeDecisionToEvent(d: {
+  id: number;
+  timestamp: Date;
+  symbol: string;
+  decision: string;
+  reason: string | null;
+  method_id: string;
+}) {
+  const r = d.reason || '';
+  const execBlocked = parseExecutionBlockedReason(r);
+  const isTrade = d.decision === 'trade';
+
+  let module = 'LLM';
+  if (isSignalGateOnlyReason(r)) module = 'SignalGate';
+  else if (r.startsWith('Risk engine:')) module = 'RiskEngine';
+  else if (execBlocked) module = 'Execution';
+
+  let message: string;
+  if (isTrade && execBlocked) {
+    message = `${d.symbol} — LLM TRADE, không vào lệnh`;
+  } else if (isTrade) {
+    message = `${d.symbol} — LLM TRADE (đang/đã gửi lệnh)`;
+  } else {
+    message = `${d.symbol} — NO TRADE`;
+  }
+
+  let severity: 'info' | 'warning' | 'error' = 'info';
+  if (execBlocked) severity = 'warning';
+  else if (!isTrade && (r.includes('blocked') || r.includes('invalid'))) severity = 'warning';
+
+  let details = r;
+  if (execBlocked) {
+    details = execBlocked;
+    const summary = r.split('| Execution blocked:')[0]?.trim();
+    if (summary) details = `${summary}\n→ ${execBlocked}`;
+  } else if (isTrade && r === 'LLM decision') {
+    details = 'LLM đã duyệt trade (log cũ — lý do execution chưa được ghi)';
+    severity = 'warning';
+  }
+
+  return {
+    id: `td-${d.id}`,
+    timestamp: d.timestamp.toISOString(),
+    module,
+    message,
+    severity,
+    details: details.substring(0, 500),
+    metadata: { method_id: d.method_id, decision: d.decision },
+  };
+}
+
 /**
  * GET /api/dashboard/system
  * Get system health and status summary
@@ -710,43 +771,49 @@ router.get('/events', async (req: Request, res: Response) => {
 
     const fromEvents = tradeEvents.map((event) => {
       const rawDetails = event.event_data;
-      const details =
+      let parsed: Record<string, unknown> | null = null;
+      if (typeof rawDetails === 'string' && rawDetails.startsWith('{')) {
+        try {
+          parsed = JSON.parse(rawDetails) as Record<string, unknown>;
+        } catch {
+          parsed = null;
+        }
+      }
+
+      const isExecBlocked = event.event_type === 'execution_blocked';
+      let message = event.event_type;
+      let details =
         typeof rawDetails === 'string'
           ? rawDetails.substring(0, 500)
           : rawDetails != null
             ? JSON.stringify(rawDetails).substring(0, 500)
             : '';
+
+      if (isExecBlocked) {
+        message = 'LLM TRADE — không vào lệnh';
+        const blockReason =
+          (parsed?.reason as string) ||
+          (typeof parsed === 'object' && parsed ? details : 'Execution blocked');
+        const sym = (parsed?.symbol as string) || '';
+        const tf = (parsed?.timeframe as string) || '';
+        details = [sym && tf ? `${sym} ${tf}` : sym, blockReason].filter(Boolean).join(' · ');
+      }
+
       return {
         id: `te-${event.id}`,
         timestamp: event.timestamp.toISOString(),
-        module: 'Testnet',
-        message: event.event_type,
-        severity: (event.event_type.toLowerCase().includes('error') ? 'error' : 'info') as
-          | 'info'
-          | 'warning'
-          | 'error',
+        module: isExecBlocked ? 'Execution' : 'Testnet',
+        message,
+        severity: (event.event_type.toLowerCase().includes('error')
+          ? 'error'
+          : isExecBlocked
+            ? 'warning'
+            : 'info') as 'info' | 'warning' | 'error',
         details,
       };
     });
 
-    const fromDecisions = decisions.map((d) => {
-      const r = d.reason || '';
-      let module = 'Decision';
-      if (isSignalGateOnlyReason(r)) module = 'SignalGate';
-      else if (r.startsWith('Risk engine:')) module = 'RiskEngine';
-      else if (r.startsWith('LLM:')) module = 'LLM';
-      const sev: 'info' | 'warning' | 'error' =
-        d.decision === 'no_trade' && (r.includes('blocked') || r.includes('invalid')) ? 'warning' : 'info';
-      return {
-        id: `td-${d.id}`,
-        timestamp: d.timestamp.toISOString(),
-        module,
-        message: `${d.symbol} ${d.decision}`,
-        severity: sev,
-        details: (d.reason || '').substring(0, 500),
-        metadata: { method_id: d.method_id },
-      };
-    });
+    const fromDecisions = decisions.map((d) => mapTradeDecisionToEvent(d));
 
     let merged = [...fromEvents, ...fromDecisions].sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
