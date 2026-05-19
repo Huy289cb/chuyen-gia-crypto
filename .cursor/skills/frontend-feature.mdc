@@ -13,7 +13,8 @@ description: Add or extend Next.js dashboard panels, data fetching, or v3 contex
 - `app/page.tsx` layout grid and existing panels
 - `app/contexts/V3DashboardDataContext.tsx` and `app/lib/v3DashboardFetchers.ts`
 - `app/types/index.ts` for shared types
-- `getApiBase()` behavior (browser vs server)
+- `app/rules/v3-rules.tsx` if changing pipeline/product copy on `/rules`
+- `getApiBase()` behavior (browser vs server); production API via Vercel env `NEXT_PUBLIC_API_URL`
 
 ## Steps
 1. Add typed fetcher in `v3DashboardFetchers.ts` (or extend existing loader).

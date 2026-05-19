@@ -6,6 +6,11 @@ alwaysApply: false
 
 # Frontend (Next.js 15 + TS)
 
+## Deployment
+- **Production**: Vercel — commit + push; set `NEXT_PUBLIC_API_URL` to production API base
+- **Do not** add VPS/backend steps to frontend tasks unless explicitly deploying API
+- Product rules page: `app/rules/v3-rules.tsx` (`/rules`) — keep in sync with `docs/v3-operations.md` when pipeline behavior changes
+
 ## App Router
 - App lives under `frontend/app/`; root layout is Server Component (`layout.tsx` metadata + fonts)
 - Dashboard page (`app/page.tsx`) is **`'use client'`** — v3 panels need hooks, polling, and charts
@@ -15,6 +20,7 @@ alwaysApply: false
 - Use `getApiBase()` from `app/lib/apiBase.ts` for all `/api` calls
 - Browser: same-origin `/api` (proxy/rewrite); SSR/dev server: `NEXT_PUBLIC_API_URL` or `http://localhost:3000/api`
 - Batch dashboard loads via `V3DashboardDataProvider` + `app/lib/v3DashboardFetchers.ts` — extend fetchers/types there instead of duplicating `fetch` in panels
+- Signal Gate panel: best-of 15m/1h/4h ranking (matches backend `signal-gate-ranking.ts`); scheduler `lastRun` from API heartbeats
 - Shared UI types: `app/types/index.ts`; panel-specific shapes stay next to fetchers when API-only
 
 ## UI structure

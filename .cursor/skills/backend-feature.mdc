@@ -13,8 +13,9 @@ description: Add or extend Express API routes, services, schedulers, or worker j
 - `backend/src/routes/index.ts` (mount points)
 - Related `services/`, `repositories/`, `config/`
 - `backend/prisma/schema.prisma` if persistence changes
-- `docs/api-spec.md` and frontend `app/lib/v3DashboardFetchers.ts` if UI consumes the API
+- `docs/api-spec.md`, `docs/v3-operations.md`, and frontend `app/lib/v3DashboardFetchers.ts` if UI consumes the API
 - `backend/.env.example` for new config
+- V3 path: schedulers → `signal-gate.service.ts` → `groq-dispatch.service.ts` → `v3-trade-execution.service.ts` → `binance-order-fill.service.ts` / `position-close.service.ts`
 
 ## Steps
 1. Define contract (method, path, query/body, response JSON).

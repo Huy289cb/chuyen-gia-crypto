@@ -244,24 +244,15 @@ npm run prisma:migrate
 - SQLite retained only for migration input
 
 ### Process Management (PM2)
+
+Prefer **`scripts/deploy.sh`** for production rollouts (pull, build, reload, health check).
+
 ```bash
-# Build TypeScript
 cd backend
-npm run build
-
-# Start API process
-pm2 start ecosystem.config.cjs --only crypto-api
-
-# Start Worker process
-pm2 start ecosystem.config.cjs --only crypto-worker
-
-# Start both
-pm2 start ecosystem.config.cjs
-
-# View logs
-pm2 logs
-
-# Monitor
+pm2 start ecosystem.config.cjs --update-env   # first time
+pm2 reload ecosystem.config.cjs --update-env  # subsequent deploys
+pm2 logs crypto-api --lines 50 --nostream
+pm2 logs crypto-worker --lines 50 --nostream
 pm2 monit
 ```
 
@@ -292,16 +283,24 @@ sudo systemctl reload nginx
 - **Frontend Display**: All timestamps use `toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })` or +7 hours offset for Unix timestamps
 - **Chart Data**: Unix timestamps have +7 hours offset added before display
 
-**VPS Deployment**:
+**VPS Deployment (backend only)**:
+
+Frontend is deployed on **Vercel** (git push). On the VPS, use the deploy script:
+
 ```bash
-cd ~/chuyen-gia-crypto
-git pull origin develop
-cd backend
-npm install
-npm run build
-npm run prisma:generate
-npm run prisma:db:push
-pm2 restart all
+~/deploy.sh
+# or: ./scripts/deploy.sh
+```
+
+See **`docs/deployment.md`** for flags (`DEPLOY_DB_PUSH`, `DEPLOY_SKIP_PULL`, etc.).
+
+Manual equivalent:
+
+```bash
+cd ~/chuyen-gia-crypto && git pull --ff-only origin develop
+cd backend && npm ci && npm run build
+pm2 reload ecosystem.config.cjs --update-env && pm2 save
+curl -s http://127.0.0.1:3000/health
 ```
 
 ### Monitoring

@@ -6,9 +6,10 @@ alwaysApply: true
 # Repo overview
 
 ## Layout
-- `backend/` — Express + TypeScript + Prisma (primary API/worker)
-- `frontend/` — Next.js 15 App Router dashboard (port **3001**)
-- `docs/` — API, architecture, setup (`docs/api-spec.md`, `docs/architecture.md`)
+- `backend/` — Express + TypeScript + Prisma (primary API/worker); deploy on **VPS** via `scripts/deploy.sh`
+- `frontend/` — Next.js 15 App Router dashboard (port **3001**); deploy on **Vercel** (git push only)
+- `docs/` — `docs/deployment.md`, `docs/v3-operations.md`, `docs/api-spec.md`, `docs/architecture.md`
+- `scripts/deploy.sh` — VPS backend rollout (PM2 reload + health check)
 - `backend-go/` — separate Go service; do not assume it when editing Node backend unless the task says so
 - `frontend-old/` — legacy Vite app; avoid unless migrating
 
@@ -30,4 +31,5 @@ alwaysApply: true
 ## Commands
 - Backend dev: `cd backend && npm run dev` (API), `npm run dev:worker` (worker)
 - Backend build/test: `npm run build`, `npm test` / `npm run test:run`
-- Frontend dev: `cd frontend && npm run dev`
+- VPS deploy: `~/deploy.sh` or `./scripts/deploy.sh` (backend only; see `docs/deployment.md`)
+- Frontend dev: `cd frontend && npm run dev` (production: Vercel auto-build on push)

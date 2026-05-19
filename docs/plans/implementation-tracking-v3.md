@@ -181,6 +181,20 @@ Tracking progress for the Big Update Plan v3 implementation.
 
 ---
 
+## Post-v3 operations (2026-05)
+
+- [x] Binance testnet execution path (`executeV3Trade` → limit order + pending → WS fill)
+- [x] WS SL/TP / ACCOUNT_UPDATE → close local position (`position-close.service.ts`)
+- [x] Position monitor executes REDUCE/EXIT on Binance
+- [x] Scheduler heartbeats for dashboard `lastRun`
+- [x] Signal gate wired to `MIN_SIGNAL_GRADE` / `MIN_SIGNAL_CONFIDENCE`
+- [x] `reconcileExpectedRr()` from entry/SL/TP prices
+- [x] MarketScan parallel TF fetch; LLM one best TF per cycle
+- [x] `MAX_TOTAL_EXPOSURE_USD` exposure cap
+- [x] VPS deploy script `scripts/deploy.sh`; frontend on Vercel
+
+See `docs/v3-operations.md` and `docs/deployment.md`.
+
 ## Notes
 - Follow strict integration order
 - Do not skip phases

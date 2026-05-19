@@ -1,0 +1,27 @@
+---
+name: deploy-vps
+description: Deploy or troubleshoot backend on VPS with scripts/deploy.sh and PM2. Frontend deploys on Vercel (git push only).
+---
+
+# Deploy VPS (backend)
+
+## Scope
+- **VPS**: `scripts/deploy.sh` → PM2 `crypto-api` + `crypto-worker`
+- **Vercel**: frontend — push git only; set `NEXT_PUBLIC_API_URL`
+
+## Deploy command
+```bash
+~/deploy.sh
+# DEPLOY_DB_PUSH=1 ~/deploy.sh   # schema change
+# DEPLOY_SKIP_PULL=1 ~/deploy.sh # local build only
+```
+
+## Verify
+- `curl -s http://127.0.0.1:3000/health` → 200
+- `pm2 status` both apps online
+- `docs/deployment.md`, `docs/v3-operations.md`
+
+## Do not
+- Run `pm2 logs` without `--nostream` in scripts (blocks forever)
+- Flush logs every deploy unless debugging
+- Deploy frontend on VPS unless explicitly requested

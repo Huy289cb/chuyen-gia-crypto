@@ -411,7 +411,7 @@ If you see:
 Binance API Error -5000: Path /fapi/v1/order/stopMarket, Method POST is invalid
 ```
 
-The deployment is still running old code. Pull the latest backend and restart PM2.
+The deployment is still running old code. On VPS run `~/deploy.sh` (or `./scripts/deploy.sh`). See `docs/deployment.md`.
 
 ### Repeated balance discrepancy warnings
 

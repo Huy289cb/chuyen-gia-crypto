@@ -291,6 +291,20 @@ The system is designed to support multiple trading methods running in parallel. 
   - `testnet_pending_orders` - Binance testnet pending orders
 - **Data Retention**: 15m candles kept for 30 days (auto-cleanup via maintenance job)
 
+## Big Update v3 pipeline (current — Kim Nghia, BTC-only)
+
+Worker schedulers (see `docs/v3-operations.md`):
+
+1. **MarketScan** (`*/5`) — fetch 15m/1h/4h in parallel, run Signal Gate (no Groq)
+2. **LLMDispatch** (`2,17,32,47`) — pick **one** best PASS timeframe, Groq, `executeV3Trade`
+3. **PositionMonitor** (`*/1`) — mark price, REDUCE 50% or EXIT on Binance when triggered
+
+Execution: Binance Futures testnet limit entry → pending order → user-data WS fill → open position + SL/TP orders. Local DB synced via `binance-order-fill.service.ts` and `position-close.service.ts`.
+
+API process: HTTP + Binance WebSocket + reconciliation. Dashboard scheduler status uses worker heartbeats (`utils/scheduler-heartbeat.ts`).
+
+Deploy: backend `scripts/deploy.sh` on VPS; frontend Vercel (`docs/deployment.md`).
+
 ## Scalability Considerations
 
 ### Current (Production)
