@@ -1,9 +1,11 @@
 import {
   isChatAllowed,
   isTelegramEnabled,
+  isTelegramPollingEnabled,
   isUserAllowed,
+  logTelegramProcessContext,
 } from '../../config/telegram';
-import { getTelegramUpdates, type TelegramUpdate } from './telegram-client';
+import { deleteTelegramWebhook, getTelegramUpdates, type TelegramUpdate } from './telegram-client';
 import { enqueueTelegramMessage } from './telegram-client';
 import {
   getAccountBalanceSummary,
@@ -210,14 +212,31 @@ function schedulePoll(): void {
 }
 
 export function startTelegramBot(): void {
+  logTelegramProcessContext('worker-bot');
+
   if (!isTelegramEnabled()) {
     console.log('[TelegramBot] Disabled (TELEGRAM_ENABLED or missing token/chat ids)');
     return;
   }
-  if (polling) return;
-  polling = true;
-  console.log('[TelegramBot] Starting long polling...');
-  schedulePoll();
+
+  if (!isTelegramPollingEnabled()) {
+    console.log(
+      '[TelegramBot] Polling OFF (TELEGRAM_POLLING_ENABLED!=true). ' +
+        'Outbound notify/sendMessage only; manual getUpdates is free for debug.'
+    );
+    return;
+  }
+
+  if (polling) {
+    console.warn(`[TelegramBot] Already polling pid=${process.pid} — skip duplicate start`);
+    return;
+  }
+
+  void deleteTelegramWebhook().then(() => {
+    polling = true;
+    console.log(`[TelegramBot] Starting long polling pid=${process.pid} (consumes getUpdates queue)`);
+    schedulePoll();
+  });
 }
 
 export function stopTelegramBot(): void {

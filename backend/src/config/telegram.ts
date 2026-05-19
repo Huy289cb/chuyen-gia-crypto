@@ -4,6 +4,8 @@ export type TelegramNotifyLevel = 'off' | 'trades_only' | 'trades_risk' | 'verbo
 
 export interface TelegramConfig {
   enabled: boolean;
+  /** When false: sendMessage/notify only — no getUpdates (frees queue for manual debug). */
+  pollingEnabled: boolean;
   botToken: string;
   chatIds: string[];
   allowedUserIds: string[];
@@ -20,6 +22,15 @@ function parseCsv(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/** PM2/dotenv often truncate `0 21 * * *` to `0` — allow underscore form `0_21_*_*_*`. */
+function parseCronExpr(value: string | undefined, fallback: string): string {
+  const raw = (value || fallback).trim();
+  const normalized = raw.includes('_') ? raw.replace(/_/g, ' ') : raw;
+  if (cron.validate(normalized)) return normalized;
+  if (cron.validate(fallback)) return fallback;
+  return normalized;
+}
+
 function parseNotifyLevel(value: string | undefined): TelegramNotifyLevel {
   const v = (value || 'verbose').toLowerCase();
   if (v === 'off' || v === 'trades_only' || v === 'trades_risk' || v === 'verbose') {
@@ -30,16 +41,30 @@ function parseNotifyLevel(value: string | undefined): TelegramNotifyLevel {
 
 export const telegramConfig: TelegramConfig = {
   enabled: process.env.TELEGRAM_ENABLED === 'true',
+  pollingEnabled: process.env.TELEGRAM_POLLING_ENABLED === 'true',
   botToken: process.env.TELEGRAM_BOT_TOKEN || '',
   chatIds: parseCsv(process.env.TELEGRAM_CHAT_IDS),
   allowedUserIds: parseCsv(process.env.TELEGRAM_ALLOWED_USER_IDS),
   notifyLevel: parseNotifyLevel(process.env.TELEGRAM_NOTIFY_LEVEL),
-  dailyReportCron: process.env.TELEGRAM_DAILY_REPORT_CRON || '0 21 * * *',
+  dailyReportCron: parseCronExpr(process.env.TELEGRAM_DAILY_REPORT_CRON, '0 21 * * *'),
   timezone: 'Asia/Ho_Chi_Minh',
 };
 
 export function isTelegramEnabled(): boolean {
   return telegramConfig.enabled && !!telegramConfig.botToken && telegramConfig.chatIds.length > 0;
+}
+
+export function isTelegramPollingEnabled(): boolean {
+  return isTelegramEnabled() && telegramConfig.pollingEnabled;
+}
+
+/** Log once per process for ops/debug (pid + role). */
+export function logTelegramProcessContext(role: string): void {
+  if (!telegramConfig.enabled) return;
+  console.log(
+    `[Telegram] process=${role} pid=${process.pid} polling=${telegramConfig.pollingEnabled} ` +
+      `notify=${telegramConfig.notifyLevel} chats=${telegramConfig.chatIds.length}`
+  );
 }
 
 export function shouldNotifyVerbose(): boolean {

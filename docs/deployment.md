@@ -95,9 +95,11 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_IDS=123456789
 TELEGRAM_NOTIFY_LEVEL=verbose
 TELEGRAM_DAILY_REPORT_CRON=0 21 * * *
+TELEGRAM_POLLING_ENABLED=true
 ```
 
-- **Worker**: daily report (21:00 ICT), bot commands (`/lenh`, `/show`, …), trade hooks from schedulers.
+- **Worker**: daily report (21:00 ICT), trade hooks from schedulers.
+- **Commands** (`/lenh`, `/show`): only when `TELEGRAM_POLLING_ENABLED=true` on worker. While polling runs, manual `getUpdates` returns empty (409 if two pollers). Set `TELEGRAM_POLLING_ENABLED=false` to debug chat_id via curl/script.
 - **API**: WebSocket fill/close notifications when `BINANCE_ENABLED=true`.
 - PnL in Telegram uses **GMT+7** day boundary (dashboard API stays UTC).
 

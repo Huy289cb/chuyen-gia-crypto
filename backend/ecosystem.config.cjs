@@ -19,7 +19,18 @@ const distDir = path.join(backendRoot, 'dist');
 const envPath = path.join(backendRoot, '.env');
 const logsDir = path.join(backendRoot, 'logs');
 
-require('dotenv').config({ path: envPath });
+require('dotenv').config({ path: envPath, override: true });
+
+/** PM2 env_file misparses values starting with `-` (group chat_id). Inject via env. */
+const telegramEnv = {
+  TELEGRAM_ENABLED: process.env.TELEGRAM_ENABLED,
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_CHAT_IDS: process.env.TELEGRAM_CHAT_IDS,
+  TELEGRAM_ALLOWED_USER_IDS: process.env.TELEGRAM_ALLOWED_USER_IDS,
+  TELEGRAM_NOTIFY_LEVEL: process.env.TELEGRAM_NOTIFY_LEVEL,
+  TELEGRAM_DAILY_REPORT_CRON: process.env.TELEGRAM_DAILY_REPORT_CRON,
+  TELEGRAM_POLLING_ENABLED: process.env.TELEGRAM_POLLING_ENABLED,
+};
 
 module.exports = {
   apps: [
@@ -33,6 +44,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M',
       env_file: envPath,
+      env: telegramEnv,
       error_file: path.join(logsDir, 'api-error.log'),
       out_file: path.join(logsDir, 'api-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
@@ -49,6 +61,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '350M',
       env_file: envPath,
+      env: telegramEnv,
       error_file: path.join(logsDir, 'worker-error.log'),
       out_file: path.join(logsDir, 'worker-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',

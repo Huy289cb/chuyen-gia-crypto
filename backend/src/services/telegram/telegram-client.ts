@@ -92,9 +92,26 @@ export async function getTelegramUpdates(
     allowed_updates: ['message'],
   };
   if (offset != null && offset > 0) params.offset = offset;
+  console.log(
+    `[Telegram] getUpdates START pid=${process.pid} offset=${offset ?? 'none'} timeout=${timeoutSeconds}s`
+  );
   const res = await axios.get(botUrl('getUpdates'), {
     params,
     timeout: (timeoutSeconds + 10) * 1000,
   });
-  return (res.data?.result as TelegramUpdate[]) || [];
+  const updates = (res.data?.result as TelegramUpdate[]) || [];
+  console.log(`[Telegram] getUpdates END pid=${process.pid} count=${updates.length}`);
+  return updates;
+}
+
+/** Clear webhook so getUpdates/polling can receive messages. */
+export async function deleteTelegramWebhook(): Promise<void> {
+  if (!telegramConfig.botToken) return;
+  try {
+    await axios.post(botUrl('deleteWebhook'), { drop_pending_updates: false });
+    console.log(`[Telegram] deleteWebhook ok pid=${process.pid}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Telegram] deleteWebhook failed pid=${process.pid}:`, msg);
+  }
 }

@@ -4,7 +4,7 @@ import { disconnectPrisma } from './lib/prisma';
 import { startWorkerScheduler, stopWorkerScheduler } from './services/worker-scheduler';
 import { startTelegramBot, stopTelegramBot } from './services/telegram/telegram-bot.service';
 import { startTelegramDailyReportScheduler, stopTelegramDailyReportScheduler } from './schedulers/telegram-daily-report.scheduler';
-import { isTelegramEnabled } from './config/telegram';
+import { isTelegramEnabled, logTelegramProcessContext } from './config/telegram';
 import { getOrCreateTestnetAccount } from './repositories/testnet.repository';
 import dotenv from 'dotenv';
 dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
@@ -132,6 +132,7 @@ async function startWorker() {
   await startWorkerScheduler();
 
   if (isTelegramEnabled()) {
+    logTelegramProcessContext('crypto-worker');
     startTelegramDailyReportScheduler();
     startTelegramBot();
   }
