@@ -269,7 +269,7 @@ CRITICAL BIAS-ACTION CONSISTENCY:
 CRITICAL SL/TP PLACEMENT:
 - For LONG: entry > current price, SL < entry, TP > entry
 - For SHORT: entry < current price, SL > entry, TP < entry
-- SL distance should be at least 0.5% from entry
+- SL distance MUST be at least 0.5% from entry (prefer 0.5%-1.0% on 15m); place SL beyond swing liquidity, not inside the wick only
 - R:R ratio should be at least 1.0 for Kim Nghia
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {

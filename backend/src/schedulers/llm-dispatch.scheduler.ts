@@ -13,6 +13,7 @@ import { executeV3Trade } from '../services/v3-trade-execution.service';
 import { hookLlmExecuteFail, hookLlmNoTrade } from '../services/telegram/telegram-hooks';
 import { memoryService } from '../services/memory.service';
 import { recordTestnetTradeEvent } from '../repositories/testnet.repository';
+import { formatLlmTradeSummary } from '../utils/trade-levels';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 
@@ -126,7 +127,7 @@ async function runLLMDispatch() {
           console.warn(`[LLMDispatch] Trade execution skipped: ${execResult.reason}`);
           hookLlmExecuteFail(symbol, execResult.reason);
 
-          const summary = `LLM: ${dispatchResult.analysis.action} · conf ${((dispatchResult.analysis.confidence ?? 0) * 100).toFixed(0)}% · entry ${dispatchResult.analysis.suggested_entry ?? '—'}`;
+          const summary = formatLlmTradeSummary(dispatchResult.analysis);
           if (dispatchResult.decisionRecordId) {
             await memoryService.recordExecutionBlocked(
               dispatchResult.decisionRecordId,

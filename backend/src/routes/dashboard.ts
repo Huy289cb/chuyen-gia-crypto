@@ -105,6 +105,24 @@ function parseExecutionBlockedReason(reason: string): string | null {
   return null;
 }
 
+function fmtEventPrice(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function formatLevelsBlock(d: {
+  entry_price?: number | null;
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  expected_rr?: number | null;
+}): string {
+  const rr =
+    d.expected_rr != null && Number.isFinite(Number(d.expected_rr))
+      ? ` · R:R ${Number(d.expected_rr).toFixed(2)}`
+      : '';
+  return `Entry ${fmtEventPrice(d.entry_price)} · SL ${fmtEventPrice(d.stop_loss)} · TP ${fmtEventPrice(d.take_profit)}${rr}`;
+}
+
 function mapTradeDecisionToEvent(d: {
   id: number;
   timestamp: Date;
@@ -112,10 +130,15 @@ function mapTradeDecisionToEvent(d: {
   decision: string;
   reason: string | null;
   method_id: string;
+  entry_price?: number | null;
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  expected_rr?: number | null;
 }) {
   const r = d.reason || '';
   const execBlocked = parseExecutionBlockedReason(r);
   const isTrade = d.decision === 'trade';
+  const levels = formatLevelsBlock(d);
 
   let module = 'LLM';
   if (isSignalGateOnlyReason(r)) module = 'SignalGate';
@@ -135,14 +158,19 @@ function mapTradeDecisionToEvent(d: {
   if (execBlocked) severity = 'warning';
   else if (!isTrade && (r.includes('blocked') || r.includes('invalid'))) severity = 'warning';
 
-  let details = r;
+  let details: string;
   if (execBlocked) {
-    details = execBlocked;
     const summary = r.split('| Execution blocked:')[0]?.trim();
-    if (summary) details = `${summary}\n→ ${execBlocked}`;
+    details = [summary || levels, levels, `→ ${execBlocked}`].filter(Boolean).join('\n');
+  } else if (isTrade && (d.entry_price || d.stop_loss || d.take_profit)) {
+    details = [r.includes('LLM:') ? r.split('| Execution blocked:')[0]?.trim() : r, levels]
+      .filter(Boolean)
+      .join('\n');
   } else if (isTrade && r === 'LLM decision') {
     details = 'LLM đã duyệt trade (log cũ — lý do execution chưa được ghi)';
     severity = 'warning';
+  } else {
+    details = r || levels;
   }
 
   return {
@@ -151,8 +179,14 @@ function mapTradeDecisionToEvent(d: {
     module,
     message,
     severity,
-    details: details.substring(0, 500),
-    metadata: { method_id: d.method_id, decision: d.decision },
+    details: details.substring(0, 600),
+    metadata: {
+      method_id: d.method_id,
+      decision: d.decision,
+      entry: d.entry_price,
+      stop_loss: d.stop_loss,
+      take_profit: d.take_profit,
+    },
   };
 }
 
@@ -747,17 +781,22 @@ router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
  */
 router.get('/events', async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(parseInt(String(req.query.limit || 20), 10) || 20, 100);
+    const page = Math.max(1, parseInt(String(req.query.page || 1), 10) || 1);
+    const pageSize = Math.min(
+      Math.max(1, parseInt(String(req.query.pageSize || req.query.limit || 8), 10) || 8),
+      50
+    );
     const moduleFilter = typeof req.query.module === 'string' ? req.query.module.toLowerCase() : '';
+    const poolSize = 400;
 
     const [tradeEvents, decisions] = await Promise.all([
       prisma.testnetTradeEvent.findMany({
         orderBy: { timestamp: 'desc' },
-        take: limit,
+        take: poolSize,
       }),
       prisma.tradeDecision.findMany({
         orderBy: { timestamp: 'desc' },
-        take: Math.min(limit, 25),
+        take: poolSize,
         select: {
           id: true,
           timestamp: true,
@@ -765,6 +804,10 @@ router.get('/events', async (req: Request, res: Response) => {
           reason: true,
           symbol: true,
           method_id: true,
+          entry_price: true,
+          stop_loss: true,
+          take_profit: true,
+          expected_rr: true,
         },
       }),
     ]);
@@ -796,7 +839,18 @@ router.get('/events', async (req: Request, res: Response) => {
           (typeof parsed === 'object' && parsed ? details : 'Execution blocked');
         const sym = (parsed?.symbol as string) || '';
         const tf = (parsed?.timeframe as string) || '';
-        details = [sym && tf ? `${sym} ${tf}` : sym, blockReason].filter(Boolean).join(' · ');
+        const levels = formatLevelsBlock({
+          entry_price: parsed?.entry as number,
+          stop_loss: parsed?.stop_loss as number,
+          take_profit: parsed?.take_profit as number,
+        });
+        details = [
+          sym && tf ? `${sym} ${tf}` : sym,
+          levels,
+          `→ ${blockReason}`,
+        ]
+          .filter(Boolean)
+          .join('\n');
       }
 
       return {
@@ -823,11 +877,21 @@ router.get('/events', async (req: Request, res: Response) => {
       merged = merged.filter((e) => e.module.toLowerCase().includes(moduleFilter));
     }
 
-    merged = merged.slice(0, limit);
+    const total = merged.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    const data = merged.slice(start, start + pageSize);
 
     res.json({
       ok: true,
-      data: merged,
+      data,
+      pagination: {
+        page: safePage,
+        pageSize,
+        total,
+        totalPages,
+      },
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching events:', error.message);

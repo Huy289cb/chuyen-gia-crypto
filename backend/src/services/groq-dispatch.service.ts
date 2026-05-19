@@ -10,7 +10,12 @@ import { signalGateService, type SignalGateOutput } from './signal-gate.service'
 import { riskManagerService } from './risk-manager.service';
 import { getOrCreateTestnetAccount } from '../repositories/testnet.repository';
 import { getMethodConfig } from '../config/methods';
-import { reconcileExpectedRr } from '../utils/trade-levels';
+import {
+  checkMinSlDistance,
+  formatLlmTradeSummary,
+  reconcileExpectedRr,
+} from '../utils/trade-levels';
+import { getRiskPolicy } from '../config/risk-policy';
 import type { UnifiedCandle } from './candle.service';
 
 export interface GroqDispatchInput {
@@ -134,7 +139,7 @@ export class GroqDispatchService {
     }
 
     // Step 4: Call Groq with strict validation
-    const analysis = await this.callGroqWithValidation(systemPrompt, userPrompt);
+    let analysis = await this.callGroqWithValidation(systemPrompt, userPrompt);
 
     if (!analysis) {
       if (this.config.enableMemory) {
@@ -157,9 +162,49 @@ export class GroqDispatchService {
       };
     }
 
-    // Step 5a: Enforce minimum R:R from prices (LLM claims are not trusted)
+    // Step 5a: Enforce minimum SL distance (before execution — avoids tight stops)
+    if (
+      analysis.action !== 'hold' &&
+      analysis.suggested_entry &&
+      analysis.suggested_stop_loss &&
+      analysis.suggested_take_profit
+    ) {
+      const entry = Number(analysis.suggested_entry);
+      const sl = Number(analysis.suggested_stop_loss);
+      const minSlPct = getRiskPolicy().minSlDistancePercent;
+      const slCheck = checkMinSlDistance(entry, sl, minSlPct);
+
+      if (!slCheck.ok) {
+        const reason = `SL distance ${(slCheck.distancePct * 100).toFixed(2)}% below min ${(slCheck.minPct * 100).toFixed(2)}%`;
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: 'unknown',
+            grade: 'A',
+            confidence: analysis.confidence || 0,
+            regime: 'unknown',
+            decision: 'no_trade',
+            reason: `Risk engine: ${reason} · ${formatLlmTradeSummary(analysis)}`,
+            entry_price: entry,
+            stop_loss: sl,
+            take_profit: Number(analysis.suggested_take_profit),
+            expected_rr: analysis.expected_rr,
+            method_id,
+          });
+        }
+        return {
+          decision: 'no_trade',
+          reason: `Risk engine blocked: ${reason}`,
+          memory_context: memoryContext,
+        };
+      }
+    }
+
+    // Step 5b: Enforce minimum R:R from prices (LLM claims are not trusted)
     if (analysis.action !== 'hold' && analysis.suggested_entry && analysis.suggested_stop_loss && analysis.suggested_take_profit) {
-      const { computedRr } = reconcileExpectedRr(analysis);
+      const { analysis: withRr, computedRr } = reconcileExpectedRr(analysis);
+      analysis = withRr;
       const methodConfig = getMethodConfig(method_id);
       const minRr = methodConfig.autoEntry.minRRRatio;
 
@@ -231,7 +276,7 @@ export class GroqDispatchService {
     let decisionRecordId: number | undefined;
     const isTrade = analysis.action !== 'hold';
     const llmSummary = isTrade
-      ? `LLM: ${analysis.action} · conf ${((analysis.confidence ?? 0) * 100).toFixed(0)}% · entry ${analysis.suggested_entry ?? '—'}`
+      ? formatLlmTradeSummary(analysis)
       : analysis.reason_summary || 'LLM: hold / no trade';
 
     if (this.config.enableMemory) {
@@ -391,9 +436,17 @@ export class GroqDispatchService {
       prompt += `${i + 1}. O: ${candle.open} H: ${candle.high} L: ${candle.low} C: ${candle.close} V: ${candle.volume}\n`;
     });
 
+    const minSlPct = getRiskPolicy().minSlDistancePercent;
+    const minSlLabel = (minSlPct * 100).toFixed(2);
+
     prompt +=
-      '\nCRITICAL: expected_rr MUST equal |take_profit - entry| / |entry - stop_loss| (2 decimal places). ' +
-      'Do not invent expected_rr; compute it from your suggested_entry, suggested_stop_loss, suggested_take_profit.\n';
+      '\nCRITICAL — STOP LOSS (system rejects tighter stops):\n' +
+      `- Minimum |entry - suggested_stop_loss| / entry >= ${minSlLabel}% (your last outputs near 0.3% were rejected).\n` +
+      '- Place SL beyond the recent swing liquidity (swing high for SHORT, swing low for LONG), not only inside the current candle wick.\n' +
+      `- On ${timeframe} BTC, aim SL roughly ${minSlLabel}%-1.0% from entry unless structure requires wider.\n` +
+      '\nCRITICAL — R:R:\n' +
+      'expected_rr MUST equal |take_profit - entry| / |entry - stop_loss| (2 decimal places). ' +
+      'Compute from suggested_entry, suggested_stop_loss, suggested_take_profit — do not invent expected_rr.\n';
 
     return prompt;
   }

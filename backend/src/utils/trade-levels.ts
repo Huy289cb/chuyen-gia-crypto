@@ -27,6 +27,49 @@ export interface RrReconcileResult {
 /**
  * Overwrite expected_rr with price-derived R:R; warn when LLM claim diverges.
  */
+export function formatPriceLevel(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  return Number(value).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** One-line summary for event log / trade_decisions */
+export function formatLlmTradeSummary(analysis: {
+  action?: string;
+  confidence?: number;
+  suggested_entry?: number;
+  suggested_stop_loss?: number;
+  suggested_take_profit?: number;
+}): string {
+  const action = String(analysis.action ?? '—');
+  const conf =
+    analysis.confidence != null && Number.isFinite(analysis.confidence)
+      ? `${(analysis.confidence * 100).toFixed(0)}%`
+      : '—';
+  return [
+    `LLM: ${action}`,
+    `conf ${conf}`,
+    `entry ${formatPriceLevel(analysis.suggested_entry)}`,
+    `SL ${formatPriceLevel(analysis.suggested_stop_loss)}`,
+    `TP ${formatPriceLevel(analysis.suggested_take_profit)}`,
+  ].join(' · ');
+}
+
+export function checkMinSlDistance(
+  entry: number,
+  stopLoss: number,
+  minPct: number
+): { ok: boolean; distancePct: number; minPct: number } {
+  const distancePct = Math.abs(entry - stopLoss) / entry;
+  return {
+    ok: distancePct + 1e-9 >= minPct,
+    distancePct,
+    minPct,
+  };
+}
+
 export function reconcileExpectedRr(analysis: GroqAnalysis): RrReconcileResult {
   const entry = Number(analysis.suggested_entry);
   const sl = Number(analysis.suggested_stop_loss);
