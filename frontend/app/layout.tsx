@@ -19,6 +19,11 @@ export const metadata: Metadata = {
   title: "Download Money | AI Trading Workspace",
   description: "Download Money is an AI-powered trading workspace for BTC market signals, execution planning, and performance tracking.",
   keywords: ["download money", "trading workspace", "BTC", "AI trading", "signals", "execution"],
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: ["/favicon.svg"],
+    apple: [{ url: "/logo.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({

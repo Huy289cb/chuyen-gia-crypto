@@ -1,9 +1,10 @@
 'use client';
 
-import { Zap, RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen } from 'lucide-react';
 import { getTimeSince, cn } from '@/lib/utils';
 import { useTheme } from '../components/ThemeProvider';
 import { APP_VERSION } from '@/lib/version';
+import { BrandLogo } from '../components/BrandLogo';
 
 interface HeaderProps {
   onRefresh: () => void;
@@ -51,9 +52,7 @@ export function Header({ onRefresh, isLoading, lastDashboardUpdate }: HeaderProp
         <div className="flex items-center justify-between h-14 sm:h-16">
           <div className="flex items-center gap-3 sm:gap-6">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="relative p-1.5 sm:p-2 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-xl animate-pulse-glow">
-                <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-bg-primary" />
-              </div>
+              <BrandLogo size="md" />
               <div>
                 <h1 className="text-base sm:text-lg font-bold text-foreground">
                   <span className="hidden sm:inline">Download</span>
