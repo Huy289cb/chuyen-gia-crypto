@@ -13,6 +13,7 @@ import {
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { SectionHeader } from '../components/SectionHeader';
+import { SignalGateGradingSection } from './SignalGateGradingSection';
 
 export type RulesLanguage = 'vi' | 'en';
 
@@ -393,6 +394,8 @@ export function V3Rules({ language }: V3RulesProps) {
           </ol>
         </Card>
       </section>
+
+      <SignalGateGradingSection language={language} />
 
       <section>
         <SectionHeader
