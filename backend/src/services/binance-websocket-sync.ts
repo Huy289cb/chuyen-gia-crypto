@@ -17,6 +17,10 @@ import {
   resolveFillAvgPrice,
   resolveFillQty,
 } from './binance-order-fill.service';
+import {
+  closeOpenPositionFromBinanceFill,
+  syncClosedPositionsFromAccountUpdate,
+} from './position-close.service';
 
 let ws: WebSocket | null = null;
 let listenKey: string | null = null;
@@ -105,6 +109,11 @@ async function handleOrderTradeUpdate(event: any): Promise<void> {
   );
 
   const localOrder = await findLocalOrderForBinanceEvent(binanceOrderId, symbol);
+  const isAlgoClose =
+    orderType === 'STOP_MARKET' ||
+    orderType === 'TAKE_PROFIT_MARKET' ||
+    orderType === 'STOP' ||
+    orderType === 'TAKE_PROFIT';
 
   if (!localOrder && orderType === 'LIMIT') {
     console.log(`[BinanceWebSocketSync] No local order found for binanceOrderId=${binanceOrderId}, skipping`);
@@ -121,10 +130,17 @@ async function handleOrderTradeUpdate(event: any): Promise<void> {
       break;
 
     case 'FILLED':
-      if (orderType === 'LIMIT') {
+      if (orderType === 'LIMIT' && localOrder) {
         await handleOrderFilled(localOrder, order, executedQty, eventTime);
-      } else if (orderType === 'STOP_MARKET' || orderType === 'TAKE_PROFIT_MARKET') {
-        await handleAlgoOrderFilled(binanceOrderId, orderType, executedQty, avgPrice, eventTime);
+      } else if (isAlgoClose) {
+        await handleAlgoOrderFilled(
+          binanceOrderId,
+          orderType,
+          executedQty,
+          avgPrice,
+          symbol,
+          eventTime
+        );
       }
       break;
 
@@ -208,22 +224,33 @@ async function handleAlgoOrderFilled(
   orderType: string,
   executedQty: number,
   avgPrice: number,
+  symbol: string,
   eventTime: number
 ): Promise<void> {
   console.log(`[BinanceWebSocketSync] Algo order filled: binanceOrderId=${binanceOrderId} type=${orderType}`);
 
-  await recordTestnetTradeEvent('unknown', 'algo_order_filled', {
+  const closed = await closeOpenPositionFromBinanceFill(
+    binanceOrderId,
+    orderType,
+    executedQty,
+    avgPrice,
+    symbol
+  );
+
+  await recordTestnetTradeEvent('unknown', closed ? 'position_closed_algo' : 'algo_order_filled', {
     binance_order_id: binanceOrderId,
     order_type: orderType,
     executed_qty: executedQty,
     avg_price: avgPrice,
+    position_closed: closed,
     timestamp: new Date(eventTime).toISOString(),
   });
 }
 
 function handleAccountUpdate(event: any): void {
-  const { E: eventTime } = event;
+  const { E: eventTime, a: account } = event;
   console.log(`[BinanceWebSocketSync] ACCOUNT_UPDATE at ${new Date(eventTime).toISOString()}`);
+  void syncClosedPositionsFromAccountUpdate(account?.P ?? []);
 }
 
 function startKeepAlive(): void {

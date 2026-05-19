@@ -11,6 +11,7 @@ import {
   V3_MARKET_SCAN_CRON,
   V3_SIGNAL_GATE_TIMEFRAMES,
 } from '../config/v3-schedulers';
+import { getSchedulerLastRun } from '../utils/scheduler-heartbeat';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import {
   calculatePnlPercent,
@@ -207,17 +208,20 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
       }),
     ]);
 
-    const marketLast = lastBtcCandle?.timestamp ? new Date(lastBtcCandle.timestamp) : null;
-    const llmLast = lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null;
+    const marketHb = getSchedulerLastRun('MarketScan');
+    const llmHb = getSchedulerLastRun('LLMDispatch');
+    const posHb = getSchedulerLastRun('PositionMonitor');
+
+    const marketLast =
+      marketHb ?? (lastBtcCandle?.timestamp ? new Date(lastBtcCandle.timestamp) : null);
+    const llmLast =
+      llmHb ?? (lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null);
     const posTimes = [lastTradeEvent?.timestamp, lastOpenPosTouch?.entry_time]
       .filter(Boolean)
       .map((t) => new Date(t as Date).getTime());
-    // Position monitor runs every minute when worker is healthy; use candle activity as proxy
-    // when no testnet positions/trades exist yet.
-    const posLast =
-      posTimes.length > 0
-        ? new Date(Math.max(...posTimes))
-        : marketLast;
+    const posFallback =
+      posTimes.length > 0 ? new Date(Math.max(...posTimes)) : marketLast;
+    const posLast = posHb ?? posFallback;
 
     const schedulers = [
       {
@@ -798,28 +802,65 @@ router.get('/balance', async (req: Request, res: Response) => {
     weekStart.setUTCDate(weekStart.getUTCDate() - 7);
     weekStart.setUTCHours(0, 0, 0, 0);
 
-    const [baselineDay, baselineWeek, marginAgg] = await Promise.all([
-      prisma.testnetAccountSnapshot.findFirst({
-        where: { account_id: account.id, timestamp: { lt: dayStart } },
-        orderBy: { timestamp: 'desc' },
-      }),
-      prisma.testnetAccountSnapshot.findFirst({
-        where: { account_id: account.id, timestamp: { lt: weekStart } },
-        orderBy: { timestamp: 'desc' },
-      }),
-      prisma.testnetPosition.aggregate({
-        where: {
-          account_id: account.id,
-          status: { in: ['open', 'OPEN'] },
-        },
-        _sum: { risk_usd: true },
-      }),
-    ]);
+    const [baselineDay, baselineWeek, marginAgg, realizedTodayAgg, realizedWeekAgg, unrealizedOpenAgg] =
+      await Promise.all([
+        prisma.testnetAccountSnapshot.findFirst({
+          where: { account_id: account.id, timestamp: { lt: dayStart } },
+          orderBy: { timestamp: 'desc' },
+        }),
+        prisma.testnetAccountSnapshot.findFirst({
+          where: { account_id: account.id, timestamp: { lt: weekStart } },
+          orderBy: { timestamp: 'desc' },
+        }),
+        prisma.testnetPosition.aggregate({
+          where: {
+            account_id: account.id,
+            status: { in: ['open', 'OPEN'] },
+          },
+          _sum: { risk_usd: true },
+        }),
+        prisma.testnetPosition.aggregate({
+          where: {
+            account_id: account.id,
+            status: { in: ['closed', 'CLOSED'] },
+            close_time: { gte: dayStart },
+          },
+          _sum: { realized_pnl: true },
+        }),
+        prisma.testnetPosition.aggregate({
+          where: {
+            account_id: account.id,
+            status: { in: ['closed', 'CLOSED'] },
+            close_time: { gte: weekStart },
+          },
+          _sum: { realized_pnl: true },
+        }),
+        prisma.testnetPosition.aggregate({
+          where: {
+            account_id: account.id,
+            status: { in: ['open', 'OPEN'] },
+          },
+          _sum: { unrealized_pnl: true },
+        }),
+      ]);
+
+    const openUnrealized = unrealizedOpenAgg._sum.unrealized_pnl ?? 0;
+    const realizedToday = realizedTodayAgg._sum.realized_pnl ?? 0;
+    const realizedWeek = realizedWeekAgg._sum.realized_pnl ?? 0;
 
     const startDayEquity = baselineDay?.equity ?? account.equity;
     const startWeekEquity = baselineWeek?.equity ?? account.equity;
-    const dailyPnL = (account.equity ?? 0) - startDayEquity;
-    const weeklyPnL = (account.equity ?? 0) - startWeekEquity;
+    const equityDeltaDay = (account.equity ?? 0) - startDayEquity;
+    const equityDeltaWeek = (account.equity ?? 0) - startWeekEquity;
+
+    const dailyPnL =
+      realizedToday !== 0 || openUnrealized !== 0
+        ? realizedToday + openUnrealized
+        : equityDeltaDay;
+    const weeklyPnL =
+      realizedWeek !== 0 || openUnrealized !== 0
+        ? realizedWeek + openUnrealized
+        : equityDeltaWeek;
 
     const usedMargin = marginAgg._sum.risk_usd || 0;
     const equity = account.equity ?? account.current_balance ?? 0;
@@ -1009,10 +1050,12 @@ router.get('/trades', async (req: Request, res: Response) => {
       id: pos.position_id,
       symbol: pos.symbol,
       side: pos.side,
-      price: pos.close_price || pos.entry_price || 0,
+      entryPrice: pos.entry_price || 0,
+      closePrice: pos.close_price || pos.entry_price || 0,
       quantity: pos.size_qty || 0,
       fee: (pos.entry_fee || 0) + (pos.exit_fee || 0) + (pos.funding_fee || 0),
       realizedPnL: pos.realized_pnl || 0,
+      closeReason: pos.close_reason || undefined,
       status: pos.status,
       closedAt: pos.close_time?.toISOString() || '',
     }));

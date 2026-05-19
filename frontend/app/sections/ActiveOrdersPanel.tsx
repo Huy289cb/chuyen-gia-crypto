@@ -4,8 +4,9 @@ import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { EmptyState } from '../components/EmptyState';
 import { StatusBadge } from '../components/StatusBadge';
+import { SideChip } from '../components/SideChip';
 import { ShoppingBag, Clock } from 'lucide-react';
-import { cn, formatPrice, formatVietnamTime } from '@/lib/utils';
+import { cn, formatPositionSize, formatPrice, formatVietnamTime } from '@/lib/utils';
 import { useAccountData } from '../hooks/useAccountData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
@@ -78,11 +79,7 @@ export function ActiveOrdersPanel({ className }: ActiveOrdersPanelProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground">{order.symbol}</span>
-                <StatusBadge
-                  status={order.side.toLowerCase() === 'buy' || order.side.toLowerCase() === 'long' ? 'trading_enabled' : 'blocked'}
-                  label={order.side.toUpperCase()}
-                  size="sm"
-                />
+                <SideChip side={order.side} />
                 <span className="text-xs text-foreground-tertiary">{order.type}</span>
               </div>
               <StatusBadge
@@ -99,7 +96,7 @@ export function ActiveOrdersPanel({ className }: ActiveOrdersPanelProps) {
               </div>
               <div>
                 <span className="text-foreground-tertiary">Qty:</span>
-                <span className="ml-1 font-mono text-foreground">{order.quantity}</span>
+                <span className="ml-1 font-mono text-foreground">{formatPositionSize(order.quantity)}</span>
               </div>
               <div>
                 <span className="text-foreground-tertiary">ID:</span>

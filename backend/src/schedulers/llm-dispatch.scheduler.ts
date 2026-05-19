@@ -11,6 +11,7 @@ import { getScanResult, type MarketScanResult } from './market-scan.scheduler';
 import { getMethodConfig } from '../config/methods';
 import { executeV3Trade } from '../services/v3-trade-execution.service';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
+import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -69,6 +70,7 @@ async function runLLMDispatch() {
   }
 
   isRunning = true;
+  recordSchedulerRun('LLMDispatch');
   try {
     console.log('[LLMDispatch] Starting LLM dispatch');
 

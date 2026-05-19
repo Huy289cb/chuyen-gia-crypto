@@ -23,6 +23,23 @@ export function formatPrice(price: number | null | undefined, decimals: number =
   }
 }
 
+/** BTC qty — always show positive size; sign is conveyed by side chip. */
+export function formatPositionSize(quantity: number | null | undefined, decimals: number = 4): string {
+  if (quantity == null || typeof quantity !== 'number' || isNaN(quantity)) return '-';
+  return Math.abs(quantity).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+export function formatCloseReason(reason: string | null | undefined): string {
+  if (!reason) return '—';
+  return reason
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 export function formatPercentage(value: number | null | undefined, decimals: number = 2): string {
   if (value == null) return '-';
   const sign = value >= 0 ? '+' : '';

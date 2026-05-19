@@ -5,9 +5,10 @@
  */
 
 import { analyzeSetupGate, SetupGateInput, SetupGateResult } from '../analyzers/setup-gate.analyzer';
+import { getRiskPolicy } from '../config/risk-policy';
 
 export interface SignalGateConfig {
-  minGrade: 'A' | 'B' | 'C';
+  minGrade: 'A' | 'B' | 'C' | 'D';
   minConfidence: number;
   allowedRegimes: ('trend' | 'range' | 'chop')[];
   enableDuplicateFilter: boolean;
@@ -190,5 +191,14 @@ export class SignalGateService {
   }
 }
 
-// Export singleton instance
-export const signalGateService = new SignalGateService();
+function buildSignalGateConfigFromEnv(): Partial<SignalGateConfig> {
+  const policy = getRiskPolicy();
+  const minGrade = policy.minSignalGrade;
+  return {
+    minGrade: (['A', 'B', 'C', 'D'].includes(minGrade) ? minGrade : 'A') as SignalGateConfig['minGrade'],
+    minConfidence: policy.minSignalConfidence,
+  };
+}
+
+// Export singleton instance (wired to MIN_SIGNAL_GRADE / MIN_SIGNAL_CONFIDENCE)
+export const signalGateService = new SignalGateService(buildSignalGateConfigFromEnv());

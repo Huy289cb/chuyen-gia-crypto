@@ -72,10 +72,12 @@ export interface AccountData {
     id: string;
     symbol: string;
     side: string;
-    price: number;
+    entryPrice: number;
+    closePrice: number;
     quantity: number;
     fee: number;
     realizedPnL: number;
+    closeReason?: string;
     status: string;
     closedAt: string;
   }>;

@@ -130,7 +130,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
 
       <div className="mt-4 pt-4 border-t border-border-default grid grid-cols-2 gap-3">
         <div className="p-3 bg-surface-1/50 rounded-lg">
-          <p className="text-xs text-foreground-tertiary mb-1">Daily PnL</p>
+          <p className="text-xs text-foreground-tertiary mb-1">Daily PnL (UTC)</p>
           <p className={cn(
             'text-sm font-mono font-semibold',
             balanceData.dailyPnL >= 0 ? 'text-success' : 'text-danger'
@@ -139,7 +139,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           </p>
         </div>
         <div className="p-3 bg-surface-1/50 rounded-lg">
-          <p className="text-xs text-foreground-tertiary mb-1">Weekly PnL</p>
+          <p className="text-xs text-foreground-tertiary mb-1">7-day PnL</p>
           <p className={cn(
             'text-sm font-mono font-semibold',
             balanceData.weeklyPnL >= 0 ? 'text-success' : 'text-danger'

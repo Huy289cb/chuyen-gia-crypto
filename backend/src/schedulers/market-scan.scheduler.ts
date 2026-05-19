@@ -8,6 +8,7 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { getCandles } from '../services/candle.service';
 import { signalGateService, type SignalGateOutput } from '../services/signal-gate.service';
 import type { UnifiedCandle } from '../services/candle.service';
+import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 
 let marketScanTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -32,14 +33,15 @@ async function runMarketScan() {
   }
 
   isRunning = true;
+  recordSchedulerRun('MarketScan');
   try {
     console.log('[MarketScan] Starting market scan');
 
     const symbols = ['BTC']; // BTC-only per Big Update Plan v3
     const timeframes = ['15m', '1h', '4h'];
 
-    for (const symbol of symbols) {
-      for (const timeframe of timeframes) {
+    const scanJobs = symbols.flatMap((symbol) =>
+      timeframes.map(async (timeframe) => {
         const { candles, source } = await getCandles({
           symbol,
           timeframe,
@@ -53,7 +55,7 @@ async function runMarketScan() {
 
         if (candles.length < 50) {
           console.warn(`[MarketScan] Insufficient candles for ${symbol} ${timeframe}, skipping gate`);
-          continue;
+          return;
         }
 
         const signalResult = await signalGateService.evaluate({
@@ -77,8 +79,10 @@ async function runMarketScan() {
         console.log(
           `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
         );
-      }
-    }
+      })
+    );
+
+    await Promise.all(scanJobs);
 
     console.log('[MarketScan] Market scan completed');
   } catch (error) {

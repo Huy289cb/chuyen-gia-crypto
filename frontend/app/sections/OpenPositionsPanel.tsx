@@ -3,9 +3,9 @@
 import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { EmptyState } from '../components/EmptyState';
-import { StatusBadge } from '../components/StatusBadge';
+import { SideChip } from '../components/SideChip';
 import { Target, Clock } from 'lucide-react';
-import { cn, formatPrice } from '@/lib/utils';
+import { cn, formatPositionSize, formatPrice } from '@/lib/utils';
 import { useAccountData } from '../hooks/useAccountData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
@@ -78,11 +78,7 @@ export function OpenPositionsPanel({ className }: OpenPositionsPanelProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground">{position.symbol}</span>
-                <StatusBadge
-                  status={position.side.toLowerCase() === 'long' ? 'trading_enabled' : 'blocked'}
-                  label={position.side.toUpperCase()}
-                  size="sm"
-                />
+                <SideChip side={position.side} />
               </div>
               <div className="flex items-center gap-1 text-xs text-foreground-tertiary">
                 <Clock className="w-3 h-3" />
@@ -93,7 +89,7 @@ export function OpenPositionsPanel({ className }: OpenPositionsPanelProps) {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <span className="text-foreground-tertiary">Size:</span>
-                <span className="ml-1 font-mono text-foreground">{position.size}</span>
+                <span className="ml-1 font-mono text-foreground">{formatPositionSize(position.size)}</span>
               </div>
               <div>
                 <span className="text-foreground-tertiary">Entry:</span>

@@ -1,11 +1,17 @@
 /**
  * Position Monitor Scheduler
  * Monitors open positions and applies HOLD / REDUCE / EXIT actions
- * Simplified position management based on health and market conditions
  */
 
 import cron, { type ScheduledTask } from 'node-cron';
 import { prisma } from '../lib/prisma';
+import { updateTestnetPosition } from '../repositories/testnet.repository';
+import { resolveMarkPrice } from '../services/position-mark';
+import {
+  closeLocalPosition,
+  closePositionOnBinanceMarket,
+} from '../services/position-close.service';
+import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 
 let positionMonitorTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -24,9 +30,6 @@ export interface PositionHealth {
   reason: string;
 }
 
-/**
- * Run position monitor
- */
 async function runPositionMonitor() {
   if (isRunning) {
     console.warn('[PositionMonitor] Previous monitor still running, skipping cycle');
@@ -34,29 +37,61 @@ async function runPositionMonitor() {
   }
 
   isRunning = true;
+  recordSchedulerRun('PositionMonitor');
   try {
     console.log('[PositionMonitor] Starting position monitor');
 
-    // Get open testnet positions
     const openPositions = await prisma.testnetPosition.findMany({
       where: { status: 'open' },
-      include: {
-        account: true
-      }
+      include: { account: true },
     });
 
     console.log(`[PositionMonitor] Found ${openPositions.length} open positions`);
 
     for (const position of openPositions) {
-      const health = await analyzePositionHealth(position);
-      
-      console.log(`[PositionMonitor] ${position.symbol} ${position.side}: ${health.health.toUpperCase()}`);
-      console.log(`[PositionMonitor] PnL: ${health.unrealized_pnl.toFixed(2)} (${health.unrealized_pnl_percent.toFixed(2)}%), Action: ${health.recommended_action}`);
+      const mark = await resolveMarkPrice(
+        position.symbol,
+        position.current_price || position.entry_price
+      );
+      await updateTestnetPosition(position.position_id, { current_price: mark });
+
+      const refreshed = { ...position, current_price: mark };
+      const health = await analyzePositionHealth(refreshed);
+
+      console.log(
+        `[PositionMonitor] ${position.symbol} ${position.side}: ${health.health.toUpperCase()}`
+      );
+      console.log(
+        `[PositionMonitor] PnL: ${health.unrealized_pnl.toFixed(2)} (${health.unrealized_pnl_percent.toFixed(2)}%), Action: ${health.recommended_action}`
+      );
       console.log(`[PositionMonitor] Reason: ${health.reason}`);
 
-      // Execute recommended action (will be implemented in integration phase)
-      if (health.recommended_action !== 'hold') {
-        console.log(`[PositionMonitor] Would execute ${health.recommended_action} for position ${position.position_id}`);
+      if (health.recommended_action === 'exit') {
+        await closePositionOnBinanceMarket(refreshed);
+        await closeLocalPosition(
+          { ...refreshed, account: refreshed.account },
+          mark,
+          'position_monitor_exit'
+        );
+      } else if (health.recommended_action === 'reduce') {
+        const totalQty = Math.abs(refreshed.size_qty);
+        const reduceQty = totalQty * 0.5;
+        if (reduceQty > 0) {
+          await closePositionOnBinanceMarket(refreshed, reduceQty);
+          const remainingQty = totalQty - reduceQty;
+          const sizeUsd =
+            refreshed.size_usd > 0
+              ? (refreshed.size_usd * remainingQty) / totalQty
+              : remainingQty * mark;
+          await updateTestnetPosition(position.position_id, {
+            size_qty: remainingQty,
+            size_usd: sizeUsd,
+            current_price: mark,
+          });
+          console.log(
+            `[PositionMonitor] Reduced ${position.position_id} by 50% (qty ${remainingQty})`
+          );
+        }
       }
     }
 
@@ -68,40 +103,35 @@ async function runPositionMonitor() {
   }
 }
 
-/**
- * Analyze position health
- */
 async function analyzePositionHealth(position: any): Promise<PositionHealth> {
   const currentPrice = position.current_price;
   const entryPrice = position.entry_price;
   const side = position.side;
-  
-  // Calculate PnL
+  const qty = Math.abs(position.size_qty);
+
   let unrealizedPnl = 0;
   let unrealizedPnlPercent = 0;
-  
+
   if (side === 'long') {
-    unrealizedPnl = (currentPrice - entryPrice) * position.size_qty;
+    unrealizedPnl = (currentPrice - entryPrice) * qty;
     unrealizedPnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
   } else {
-    unrealizedPnl = (entryPrice - currentPrice) * position.size_qty;
+    unrealizedPnl = (entryPrice - currentPrice) * qty;
     unrealizedPnlPercent = ((entryPrice - currentPrice) / entryPrice) * 100;
   }
 
-  // Calculate time in position
   const entryTime = new Date(position.entry_time);
   const now = new Date();
   const timeInPositionMinutes = (now.getTime() - entryTime.getTime()) / (1000 * 60);
 
-  // Determine health and action
   let health: 'healthy' | 'warning' | 'critical' = 'healthy';
   let recommendedAction: 'hold' | 'reduce' | 'exit' = 'hold';
   let reason = 'Position is healthy';
 
-  // Check if near SL
-  const slDistance = side === 'long' 
-    ? (currentPrice - position.stop_loss) / entryPrice * 100
-    : (position.stop_loss - currentPrice) / entryPrice * 100;
+  const slDistance =
+    side === 'long'
+      ? ((currentPrice - position.stop_loss) / entryPrice) * 100
+      : ((position.stop_loss - currentPrice) / entryPrice) * 100;
 
   if (slDistance < 0.2) {
     health = 'critical';
@@ -113,14 +143,12 @@ async function analyzePositionHealth(position: any): Promise<PositionHealth> {
     reason = 'Position approaching stop loss';
   }
 
-  // Check if in profit for extended time
   if (unrealizedPnlPercent > 1.0 && timeInPositionMinutes > 60) {
     health = 'healthy';
     recommendedAction = 'reduce';
     reason = 'Position in profit for extended time, consider taking partial profit';
   }
 
-  // Check if losing for extended time
   if (unrealizedPnlPercent < -0.5 && timeInPositionMinutes > 120) {
     health = 'warning';
     recommendedAction = 'exit';
@@ -138,13 +166,10 @@ async function analyzePositionHealth(position: any): Promise<PositionHealth> {
     time_in_position_minutes: timeInPositionMinutes,
     health,
     recommended_action: recommendedAction,
-    reason
+    reason,
   };
 }
 
-/**
- * Start position monitor scheduler
- */
 export function startPositionMonitorScheduler(cronExpression: string = '*/1 * * * *') {
   if (positionMonitorTask) {
     console.warn('[PositionMonitor] Scheduler already running');
@@ -153,14 +178,9 @@ export function startPositionMonitorScheduler(cronExpression: string = '*/1 * * 
 
   console.log(`[PositionMonitor] Starting scheduler with cron: ${cronExpression}`);
   positionMonitorTask = cron.schedule(cronExpression, runPositionMonitor);
-  
-  // Run immediately on start
   runPositionMonitor();
 }
 
-/**
- * Stop position monitor scheduler
- */
 export function stopPositionMonitorScheduler() {
   if (positionMonitorTask) {
     positionMonitorTask.stop();
@@ -169,9 +189,6 @@ export function stopPositionMonitorScheduler() {
   }
 }
 
-/**
- * Run position monitor manually (for testing)
- */
 export async function runManualPositionMonitor() {
   return await runPositionMonitor();
 }
