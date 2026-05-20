@@ -106,3 +106,4 @@ Chỉ một object, ví dụ:
 |-------------|----------|
 | 2026-05-20 | P7 build OK; P8 checklist double-check theo code + build; tracking cập nhật. |
 | 2026-05-20 | Phase 2 (P9): Step 5b TP-only adapter; P10 build OK; doc + `.env.example`. |
+| 2026-05-20 | Adapter prompts: inject `policy_floor_sl` / `policy_min_tp` + SELF-CHECK; deterministic fallback when key2 math fails. |

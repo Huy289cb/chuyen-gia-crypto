@@ -57,6 +57,53 @@ export function formatLlmTradeSummary(analysis: {
   ].join(' · ');
 }
 
+/**
+ * Minimum-distance SL + TP at min R:R from entry (policy math — does not rely on LLM arithmetic).
+ */
+export function computePolicyCompliantStopAndTarget(input: {
+  action: 'buy' | 'sell';
+  entry: number;
+  minSlPct: number;
+  minRr: number;
+}): { stopLoss: number; takeProfit: number } | null {
+  const { action, entry, minSlPct, minRr } = input;
+  if (!Number.isFinite(entry) || entry <= 0 || minSlPct <= 0 || minRr <= 0) return null;
+
+  if (action === 'buy') {
+    const stopLoss = Math.round(entry * (1 - minSlPct) * 100) / 100;
+    const risk = entry - stopLoss;
+    if (risk <= 0) return null;
+    const takeProfit = Math.round((entry + risk * minRr) * 100) / 100;
+    if (takeProfit <= entry) return null;
+    return { stopLoss, takeProfit };
+  }
+
+  const stopLoss = Math.round(entry * (1 + minSlPct) * 100) / 100;
+  const risk = stopLoss - entry;
+  if (risk <= 0) return null;
+  const takeProfit = Math.round((entry - risk * minRr) * 100) / 100;
+  if (takeProfit >= entry) return null;
+  return { stopLoss, takeProfit };
+}
+
+/** Minimum TP price for a fixed entry/SL to satisfy min R:R (reward/risk). */
+export function computeMinTakeProfitForRr(input: {
+  action: 'buy' | 'sell';
+  entry: number;
+  stopLoss: number;
+  minRr: number;
+}): number | null {
+  const { action, entry, stopLoss, minRr } = input;
+  const risk = Math.abs(entry - stopLoss);
+  if (!Number.isFinite(entry) || risk <= 0 || minRr <= 0) return null;
+  if (action === 'buy') {
+    const tp = Math.round((entry + risk * minRr) * 100) / 100;
+    return tp > entry ? tp : null;
+  }
+  const tp = Math.round((entry - risk * minRr) * 100) / 100;
+  return tp < entry ? tp : null;
+}
+
 export function checkMinSlDistance(
   entry: number,
   stopLoss: number,

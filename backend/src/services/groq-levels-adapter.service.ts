@@ -10,6 +10,8 @@ import type { GroqAnalysis } from './groq-client';
 import {
   checkMinSlDistance,
   computeExpectedRrFromPrices,
+  computeMinTakeProfitForRr,
+  computePolicyCompliantStopAndTarget,
   reconcileExpectedRr,
 } from '../utils/trade-levels';
 import { getMethodConfig } from '../config/methods';
@@ -31,7 +33,63 @@ function adapterModelId(): string {
   );
 }
 
-function buildAdapterPrompts(input: {
+function validateAndMergeRepairedLevels(input: {
+  action: 'buy' | 'sell';
+  entry: number;
+  sl: number;
+  tp: number;
+  minSlPct: number;
+  minRr: number;
+  analysis: GroqAnalysis;
+  auditTag: string;
+  note: string;
+}): GroqAnalysis | null {
+  const { action, entry, minSlPct, minRr, analysis, auditTag, note } = input;
+  let nSl = input.sl;
+  let nTp = input.tp;
+
+  if (action === 'buy') {
+    if (!(nSl < entry && nTp > entry)) {
+      console.warn(`[LevelsAdapter] ${auditTag} LONG geometry invalid`);
+      return null;
+    }
+  } else if (!(nSl > entry && nTp < entry)) {
+    console.warn(`[LevelsAdapter] ${auditTag} SHORT geometry invalid`);
+    return null;
+  }
+
+  const slCheck = checkMinSlDistance(entry, nSl, minSlPct);
+  if (!slCheck.ok) {
+    console.warn(
+      `[LevelsAdapter] ${auditTag} SL still below min: ${(slCheck.distancePct * 100).toFixed(3)}% < ${(minSlPct * 100).toFixed(2)}%`
+    );
+    return null;
+  }
+
+  const rr = computeExpectedRrFromPrices(entry, nSl, nTp);
+  if (rr == null || rr + 1e-9 < minRr) {
+    console.warn(
+      `[LevelsAdapter] ${auditTag} R:R insufficient: ${rr == null ? 'null' : rr.toFixed(2)} < ${minRr}`
+    );
+    return null;
+  }
+
+  const merged: GroqAnalysis = {
+    ...analysis,
+    suggested_stop_loss: Math.round(nSl * 100) / 100,
+    suggested_take_profit: Math.round(nTp * 100) / 100,
+    reason_summary: [analysis.reason_summary, `[LevelsAdapter:${auditTag}] ${note}`]
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 500),
+  };
+
+  const { analysis: withRr } = reconcileExpectedRr(merged);
+  return withRr;
+}
+
+/** Exported for prompt regression tests. */
+export function buildAdapterPrompts(input: {
   symbol: string;
   timeframe: string;
   action: 'buy' | 'sell';
@@ -43,42 +101,70 @@ function buildAdapterPrompts(input: {
 }): { systemPrompt: string; userPrompt: string } {
   const isLong = input.action === 'buy';
   const minSlLabel = (input.minSlPct * 100).toFixed(2);
+  const minSlAbs = Math.round(input.entry * input.minSlPct * 100) / 100;
+  const floor = computePolicyCompliantStopAndTarget({
+    action: input.action,
+    entry: input.entry,
+    minSlPct: input.minSlPct,
+    minRr: input.minRr,
+  });
 
-  const systemPrompt = `You are an execution risk specialist for crypto perpetuals (Kim Nghia pipeline).
-The primary analyst model proposed a trade but STOP LOSS is too close to ENTRY (below system minimum).
+  const slFloorLine = floor
+    ? isLong
+      ? `MANDATORY SL ceiling (LONG): suggested_stop_loss <= ${floor.stopLoss} (entry ${input.entry} − ${minSlAbs} = ${minSlLabel}% distance).`
+      : `MANDATORY SL floor (SHORT): suggested_stop_loss >= ${floor.stopLoss} (entry ${input.entry} + ${minSlAbs} = ${minSlLabel}% distance).`
+    : '';
 
-Reply with ONE JSON object only (no markdown), keys:
-- suggested_stop_loss (number)
-- suggested_take_profit (number)
-- adjustment_note (string, max 220 chars)
+  const tpHint = floor
+    ? `Reference TP at min R:R ${input.minRr}: ${floor.takeProfit} (adjust if needed but keep R:R >= ${input.minRr}).`
+    : '';
 
-Hard rules:
-- Symbol ${input.symbol}, timeframe ${input.timeframe}.
-- Side ${input.action.toUpperCase()}: ${
+  const verifyLine = isLong
+    ? `SELF-CHECK before JSON: (entry - suggested_stop_loss) / entry >= ${input.minSlPct} (${minSlLabel}%) AND suggested_stop_loss < entry.`
+    : `SELF-CHECK before JSON: (suggested_stop_loss - entry) / entry >= ${input.minSlPct} (${minSlLabel}%) AND suggested_stop_loss > entry.`;
+
+  const systemPrompt = `You are an execution risk specialist for crypto perpetuals.
+The primary analyst proposed trade levels but STOP LOSS is too close to ENTRY.
+
+Output: ONE JSON object only (no markdown, no btc wrapper), exactly these keys:
+- suggested_stop_loss (number, 2 decimals)
+- suggested_take_profit (number, 2 decimals)
+- adjustment_note (string, max 120 chars)
+
+Symbol ${input.symbol}, timeframe ${input.timeframe}, side ${input.action.toUpperCase()}:
+${
     isLong
-      ? 'LONG — stop_loss MUST be strictly BELOW entry; take_profit strictly ABOVE entry.'
-      : 'SHORT — stop_loss MUST be strictly ABOVE entry; take_profit strictly BELOW entry.'
+      ? 'LONG — stop_loss strictly BELOW entry; take_profit strictly ABOVE entry.'
+      : 'SHORT — stop_loss strictly ABOVE entry; take_profit strictly BELOW entry.'
   }
-- Entry is FIXED at ${input.entry}. Never change entry in output (only SL/TP keys).
-- Require |entry - suggested_stop_loss| / entry >= ${minSlLabel}%.
-- Require reward/risk from prices: |suggested_take_profit - entry| / |entry - suggested_stop_loss| >= ${input.minRr} (use the numbers you output).
-- Widen SL in the correct direction (away from entry vs current tight SL). Adjust TP if needed to keep R:R >= ${input.minRr} while staying realistic.`;
+Entry FIXED at ${input.entry} — do not output entry.
+
+Distance rule (server rejects tighter stops):
+  |entry - suggested_stop_loss| / entry >= ${input.minSlPct}  (${minSlLabel}%).
+${slFloorLine}
+R:R rule (compute from your numbers, 2 decimals):
+  |suggested_take_profit - entry| / |entry - suggested_stop_loss| >= ${input.minRr}.
+${tpHint}
+${verifyLine}
+Widen SL away from entry (SHORT: move SL higher than current; LONG: move SL lower than current).`;
 
   const curPct = (Math.abs(input.entry - input.sl) / input.entry) * 100;
-  const userPrompt = `PRIMARY_MODEL_LEVELS (too tight on SL):
+  const userPrompt = `PRIMARY_MODEL_LEVELS (SL too tight — must meet policy floor):
 action=${input.action}
 entry=${input.entry}
-suggested_stop_loss=${input.sl}
-suggested_take_profit=${input.tp}
+current_stop_loss=${input.sl}  (|entry-SL|/entry=${curPct.toFixed(3)}%, need >=${minSlLabel}%)
+current_take_profit=${input.tp}
+min_risk_usd=${minSlAbs}
+${floor ? `policy_floor_sl=${floor.stopLoss}` : ''}
+${floor ? `policy_ref_tp_rr${input.minRr}=${floor.takeProfit}` : ''}
 
-Current |entry - SL| / entry = ${curPct.toFixed(3)}% (minimum ${minSlLabel}%).
-
-Return JSON only.`;
+Return JSON only with suggested_stop_loss, suggested_take_profit, adjustment_note.`;
 
   return { systemPrompt, userPrompt };
 }
 
-function buildRrOnlyTpAdapterPrompts(input: {
+/** Exported for prompt regression tests. */
+export function buildRrOnlyTpAdapterPrompts(input: {
   symbol: string;
   timeframe: string;
   action: 'buy' | 'sell';
@@ -90,34 +176,39 @@ function buildRrOnlyTpAdapterPrompts(input: {
   currentRr: number;
 }): { systemPrompt: string; userPrompt: string } {
   const isLong = input.action === 'buy';
-  const minSlLabel = (input.minSlPct * 100).toFixed(2);
+  const risk = Math.abs(input.entry - input.sl);
+  const minTp = computeMinTakeProfitForRr({
+    action: input.action,
+    entry: input.entry,
+    stopLoss: input.sl,
+    minRr: input.minRr,
+  });
 
-  const systemPrompt = `You are an execution risk specialist for crypto perpetuals (Kim Nghia pipeline).
-The primary analyst proposed a trade where STOP LOSS distance is acceptable but REWARD:RISK from prices is below the system minimum.
+  const tpBound = minTp
+    ? isLong
+      ? `MANDATORY TP floor (LONG): suggested_take_profit >= ${minTp} (entry + risk×${input.minRr}, risk=${risk.toFixed(2)}).`
+      : `MANDATORY TP ceiling (SHORT): suggested_take_profit <= ${minTp} (entry − risk×${input.minRr}, risk=${risk.toFixed(2)}).`
+    : '';
 
-Reply with ONE JSON object only (no markdown), keys:
-- suggested_take_profit (number) — REQUIRED; this is the ONLY price you may change.
-- adjustment_note (string, max 220 chars)
+  const systemPrompt = `You are an execution risk specialist. SL distance is OK; R:R from prices is too low.
 
-Hard rules:
-- Symbol ${input.symbol}, timeframe ${input.timeframe}.
-- Side ${input.action.toUpperCase()}: ${
-    isLong
-      ? 'LONG — take_profit MUST be strictly ABOVE entry.'
-      : 'SHORT — take_profit MUST be strictly BELOW entry.'
-  }
-- Entry is FIXED at ${input.entry}. Stop loss is FIXED at ${input.sl} — do NOT move SL; do not output suggested_stop_loss.
-- SL distance |entry - SL| / entry is already >= ${minSlLabel}% — keep that true by not changing SL (caller enforces SL).
-- From prices, require |suggested_take_profit - entry| / |entry - SL| >= ${input.minRr}.
-- Move take profit further in the profit direction (vs current TP) enough to meet R:R >= ${input.minRr}; stay realistic for ${input.timeframe}.`;
+Output: ONE JSON object only (no markdown), keys:
+- suggested_take_profit (number, 2 decimals) — ONLY field you may change
+- adjustment_note (string, max 120 chars)
 
-  const userPrompt = `PRIMARY_MODEL_LEVELS (R:R too low; SL is acceptable, adjust TP only):
+${input.symbol} ${input.timeframe}, ${input.action.toUpperCase()}:
+Entry FIXED ${input.entry}. Stop loss FIXED ${input.sl} — do NOT output suggested_stop_loss.
+${tpBound}
+R:R: |suggested_take_profit - entry| / ${risk.toFixed(2)} >= ${input.minRr}.
+SELF-CHECK: recompute R:R from your TP before replying.`;
+
+  const userPrompt = `PRIMARY_MODEL_LEVELS (adjust TP only):
 action=${input.action}
 entry=${input.entry}
-suggested_stop_loss=${input.sl}  (FIXED — do not change)
-suggested_take_profit=${input.tp}
-
-Current R:R from prices ≈ ${input.currentRr.toFixed(3)} (minimum ${input.minRr}).
+stop_loss=${input.sl} (fixed)
+current_take_profit=${input.tp}
+current_rr=${input.currentRr.toFixed(3)} (minimum ${input.minRr})
+${minTp != null ? `policy_min_tp=${minTp}` : ''}
 
 Return JSON with suggested_take_profit and adjustment_note only.`;
 
@@ -178,60 +269,56 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
     return null;
   }
 
-  const nSl = Number(raw.suggested_stop_loss);
-  const nTp = Number(raw.suggested_take_profit);
+  let nSl = Number(raw.suggested_stop_loss);
+  let nTp = Number(raw.suggested_take_profit);
   if (!Number.isFinite(nSl) || !Number.isFinite(nTp)) {
     console.warn('[LevelsAdapter] Non-numeric SL/TP from adapter');
     return null;
   }
 
-  if (action === 'buy') {
-    if (!(nSl < entry && nTp > entry)) {
-      console.warn('[LevelsAdapter] LONG geometry invalid');
-      return null;
-    }
-  } else if (!(nSl > entry && nTp < entry)) {
-    console.warn('[LevelsAdapter] SHORT geometry invalid');
-    return null;
-  }
-
-  const slCheck = checkMinSlDistance(entry, nSl, minSlPct);
-  if (!slCheck.ok) {
-    console.warn(
-      `[LevelsAdapter] SL still below min: ${(slCheck.distancePct * 100).toFixed(3)}% < ${(minSlPct * 100).toFixed(2)}%`
-    );
-    return null;
-  }
-
-  const rr = computeExpectedRrFromPrices(entry, nSl, nTp);
-  if (rr == null || rr + 1e-9 < minRr) {
-    console.warn(`[LevelsAdapter] R:R insufficient: ${rr == null ? 'null' : rr.toFixed(2)} < ${minRr}`);
-    return null;
-  }
-
-  const note =
+  const llmNote =
     typeof (raw as { adjustment_note?: string }).adjustment_note === 'string'
-      ? String((raw as { adjustment_note?: string }).adjustment_note).slice(0, 220)
+      ? String((raw as { adjustment_note?: string }).adjustment_note).slice(0, 120)
       : 'levels widened to meet policy';
 
-  const merged: GroqAnalysis = {
-    ...input.analysis,
-    suggested_stop_loss: Math.round(nSl * 100) / 100,
-    suggested_take_profit: Math.round(nTp * 100) / 100,
-    reason_summary: [
-      input.analysis.reason_summary,
-      `[LevelsAdapter:key2] ${note}`,
-    ]
-      .filter(Boolean)
-      .join(' · ')
-      .slice(0, 500),
-  };
+  let repaired = validateAndMergeRepairedLevels({
+    action,
+    entry,
+    sl: nSl,
+    tp: nTp,
+    minSlPct,
+    minRr,
+    analysis: input.analysis,
+    auditTag: 'key2',
+    note: llmNote,
+  });
 
-  const { analysis: withRr } = reconcileExpectedRr(merged);
+  if (!repaired) {
+    const policy = computePolicyCompliantStopAndTarget({ action, entry, minSlPct, minRr });
+    if (policy) {
+      console.warn(
+        `[LevelsAdapter] key2 SL/TP failed policy — applying deterministic widen (entry=${entry})`
+      );
+      repaired = validateAndMergeRepairedLevels({
+        action,
+        entry,
+        sl: policy.stopLoss,
+        tp: policy.takeProfit,
+        minSlPct,
+        minRr,
+        analysis: input.analysis,
+        auditTag: 'policy-math',
+        note: `SL/TP from min ${(minSlPct * 100).toFixed(2)}% + R:R ${minRr} (LLM key2 was insufficient)`,
+      });
+    }
+  }
+
+  if (!repaired) return null;
+
   console.log(
-    `[LevelsAdapter] OK ${input.symbol} ${input.timeframe} ${action} SL ${sl0}→${withRr.suggested_stop_loss} TP ${tp0}→${withRr.suggested_take_profit} rr≈${withRr.expected_rr}`
+    `[LevelsAdapter] OK ${input.symbol} ${input.timeframe} ${action} SL ${sl0}→${repaired.suggested_stop_loss} TP ${tp0}→${repaired.suggested_take_profit} rr≈${repaired.expected_rr}`
   );
-  return withRr;
+  return repaired;
 }
 
 /**
@@ -314,7 +401,22 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
     return null;
   }
 
-  const rr = computeExpectedRrFromPrices(entry, sl0, nTp);
+  let finalTp = nTp;
+  let rr = computeExpectedRrFromPrices(entry, sl0, finalTp);
+  if (rr == null || rr + 1e-9 < minRr) {
+    const policyTp = computeMinTakeProfitForRr({
+      action,
+      entry,
+      stopLoss: sl0,
+      minRr,
+    });
+    if (policyTp != null) {
+      console.warn(`[LevelsAdapter:RR] key2 TP insufficient — applying policy_min_tp=${policyTp}`);
+      finalTp = policyTp;
+      rr = computeExpectedRrFromPrices(entry, sl0, finalTp);
+    }
+  }
+
   if (rr == null || rr + 1e-9 < minRr) {
     console.warn(`[LevelsAdapter:RR] R:R still insufficient: ${rr == null ? 'null' : rr.toFixed(2)} < ${minRr}`);
     return null;
@@ -328,7 +430,7 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
   const merged: GroqAnalysis = {
     ...input.analysis,
     suggested_stop_loss: Math.round(sl0 * 100) / 100,
-    suggested_take_profit: Math.round(nTp * 100) / 100,
+    suggested_take_profit: Math.round(finalTp * 100) / 100,
     reason_summary: [
       input.analysis.reason_summary,
       `[LevelsAdapter:key2:rr-tp] ${note}`,
