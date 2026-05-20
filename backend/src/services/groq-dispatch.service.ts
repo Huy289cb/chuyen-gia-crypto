@@ -17,6 +17,10 @@ import {
 } from '../utils/trade-levels';
 import { getRiskPolicy } from '../config/risk-policy';
 import type { UnifiedCandle } from './candle.service';
+import {
+  tryRepairLevelsWithSecondaryKey,
+  tryRepairTpForMinRrWithSecondaryKey,
+} from './groq-levels-adapter.service';
 
 export interface GroqDispatchInput {
   symbol: string;
@@ -170,9 +174,23 @@ export class GroqDispatchService {
       analysis.suggested_take_profit
     ) {
       const entry = Number(analysis.suggested_entry);
-      const sl = Number(analysis.suggested_stop_loss);
+      let sl = Number(analysis.suggested_stop_loss);
       const minSlPct = getRiskPolicy().minSlDistancePercent;
-      const slCheck = checkMinSlDistance(entry, sl, minSlPct);
+      let slCheck = checkMinSlDistance(entry, sl, minSlPct);
+
+      if (!slCheck.ok) {
+        const repaired = await tryRepairLevelsWithSecondaryKey({
+          symbol,
+          timeframe,
+          methodId: method_id,
+          analysis,
+        });
+        if (repaired) {
+          analysis = repaired;
+          sl = Number(analysis.suggested_stop_loss);
+          slCheck = checkMinSlDistance(entry, sl, minSlPct);
+        }
+      }
 
       if (!slCheck.ok) {
         const reason = `SL distance ${(slCheck.distancePct * 100).toFixed(2)}% below min ${(slCheck.minPct * 100).toFixed(2)}%`;
@@ -207,12 +225,27 @@ export class GroqDispatchService {
 
     // Step 5b: Enforce minimum R:R from prices (LLM claims are not trusted)
     if (analysis.action !== 'hold' && analysis.suggested_entry && analysis.suggested_stop_loss && analysis.suggested_take_profit) {
-      const { analysis: withRr, computedRr } = reconcileExpectedRr(analysis);
+      let { analysis: withRr, computedRr } = reconcileExpectedRr(analysis);
       analysis = withRr;
       const methodConfig = getMethodConfig(method_id);
       const minRr = methodConfig.autoEntry.minRRRatio;
 
-      if (computedRr != null && computedRr < minRr) {
+      if (computedRr != null && computedRr + 1e-9 < minRr) {
+        const repairedRr = await tryRepairTpForMinRrWithSecondaryKey({
+          symbol,
+          timeframe,
+          methodId: method_id,
+          analysis,
+        });
+        if (repairedRr) {
+          analysis = repairedRr;
+          const again = reconcileExpectedRr(analysis);
+          analysis = again.analysis;
+          computedRr = again.computedRr;
+        }
+      }
+
+      if (computedRr != null && computedRr + 1e-9 < minRr) {
         const reason = `R:R ${computedRr.toFixed(2)} below minimum ${minRr} (from entry/SL/TP)`;
         if (this.config.enableMemory) {
           await memoryService.storeDecision({

@@ -11,6 +11,8 @@ export interface GroqAnalysisRequest {
   userPrompt: string;
   temperature?: number;
   maxRetries?: number;
+  /** If set, only these models are tried (in order). Saves cost for auxiliary calls (e.g. levels adapter). */
+  preferredModels?: string[];
 }
 
 export interface GroqAnalysis {
@@ -52,7 +54,7 @@ let lastCallTime = 0;
 const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
 
 // Function to clean JSON response from models that add extra text
-function cleanJSONResponse(rawResponse: string): GroqAnalysis | null {
+export function cleanJSONResponse(rawResponse: string): GroqAnalysis | null {
   try {
     // Find the first { and match braces to get complete JSON object
     const start = rawResponse.indexOf('{');
@@ -202,7 +204,7 @@ class GroqClient {
    * Send chat completion request to Groq API
    */
   async analyze(params: GroqAnalysisRequest): Promise<GroqAnalysis> {
-    const { systemPrompt, userPrompt, temperature = 0.2, maxRetries = 5 } = params;
+    const { systemPrompt, userPrompt, temperature = 0.2, maxRetries = 5, preferredModels } = params;
 
     // Rate limiting protection
     const now = Date.now();
@@ -224,9 +226,12 @@ class GroqClient {
       keysTried.add(currentKeyIndex);
       console.log(`[GroqClient] Using API key ${currentKeyIndex + 1}/${totalApiKeys} (tried ${keysTried.size}/${totalApiKeys} keys)`);
 
+      const modelsToTry =
+        preferredModels && preferredModels.length > 0 ? preferredModels : MODELS;
+
       // Inner loop: Try each model with current API key
-      for (let modelIndex = 0; modelIndex < MODELS.length; modelIndex++) {
-        const currentModel = MODELS[modelIndex];
+      for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
+        const currentModel = modelsToTry[modelIndex];
         console.log(`[GroqClient] Trying model: ${currentModel}`);
 
         const requestBody = {
