@@ -73,7 +73,7 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
         {llmData.lastEngagedSummary ? (
           <div className="p-3 bg-surface-1/50 rounded-lg">
             <p className="text-xs text-foreground-tertiary mb-1">Lần gọi gần nhất</p>
-            <p className="text-sm text-foreground">{llmData.lastEngagedSummary}</p>
+            <p className="text-sm text-foreground line-clamp-4">{llmData.lastEngagedSummary}</p>
           </div>
         ) : null}
 

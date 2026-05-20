@@ -237,7 +237,7 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
           )}
         </div>
 
-        <div className="overflow-x-auto -mx-1 px-1 pb-1">
+        <div className="overflow-x-auto -mx-1 px-1 pb-1 max-h-[min(28rem,70vh)] lg:max-h-none">
         <ol className="flex flex-col lg:flex-row lg:items-start lg:gap-0 gap-0 lg:min-w-max">
           {flow.stages.map((stage, index) => (
             <PipelineStep

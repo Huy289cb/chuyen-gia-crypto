@@ -120,22 +120,27 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         </div>
 
         {(signalData.detailReason || signalData.setupReason) && !signalData.pass ? (
-          <div className="p-3 bg-warning-dim/30 rounded-lg border border-warning/20">
-            <p className="text-xs text-foreground-tertiary mb-1">
-              Bằng chứng lần quét (khung {signalData.timeframe || 'best'})
-            </p>
-            <pre className="text-xs text-foreground leading-relaxed whitespace-pre-wrap font-sans">
+          <details className="group rounded-lg border border-warning/20 bg-warning-dim/30">
+            <summary className="cursor-pointer list-none px-3 py-2.5 text-xs font-medium text-foreground-secondary [&::-webkit-details-marker]:hidden">
+              <span className="text-foreground-tertiary">
+                Bằng chứng lần quét ({signalData.timeframe || 'best'})
+              </span>
+              <span className="ml-2 text-accent-primary group-open:hidden">— mở rộng</span>
+              <span className="ml-2 text-accent-primary hidden group-open:inline">— thu gọn</span>
+            </summary>
+            <pre className="max-h-36 overflow-y-auto px-3 pb-3 text-xs text-foreground leading-relaxed whitespace-pre-wrap font-sans">
               {signalData.detailReason || signalData.setupReason}
             </pre>
-          </div>
+          </details>
         ) : null}
 
         {signalData.evaluations && signalData.evaluations.length > 0 ? (
-          <div>
-            <p className="text-xs text-foreground-tertiary mb-2 uppercase tracking-wide">
-              Theo khung thời gian
-            </p>
-            <div className="space-y-2">
+          <details className="group rounded-lg border border-border-default bg-surface-1/30">
+            <summary className="cursor-pointer list-none px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-foreground-tertiary [&::-webkit-details-marker]:hidden">
+              Theo khung thời gian ({signalData.evaluations.length})
+              <span className="ml-2 normal-case text-accent-primary group-open:hidden">— mở rộng</span>
+            </summary>
+            <div className="max-h-52 overflow-y-auto space-y-2 px-3 pb-3">
               {signalData.evaluations.map((row) => (
                 <div
                   key={row.timeframe}
@@ -157,14 +162,14 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
                     {row.playbook !== 'none' ? ` · ${row.playbook}` : ''}
                   </p>
                   {!row.pass && (row.detailReason || row.setupReason) ? (
-                    <pre className="text-xs text-foreground mt-1.5 leading-relaxed whitespace-pre-wrap font-sans">
+                    <pre className="text-xs text-foreground mt-1.5 max-h-24 overflow-y-auto leading-relaxed whitespace-pre-wrap font-sans">
                       {row.detailReason || row.setupReason}
                     </pre>
                   ) : null}
                 </div>
               ))}
             </div>
-          </div>
+          </details>
         ) : null}
 
         <div>

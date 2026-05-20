@@ -71,42 +71,57 @@ function DashboardPage() {
       <main className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden">
         <DecisionFlowPanel className="mb-6" />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="space-y-6 min-w-0">
+        {/* Primary workspace: account | market | execution */}
+        <section
+          aria-label="Trading workspace"
+          className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-6 items-start"
+        >
+          <aside className="xl:col-span-3 space-y-6 min-w-0 order-2 xl:order-1">
+            <TestnetBalancePanel />
             <SystemOverview />
+          </aside>
+
+          <div className="xl:col-span-6 space-y-6 min-w-0 order-1 xl:order-2">
+            <MarketChartPanel symbol="BTC" method="kim_nghia" />
+            <IndicatorPanel />
+            <div id="event-log">
+              <EventLogFeed refreshToken={eventLogRefreshToken} />
+            </div>
+          </div>
+
+          <aside className="xl:col-span-3 space-y-6 min-w-0 order-3">
+            <div id="open-positions">
+              <OpenPositionsPanel />
+            </div>
+            <ActiveOrdersPanel />
+            <TradeHistoryPanel />
+          </aside>
+        </section>
+
+        {/* Pipeline ops & intelligence — balanced two columns */}
+        <section
+          aria-label="Pipeline and intelligence"
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
+        >
+          <div className="space-y-6 min-w-0">
             <SchedulerStatusPanel />
             <CandleWarmupPanel />
             <div id="risk-engine">
               <RiskEnginePanel />
             </div>
             <NoTradeReasonsPanel />
+            <MemoryInsightsPanel />
           </div>
 
           <div className="space-y-6 min-w-0">
-            <MarketChartPanel symbol="BTC" method="kim_nghia" />
-            <IndicatorPanel />
-          </div>
-
-          <div className="space-y-6 min-w-0">
-            <TestnetBalancePanel />
-            <div id="open-positions">
-              <OpenPositionsPanel />
-            </div>
-            <ActiveOrdersPanel />
-            <TradeHistoryPanel />
             <div id="signal-gate">
               <SignalGatePanel />
             </div>
             <div id="llm-dispatch">
               <LlmDispatchPanel />
             </div>
-            <MemoryInsightsPanel />
           </div>
-        </div>
-
-        <div id="event-log" className="mt-8">
-          <EventLogFeed refreshToken={eventLogRefreshToken} />
-        </div>
+        </section>
       </main>
 
       <Footer />
