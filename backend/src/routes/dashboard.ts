@@ -443,6 +443,7 @@ router.get('/warmup', async (_req: Request, res: Response) => {
 
 async function buildLiveSignalGateView(symbol: string) {
   const evaluations: Array<{ timeframe: string; result: SignalGateOutput }> = [];
+  const gateConfig = signalGateService.getConfig();
 
   await Promise.all(
     V3_SIGNAL_GATE_TIMEFRAMES.map(async (timeframe) => {
@@ -455,13 +456,34 @@ async function buildLiveSignalGateView(symbol: string) {
 
   if (evaluations.length === 0) return null;
 
-  const best = [...evaluations].sort(compareSignalGateEvaluations)[0];
+  const sorted = [...evaluations].sort(compareSignalGateEvaluations);
+  const best = sorted[0];
   const { timeframe, result } = best;
 
-  const reasonCodes = [result.reason];
-  if (evaluations.length > 1) {
-    reasonCodes.push(`Evaluated: ${evaluations.map((e) => e.timeframe).join(', ')} (best: ${timeframe})`);
+  const perTimeframe = sorted.map(({ timeframe: tf, result: r }) => ({
+    timeframe: tf,
+    grade: r.setupResult.grade,
+    confidence: r.setupResult.confidence,
+    regime: r.setupResult.regime,
+    playbook: r.setupResult.playbookKey || 'none',
+    pass: r.pass,
+    setupReason: r.setupResult.reason,
+    gateReason: r.pass ? null : r.reason,
+  }));
+
+  const reasonCodes: string[] = [];
+  for (const row of perTimeframe) {
+    if (row.pass) {
+      reasonCodes.push(`${row.timeframe}: PASS · grade ${row.grade}`);
+    } else {
+      reasonCodes.push(
+        `${row.timeframe}: BLOCK · grade ${row.grade} · ${row.setupReason}`
+      );
+    }
   }
+  reasonCodes.push(
+    `Policy: grade ≥ ${gateConfig.minGrade}, conf ≥ ${(gateConfig.minConfidence * 100).toFixed(0)}%`
+  );
 
   return {
     id: 'live',
@@ -471,7 +493,9 @@ async function buildLiveSignalGateView(symbol: string) {
     playbook: result.setupResult.playbookKey || 'unknown',
     regime: result.setupResult.regime,
     pass: result.pass,
+    setupReason: result.setupResult.reason,
     reasonCodes,
+    evaluations: perTimeframe,
     timestamp: new Date().toISOString(),
   };
 }

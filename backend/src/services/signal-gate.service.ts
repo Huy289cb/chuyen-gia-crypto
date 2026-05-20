@@ -6,6 +6,7 @@
 
 import { analyzeSetupGate, SetupGateInput, SetupGateResult } from '../analyzers/setup-gate.analyzer';
 import { getRiskPolicy } from '../config/risk-policy';
+import { formatSignalGateBlockReason } from '../utils/signal-gate-format';
 
 export interface SignalGateConfig {
   minGrade: 'A' | 'B' | 'C' | 'D';
@@ -138,15 +139,14 @@ export class SignalGateService {
 
     const pass = gradePass && confidencePass && regimePass;
 
-    let reason = '';
-    if (!gradePass) {
-      reason = `Grade ${setupResult.grade} below minimum ${this.config.minGrade}`;
-    } else if (!confidencePass) {
-      reason = `Confidence ${(setupResult.confidence * 100).toFixed(0)}% below minimum ${(this.config.minConfidence * 100).toFixed(0)}%`;
-    } else if (!regimePass) {
-      reason = `Regime ${setupResult.regime} not in allowed list`;
-    } else {
+    let reason: string;
+    if (pass) {
       reason = 'Signal passes all gate conditions';
+    } else {
+      reason = formatSignalGateBlockReason(
+        { pass, setupResult, reason: '', shouldCallGroq: false, isDuplicate: false },
+        this.config
+      );
     }
 
     return {

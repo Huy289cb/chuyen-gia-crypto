@@ -48,6 +48,16 @@ export function hookSignalGateBlock(symbol: string, timeframe: string, reason: s
   );
 }
 
+/** One message per market-scan cycle (all timeframes). */
+export function hookSignalGateScanSummary(symbol: string, body: string, allBlocked: boolean): void {
+  const slot = Math.floor(Date.now() / (5 * 60 * 1000));
+  notifyVerbose(
+    allBlocked ? '🚫 Signal Gate BLOCK — quét xong' : '✅ Signal Gate — quét xong',
+    body,
+    `sg_scan:${symbol}:${slot}`
+  );
+}
+
 export function hookLlmNoTrade(symbol: string, reason: string): void {
   notifyVerbose('🤖 LLM no_trade', `${symbol}: ${reason}`, `llm_no:${symbol}:${reason.slice(0, 40)}`);
 }

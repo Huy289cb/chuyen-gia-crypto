@@ -76,7 +76,6 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
       />
 
       <div className="space-y-4">
-        {/* Pass/Block Status */}
         <div className="flex items-center justify-between gap-3 p-3 bg-surface-1/50 rounded-lg">
           <div className="flex items-center gap-2 min-w-0">
             {signalData.pass ? (
@@ -95,7 +94,6 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           />
         </div>
 
-        {/* Signal Details */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-surface-1/50 rounded-lg">
             <p className="text-xs text-foreground-tertiary mb-1">Grade</p>
@@ -121,9 +119,52 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           ) : null}
         </div>
 
-        {/* Reason Codes */}
+        {signalData.setupReason && !signalData.pass ? (
+          <div className="p-3 bg-warning-dim/30 rounded-lg border border-warning/20">
+            <p className="text-xs text-foreground-tertiary mb-1">Tại sao chấm điểm này?</p>
+            <p className="text-sm text-foreground leading-relaxed">{signalData.setupReason}</p>
+          </div>
+        ) : null}
+
+        {signalData.evaluations && signalData.evaluations.length > 0 ? (
+          <div>
+            <p className="text-xs text-foreground-tertiary mb-2 uppercase tracking-wide">
+              Theo khung thời gian
+            </p>
+            <div className="space-y-2">
+              {signalData.evaluations.map((row) => (
+                <div
+                  key={row.timeframe}
+                  className="p-3 bg-surface-1/50 rounded-lg text-sm"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="font-medium text-foreground">{row.timeframe}</span>
+                    <span
+                      className={cn(
+                        'text-xs font-medium',
+                        row.pass ? 'text-success' : 'text-danger'
+                      )}
+                    >
+                      {row.pass ? 'PASS' : 'BLOCK'} · grade {row.grade}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground-tertiary">
+                    {row.regime}
+                    {row.playbook !== 'none' ? ` · ${row.playbook}` : ''}
+                  </p>
+                  {!row.pass && row.setupReason ? (
+                    <p className="text-xs text-foreground mt-1.5 leading-relaxed">
+                      {row.setupReason}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div>
-          <p className="text-xs text-foreground-tertiary mb-2 uppercase tracking-wide">Reason Codes</p>
+          <p className="text-xs text-foreground-tertiary mb-2 uppercase tracking-wide">Tóm tắt</p>
           <div className="flex flex-wrap gap-2">
             {signalData.reasonCodes && signalData.reasonCodes.length > 0 ? (
               signalData.reasonCodes.map((code) => (

@@ -10,9 +10,10 @@ import { signalGateService, type SignalGateOutput } from '../services/signal-gat
 import type { UnifiedCandle } from '../services/candle.service';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 import {
-  hookSignalGateBlock,
-  hookSignalGatePass,
-} from '../services/telegram/telegram-hooks';
+  formatSignalGateTelegramScan,
+  type SignalGateTimeframeRow,
+} from '../utils/signal-gate-format';
+import { hookSignalGateScanSummary } from '../services/telegram/telegram-hooks';
 
 let marketScanTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -43,60 +44,63 @@ async function runMarketScan() {
 
     const symbols = ['BTC']; // BTC-only per Big Update Plan v3
     const timeframes = ['15m', '1h', '4h'];
+    const gateConfig = signalGateService.getConfig();
 
-    const scanJobs = symbols.flatMap((symbol) =>
-      timeframes.map(async (timeframe) => {
-        const { candles, source } = await getCandles({
-          symbol,
-          timeframe,
-          limit: 100,
-          cacheToDb: true,
-        });
+    for (const symbol of symbols) {
+      const telegramRows: SignalGateTimeframeRow[] = [];
 
-        console.log(
-          `[MarketScan] Fetched ${candles.length} candles for ${symbol} ${timeframe} (source: ${source})`
-        );
-
-        if (candles.length < 50) {
-          console.warn(`[MarketScan] Insufficient candles for ${symbol} ${timeframe}, skipping gate`);
-          return;
-        }
-
-        const signalResult = await signalGateService.evaluate({
-          candles,
-          symbol,
-          timeframe,
-        });
-
-        const result: MarketScanResult = {
-          symbol,
-          timeframe,
-          candles,
-          signalResult,
-          timestamp: new Date(),
-        };
-
-        const key = `${symbol}_${timeframe}`;
-        scanResults.set(key, result);
-
-        const dupTag = signalResult.isDuplicate ? ' (duplicate)' : '';
-        console.log(
-          `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
-        );
-
-        if (signalResult.pass && signalResult.shouldCallGroq && !signalResult.isDuplicate) {
-          hookSignalGatePass(
+      await Promise.all(
+        timeframes.map(async (timeframe) => {
+          const { candles, source } = await getCandles({
             symbol,
             timeframe,
-            signalResult.setupResult.grade || '?'
-          );
-        } else if (!signalResult.pass && !signalResult.isDuplicate) {
-          hookSignalGateBlock(symbol, timeframe, signalResult.reason);
-        }
-      })
-    );
+            limit: 100,
+            cacheToDb: true,
+          });
 
-    await Promise.all(scanJobs);
+          console.log(
+            `[MarketScan] Fetched ${candles.length} candles for ${symbol} ${timeframe} (source: ${source})`
+          );
+
+          if (candles.length < 50) {
+            console.warn(`[MarketScan] Insufficient candles for ${symbol} ${timeframe}, skipping gate`);
+            return;
+          }
+
+          const signalResult = await signalGateService.evaluate({
+            candles,
+            symbol,
+            timeframe,
+          });
+
+          const result: MarketScanResult = {
+            symbol,
+            timeframe,
+            candles,
+            signalResult,
+            timestamp: new Date(),
+          };
+
+          const key = `${symbol}_${timeframe}`;
+          scanResults.set(key, result);
+
+          const dupTag = signalResult.isDuplicate ? ' (duplicate)' : '';
+          console.log(
+            `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
+          );
+
+          if (!signalResult.isDuplicate) {
+            telegramRows.push({ timeframe, output: signalResult });
+          }
+        })
+      );
+
+      if (telegramRows.length > 0) {
+        const { body } = formatSignalGateTelegramScan(symbol, telegramRows, gateConfig);
+        const allBlocked = telegramRows.every((r) => !r.output.pass);
+        hookSignalGateScanSummary(symbol, body, allBlocked);
+      }
+    }
 
     console.log('[MarketScan] Market scan completed');
   } catch (error) {

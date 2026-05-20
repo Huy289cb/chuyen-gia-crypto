@@ -83,6 +83,17 @@ export interface AccountData {
   }>;
 }
 
+export interface SignalGateEvaluationRow {
+  timeframe: string;
+  grade: string;
+  confidence: number;
+  regime: string;
+  playbook: string;
+  pass: boolean;
+  setupReason: string;
+  gateReason?: string | null;
+}
+
 export interface SignalGateView {
   grade: string;
   confidence: number;
@@ -90,6 +101,8 @@ export interface SignalGateView {
   regime: string;
   pass: boolean;
   reasonCodes: string[];
+  setupReason?: string;
+  evaluations?: SignalGateEvaluationRow[];
   /** Timeframe that produced this view (live API picks best of 15m/1h/4h). */
   timeframe?: string;
   timestamp?: string;
@@ -200,11 +213,27 @@ async function fetchJson(path: string, label: string): Promise<ApiBody> {
   return readOkJson(res, label);
 }
 
+function mapEvaluationRow(raw: Record<string, unknown>): SignalGateEvaluationRow {
+  return {
+    timeframe: String(raw.timeframe ?? '—'),
+    grade: String(raw.grade ?? '—'),
+    confidence: Number(raw.confidence ?? 0),
+    regime: String(raw.regime ?? '—'),
+    playbook: String(raw.playbook ?? '—'),
+    pass: Boolean(raw.pass),
+    setupReason: String(raw.setupReason ?? '—'),
+    gateReason: raw.gateReason != null ? String(raw.gateReason) : null,
+  };
+}
+
 export function mapSignal(raw: Record<string, unknown> | null | undefined): SignalGateView | null {
   if (!raw) return null;
   const reasonCodes = Array.isArray(raw.reasonCodes)
     ? (raw.reasonCodes as unknown[]).map((c) => String(c))
     : [];
+  const evaluations = Array.isArray(raw.evaluations)
+    ? (raw.evaluations as Record<string, unknown>[]).map(mapEvaluationRow)
+    : undefined;
   return {
     grade: String(raw.grade ?? '—'),
     confidence: Number(raw.confidence ?? 0),
@@ -212,6 +241,8 @@ export function mapSignal(raw: Record<string, unknown> | null | undefined): Sign
     regime: String(raw.regime ?? '—'),
     pass: Boolean(raw.pass),
     reasonCodes,
+    setupReason: raw.setupReason ? String(raw.setupReason) : undefined,
+    evaluations,
     timeframe: raw.timeframe ? String(raw.timeframe) : undefined,
     timestamp: raw.timestamp ? String(raw.timestamp) : undefined,
   };
