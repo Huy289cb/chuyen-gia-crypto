@@ -70,6 +70,24 @@ function pickLatestTimestamp(...candidates: (string | null | undefined)[]): stri
   return valid.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
 }
 
+/**
+ * Signal gate `timestamp` = last closed candle time used for evaluation (chart bar), not wall-clock.
+ * LLM `lastCall` = when the latest engaged Groq decision was persisted. They often align but can diverge
+ * when candles advance on refresh while the last Groq run was earlier (cron / no_trade path).
+ */
+function isLlmTimestampBeforeSignalCandle(
+  signalIso: string | null | undefined,
+  llmIso: string | null | undefined
+): boolean {
+  if (!signalIso || !llmIso) return false;
+  const sig = new Date(signalIso).getTime();
+  const llm = new Date(llmIso).getTime();
+  if (!Number.isFinite(sig) || !Number.isFinite(llm)) return false;
+  /** Same scan cycle usually has Groq within a few minutes after candle close; older => different cycle. */
+  const graceAfterCandleMs = 5 * 60 * 1000;
+  return llm < sig - graceAfterCandleMs;
+}
+
 function topNoTradeReason(intel: IntelligenceData | null): string | null {
   if (!intel?.noTradeReasons?.length) return null;
   const sorted = [...intel.noTradeReasons].sort((a, b) => b.count - a.count);
@@ -292,17 +310,31 @@ export function computeDecisionFlow(
       passed: llmTriggered,
       blocked: signalPassed && riskApproved && !llmTriggered,
       skipped: !signalPassed || !riskApproved,
-      reason: llmTriggered
-        ? llm?.lastEngagedSummary
-          ? `Groq · ${llm.lastEngagedSummary}${(llm.callsToday ?? 0) > 0 ? ` · ${llm.callsToday} lần hôm nay` : ''}`
-          : `${llm?.callsToday ?? 0} LLM call(s) today`
-        : signalPassed && riskApproved
-          ? duplicateSignalHits > 0
+      reason: (() => {
+        let r: string;
+        if (llmTriggered) {
+          r = llm?.lastEngagedSummary
+            ? `Groq · ${llm.lastEngagedSummary}${(llm.callsToday ?? 0) > 0 ? ` · ${llm.callsToday} lần hôm nay` : ''}`
+            : `${llm?.callsToday ?? 0} LLM call(s) today`;
+        } else if (signalPassed && riskApproved) {
+          r = duplicateSignalHits > 0
             ? `Skipped (${duplicateSignalHits}) — duplicate or signal-only path`
             : llm?.lastCall
               ? `Chờ cycle mới — lần cuối ${llm.lastEngagedSummary || llm.lastDecision || '—'}`
-              : 'Chờ LLM Dispatch (:02,:17,:32,:47 UTC)'
-          : 'Waiting for upstream approval',
+              : 'Chờ LLM Dispatch (:02,:17,:32,:47 UTC)';
+        } else {
+          r = 'Waiting for upstream approval';
+        }
+        if (
+          llmTriggered &&
+          signalPassed &&
+          isLlmTimestampBeforeSignalCandle(signal?.timestamp, llm?.lastCall)
+        ) {
+          r +=
+            ' · Mốc giờ LLM = lần Groq gần nhất; Signal Gate = thời điểm nến đóng — có thể khác chu kỳ.';
+        }
+        return r;
+      })(),
       timestamp: llm?.lastCall || undefined,
       metric:
         llm?.lastTimeframe && llm?.responseStatus

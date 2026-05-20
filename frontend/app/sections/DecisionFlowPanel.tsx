@@ -119,7 +119,7 @@ function PipelineStep({ stage, isLast }: { stage: PipelineStageView; isLast: boo
             <p className="text-xs font-semibold text-foreground leading-tight">{stage.name}</p>
             <StageBadge status={stage.status} />
           </div>
-          <p className="text-[11px] text-foreground-secondary mt-1 line-clamp-2">{stage.reason}</p>
+          <p className="text-[11px] text-foreground-secondary mt-1 line-clamp-3">{stage.reason}</p>
           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-foreground-tertiary lg:justify-center">
             {stage.metric && <span>{stage.metric}</span>}
             {stage.timestamp && (
