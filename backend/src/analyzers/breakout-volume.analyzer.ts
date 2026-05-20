@@ -1,9 +1,9 @@
 /**
  * Breakout + Volume Analyzer
- * Detects breakout with volume confirmation
  */
 
 import { CandleData } from './setup-gate.analyzer';
+import type { PlaybookEvidence } from './setup-gate.types';
 
 export interface BreakoutVolumeResult {
   detected: boolean;
@@ -11,11 +11,13 @@ export interface BreakoutVolumeResult {
   confidence: number;
   reason: string;
   direction: 'bullish' | 'bearish' | null;
+  evidence: PlaybookEvidence;
 }
 
-/**
- * Analyze candles for breakout + volume patterns
- */
+function fmt(n: number, d = 2): string {
+  return n.toLocaleString('en-US', { maximumFractionDigits: d });
+}
+
 export function analyzeBreakoutVolume(candles: CandleData[]): BreakoutVolumeResult {
   if (candles.length < 30) {
     return {
@@ -23,53 +25,110 @@ export function analyzeBreakoutVolume(candles: CandleData[]): BreakoutVolumeResu
       grade: 'D',
       confidence: 0,
       reason: 'Insufficient data for breakout analysis',
-      direction: null
+      direction: null,
+      evidence: {
+        playbook: 'breakout_volume',
+        detected: false,
+        grade: 'D',
+        summary: `Thiếu dữ liệu (${candles.length}/30 nến)`,
+        metrics: { windowCandles: 30 },
+      },
     };
   }
 
   const recentCandles = candles.slice(-30);
   const currentCandle = recentCandles[recentCandles.length - 1];
-
-  // Calculate range for consolidation detection
   const consolidationCandles = recentCandles.slice(0, -5);
-  const highs = consolidationCandles.map(c => c.high);
-  const lows = consolidationCandles.map(c => c.low);
+  const highs = consolidationCandles.map((c) => c.high);
+  const lows = consolidationCandles.map((c) => c.low);
   const resistance = Math.max(...highs);
   const support = Math.min(...lows);
   const range = resistance - support;
-
-  // Calculate average volume
-  const volumes = consolidationCandles.map(c => c.volume);
+  const volumes = consolidationCandles.map((c) => c.volume);
   const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+  const volumeRatio = avgVolume > 0 ? currentCandle.volume / avgVolume : 0;
+  const minVolRatio = 1.5;
+
+  const metrics: PlaybookEvidence['metrics'] = {
+    windowCandles: 30,
+    consolidationBars: consolidationCandles.length,
+    resistance,
+    support,
+    rangeWidth: range,
+    lastClose: currentCandle.close,
+    lastVolume: currentCandle.volume,
+    avgVolume25: avgVolume,
+    volumeRatio: Number(volumeRatio.toFixed(2)),
+    minVolumeRatio: minVolRatio,
+    bullishBreak: currentCandle.close > resistance,
+    bearishBreak: currentCandle.close < support,
+  };
 
   let result: BreakoutVolumeResult = {
     detected: false,
     grade: 'D',
     confidence: 0,
     reason: 'No breakout detected',
-    direction: null
+    direction: null,
+    evidence: {
+      playbook: 'breakout_volume',
+      detected: false,
+      grade: 'D',
+      summary: '',
+      metrics,
+    },
   };
 
-  // Check for bullish breakout
-  if (currentCandle.close > resistance && currentCandle.volume > avgVolume * 1.5) {
-    const breakoutStrength = (currentCandle.close - resistance) / range;
-    const volumeRatio = currentCandle.volume / avgVolume;
+  const failReasons: string[] = [];
+  if (currentCandle.close <= resistance && currentCandle.close >= support) {
+    failReasons.push(
+      `Close ${fmt(currentCandle.close)} trong vùng tích lũy ${fmt(support)}–${fmt(resistance)}`
+    );
+  } else if (currentCandle.close > resistance && volumeRatio < minVolRatio) {
+    failReasons.push(
+      `Close trên kháng cự ${fmt(resistance)} nhưng vol ${volumeRatio.toFixed(2)}x < ${minVolRatio}x`
+    );
+  } else if (currentCandle.close < support && volumeRatio < minVolRatio) {
+    failReasons.push(
+      `Close dưới hỗ trợ ${fmt(support)} nhưng vol ${volumeRatio.toFixed(2)}x < ${minVolRatio}x`
+    );
+  } else if (currentCandle.close > resistance) {
+    failReasons.push(`Break up nhưng biên breakout/vùng < ngưỡng grade B`);
+  } else if (currentCandle.close < support) {
+    failReasons.push(`Break down nhưng biên breakout/vùng < ngưỡng grade B`);
+  }
 
+  if (currentCandle.close > resistance && currentCandle.volume > avgVolume * minVolRatio) {
+    const breakoutStrength = range > 0 ? (currentCandle.close - resistance) / range : 0;
     if (breakoutStrength > 0.01 && volumeRatio > 2.0) {
       result = {
         detected: true,
         grade: 'A',
         confidence: 0.85,
         reason: `Strong bullish breakout with ${volumeRatio.toFixed(1)}x volume confirmation`,
-        direction: 'bullish'
+        direction: 'bullish',
+        evidence: {
+          playbook: 'breakout_volume',
+          detected: true,
+          grade: 'A',
+          summary: `Break up: close ${fmt(currentCandle.close)} > KC ${fmt(resistance)}, vol ${volumeRatio.toFixed(2)}x`,
+          metrics: { ...metrics, breakoutStrengthPct: Number((breakoutStrength * 100).toFixed(2)) },
+        },
       };
-    } else if (breakoutStrength > 0.005 && volumeRatio > 1.5) {
+    } else if (breakoutStrength > 0.005 && volumeRatio > minVolRatio) {
       result = {
         detected: true,
         grade: 'B',
-        confidence: 0.70,
+        confidence: 0.7,
         reason: `Moderate bullish breakout with ${volumeRatio.toFixed(1)}x volume`,
-        direction: 'bullish'
+        direction: 'bullish',
+        evidence: {
+          playbook: 'breakout_volume',
+          detected: true,
+          grade: 'B',
+          summary: `Break up vừa: +${(breakoutStrength * 100).toFixed(2)}% vùng, vol ${volumeRatio.toFixed(2)}x`,
+          metrics: { ...metrics, breakoutStrengthPct: Number((breakoutStrength * 100).toFixed(2)) },
+        },
       };
     } else {
       result = {
@@ -77,31 +136,50 @@ export function analyzeBreakoutVolume(candles: CandleData[]): BreakoutVolumeResu
         grade: 'C',
         confidence: 0.55,
         reason: `Weak bullish breakout with ${volumeRatio.toFixed(1)}x volume`,
-        direction: 'bullish'
+        direction: 'bullish',
+        evidence: {
+          playbook: 'breakout_volume',
+          detected: true,
+          grade: 'C',
+          summary: `Break up yếu (grade C)`,
+          metrics,
+        },
       };
     }
+    return result;
   }
 
-  // Check for bearish breakout
-  if (currentCandle.close < support && currentCandle.volume > avgVolume * 1.5) {
-    const breakoutStrength = (support - currentCandle.close) / range;
-    const volumeRatio = currentCandle.volume / avgVolume;
-
+  if (currentCandle.close < support && currentCandle.volume > avgVolume * minVolRatio) {
+    const breakoutStrength = range > 0 ? (support - currentCandle.close) / range : 0;
     if (breakoutStrength > 0.01 && volumeRatio > 2.0) {
       result = {
         detected: true,
         grade: 'A',
         confidence: 0.85,
         reason: `Strong bearish breakout with ${volumeRatio.toFixed(1)}x volume confirmation`,
-        direction: 'bearish'
+        direction: 'bearish',
+        evidence: {
+          playbook: 'breakout_volume',
+          detected: true,
+          grade: 'A',
+          summary: `Break down: close ${fmt(currentCandle.close)} < HT ${fmt(support)}, vol ${volumeRatio.toFixed(2)}x`,
+          metrics: { ...metrics, breakoutStrengthPct: Number((breakoutStrength * 100).toFixed(2)) },
+        },
       };
-    } else if (breakoutStrength > 0.005 && volumeRatio > 1.5) {
+    } else if (breakoutStrength > 0.005 && volumeRatio > minVolRatio) {
       result = {
         detected: true,
         grade: 'B',
-        confidence: 0.70,
+        confidence: 0.7,
         reason: `Moderate bearish breakout with ${volumeRatio.toFixed(1)}x volume`,
-        direction: 'bearish'
+        direction: 'bearish',
+        evidence: {
+          playbook: 'breakout_volume',
+          detected: true,
+          grade: 'B',
+          summary: `Break down vừa: vol ${volumeRatio.toFixed(2)}x`,
+          metrics: { ...metrics, breakoutStrengthPct: Number((breakoutStrength * 100).toFixed(2)) },
+        },
       };
     } else {
       result = {
@@ -109,10 +187,23 @@ export function analyzeBreakoutVolume(candles: CandleData[]): BreakoutVolumeResu
         grade: 'C',
         confidence: 0.55,
         reason: `Weak bearish breakout with ${volumeRatio.toFixed(1)}x volume`,
-        direction: 'bearish'
+        direction: 'bearish',
+        evidence: {
+          playbook: 'breakout_volume',
+          detected: true,
+          grade: 'C',
+          summary: `Break down yếu (grade C)`,
+          metrics,
+        },
       };
     }
+    return result;
   }
+
+  result.evidence.summary =
+    failReasons.length > 0
+      ? failReasons.join('; ')
+      : `Vol ${volumeRatio.toFixed(2)}x, chưa breakout khỏi ${fmt(support)}–${fmt(resistance)}`;
 
   return result;
 }

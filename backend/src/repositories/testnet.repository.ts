@@ -386,8 +386,59 @@ export async function closeTestnetPosition(
   });
 }
 
+/** Synthetic position for pipeline events (FK target for testnet_trade_events). */
+export const PIPELINE_EVENT_POSITION_ID = 'pipeline_v3_kim_nghia';
+
 /**
- * Record testnet trade event
+ * Ensure a closed placeholder position exists so pipeline events can use the FK.
+ */
+export async function ensurePipelineEventPosition(accountId: number): Promise<string> {
+  const existing = await prisma.testnetPosition.findUnique({
+    where: { position_id: PIPELINE_EVENT_POSITION_ID },
+  });
+  if (existing) return PIPELINE_EVENT_POSITION_ID;
+
+  await prisma.testnetPosition.create({
+    data: {
+      position_id: PIPELINE_EVENT_POSITION_ID,
+      account_id: accountId,
+      symbol: 'BTC',
+      side: 'NONE',
+      entry_price: 0,
+      stop_loss: 0,
+      take_profit: 0,
+      size_usd: 0,
+      size_qty: 0,
+      risk_usd: 0,
+      risk_percent: 0,
+      expected_rr: 0,
+      status: 'closed',
+      close_reason: 'pipeline_event_anchor',
+    },
+  });
+  return PIPELINE_EVENT_POSITION_ID;
+}
+
+/**
+ * Pipeline / LLM events without a real open position (execution_blocked, risk pre-check).
+ */
+export async function recordPipelineEvent(
+  eventType: string,
+  eventData?: Record<string, unknown>
+): Promise<number | null> {
+  try {
+    const account = await getOrCreateTestnetAccount('BTC', 'kim_nghia', 10000);
+    const positionId = await ensurePipelineEventPosition(account.id);
+    return await recordTestnetTradeEvent(positionId, eventType, eventData);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[PipelineEvent] Failed to record ${eventType}: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Record testnet trade event (requires valid testnet_positions.position_id).
  */
 export async function recordTestnetTradeEvent(
   positionId: string,

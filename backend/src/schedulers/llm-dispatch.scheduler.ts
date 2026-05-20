@@ -12,7 +12,7 @@ import { getMethodConfig } from '../config/methods';
 import { executeV3Trade } from '../services/v3-trade-execution.service';
 import { hookLlmExecuteFail, hookLlmNoTrade } from '../services/telegram/telegram-hooks';
 import { memoryService } from '../services/memory.service';
-import { recordTestnetTradeEvent } from '../repositories/testnet.repository';
+import { recordPipelineEvent } from '../repositories/testnet.repository';
 import { formatLlmTradeSummary } from '../utils/trade-levels';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
@@ -102,6 +102,22 @@ async function runLLMDispatch() {
 
       if (dispatchResult.decision === 'no_trade') {
         hookLlmNoTrade(symbol, dispatchResult.reason);
+        const isRiskPreBlock =
+          dispatchResult.reason.includes('Risk engine blocked') ||
+          dispatchResult.reason.includes('SL distance');
+        if (isRiskPreBlock && dispatchResult.analysis) {
+          await recordPipelineEvent('execution_blocked', {
+            symbol,
+            timeframe,
+            reason: dispatchResult.reason,
+            phase: 'pre_execution',
+            action: dispatchResult.analysis.action,
+            entry: dispatchResult.analysis.suggested_entry,
+            stop_loss: dispatchResult.analysis.suggested_stop_loss,
+            take_profit: dispatchResult.analysis.suggested_take_profit,
+            decision_id: dispatchResult.decisionRecordId,
+          });
+        }
       }
 
       if (dispatchResult.decision === 'trade' && dispatchResult.analysis) {
@@ -136,17 +152,16 @@ async function runLLMDispatch() {
               execResult.reason
             );
           }
-          const eventKey = dispatchResult.decisionRecordId
-            ? `decision_${dispatchResult.decisionRecordId}`
-            : `llm_${symbol}_${timeframe}`;
-          await recordTestnetTradeEvent(eventKey, 'execution_blocked', {
+          await recordPipelineEvent('execution_blocked', {
             symbol,
             timeframe,
             reason: execResult.reason,
+            phase: 'binance_execution',
             action: dispatchResult.analysis.action,
             entry: dispatchResult.analysis.suggested_entry,
             stop_loss: dispatchResult.analysis.suggested_stop_loss,
             take_profit: dispatchResult.analysis.suggested_take_profit,
+            decision_id: dispatchResult.decisionRecordId,
           });
         }
       }

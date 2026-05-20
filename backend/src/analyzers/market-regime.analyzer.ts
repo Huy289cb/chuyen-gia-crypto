@@ -1,12 +1,10 @@
 /**
  * Market Regime Analyzer
- * Detects:
- * - trend
- * - range
- * - chop
+ * Detects: trend | range | chop (with numeric evidence)
  */
 
 import { CandleData } from './setup-gate.analyzer';
+import type { RegimeEvidence } from './setup-gate.types';
 
 export type MarketRegime = 'trend' | 'range' | 'chop';
 
@@ -17,20 +15,14 @@ export interface MarketRegimeResult {
   reason: string;
 }
 
-/**
- * Analyze candles to determine market regime
- */
-export function analyzeMarketRegime(candles: CandleData[]): MarketRegime {
-  if (candles.length < 50) {
-    return 'chop';
-  }
-
+function computeCoreMetrics(candles: CandleData[]) {
   const recentCandles = candles.slice(-50);
-  const closes = recentCandles.map(c => c.close);
-
-  // Calculate trend strength using linear regression slope
+  const closes = recentCandles.map((c) => c.close);
   const n = closes.length;
-  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumX2 = 0;
   for (let i = 0; i < n; i++) {
     sumX += i;
     sumY += closes[i];
@@ -39,60 +31,100 @@ export function analyzeMarketRegime(candles: CandleData[]): MarketRegime {
   }
   const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
   const avgPrice = sumY / n;
-  const trendStrength = Math.abs(slope / avgPrice) * 100; // Percentage
+  const trendStrengthPct = Math.abs(slope / avgPrice) * 100;
 
-  // Calculate volatility (standard deviation)
   const variance = closes.reduce((acc, val) => acc + Math.pow(val - avgPrice, 2), 0) / n;
   const stdDev = Math.sqrt(variance);
-  const volatility = stdDev / avgPrice * 100;
+  const volatilityPct = (stdDev / avgPrice) * 100;
 
-  // Calculate range boundness
-  const highs = recentCandles.map(c => c.high);
-  const lows = recentCandles.map(c => c.low);
-  const range = (Math.max(...highs) - Math.min(...lows)) / avgPrice * 100;
+  const highs = recentCandles.map((c) => c.high);
+  const lows = recentCandles.map((c) => c.low);
+  const rangePct = ((Math.max(...highs) - Math.min(...lows)) / avgPrice) * 100;
 
-  // Determine regime
-  if (volatility > 2.0 && trendStrength < 0.1) {
-    return 'chop';
-  }
+  const currentPrice = closes[closes.length - 1];
+  const sma20 = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+  const sma50 = closes.reduce((a, b) => a + b, 0) / n;
 
-  if (trendStrength > 0.3) {
-    return 'trend';
-  }
+  let trendDirection: 'bullish' | 'bearish' | null = null;
+  if (currentPrice > sma20 && sma20 > sma50) trendDirection = 'bullish';
+  else if (currentPrice < sma20 && sma20 < sma50) trendDirection = 'bearish';
 
-  if (range < 1.5 && volatility < 1.0) {
-    return 'range';
-  }
-
-  // Default to trend if moderate strength
-  if (trendStrength > 0.15) {
-    return 'trend';
-  }
-
-  return 'range';
+  return {
+    avgPrice,
+    currentPrice,
+    trendStrengthPct,
+    volatilityPct,
+    rangePct,
+    trendDirection,
+    sma20,
+    sma50,
+  };
 }
 
 /**
- * Get detailed market regime analysis
+ * Regime + rule path + numbers used for that scan.
  */
-export function getMarketRegimeDetails(candles: CandleData[]): MarketRegimeResult {
-  const regime = analyzeMarketRegime(candles);
-  const recentCandles = candles.slice(-50);
-  const closes = recentCandles.map(c => c.close);
+export function computeRegimeEvidence(candles: CandleData[]): RegimeEvidence {
+  if (candles.length < 50) {
+    const last = candles[candles.length - 1];
+    return {
+      regime: 'chop',
+      volatilityPct: 0,
+      trendStrengthPct: 0,
+      rangePct: 0,
+      avgPrice: last?.close ?? 0,
+      currentPrice: last?.close ?? 0,
+      matchedRule: `Thiếu dữ liệu: ${candles.length}/50 nến → mặc định chop`,
+      trendDirection: null,
+    };
+  }
 
-  const sma20 = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
-  const sma50 = closes.reduce((a, b) => a + b, 0) / 50;
-  const currentPrice = closes[closes.length - 1];
+  const m = computeCoreMetrics(candles);
+  let regime: MarketRegime = 'range';
+  let matchedRule: string;
 
-  let trendDirection: 'bullish' | 'bearish' | null = null;
-  if (regime === 'trend') {
-    trendDirection = currentPrice > sma20 && sma20 > sma50 ? 'bullish' : 'bearish';
+  if (m.volatilityPct > 2.0 && m.trendStrengthPct < 0.1) {
+    regime = 'chop';
+    matchedRule =
+      `CHOP: biến động ${m.volatilityPct.toFixed(2)}% > 2% và độ trend ${m.trendStrengthPct.toFixed(2)}% < 0.1% (nhiễu, không có hướng rõ)`;
+  } else if (m.trendStrengthPct > 0.3) {
+    regime = 'trend';
+    matchedRule = `TREND: độ trend ${m.trendStrengthPct.toFixed(2)}% > 0.3%`;
+  } else if (m.rangePct < 1.5 && m.volatilityPct < 1.0) {
+    regime = 'range';
+    matchedRule =
+      `RANGE: biên 50n ${m.rangePct.toFixed(2)}% < 1.5% và biến động ${m.volatilityPct.toFixed(2)}% < 1%`;
+  } else if (m.trendStrengthPct > 0.15) {
+    regime = 'trend';
+    matchedRule = `TREND (vừa): độ trend ${m.trendStrengthPct.toFixed(2)}% > 0.15%`;
+  } else {
+    regime = 'range';
+    matchedRule =
+      `RANGE (mặc định): trend ${m.trendStrengthPct.toFixed(2)}%, biến động ${m.volatilityPct.toFixed(2)}%, biên ${m.rangePct.toFixed(2)}%`;
   }
 
   return {
     regime,
-    trendDirection,
-    confidence: regime === 'trend' ? 0.8 : regime === 'range' ? 0.7 : 0.6,
-    reason: `Regime: ${regime}${trendDirection ? `, Direction: ${trendDirection}` : ''}`
+    volatilityPct: m.volatilityPct,
+    trendStrengthPct: m.trendStrengthPct,
+    rangePct: m.rangePct,
+    avgPrice: m.avgPrice,
+    currentPrice: m.currentPrice,
+    matchedRule,
+    trendDirection: regime === 'trend' ? m.trendDirection : null,
+  };
+}
+
+export function analyzeMarketRegime(candles: CandleData[]): MarketRegime {
+  return computeRegimeEvidence(candles).regime;
+}
+
+export function getMarketRegimeDetails(candles: CandleData[]): MarketRegimeResult {
+  const ev = computeRegimeEvidence(candles);
+  return {
+    regime: ev.regime,
+    trendDirection: ev.trendDirection,
+    confidence: ev.regime === 'trend' ? 0.8 : ev.regime === 'range' ? 0.7 : 0.6,
+    reason: ev.matchedRule,
   };
 }

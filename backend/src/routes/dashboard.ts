@@ -105,6 +105,18 @@ function parseExecutionBlockedReason(reason: string): string | null {
   return null;
 }
 
+/** Groq ran but risk engine rejected before trade row (SL / R:R pre-check). */
+function isPreExecutionRiskBlock(reason: string): boolean {
+  return reason.startsWith('Risk engine:') && reason.includes('LLM:');
+}
+
+function parsePreExecutionRiskDetail(reason: string): string {
+  const body = reason.replace(/^Risk engine:\s*/, '').trim();
+  const llmPart = body.includes('·') ? body.split('·').slice(1).join('·').trim() : '';
+  const gatePart = body.split('·')[0]?.trim() || body;
+  return [llmPart, `→ ${gatePart}`].filter(Boolean).join('\n');
+}
+
 function fmtEventPrice(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(Number(n))) return '—';
   return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -137,16 +149,17 @@ function mapTradeDecisionToEvent(d: {
 }) {
   const r = d.reason || '';
   const execBlocked = parseExecutionBlockedReason(r);
+  const preExecRisk = isPreExecutionRiskBlock(r);
   const isTrade = d.decision === 'trade';
   const levels = formatLevelsBlock(d);
 
   let module = 'LLM';
   if (isSignalGateOnlyReason(r)) module = 'SignalGate';
+  else if (preExecRisk || execBlocked) module = 'Execution';
   else if (r.startsWith('Risk engine:')) module = 'RiskEngine';
-  else if (execBlocked) module = 'Execution';
 
   let message: string;
-  if (isTrade && execBlocked) {
+  if ((isTrade && execBlocked) || preExecRisk) {
     message = `${d.symbol} — LLM TRADE, không vào lệnh`;
   } else if (isTrade) {
     message = `${d.symbol} — LLM TRADE (đang/đã gửi lệnh)`;
@@ -155,11 +168,13 @@ function mapTradeDecisionToEvent(d: {
   }
 
   let severity: 'info' | 'warning' | 'error' = 'info';
-  if (execBlocked) severity = 'warning';
+  if (execBlocked || preExecRisk) severity = 'warning';
   else if (!isTrade && (r.includes('blocked') || r.includes('invalid'))) severity = 'warning';
 
   let details: string;
-  if (execBlocked) {
+  if (preExecRisk) {
+    details = [parsePreExecutionRiskDetail(r), levels].filter(Boolean).join('\n');
+  } else if (execBlocked) {
     const summary = r.split('| Execution blocked:')[0]?.trim();
     details = [summary || levels, levels, `→ ${execBlocked}`].filter(Boolean).join('\n');
   } else if (isTrade && (d.entry_price || d.stop_loss || d.take_profit)) {
@@ -444,11 +459,17 @@ router.get('/warmup', async (_req: Request, res: Response) => {
 async function buildLiveSignalGateView(symbol: string) {
   const evaluations: Array<{ timeframe: string; result: SignalGateOutput }> = [];
   const gateConfig = signalGateService.getConfig();
+  let latestCandleMs = 0;
 
   await Promise.all(
     V3_SIGNAL_GATE_TIMEFRAMES.map(async (timeframe) => {
       const { candles } = await getCandles({ symbol, timeframe, limit: 100 });
       if (candles.length < 50) return;
+      const lastTs = candles[candles.length - 1]?.timestamp;
+      if (lastTs) {
+        const ms = typeof lastTs === 'number' ? lastTs : new Date(lastTs).getTime();
+        if (ms > latestCandleMs) latestCandleMs = ms;
+      }
       const result = await signalGateService.evaluate({ candles, symbol, timeframe });
       evaluations.push({ timeframe, result });
     })
@@ -468,7 +489,9 @@ async function buildLiveSignalGateView(symbol: string) {
     playbook: r.setupResult.playbookKey || 'none',
     pass: r.pass,
     setupReason: r.setupResult.reason,
+    detailReason: r.setupResult.detailReason,
     gateReason: r.pass ? null : r.reason,
+    evidence: r.setupResult.evidence,
   }));
 
   const reasonCodes: string[] = [];
@@ -476,9 +499,11 @@ async function buildLiveSignalGateView(symbol: string) {
     if (row.pass) {
       reasonCodes.push(`${row.timeframe}: PASS · grade ${row.grade}`);
     } else {
-      reasonCodes.push(
-        `${row.timeframe}: BLOCK · grade ${row.grade} · ${row.setupReason}`
-      );
+      const short =
+        row.detailReason?.split('\n')[1]?.trim() ||
+        row.setupReason ||
+        'BLOCK';
+      reasonCodes.push(`${row.timeframe}: BLOCK · grade ${row.grade} · ${short}`);
     }
   }
   reasonCodes.push(
@@ -494,10 +519,30 @@ async function buildLiveSignalGateView(symbol: string) {
     regime: result.setupResult.regime,
     pass: result.pass,
     setupReason: result.setupResult.reason,
+    detailReason: result.setupResult.detailReason,
+    evidence: result.setupResult.evidence,
     reasonCodes,
     evaluations: perTimeframe,
-    timestamp: new Date().toISOString(),
+    /** Last closed candle time used for evaluation (not wall-clock). */
+    timestamp: latestCandleMs
+      ? new Date(latestCandleMs).toISOString()
+      : new Date().toISOString(),
   };
+}
+
+function summarizeLastLlmDecision(decision: string, reason: string | null): string {
+  const r = reason || '';
+  if (r.includes('Execution blocked:')) {
+    const block = r.split('Execution blocked:').pop()?.trim() || 'execution blocked';
+    return `trade · chưa vào lệnh (${block})`;
+  }
+  if (isPreExecutionRiskBlock(r)) {
+    const gate = r.replace(/^Risk engine:\s*/, '').split('·')[0]?.trim() || r;
+    return `Groq OK · chưa vào lệnh (${gate})`;
+  }
+  if (r.startsWith('LLM:') || r.includes('LLM:')) return decision === 'trade' ? 'trade' : 'no_trade';
+  if (r.startsWith('Risk engine')) return `no_trade · ${r.slice(0, 80)}`;
+  return decision;
 }
 
 /**
@@ -657,13 +702,28 @@ router.get('/llm', async (_req: Request, res: Response) => {
       }
     }
 
-    const lastAny = await prisma.tradeDecision.findFirst({
-      where: { method_id: methodId },
+    const lastLlmDecision = await prisma.tradeDecision.findFirst({
+      where: {
+        method_id: methodId,
+        NOT: [
+          { reason: { startsWith: 'Signal gate:' } },
+          { reason: { startsWith: 'Signal gate blocked:' } },
+        ],
+      },
       orderBy: { timestamp: 'desc' },
-      select: { timestamp: true },
+      select: {
+        decision: true,
+        reason: true,
+        timestamp: true,
+        timeframe: true,
+        grade: true,
+      },
     });
 
-    const lastCallTs = lastEngaged || lastAny?.timestamp || null;
+    const lastCallTs = lastEngaged || lastLlmDecision?.timestamp || null;
+    const lastEngagedSummary = lastLlmDecision
+      ? summarizeLastLlmDecision(lastLlmDecision.decision, lastLlmDecision.reason)
+      : null;
 
     const recentAnalysis = await prisma.analysisHistory.findFirst({
       where: { coin: 'BTC', method_id: methodId },
@@ -677,12 +737,25 @@ router.get('/llm', async (_req: Request, res: Response) => {
       'meta-llama/llama-4-scout-17b-16e-instruct';
     const promptVersion = process.env.PROMPT_VERSION || 'v3';
 
-    const responseStatus =
-      llmEngagedCount > 0 ? (invalidJsonCount > 0 ? 'degraded' : 'success') : recentAnalysis?.raw_answer ? 'success' : 'none';
+    let responseStatus = 'none';
+    if (llmEngagedCount > 0) {
+      responseStatus = invalidJsonCount > 0 ? 'degraded' : 'success';
+    } else if (lastLlmDecision?.reason?.includes('Execution blocked:')) {
+      responseStatus = 'execution_blocked';
+    } else if (lastLlmDecision?.decision === 'trade') {
+      responseStatus = 'trade';
+    } else if (lastLlmDecision) {
+      responseStatus = 'no_trade';
+    } else if (recentAnalysis?.raw_answer) {
+      responseStatus = 'success';
+    }
 
     const llmStats = {
       callsToday: llmEngagedCount,
       lastCall: lastCallTs ? lastCallTs.toISOString() : null,
+      lastEngagedSummary,
+      lastDecision: lastLlmDecision?.decision ?? null,
+      lastTimeframe: lastLlmDecision?.timeframe ?? null,
       modelName,
       promptVersion,
       responseStatus,
@@ -863,13 +936,19 @@ router.get('/events', async (req: Request, res: Response) => {
           (typeof parsed === 'object' && parsed ? details : 'Execution blocked');
         const sym = (parsed?.symbol as string) || '';
         const tf = (parsed?.timeframe as string) || '';
+        const phase =
+          parsed?.phase === 'pre_execution'
+            ? '(sau Groq, trước Binance)'
+            : parsed?.phase === 'binance_execution'
+              ? '(sau Groq, lúc gửi lệnh)'
+              : '';
         const levels = formatLevelsBlock({
           entry_price: parsed?.entry as number,
           stop_loss: parsed?.stop_loss as number,
           take_profit: parsed?.take_profit as number,
         });
         details = [
-          sym && tf ? `${sym} ${tf}` : sym,
+          sym && tf ? `${sym} ${tf} ${phase}`.trim() : sym,
           levels,
           `→ ${blockReason}`,
         ]

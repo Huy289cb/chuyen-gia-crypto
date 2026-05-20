@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
@@ -40,6 +40,7 @@ export default function Home() {
 
 function DashboardPage() {
   const { summary, account, intelligence, market } = useV3Dashboard();
+  const [eventLogRefreshToken, setEventLogRefreshToken] = useState(0);
 
   const isLoading =
     summary.loading || account.loading || intelligence.loading || market.loading;
@@ -49,6 +50,7 @@ function DashboardPage() {
     account.refresh();
     intelligence.refresh();
     market.refresh();
+    setEventLogRefreshToken((t) => t + 1);
   };
 
   const schedulerRuns = summary.data?.schedulers
@@ -103,7 +105,7 @@ function DashboardPage() {
         </div>
 
         <div id="event-log" className="mt-8">
-          <EventLogFeed />
+          <EventLogFeed refreshToken={eventLogRefreshToken} />
         </div>
       </main>
 

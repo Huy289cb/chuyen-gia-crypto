@@ -11,10 +11,15 @@ import { LoadingSkeleton } from '../components/LoadingSkeleton';
 interface EventLogFeedProps {
   className?: string;
   module?: string;
+  refreshToken?: number;
 }
 
-export function EventLogFeed({ className, module }: EventLogFeedProps) {
-  const { data: events, loading, error, pagination, page, setPage } = useEventLogs(module, 8);
+export function EventLogFeed({ className, module, refreshToken = 0 }: EventLogFeedProps) {
+  const { data: events, loading, error, pagination, page, setPage } = useEventLogs(
+    module,
+    8,
+    refreshToken
+  );
 
   if (loading && events.length === 0) {
     return (

@@ -70,6 +70,13 @@ export function LlmDispatchPanel({ className }: LlmDispatchPanelProps) {
           <span className="text-sm font-mono text-foreground">{llmData.callsToday ?? 0}</span>
         </div>
 
+        {llmData.lastEngagedSummary ? (
+          <div className="p-3 bg-surface-1/50 rounded-lg">
+            <p className="text-xs text-foreground-tertiary mb-1">Lần gọi gần nhất</p>
+            <p className="text-sm text-foreground">{llmData.lastEngagedSummary}</p>
+          </div>
+        ) : null}
+
         <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-accent-primary" />

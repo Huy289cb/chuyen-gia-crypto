@@ -137,7 +137,21 @@ export function computeDecisionFlow(
     risk.currentLockState === 'unlocked' &&
     (dailyCap <= 0 || dailyLoss < dailyCap);
 
-  const llmTriggered = (llm?.callsToday ?? 0) > 0;
+  const lastCallMs = llm?.lastCall ? new Date(llm.lastCall).getTime() : 0;
+  const signalTsMs = signal?.timestamp ? new Date(signal.timestamp).getTime() : 0;
+  /** MarketScan + LLMDispatch window (~20m) after signal candle time */
+  const pipelineWindowMs = 20 * 60 * 1000;
+  const llmMatchesSignalCycle =
+    signalPassed &&
+    lastCallMs > 0 &&
+    signalTsMs > 0 &&
+    lastCallMs >= signalTsMs - 5 * 60 * 1000 &&
+    lastCallMs <= signalTsMs + pipelineWindowMs;
+
+  const llmTriggered =
+    (llm?.callsToday ?? 0) > 0 ||
+    llmMatchesSignalCycle ||
+    Boolean(llm?.lastEngagedSummary?.includes('chưa vào lệnh'));
   const positionCreated = positions.length > 0;
   const monitorActive =
     positionCreated &&
@@ -182,11 +196,20 @@ export function computeDecisionFlow(
   } else if (signalPassed && riskApproved && !llmTriggered) {
     if (duplicateSignalHits > 0) {
       blockedReason = `LLM skipped — ${duplicateSignalHits} signal-gate duplicate/skip today`;
+    } else if (llm?.lastCall) {
+      blockedReason =
+        `Chờ LLM Dispatch (cron :02,:17,:32,:47). Lần Groq cuối: ${llm.lastEngagedSummary || llm.lastDecision || '—'}`;
     } else {
-      blockedReason = topNoTradeReason(intelligence) || 'LLM dispatch not triggered yet';
+      blockedReason =
+        topNoTradeReason(intelligence) ||
+        'Chờ LLM Dispatch — Groq chạy tại phút :02,:17,:32,:47 sau Market Scan';
     }
   } else if (llmTriggered && !positionCreated) {
-    blockedReason = topNoTradeReason(intelligence) || 'No open position after LLM path';
+    if (llm?.lastEngagedSummary?.includes('chưa vào lệnh')) {
+      blockedReason = llm.lastEngagedSummary;
+    } else {
+      blockedReason = topNoTradeReason(intelligence) || 'No open position after LLM path';
+    }
   } else if (positionCreated && !monitorActive) {
     blockedReason = 'Position monitor idle or stale';
   }
@@ -270,14 +293,21 @@ export function computeDecisionFlow(
       blocked: signalPassed && riskApproved && !llmTriggered,
       skipped: !signalPassed || !riskApproved,
       reason: llmTriggered
-        ? `${llm?.callsToday ?? 0} LLM call(s) today`
+        ? llm?.lastEngagedSummary
+          ? `Groq · ${llm.lastEngagedSummary}${(llm.callsToday ?? 0) > 0 ? ` · ${llm.callsToday} lần hôm nay` : ''}`
+          : `${llm?.callsToday ?? 0} LLM call(s) today`
         : signalPassed && riskApproved
           ? duplicateSignalHits > 0
             ? `Skipped (${duplicateSignalHits}) — duplicate or signal-only path`
-            : 'Groq dispatch not engaged yet'
+            : llm?.lastCall
+              ? `Chờ cycle mới — lần cuối ${llm.lastEngagedSummary || llm.lastDecision || '—'}`
+              : 'Chờ LLM Dispatch (:02,:17,:32,:47 UTC)'
           : 'Waiting for upstream approval',
       timestamp: llm?.lastCall || undefined,
-      metric: llm?.responseStatus,
+      metric:
+        llm?.lastTimeframe && llm?.responseStatus
+          ? `${llm.lastTimeframe} · ${llm.responseStatus}`
+          : llm?.responseStatus,
     },
     {
       id: 'positionCreated',

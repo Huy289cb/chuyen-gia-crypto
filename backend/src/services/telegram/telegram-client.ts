@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 import { isTelegramEnabled, telegramConfig } from '../../config/telegram';
 
 const API_BASE = 'https://api.telegram.org';
@@ -21,6 +21,27 @@ function botUrl(method: string): string {
   return `${API_BASE}/bot${telegramConfig.botToken}/${method}`;
 }
 
+function formatTelegramApiError(err: unknown): string {
+  if (isAxiosError(err)) {
+    const data = err.response?.data as { description?: string; error_code?: number } | undefined;
+    if (data?.description) {
+      return data.error_code != null
+        ? `${data.description} (code ${data.error_code})`
+        : data.description;
+    }
+    if (err.code) return `${err.code}${err.message ? `: ${err.message}` : ''}`;
+    if (err.message) return err.message;
+    return `HTTP ${err.response?.status ?? '?'}`;
+  }
+  if (err instanceof Error) return err.message || err.name;
+  return String(err) || 'unknown error';
+}
+
+function isHtmlParseError(description: string): boolean {
+  const d = description.toLowerCase();
+  return d.includes("can't parse") || d.includes('parse entities') || d.includes('unsupported');
+}
+
 async function throttleSend(): Promise<void> {
   const wait = Math.max(0, MIN_SEND_INTERVAL_MS - (Date.now() - lastSendAt));
   if (wait > 0) {
@@ -29,11 +50,62 @@ async function throttleSend(): Promise<void> {
   lastSendAt = Date.now();
 }
 
+async function postSendMessage(
+  chatId: string,
+  text: string,
+  parseMode?: 'HTML'
+): Promise<void> {
+  const payload = {
+    chat_id: chatId,
+    text,
+    ...(parseMode ? { parse_mode: parseMode } : {}),
+    disable_web_page_preview: true,
+  };
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await axios.post(botUrl('sendMessage'), payload, { timeout: 25_000 });
+      return;
+    } catch (err: unknown) {
+      lastErr = err;
+      const msg = formatTelegramApiError(err);
+      const retryable =
+        msg.includes('ETIMEDOUT') ||
+        msg.includes('ECONNRESET') ||
+        msg.includes('ENOTFOUND') ||
+        msg.includes('429');
+      if (!retryable || attempt === 2) throw err;
+      console.warn(`[Telegram] send retry ${attempt}/2 chat=${chatId}: ${msg}`);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  throw lastErr;
+}
+
+async function sendChunk(chatId: string, chunk: string): Promise<void> {
+  try {
+    await postSendMessage(chatId, chunk, 'HTML');
+  } catch (err: unknown) {
+    const desc = formatTelegramApiError(err);
+    if (isHtmlParseError(desc)) {
+      console.warn(`[Telegram] HTML parse failed chat=${chatId}, retry plain text`);
+      await postSendMessage(chatId, chunk);
+      return;
+    }
+    throw err;
+  }
+}
+
 export async function sendTelegramMessage(
   text: string,
   chatId?: string
 ): Promise<boolean> {
   if (!isTelegramEnabled()) return false;
+  if (!text?.trim()) {
+    console.warn('[Telegram] skip empty message');
+    return false;
+  }
 
   const targets = chatId ? [chatId] : telegramConfig.chatIds;
   let anyOk = false;
@@ -43,18 +115,13 @@ export async function sendTelegramMessage(
       await throttleSend();
       const chunks = splitMessage(text, 4000);
       for (const chunk of chunks) {
-        await axios.post(botUrl('sendMessage'), {
-          chat_id: id,
-          text: chunk,
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-        });
+        await sendChunk(id, chunk);
         if (chunks.length > 1) await throttleSend();
       }
       anyOk = true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[Telegram] sendMessage failed chat=${id}:`, msg);
+      const msg = formatTelegramApiError(err);
+      console.error(`[Telegram] sendMessage failed chat=${id}: ${msg}`);
     }
   }
   return anyOk;
@@ -79,7 +146,7 @@ export function enqueueTelegramMessage(text: string, chatId?: string): void {
     .then(async () => {
       await sendTelegramMessage(text, chatId);
     })
-    .catch((e) => console.error('[Telegram] queue error:', e));
+    .catch((e) => console.error('[Telegram] queue error:', formatTelegramApiError(e)));
 }
 
 export async function getTelegramUpdates(
@@ -95,23 +162,27 @@ export async function getTelegramUpdates(
   console.log(
     `[Telegram] getUpdates START pid=${process.pid} offset=${offset ?? 'none'} timeout=${timeoutSeconds}s`
   );
-  const res = await axios.get(botUrl('getUpdates'), {
-    params,
-    timeout: (timeoutSeconds + 10) * 1000,
-  });
-  const updates = (res.data?.result as TelegramUpdate[]) || [];
-  console.log(`[Telegram] getUpdates END pid=${process.pid} count=${updates.length}`);
-  return updates;
+  try {
+    const res = await axios.get(botUrl('getUpdates'), {
+      params,
+      timeout: (timeoutSeconds + 10) * 1000,
+    });
+    const updates = (res.data?.result as TelegramUpdate[]) || [];
+    console.log(`[Telegram] getUpdates END pid=${process.pid} count=${updates.length}`);
+    return updates;
+  } catch (err: unknown) {
+    console.error(`[Telegram] getUpdates error: ${formatTelegramApiError(err)}`);
+    return [];
+  }
 }
 
 /** Clear webhook so getUpdates/polling can receive messages. */
 export async function deleteTelegramWebhook(): Promise<void> {
   if (!telegramConfig.botToken) return;
   try {
-    await axios.post(botUrl('deleteWebhook'), { drop_pending_updates: false });
+    await axios.post(botUrl('deleteWebhook'), { drop_pending_updates: false }, { timeout: 15_000 });
     console.log(`[Telegram] deleteWebhook ok pid=${process.pid}`);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[Telegram] deleteWebhook failed pid=${process.pid}:`, msg);
+    console.warn(`[Telegram] deleteWebhook failed pid=${process.pid}: ${formatTelegramApiError(err)}`);
   }
 }

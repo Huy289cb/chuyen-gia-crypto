@@ -119,10 +119,14 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           ) : null}
         </div>
 
-        {signalData.setupReason && !signalData.pass ? (
+        {(signalData.detailReason || signalData.setupReason) && !signalData.pass ? (
           <div className="p-3 bg-warning-dim/30 rounded-lg border border-warning/20">
-            <p className="text-xs text-foreground-tertiary mb-1">Tại sao chấm điểm này?</p>
-            <p className="text-sm text-foreground leading-relaxed">{signalData.setupReason}</p>
+            <p className="text-xs text-foreground-tertiary mb-1">
+              Bằng chứng lần quét (khung {signalData.timeframe || 'best'})
+            </p>
+            <pre className="text-xs text-foreground leading-relaxed whitespace-pre-wrap font-sans">
+              {signalData.detailReason || signalData.setupReason}
+            </pre>
           </div>
         ) : null}
 
@@ -152,10 +156,10 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
                     {row.regime}
                     {row.playbook !== 'none' ? ` · ${row.playbook}` : ''}
                   </p>
-                  {!row.pass && row.setupReason ? (
-                    <p className="text-xs text-foreground mt-1.5 leading-relaxed">
-                      {row.setupReason}
-                    </p>
+                  {!row.pass && (row.detailReason || row.setupReason) ? (
+                    <pre className="text-xs text-foreground mt-1.5 leading-relaxed whitespace-pre-wrap font-sans">
+                      {row.detailReason || row.setupReason}
+                    </pre>
                   ) : null}
                 </div>
               ))}

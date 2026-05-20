@@ -46,7 +46,8 @@ async function readOkJson(res: Response) {
 
 export function useEventLogs(
   module?: string,
-  pageSize: number = 8
+  pageSize: number = 8,
+  refreshToken = 0
 ): UseEventLogsReturn {
   const [data, setData] = useState<EventLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +105,7 @@ export function useEventLogs(
     } finally {
       setLoading(false);
     }
-  }, [module, page, pageSize]);
+  }, [module, page, pageSize, refreshToken]);
 
   useEffect(() => {
     fetchData();

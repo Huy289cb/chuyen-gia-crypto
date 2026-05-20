@@ -45,27 +45,33 @@ export function formatSignalGateBlockReason(
 
   if (gate) parts.push(gate);
   if (setup.reason) parts.push(`Setup: ${setup.reason}`);
+  if (setup.detailReason) {
+    const oneLine = setup.detailReason.replace(/\n/g, ' | ');
+    parts.push(oneLine.length > 280 ? `${oneLine.slice(0, 277)}…` : oneLine);
+  }
   parts.push(`Regime: ${setup.regime}`);
   if (setup.playbookKey) parts.push(`Playbook: ${setup.playbookKey}`);
 
   return parts.join(' · ');
 }
 
-function formatTimeframeLine(row: SignalGateTimeframeRow, config: SignalGateConfig): string {
+function formatTimeframeBlock(row: SignalGateTimeframeRow, config: SignalGateConfig): string {
   const { timeframe, output } = row;
   const s = output.setupResult;
   const gate = formatGateFailureReason(output, config);
 
-  if (output.pass) {
-    return `• ${timeframe}: PASS · grade ${s.grade} · conf ${(s.confidence * 100).toFixed(0)}% · ${s.regime}${s.playbookKey ? ` · ${s.playbookKey}` : ''}`;
-  }
+  const header = output.pass
+    ? `• ${timeframe}: PASS · grade ${s.grade} · conf ${(s.confidence * 100).toFixed(0)}% · ${s.regime}${s.playbookKey ? ` · ${s.playbookKey}` : ''}`
+    : `• ${timeframe}: BLOCK · grade ${s.grade} · ${s.regime}${gate ? ` (${gate})` : ''}`;
 
-  const why =
-    s.grade === 'D' && s.reason
-      ? s.reason
-      : gate || output.reason || 'Không đạt điều kiện gate';
+  const detail = s.detailReason?.trim();
+  if (!detail) return header;
 
-  return `• ${timeframe}: BLOCK · grade ${s.grade} · ${s.regime} — ${why}`;
+  const indented = detail
+    .split('\n')
+    .map((line) => `  ${line}`)
+    .join('\n');
+  return `${header}\n${indented}`;
 }
 
 /**
@@ -84,7 +90,7 @@ export function formatSignalGateTelegramScan(
     return order.indexOf(a.timeframe) - order.indexOf(b.timeframe);
   });
 
-  const lines = sorted.map((r) => formatTimeframeLine(r, config));
+  const lines = sorted.map((r) => formatTimeframeBlock(r, config));
   const policy = `Yêu cầu: grade ≥ ${config.minGrade}, conf ≥ ${(config.minConfidence * 100).toFixed(0)}%, regime ${config.allowedRegimes.join('|')}`;
 
   return {

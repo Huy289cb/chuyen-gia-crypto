@@ -14,11 +14,22 @@ export interface TelegramConfig {
   timezone: string;
 }
 
+function stripEnvQuotes(s: string): string {
+  const t = s.trim();
+  if (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'"))
+  ) {
+    return t.slice(1, -1).trim();
+  }
+  return t;
+}
+
 function parseCsv(value: string | undefined): string[] {
   if (!value?.trim()) return [];
   return value
     .split(',')
-    .map((s) => s.trim())
+    .map((s) => stripEnvQuotes(s))
     .filter(Boolean);
 }
 

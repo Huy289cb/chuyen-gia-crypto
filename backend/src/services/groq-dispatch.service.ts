@@ -176,8 +176,9 @@ export class GroqDispatchService {
 
       if (!slCheck.ok) {
         const reason = `SL distance ${(slCheck.distancePct * 100).toFixed(2)}% below min ${(slCheck.minPct * 100).toFixed(2)}%`;
+        let decisionRecordId: number | undefined;
         if (this.config.enableMemory) {
-          await memoryService.storeDecision({
+          const row = await memoryService.storeDecision({
             symbol,
             timeframe,
             playbook_key: 'unknown',
@@ -192,11 +193,14 @@ export class GroqDispatchService {
             expected_rr: analysis.expected_rr,
             method_id,
           });
+          decisionRecordId = row?.id;
         }
         return {
           decision: 'no_trade',
           reason: `Risk engine blocked: ${reason}`,
+          analysis,
           memory_context: memoryContext,
+          decisionRecordId,
         };
       }
     }

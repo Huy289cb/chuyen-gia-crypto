@@ -1,12 +1,12 @@
 /**
  * Setup Gate Analyzer
- * Combines all conditions to determine if a valid setup exists
- * Output: playbookKey, grade (A/B/C/D), confidence, regime
  */
 
 import { analyzeLiquiditySweep } from './liquidity-sweep.analyzer';
 import { analyzeBreakoutVolume } from './breakout-volume.analyzer';
-import { analyzeMarketRegime } from './market-regime.analyzer';
+import { computeRegimeEvidence } from './market-regime.analyzer';
+import type { SetupGateEvidence } from './setup-gate.types';
+import { formatSetupGateDetail } from '../utils/setup-gate-evidence';
 
 export interface CandleData {
   open: number;
@@ -23,6 +23,10 @@ export interface SetupGateResult {
   confidence: number;
   regime: 'trend' | 'range' | 'chop';
   reason: string;
+  /** Full scan evidence (numbers from this candle window) */
+  evidence: SetupGateEvidence;
+  /** Multi-line detail for UI / Telegram */
+  detailReason: string;
 }
 
 export interface SetupGateInput {
@@ -31,49 +35,104 @@ export interface SetupGateInput {
   timeframe: string;
 }
 
-/**
- * Analyze market data to determine if a valid setup exists
- */
+function buildEvidence(
+  input: SetupGateInput,
+  regimeEvidence: ReturnType<typeof computeRegimeEvidence>,
+  liquiditySweep: ReturnType<typeof analyzeLiquiditySweep>,
+  breakoutVolume: ReturnType<typeof analyzeBreakoutVolume>
+): SetupGateEvidence {
+  const last = input.candles[input.candles.length - 1];
+  return {
+    symbol: input.symbol,
+    timeframe: input.timeframe,
+    candleCount: input.candles.length,
+    lastCandleTime: last?.timestamp ?? null,
+    price: last?.close ?? regimeEvidence.currentPrice,
+    regime: regimeEvidence,
+    playbooks: [liquiditySweep.evidence, breakoutVolume.evidence],
+  };
+}
+
+function withDetail(
+  base: Omit<SetupGateResult, 'evidence' | 'detailReason'>,
+  evidence: SetupGateEvidence
+): SetupGateResult {
+  return {
+    ...base,
+    evidence,
+    detailReason: formatSetupGateDetail(evidence),
+  };
+}
+
 export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGateResult> {
   const { candles } = input;
 
   if (candles.length < 50) {
-    return {
-      playbookKey: null,
-      grade: 'D',
-      confidence: 0,
-      regime: 'chop',
-      reason: 'Insufficient candle data (need at least 50 candles)'
+    const regimeEvidence = computeRegimeEvidence(candles);
+    const emptyPb = {
+      playbook: 'liquidity_sweep' as const,
+      detected: false,
+      grade: 'D' as const,
+      summary: 'Chưa đủ nến để phân tích',
+      metrics: {},
     };
+    const evidence = buildEvidence(
+      input,
+      regimeEvidence,
+      {
+        detected: false,
+        grade: 'D',
+        confidence: 0,
+        reason: 'Insufficient data',
+        sweepType: null,
+        evidence: emptyPb,
+      },
+      {
+        detected: false,
+        grade: 'D',
+        confidence: 0,
+        reason: 'Insufficient data',
+        direction: null,
+        evidence: { ...emptyPb, playbook: 'breakout_volume' },
+      }
+    );
+    return withDetail(
+      {
+        playbookKey: null,
+        grade: 'D',
+        confidence: 0,
+        regime: 'chop',
+        reason: `Thiếu dữ liệu: ${candles.length}/50 nến`,
+      },
+      evidence
+    );
   }
 
-  // Analyze market regime first
-  const regime = analyzeMarketRegime(candles);
-
-  // If regime is choppy, reject immediately
-  if (regime === 'chop') {
-    return {
-      playbookKey: null,
-      grade: 'D',
-      confidence: 0,
-      regime: 'chop',
-      reason: 'Market regime is choppy - no trade'
-    };
-  }
-
-  // Check for liquidity sweep setup
+  const regimeEvidence = computeRegimeEvidence(candles);
+  const regime = regimeEvidence.regime;
   const liquiditySweep = analyzeLiquiditySweep(candles);
-
-  // Check for breakout + volume setup
   const breakoutVolume = analyzeBreakoutVolume(candles);
+  const evidence = buildEvidence(input, regimeEvidence, liquiditySweep, breakoutVolume);
 
-  // Determine best setup
-  let bestSetup: SetupGateResult = {
+  if (regime === 'chop') {
+    return withDetail(
+      {
+        playbookKey: null,
+        grade: 'D',
+        confidence: 0,
+        regime: 'chop',
+        reason: regimeEvidence.matchedRule,
+      },
+      evidence
+    );
+  }
+
+  let bestSetup: Omit<SetupGateResult, 'evidence' | 'detailReason'> = {
     playbookKey: null,
     grade: 'D',
     confidence: 0,
     regime,
-    reason: 'No valid setup detected'
+    reason: 'Không có setup A/B — xem chi tiết playbook bên dưới',
   };
 
   if (liquiditySweep.detected && liquiditySweep.grade === 'A') {
@@ -82,24 +141,22 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
       grade: 'A',
       confidence: liquiditySweep.confidence,
       regime,
-      reason: liquiditySweep.reason
+      reason: liquiditySweep.reason,
     };
   }
 
   if (breakoutVolume.detected && breakoutVolume.grade === 'A') {
-    // Prefer breakout if confidence is higher
     if (breakoutVolume.confidence > bestSetup.confidence) {
       bestSetup = {
         playbookKey: 'breakout_volume',
         grade: 'A',
         confidence: breakoutVolume.confidence,
         regime,
-        reason: breakoutVolume.reason
+        reason: breakoutVolume.reason,
       };
     }
   }
 
-  // If no A-grade setup, check for B-grade
   if (bestSetup.grade === 'D') {
     if (liquiditySweep.detected && liquiditySweep.grade === 'B') {
       bestSetup = {
@@ -107,7 +164,7 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
         grade: 'B',
         confidence: liquiditySweep.confidence,
         regime,
-        reason: liquiditySweep.reason
+        reason: liquiditySweep.reason,
       };
     }
 
@@ -118,11 +175,11 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
           grade: 'B',
           confidence: breakoutVolume.confidence,
           regime,
-          reason: breakoutVolume.reason
+          reason: breakoutVolume.reason,
         };
       }
     }
   }
 
-  return bestSetup;
+  return withDetail(bestSetup, evidence);
 }

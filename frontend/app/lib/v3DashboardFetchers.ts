@@ -91,7 +91,9 @@ export interface SignalGateEvaluationRow {
   playbook: string;
   pass: boolean;
   setupReason: string;
+  detailReason?: string;
   gateReason?: string | null;
+  evidence?: Record<string, unknown>;
 }
 
 export interface SignalGateView {
@@ -102,6 +104,7 @@ export interface SignalGateView {
   pass: boolean;
   reasonCodes: string[];
   setupReason?: string;
+  detailReason?: string;
   evaluations?: SignalGateEvaluationRow[];
   /** Timeframe that produced this view (live API picks best of 15m/1h/4h). */
   timeframe?: string;
@@ -129,6 +132,9 @@ export interface IntelligenceData {
   llm: {
     callsToday?: number;
     lastCall: string | null;
+    lastEngagedSummary?: string | null;
+    lastDecision?: string | null;
+    lastTimeframe?: string | null;
     modelName: string;
     promptVersion: string;
     responseStatus: string;
@@ -222,7 +228,12 @@ function mapEvaluationRow(raw: Record<string, unknown>): SignalGateEvaluationRow
     playbook: String(raw.playbook ?? '—'),
     pass: Boolean(raw.pass),
     setupReason: String(raw.setupReason ?? '—'),
+    detailReason: raw.detailReason ? String(raw.detailReason) : undefined,
     gateReason: raw.gateReason != null ? String(raw.gateReason) : null,
+    evidence:
+      raw.evidence && typeof raw.evidence === 'object'
+        ? (raw.evidence as Record<string, unknown>)
+        : undefined,
   };
 }
 
@@ -242,6 +253,7 @@ export function mapSignal(raw: Record<string, unknown> | null | undefined): Sign
     pass: Boolean(raw.pass),
     reasonCodes,
     setupReason: raw.setupReason ? String(raw.setupReason) : undefined,
+    detailReason: raw.detailReason ? String(raw.detailReason) : undefined,
     evaluations,
     timeframe: raw.timeframe ? String(raw.timeframe) : undefined,
     timestamp: raw.timestamp ? String(raw.timestamp) : undefined,

@@ -5,7 +5,11 @@ import {
   isUserAllowed,
   logTelegramProcessContext,
 } from '../../config/telegram';
-import { deleteTelegramWebhook, getTelegramUpdates, type TelegramUpdate } from './telegram-client';
+import {
+  deleteTelegramWebhook,
+  getTelegramUpdates,
+  type TelegramUpdate,
+} from './telegram-client';
 import { enqueueTelegramMessage } from './telegram-client';
 import {
   getAccountBalanceSummary,
