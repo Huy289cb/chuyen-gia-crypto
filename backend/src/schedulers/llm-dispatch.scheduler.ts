@@ -10,7 +10,7 @@ import { groqDispatchService } from '../services/groq-dispatch.service';
 import { getScanResult, type MarketScanResult } from './market-scan.scheduler';
 import { getMethodConfig } from '../config/methods';
 import { executeV3Trade } from '../services/v3-trade-execution.service';
-import { hookLlmExecuteFail, hookLlmNoTrade } from '../services/telegram/telegram-hooks';
+import { hookLlmDispatchSummary } from '../services/telegram/telegram-hooks';
 import { memoryService } from '../services/memory.service';
 import { recordPipelineEvent } from '../repositories/testnet.repository';
 import { formatLlmTradeSummary } from '../utils/trade-levels';
@@ -100,8 +100,12 @@ async function runLLMDispatch() {
 
       console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);
 
+      let execState: 'pending_placed' | 'exec_failed' | 'none' = 'none';
+      let execDetail: string | undefined;
+      let orderId: string | undefined;
+      let binanceOrderId: string | undefined;
+
       if (dispatchResult.decision === 'no_trade') {
-        hookLlmNoTrade(symbol, dispatchResult.reason);
         const isRiskPreBlock =
           dispatchResult.reason.includes('Risk engine blocked') ||
           dispatchResult.reason.includes('SL distance');
@@ -135,13 +139,17 @@ async function runLLMDispatch() {
         });
 
         if (execResult.success) {
+          execState = 'pending_placed';
+          orderId = execResult.orderId != null ? String(execResult.orderId) : undefined;
+          binanceOrderId = execResult.binanceOrderId != null ? String(execResult.binanceOrderId) : undefined;
           console.log(
             `[LLMDispatch] Binance pending order ${execResult.orderId} ` +
               `(binance=${execResult.binanceOrderId}) for ${symbol}`
           );
         } else {
+          execState = 'exec_failed';
+          execDetail = execResult.reason;
           console.warn(`[LLMDispatch] Trade execution skipped: ${execResult.reason}`);
-          hookLlmExecuteFail(symbol, execResult.reason);
 
           const summary = formatLlmTradeSummary(dispatchResult.analysis);
           if (dispatchResult.decisionRecordId) {
@@ -165,6 +173,21 @@ async function runLLMDispatch() {
           });
         }
       }
+
+      hookLlmDispatchSummary({
+        symbol,
+        timeframe,
+        decision: dispatchResult.decision,
+        reason: dispatchResult.reason,
+        tradeSummary:
+          dispatchResult.analysis != null
+            ? formatLlmTradeSummary(dispatchResult.analysis)
+            : undefined,
+        execution: execState,
+        executionDetail: execDetail,
+        orderId,
+        binanceOrderId,
+      });
     }
 
     console.log('[LLMDispatch] LLM dispatch completed');

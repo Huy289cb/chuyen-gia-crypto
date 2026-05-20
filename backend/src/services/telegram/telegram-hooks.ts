@@ -48,14 +48,43 @@ export function hookSignalGateBlock(symbol: string, timeframe: string, reason: s
   );
 }
 
-/** One message per market-scan cycle (all timeframes). */
+/** Signal gate scan summary — caller should throttle to ~15m to match LLMDispatch cadence. */
 export function hookSignalGateScanSummary(symbol: string, body: string, allBlocked: boolean): void {
-  const slot = Math.floor(Date.now() / (5 * 60 * 1000));
+  const slot = Math.floor(Date.now() / (15 * 60 * 1000));
   notifyVerbose(
-    allBlocked ? '🚫 Signal Gate BLOCK — quét xong' : '✅ Signal Gate — quét xong',
+    allBlocked ? '🚫 Signal Gate BLOCK — quét (15m)' : '✅ Signal Gate — quét (15m)',
     body,
     `sg_scan:${symbol}:${slot}`
   );
+}
+
+/** One summary per LLM dispatch cycle (aligned with cron :02,:17,:32,:47). */
+export function hookLlmDispatchSummary(input: {
+  symbol: string;
+  timeframe: string;
+  decision: 'trade' | 'no_trade';
+  reason: string;
+  tradeSummary?: string;
+  execution?: 'pending_placed' | 'exec_failed' | 'none';
+  executionDetail?: string;
+  orderId?: string;
+  binanceOrderId?: string;
+}): void {
+  const slot = Math.floor(Date.now() / (15 * 60 * 1000));
+  const lines = [
+    `${input.symbol} · ${input.timeframe}`,
+    `Quyết định: ${input.decision}`,
+    `Lý do: ${input.reason}`,
+  ];
+  if (input.tradeSummary) lines.push(input.tradeSummary);
+  if (input.execution && input.execution !== 'none') {
+    let execLine = `Thực thi: ${input.execution}`;
+    if (input.executionDetail) execLine += ` — ${input.executionDetail}`;
+    if (input.orderId) execLine += ` · order ${input.orderId}`;
+    if (input.binanceOrderId) execLine += ` · Binance ${input.binanceOrderId}`;
+    lines.push(execLine);
+  }
+  notifyVerbose('🤖 LLM Dispatch — kết quả', lines.join('\n'), `llm_sum:${input.symbol}:${slot}`);
 }
 
 export function hookLlmNoTrade(symbol: string, reason: string): void {

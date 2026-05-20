@@ -22,7 +22,11 @@ PositionMonitor (*/1) → HOLD / REDUCE / EXIT (executes on Binance when not hol
 | LLMDispatch | `2,17,32,47 * * * *` | +2 min after scan boundary; **one** best TF per cycle |
 | PositionMonitor | `*/1 * * * *` | Mark price refresh; REDUCE 50% or EXIT via market close |
 
+**MarketScan snapshot vs duplicate:** Re-scans on the same closed bar hit the signal-gate in-memory duplicate branch (`isDuplicate`). The scheduler keeps the last **fresh** `PASS + shouldCallGroq` snapshot for that bar’s open timestamp so LLMDispatch is not starved before the next bar closes.
+
 Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/scheduler-heartbeat.ts`), with DB fallbacks when worker just restarted.
+
+**Telegram (verbose):** Signal gate digest is sent at most **once per 15 minutes** from MarketScan (scan still every 5m). Each successful LLM dispatch cron run sends **one** `LLM Dispatch — kết quả` summary (decision, reason, levels summary, execution / order ids when applicable). Dedup slots in `telegram-hooks.ts` use 15m windows for those hooks.
 
 ## Key modules (May 2026)
 

@@ -28,6 +28,47 @@ export interface MarketScanResult {
 
 const scanResults = new Map<string, MarketScanResult>();
 
+/** Telegram signal-gate digest: align with LLMDispatch (~15m), not every 5m scan. */
+let lastSignalGateTelegramSentAt = 0;
+const SIGNAL_GATE_TELEGRAM_INTERVAL_MS = 15 * 60 * 1000;
+
+function lastBarOpenTimestamp(candles: UnifiedCandle[]): number | null {
+  if (candles.length === 0) return null;
+  return candles[candles.length - 1].timestamp;
+}
+
+/**
+ * When the same closed bar is re-scanned, signal gate returns `isDuplicate` and `shouldCallGroq: false`.
+ * Overwriting the in-memory snapshot would erase the last fresh PASS — LLMDispatch then skips Groq until the next bar.
+ * Keep the prior fresh `signalResult` while still refreshing candles for the same bar open time.
+ */
+function mergeDuplicateScanWithPriorEligible(
+  prev: MarketScanResult | undefined,
+  incoming: MarketScanResult
+): MarketScanResult {
+  const prevBar = lastBarOpenTimestamp(prev?.candles ?? []);
+  const nextBar = lastBarOpenTimestamp(incoming.candles);
+  const p = prev?.signalResult;
+  if (
+    prev &&
+    p &&
+    prevBar != null &&
+    nextBar != null &&
+    prevBar === nextBar &&
+    !p.isDuplicate &&
+    p.pass &&
+    p.shouldCallGroq &&
+    incoming.signalResult.isDuplicate
+  ) {
+    return {
+      ...incoming,
+      signalResult: p,
+      timestamp: new Date(),
+    };
+  }
+  return incoming;
+}
+
 /**
  * Run market scan for configured symbols
  */
@@ -82,12 +123,20 @@ async function runMarketScan() {
           };
 
           const key = `${symbol}_${timeframe}`;
-          scanResults.set(key, result);
+          const prev = scanResults.get(key);
+          const toStore = mergeDuplicateScanWithPriorEligible(prev, result);
+          scanResults.set(key, toStore);
 
           const dupTag = signalResult.isDuplicate ? ' (duplicate)' : '';
-          console.log(
-            `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
-          );
+          if (toStore !== result) {
+            console.log(
+              `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} — kept prior fresh signal for LLM (same bar)`
+            );
+          } else {
+            console.log(
+              `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
+            );
+          }
 
           if (!signalResult.isDuplicate) {
             telegramRows.push({ timeframe, output: signalResult });
@@ -96,9 +145,13 @@ async function runMarketScan() {
       );
 
       if (telegramRows.length > 0) {
-        const { body } = formatSignalGateTelegramScan(symbol, telegramRows, gateConfig);
-        const allBlocked = telegramRows.every((r) => !r.output.pass);
-        hookSignalGateScanSummary(symbol, body, allBlocked);
+        const now = Date.now();
+        if (now - lastSignalGateTelegramSentAt >= SIGNAL_GATE_TELEGRAM_INTERVAL_MS) {
+          lastSignalGateTelegramSentAt = now;
+          const { body } = formatSignalGateTelegramScan(symbol, telegramRows, gateConfig);
+          const allBlocked = telegramRows.every((r) => !r.output.pass);
+          hookSignalGateScanSummary(symbol, body, allBlocked);
+        }
       }
     }
 
