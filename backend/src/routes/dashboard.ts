@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { getTestnetAccount, updateTestnetPosition } from '../repositories/testnet.repository';
+import {
+  getTestnetAccount,
+  PIPELINE_EVENT_POSITION_ID,
+  updateTestnetPosition,
+} from '../repositories/testnet.repository';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
@@ -11,7 +15,10 @@ import {
   V3_MARKET_SCAN_CRON,
   V3_SIGNAL_GATE_TIMEFRAMES,
 } from '../config/v3-schedulers';
-import { getSchedulerLastRun } from '../utils/scheduler-heartbeat';
+import {
+  getPersistedSchedulerLastRun,
+  getSchedulerLastRun,
+} from '../utils/scheduler-heartbeat';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import {
   calculatePnlPercent,
@@ -296,42 +303,36 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
     const LLM_CRON = V3_LLM_DISPATCH_CRON;
     const POS_CRON = '*/1 * * * *';
 
-    const [lastBtcCandle, lastKimDecision, lastTradeEvent, lastOpenPosTouch] = await Promise.all([
-      prisma.ohlcvCandle.findFirst({
-        where: { coin: 'BTC' },
-        orderBy: { timestamp: 'desc' },
-        select: { timestamp: true },
-      }),
-      prisma.tradeDecision.findFirst({
-        where: { method_id: 'kim_nghia' },
-        orderBy: { timestamp: 'desc' },
-        select: { timestamp: true },
-      }),
-      prisma.testnetTradeEvent.findFirst({
-        orderBy: { timestamp: 'desc' },
-        select: { timestamp: true },
-      }),
-      prisma.testnetPosition.findFirst({
-        where: { status: { in: ['open', 'OPEN'] } },
-        orderBy: { entry_time: 'desc' },
-        select: { entry_time: true },
-      }),
-    ]);
+    const [lastBtcCandle, lastKimDecision, persistedMarket, persistedLlm, persistedPos] =
+      await Promise.all([
+        prisma.ohlcvCandle.findFirst({
+          where: { coin: 'BTC' },
+          orderBy: { timestamp: 'desc' },
+          select: { timestamp: true },
+        }),
+        prisma.tradeDecision.findFirst({
+          where: { method_id: 'kim_nghia' },
+          orderBy: { timestamp: 'desc' },
+          select: { timestamp: true },
+        }),
+        getPersistedSchedulerLastRun('MarketScan'),
+        getPersistedSchedulerLastRun('LLMDispatch'),
+        getPersistedSchedulerLastRun('PositionMonitor'),
+      ]);
 
     const marketHb = getSchedulerLastRun('MarketScan');
     const llmHb = getSchedulerLastRun('LLMDispatch');
     const posHb = getSchedulerLastRun('PositionMonitor');
 
     const marketLast =
-      marketHb ?? (lastBtcCandle?.timestamp ? new Date(lastBtcCandle.timestamp) : null);
+      persistedMarket ??
+      marketHb ??
+      (lastBtcCandle?.timestamp ? new Date(lastBtcCandle.timestamp) : null);
     const llmLast =
-      llmHb ?? (lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null);
-    const posTimes = [lastTradeEvent?.timestamp, lastOpenPosTouch?.entry_time]
-      .filter(Boolean)
-      .map((t) => new Date(t as Date).getTime());
-    const posFallback =
-      posTimes.length > 0 ? new Date(Math.max(...posTimes)) : marketLast;
-    const posLast = posHb ?? posFallback;
+      persistedLlm ??
+      llmHb ??
+      (lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null);
+    const posLast = persistedPos ?? posHb ?? null;
 
     const schedulers = [
       {
@@ -835,10 +836,13 @@ router.get('/memory', async (_req: Request, res: Response) => {
  */
 router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
   try {
-    // Get recent trade decisions that were blocked
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Recent no_trade decisions only (last 24h) — avoid stale historical aggregates
     const recentDecisions = await prisma.tradeDecision.findMany({
       where: {
         decision: 'no_trade',
+        timestamp: { gte: since },
       },
       orderBy: { timestamp: 'desc' },
       take: 100,
@@ -1267,6 +1271,8 @@ router.get('/trades', async (req: Request, res: Response) => {
     const positions = await prisma.testnetPosition.findMany({
       where: {
         status: { in: ['closed', 'CLOSED'] },
+        position_id: { not: PIPELINE_EVENT_POSITION_ID },
+        side: { not: 'NONE' },
         ...(symbol ? { symbol: String(symbol).toUpperCase() } : {}),
         ...(method
           ? {

@@ -14,6 +14,10 @@ import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, place
 import { get } from './binance/client';
 import { endpoints } from './binance/endpoints';
 import { resolvePositionSide, validatePositionSide, OrderIntent } from './binance-hedge-mode';
+import {
+  evaluateNormalizedQuantity,
+  normalizeToStepSize as normalizeQtyToStep,
+} from '../utils/order-quantity';
 
 /**
  * Fetch real position from Binance for a symbol
@@ -77,14 +81,8 @@ async function getExchangeInfoCached(symbol?: string): Promise<any> {
   return response;
 }
 
-/**
- * Normalize value to step size (for quantity precision)
- */
-function normalizeToStepSize(value: number, stepSize: number): number {
-  const stepDecimals = stepSize.toString().split('.')[1]?.length || 0;
-  const normalized = Math.floor(value / stepSize) * stepSize;
-  return parseFloat(normalized.toFixed(stepDecimals));
-}
+/** Re-export for callers that need step rounding without a full Binance round-trip. */
+export { normalizeQtyToStep as normalizeToStepSize };
 
 /**
  * Normalize price to tick size (for price precision)
@@ -98,7 +96,7 @@ function normalizeToTickSize(price: number, tickSize: number): number {
 /**
  * Get precision filters for a symbol
  */
-async function getSymbolFilters(symbol: string): Promise<{
+export async function getSymbolFilters(symbol: string): Promise<{
   stepSize: number;
   tickSize: number;
   minQty: number;
@@ -122,6 +120,30 @@ async function getSymbolFilters(symbol: string): Promise<{
     maxPrice: parseFloat(priceFilter.maxPrice),
     minNotional: parseFloat(minNotionalFilter.minNotional),
   };
+}
+
+/**
+ * Normalize quantity to exchange stepSize and validate minQty before placing orders.
+ */
+export async function normalizeQuantityForSymbol(
+  symbol: string,
+  quantity: number
+): Promise<ReturnType<typeof evaluateNormalizedQuantity>> {
+  const filters = await getSymbolFilters(symbol);
+  return evaluateNormalizedQuantity(quantity, filters);
+}
+
+function assertValidNormalizedQuantity(
+  symbol: string,
+  intent: OrderIntent,
+  check: ReturnType<typeof evaluateNormalizedQuantity>
+): number {
+  if (!check.valid) {
+    throw new Error(
+      `[BinanceClient] ${intent} order rejected for ${symbol}: ${check.reason ?? 'invalid quantity'}`
+    );
+  }
+  return check.normalizedQty;
 }
 
 export function initTestnetClient(): any {
@@ -214,10 +236,17 @@ export async function placeMarketOrder(
     throw new Error('[BinanceClient] Order rejected: currentPosition is required for CLOSE orders');
   }
 
-  // Log order details before placing
-  console.log(`[BinanceClient] MARKET ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}`);
-
   try {
+    const filters = await getSymbolFilters(symbol);
+    const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
+    const normalizedQuantity = assertValidNormalizedQuantity(symbol, intent, qtyCheck);
+
+    console.log(
+      `[BinanceClient] MARKET ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} ` +
+        `quantity=${quantity} -> ${normalizedQuantity} (stepSize: ${filters.stepSize}) ` +
+        `positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}`
+    );
+
     // If positionSide is explicitly provided, validate it
     if (positionSide !== null) {
       validatePositionSide(positionSide);
@@ -230,7 +259,7 @@ export async function placeMarketOrder(
       symbol,
       side,
       type: 'MARKET',
-      quantity: quantity.toString(),
+      quantity: normalizedQuantity.toString(),
     };
     
     // Add positionSide if in HEDGE mode
@@ -248,7 +277,7 @@ export async function placeMarketOrder(
     const takerFeeRate = 0.0004; // 0.04%
     const estimatedFee = orderValue * takerFeeRate;
     
-    console.log(`[BinanceClient] MARKET ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} positionSide=${positionSide || 'N/A'} orderId=${response.orderId} estimated fee: ${estimatedFee.toFixed(4)} USDT`);
+    console.log(`[BinanceClient] MARKET ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} quantity=${normalizedQuantity} positionSide=${positionSide || 'N/A'} orderId=${response.orderId} estimated fee: ${estimatedFee.toFixed(4)} USDT`);
     
     return {
       ...response,
@@ -288,13 +317,14 @@ export async function placeLimitOrder(
 
   // Get precision filters and normalize values
   const filters = await getSymbolFilters(symbol);
-  const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
+  const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
+  const normalizedQuantity = assertValidNormalizedQuantity(symbol, intent, qtyCheck);
   const normalizedPrice = normalizeToTickSize(price, filters.tickSize);
   
   console.log(`[BinanceClient] Precision normalization: quantity ${quantity} -> ${normalizedQuantity} (stepSize: ${filters.stepSize}), price ${price} -> ${normalizedPrice} (tickSize: ${filters.tickSize})`);
 
   // Log order details before placing
-  console.log(`[BinanceClient] LIMIT ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} quantity=${quantity} price=${price} positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}${newClientOrderId ? ` clientOrderId=${newClientOrderId}` : ''}`);
+  console.log(`[BinanceClient] LIMIT ORDER REQUEST: symbol=${symbol} side=${side} intent=${intent} quantity=${normalizedQuantity} price=${normalizedPrice} positionSide=${positionSide || 'N/A'} currentPosition=${currentPosition ? JSON.stringify(currentPosition) : 'N/A'}${newClientOrderId ? ` clientOrderId=${newClientOrderId}` : ''}`);
 
   try {
     // If positionSide is explicitly provided, validate it
@@ -361,7 +391,8 @@ export async function placeStopLossOrder(
   try {
     // Get precision filters and normalize values
     const filters = await getSymbolFilters(symbol);
-    const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
+    const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
+    const normalizedQuantity = assertValidNormalizedQuantity(symbol, intent, qtyCheck);
     const normalizedStopPrice = normalizeToTickSize(stopPrice, filters.tickSize);
     
     console.log(`[BinanceClient] Precision normalization for SL: quantity ${quantity} -> ${normalizedQuantity}, stopPrice ${stopPrice} -> ${normalizedStopPrice}`);
@@ -432,7 +463,8 @@ export async function placeTakeProfitOrder(
   try {
     // Get precision filters and normalize values
     const filters = await getSymbolFilters(symbol);
-    const normalizedQuantity = normalizeToStepSize(quantity, filters.stepSize);
+    const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
+    const normalizedQuantity = assertValidNormalizedQuantity(symbol, intent, qtyCheck);
     const normalizedPrice = normalizeToTickSize(price, filters.tickSize);
     
     console.log(`[BinanceClient] Precision normalization for TP: quantity ${quantity} -> ${normalizedQuantity}, price ${price} -> ${normalizedPrice}`);

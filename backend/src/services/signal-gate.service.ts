@@ -7,6 +7,7 @@
 import { analyzeSetupGate, SetupGateInput, SetupGateResult } from '../analyzers/setup-gate.analyzer';
 import { getRiskPolicy } from '../config/risk-policy';
 import { formatSignalGateBlockReason } from '../utils/signal-gate-format';
+import { generateCandleHash } from '../utils/candle-hash';
 
 export interface SignalGateConfig {
   minGrade: 'A' | 'B' | 'C' | 'D';
@@ -42,14 +43,6 @@ const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
  */
 function generateCacheKey(symbol: string, timeframe: string, candleHash: string): string {
   return `${symbol}_${timeframe}_${candleHash}`;
-}
-
-/**
- * Generate simple hash from candle data
- */
-function generateCandleHash(candles: CandleData[]): string {
-  const lastCandle = candles[candles.length - 1];
-  return `${lastCandle.timestamp}_${lastCandle.high}_${lastCandle.low}_${lastCandle.close}`;
 }
 
 /**

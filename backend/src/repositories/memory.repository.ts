@@ -51,6 +51,18 @@ export interface PlaybookStatsInput {
 /**
  * Store a trade decision
  */
+export async function findTradeDecisionForBar(
+  symbol: string,
+  timeframe: string,
+  candle_hash: string,
+  method_id: string
+) {
+  return await prisma.tradeDecision.findFirst({
+    where: { symbol, timeframe, candle_hash, method_id },
+    orderBy: { timestamp: 'desc' },
+  });
+}
+
 export async function storeTradeDecision(input: TradeDecisionInput) {
   return await prisma.tradeDecision.create({
     data: input

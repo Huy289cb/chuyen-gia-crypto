@@ -448,6 +448,7 @@ model TradeDecision {
   @@index([playbook_key])
   @@index([decision])
   @@index([method_id])
+  @@index([symbol, timeframe, candle_hash, method_id])
   @@map("trade_decisions")
 }
 
@@ -504,4 +505,16 @@ model PlaybookStats {
   @@index([playbook_key])
   @@index([symbol])
   @@map("playbook_stats")
+}
+
+// ============================================
+// SCHEDULER HEARTBEATS (worker → API dashboard)
+// ============================================
+
+model SchedulerHeartbeat {
+  name       String   @id
+  last_run   DateTime
+  updated_at DateTime @updatedAt
+
+  @@map("scheduler_heartbeats")
 }

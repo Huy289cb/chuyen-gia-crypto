@@ -5,7 +5,10 @@ import {
   V3_LLM_DISPATCH_CRON,
   V3_MARKET_SCAN_CRON,
 } from '../config/v3-schedulers';
-import { getSchedulerLastRun } from '../utils/scheduler-heartbeat';
+import {
+  getPersistedSchedulerLastRun,
+  getSchedulerLastRun,
+} from '../utils/scheduler-heartbeat';
 import { getDayBoundsICT } from '../utils/ict-time';
 
 const POS_CRON = '*/1 * * * *';
@@ -105,30 +108,36 @@ export async function getSystemHealthSnapshot(): Promise<SystemHealthSnapshot> {
   });
   const lockStatus = lockedAccounts > 0 ? 'locked' : 'unlocked';
 
-  const [lastBtcCandle, lastKimDecision, lastTradeEvent] = await Promise.all([
-    prisma.ohlcvCandle.findFirst({
-      where: { coin: 'BTC' },
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true },
-    }),
-    prisma.tradeDecision.findFirst({
-      where: { method_id: 'kim_nghia' },
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true },
-    }),
-    prisma.testnetTradeEvent.findFirst({
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true },
-    }),
-  ]);
+  const [lastBtcCandle, lastKimDecision, persistedMarket, persistedLlm, persistedPos] =
+    await Promise.all([
+      prisma.ohlcvCandle.findFirst({
+        where: { coin: 'BTC' },
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true },
+      }),
+      prisma.tradeDecision.findFirst({
+        where: { method_id: 'kim_nghia' },
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true },
+      }),
+      getPersistedSchedulerLastRun('MarketScan'),
+      getPersistedSchedulerLastRun('LLMDispatch'),
+      getPersistedSchedulerLastRun('PositionMonitor'),
+    ]);
 
   const marketHb = getSchedulerLastRun('MarketScan');
   const llmHb = getSchedulerLastRun('LLMDispatch');
   const posHb = getSchedulerLastRun('PositionMonitor');
 
-  const marketLast = marketHb ?? (lastBtcCandle?.timestamp ? new Date(lastBtcCandle.timestamp) : null);
-  const llmLast = llmHb ?? (lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null);
-  const posLast = posHb ?? (lastTradeEvent?.timestamp ? new Date(lastTradeEvent.timestamp) : null);
+  const marketLast =
+    persistedMarket ??
+    marketHb ??
+    (lastBtcCandle?.timestamp ? new Date(lastBtcCandle.timestamp) : null);
+  const llmLast =
+    persistedLlm ??
+    llmHb ??
+    (lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null);
+  const posLast = persistedPos ?? posHb ?? null;
 
   const schedulers: SchedulerStatusRow[] = [
     {

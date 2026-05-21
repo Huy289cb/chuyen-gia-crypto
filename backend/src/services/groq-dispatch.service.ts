@@ -17,6 +17,7 @@ import {
 } from '../utils/trade-levels';
 import { getRiskPolicy } from '../config/risk-policy';
 import type { UnifiedCandle } from './candle.service';
+import { generateCandleHash } from '../utils/candle-hash';
 import {
   tryRepairLevelsWithSecondaryKey,
   tryRepairTpForMinRrWithSecondaryKey,
@@ -83,6 +84,14 @@ export class GroqDispatchService {
    */
   async dispatch(input: GroqDispatchInput): Promise<GroqDispatchOutput> {
     const { symbol, timeframe, candles, systemPrompt, method_id = 'kim_nghia', signalResult: precomputed } = input;
+    const candleHash = generateCandleHash(
+      candles.map((c) => ({
+        timestamp: c.timestamp,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      }))
+    );
 
     let signalResult: SignalGateOutput | undefined = precomputed;
 
@@ -114,7 +123,8 @@ export class GroqDispatchService {
             regime: signalResult.setupResult.regime,
             decision: 'no_trade',
             reason: `Signal gate: ${signalResult.reason}`,
-            method_id
+            method_id,
+            candle_hash: candleHash,
           });
         }
 
@@ -157,6 +167,7 @@ export class GroqDispatchService {
           decision: 'no_trade',
           reason: 'LLM: invalid JSON or failed validation after retries',
           method_id,
+          candle_hash: candleHash,
         });
       }
       return {
@@ -210,6 +221,7 @@ export class GroqDispatchService {
             take_profit: Number(analysis.suggested_take_profit),
             expected_rr: analysis.expected_rr,
             method_id,
+            candle_hash: candleHash,
           });
           decisionRecordId = row?.id;
         }
@@ -258,6 +270,7 @@ export class GroqDispatchService {
             decision: 'no_trade',
             reason: `Risk engine: ${reason}`,
             method_id,
+            candle_hash: candleHash,
           });
         }
         return {
@@ -297,7 +310,8 @@ export class GroqDispatchService {
             regime: 'unknown',
             decision: 'no_trade',
             reason: `Risk engine: ${riskCheck.reason}`,
-            method_id
+            method_id,
+            candle_hash: candleHash,
           });
         }
 
@@ -330,7 +344,8 @@ export class GroqDispatchService {
         stop_loss: analysis.suggested_stop_loss,
         take_profit: analysis.suggested_take_profit,
         expected_rr: analysis.expected_rr,
-        method_id
+        method_id,
+        candle_hash: candleHash,
       });
       decisionRecordId = row?.id;
     }

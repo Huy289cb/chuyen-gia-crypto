@@ -13,9 +13,26 @@ import {
 } from '../services/position-close.service';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 import { hookPositionMonitorAction } from '../services/telegram/telegram-hooks';
+import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 
 let positionMonitorTask: ScheduledTask | null = null;
 let isRunning = false;
+
+/** Avoid spamming Binance when reduce/close qty cannot be normalized. */
+const precisionSkipUntil = new Map<string, number>();
+const PRECISION_SKIP_MS = 5 * 60 * 1000;
+
+function shouldSkipPrecisionAction(positionId: string): boolean {
+  const until = precisionSkipUntil.get(positionId);
+  return until != null && Date.now() < until;
+}
+
+function markPrecisionSkip(positionId: string, reason: string): void {
+  precisionSkipUntil.set(positionId, Date.now() + PRECISION_SKIP_MS);
+  console.warn(
+    `[PositionMonitor] Skipping reduce/close for ${positionId} for ${PRECISION_SKIP_MS / 60000}m: ${reason}`
+  );
+}
 
 export interface PositionHealth {
   position_id: string;
@@ -50,6 +67,13 @@ async function runPositionMonitor() {
     console.log(`[PositionMonitor] Found ${openPositions.length} open positions`);
 
     for (const position of openPositions) {
+      if (
+        position.position_id === PIPELINE_EVENT_POSITION_ID ||
+        String(position.side).toUpperCase() === 'NONE'
+      ) {
+        continue;
+      }
+
       const mark = await resolveMarkPrice(
         position.symbol,
         position.current_price || position.entry_price
@@ -68,20 +92,35 @@ async function runPositionMonitor() {
       console.log(`[PositionMonitor] Reason: ${health.reason}`);
 
       if (health.recommended_action === 'exit') {
+        if (shouldSkipPrecisionAction(position.position_id)) {
+          continue;
+        }
         hookPositionMonitorAction(position.symbol, 'EXIT', health.reason);
-        await closePositionOnBinanceMarket(refreshed);
+        const closeResult = await closePositionOnBinanceMarket(refreshed);
+        if (!closeResult.ok) {
+          markPrecisionSkip(position.position_id, closeResult.reason ?? 'exit close failed');
+          continue;
+        }
         await closeLocalPosition(
           { ...refreshed, account: refreshed.account },
           mark,
           'position_monitor_exit'
         );
       } else if (health.recommended_action === 'reduce') {
+        if (shouldSkipPrecisionAction(position.position_id)) {
+          continue;
+        }
         hookPositionMonitorAction(position.symbol, 'REDUCE', health.reason);
         const totalQty = Math.abs(refreshed.size_qty);
         const reduceQty = totalQty * 0.5;
         if (reduceQty > 0) {
-          await closePositionOnBinanceMarket(refreshed, reduceQty);
-          const remainingQty = totalQty - reduceQty;
+          const closeResult = await closePositionOnBinanceMarket(refreshed, reduceQty);
+          if (!closeResult.ok) {
+            markPrecisionSkip(position.position_id, closeResult.reason ?? 'reduce close failed');
+            continue;
+          }
+          const closedQty = closeResult.normalizedQty ?? reduceQty;
+          const remainingQty = Math.max(0, totalQty - closedQty);
           const sizeUsd =
             refreshed.size_usd > 0
               ? (refreshed.size_usd * remainingQty) / totalQty
@@ -92,7 +131,7 @@ async function runPositionMonitor() {
             current_price: mark,
           });
           console.log(
-            `[PositionMonitor] Reduced ${position.position_id} by 50% (qty ${remainingQty})`
+            `[PositionMonitor] Reduced ${position.position_id} by 50% (remaining qty ${remainingQty})`
           );
         }
       }

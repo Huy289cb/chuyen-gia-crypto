@@ -61,7 +61,26 @@ export class MemoryService {
    */
   async storeDecision(input: DecisionInput) {
     try {
-      const decision = await MemoryRepository.storeTradeDecision(input);
+      const methodId = input.method_id ?? 'kim_nghia';
+      if (input.candle_hash) {
+        const existing = await MemoryRepository.findTradeDecisionForBar(
+          input.symbol,
+          input.timeframe,
+          input.candle_hash,
+          methodId
+        );
+        if (existing) {
+          console.log(
+            `[MemoryService] Skip duplicate bar ${input.candle_hash} for ${input.symbol} ${input.timeframe} (id=${existing.id})`
+          );
+          return existing;
+        }
+      }
+
+      const decision = await MemoryRepository.storeTradeDecision({
+        ...input,
+        method_id: methodId,
+      });
       console.log(`[MemoryService] Stored decision for ${input.symbol}: ${input.decision}`);
       return decision;
     } catch (error) {

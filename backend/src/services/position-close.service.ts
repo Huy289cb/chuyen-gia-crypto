@@ -9,7 +9,7 @@ import {
   updateTestnetPosition,
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
-import { placeMarketOrder } from './binanceClient';
+import { normalizeQuantityForSymbol, placeMarketOrder } from './binanceClient';
 
 function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
@@ -92,23 +92,39 @@ export async function closeLocalPosition(
 /**
  * Market-close on Binance (full or partial qty).
  */
+export interface BinanceCloseResult {
+  ok: boolean;
+  reason?: string;
+  normalizedQty?: number;
+}
+
 export async function closePositionOnBinanceMarket(
   position: { symbol: string; side: string; size_qty: number },
   closeQty?: number
-): Promise<void> {
-  if (process.env.BINANCE_ENABLED !== 'true') return;
+): Promise<BinanceCloseResult> {
+  if (process.env.BINANCE_ENABLED !== 'true') {
+    return { ok: true, reason: 'binance_disabled' };
+  }
 
   await ensurePositionModeDetected();
 
   const qty = Math.abs(closeQty ?? position.size_qty);
-  if (qty <= 0) return;
+  if (qty <= 0) {
+    return { ok: false, reason: 'close quantity <= 0' };
+  }
 
   const symbol = `${position.symbol.toUpperCase()}USDT`;
+  const qtyCheck = await normalizeQuantityForSymbol(symbol, qty);
+  if (!qtyCheck.valid) {
+    return { ok: false, reason: qtyCheck.reason ?? 'invalid close quantity after normalization' };
+  }
+
+  const normalizedQty = qtyCheck.normalizedQty;
   const isLong = position.side.toLowerCase() === 'long';
   const binanceSide = isLong ? 'SELL' : 'BUY';
   const positionSide = isLong ? 'LONG' : 'SHORT';
   const currentPosition = {
-    positionAmt: isLong ? qty : -qty,
+    positionAmt: isLong ? normalizedQty : -normalizedQty,
     positionSide,
   };
 
@@ -116,13 +132,16 @@ export async function closePositionOnBinanceMarket(
     {},
     symbol,
     binanceSide,
-    qty,
+    normalizedQty,
     'CLOSE',
     currentPosition,
     positionSide
   );
 
-  console.log(`[PositionClose] Binance market close ${symbol} ${binanceSide} qty=${qty}`);
+  console.log(
+    `[PositionClose] Binance market close ${symbol} ${binanceSide} qty=${normalizedQty} (raw ${qty})`
+  );
+  return { ok: true, normalizedQty };
 }
 
 export async function closeOpenPositionFromBinanceFill(

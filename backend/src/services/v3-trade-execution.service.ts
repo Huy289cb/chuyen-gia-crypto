@@ -14,7 +14,7 @@ import {
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { computeExpectedRrFromPrices } from '../utils/trade-levels';
-import { initTestnetClient, placeLimitOrder } from './binanceClient';
+import { initTestnetClient, normalizeQuantityForSymbol, placeLimitOrder } from './binanceClient';
 import {
   hookPendingOrderPlaced,
   hookTradeRejected,
@@ -115,6 +115,26 @@ export async function executeV3Trade(
     getTestnetPendingOrders({ symbol, status: 'pending', methodId }),
   ]);
 
+  const sameSideOpen = openPositions.filter(
+    (p) => String(p.side).toLowerCase() === side
+  );
+  if (sameSideOpen.length > 0) {
+    return {
+      success: false,
+      reason: `Same-side ${side} position already open (scaling-in disabled)`,
+    };
+  }
+
+  const sameSidePending = pendingOrders.filter(
+    (o) => String(o.side).toLowerCase() === side
+  );
+  if (sameSidePending.length > 0) {
+    return {
+      success: false,
+      reason: `Same-side ${side} pending order already exists`,
+    };
+  }
+
   const maxPerSymbol = riskPolicy.maxPositionsPerSymbol;
   if (openPositions.length >= maxPerSymbol || pendingOrders.length >= maxPerSymbol) {
     return {
@@ -150,6 +170,17 @@ export async function executeV3Trade(
   }
 
   const sizeQty = sizeUsd / entry;
+  const symbolUsdt = `${symbol.toUpperCase()}USDT`;
+
+  const qtyCheck = await normalizeQuantityForSymbol(symbolUsdt, sizeQty);
+  if (!qtyCheck.valid) {
+    return {
+      success: false,
+      reason: qtyCheck.reason ?? 'Order quantity invalid after exchange normalization',
+    };
+  }
+  const normalizedSizeQty = qtyCheck.normalizedQty;
+
   const expectedRr =
     computeExpectedRrFromPrices(entry, stopLoss, takeProfit) ??
     Number(analysis.expected_rr) ??
@@ -171,9 +202,9 @@ export async function executeV3Trade(
   try {
     const order = await placeLimitOrder(
       client,
-      `${symbol.toUpperCase()}USDT`,
+      symbolUsdt,
       binanceSide,
-      sizeQty,
+      normalizedSizeQty,
       entry,
       'OPEN',
       null,
@@ -200,7 +231,7 @@ export async function executeV3Trade(
     stopLoss,
     takeProfit,
     sizeUsd,
-    sizeQty,
+    sizeQty: normalizedSizeQty,
     riskUsd,
     riskPercent: riskPolicy.riskPerTradePercent,
     expectedRr,
