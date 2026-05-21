@@ -136,6 +136,7 @@ async function runLLMDispatch() {
           timeframe,
           analysis: dispatchResult.analysis,
           methodId: 'kim_nghia',
+          decisionRecordId: dispatchResult.decisionRecordId,
         });
 
         if (execResult.success) {

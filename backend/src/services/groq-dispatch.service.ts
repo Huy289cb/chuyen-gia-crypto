@@ -290,8 +290,8 @@ export class GroqDispatchService {
 
       const riskCheck = riskManagerService.canOpenTrade({
         symbol,
-        grade: 'A', // Assume A-grade since we passed signal gate
-        confidence: analysis.confidence || 0,
+        grade: signalResult?.setupResult.grade ?? 'B',
+        confidence: Math.max(analysis.confidence || 0, signalResult?.setupResult.confidence ?? 0),
         entryPrice: analysis.suggested_entry || 0,
         stopLoss: analysis.suggested_stop_loss || 0,
         takeProfit: analysis.suggested_take_profit || 0,
@@ -323,23 +323,83 @@ export class GroqDispatchService {
       }
     }
 
+    const gateGrade = signalResult?.setupResult.grade ?? 'D';
+    const gateConfidence = signalResult?.setupResult.confidence ?? 0;
+    const gateRegime = signalResult?.setupResult.regime ?? 'unknown';
+    const gatePlaybook = signalResult?.setupResult.playbookKey || 'unknown';
+
+    // LLM veto-only: hold = veto; buy/sell = confirm signal gate pass
+    const llmConfirms = analysis.action !== 'hold';
+    const blockRange =
+      process.env.V3_BLOCK_RANGE_ENTRIES !== 'false' &&
+      (gateRegime === 'range' || gateRegime === 'chop');
+
+    if (llmConfirms && blockRange) {
+      const reason = `Regime ${gateRegime} blocked for entries (V3_BLOCK_RANGE_ENTRIES)`;
+      if (this.config.enableMemory) {
+        await memoryService.storeDecision({
+          symbol,
+          timeframe,
+          playbook_key: gatePlaybook,
+          grade: gateGrade,
+          confidence: gateConfidence,
+          regime: gateRegime,
+          decision: 'no_trade',
+          reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+          method_id,
+          candle_hash: candleHash,
+        });
+      }
+      return {
+        decision: 'no_trade',
+        reason,
+        analysis,
+        memory_context: memoryContext,
+      };
+    }
+
+    const minLlmConf = parseFloat(process.env.V3_MIN_LLM_CONFIRM_CONFIDENCE || '0.75');
+    if (llmConfirms && (analysis.confidence ?? 0) < minLlmConf) {
+      const reason = `LLM confidence ${((analysis.confidence ?? 0) * 100).toFixed(0)}% below min ${(minLlmConf * 100).toFixed(0)}%`;
+      if (this.config.enableMemory) {
+        await memoryService.storeDecision({
+          symbol,
+          timeframe,
+          playbook_key: gatePlaybook,
+          grade: gateGrade,
+          confidence: analysis.confidence || 0,
+          regime: gateRegime,
+          decision: 'no_trade',
+          reason: `LLM veto: ${reason}`,
+          method_id,
+          candle_hash: candleHash,
+        });
+      }
+      return {
+        decision: 'no_trade',
+        reason,
+        analysis,
+        memory_context: memoryContext,
+      };
+    }
+
     // Step 6: Store decision
     let decisionRecordId: number | undefined;
-    const isTrade = analysis.action !== 'hold';
+    const isTrade = llmConfirms;
     const llmSummary = isTrade
       ? formatLlmTradeSummary(analysis)
-      : analysis.reason_summary || 'LLM: hold / no trade';
+      : analysis.reason_summary || 'LLM: hold (veto)';
 
     if (this.config.enableMemory) {
       const row = await memoryService.storeDecision({
         symbol,
         timeframe,
-        playbook_key: 'unknown',
-        grade: 'A',
-        confidence: analysis.confidence || 0,
-        regime: 'unknown',
+        playbook_key: gatePlaybook,
+        grade: gateGrade,
+        confidence: gateConfidence,
+        regime: gateRegime,
         decision: isTrade ? 'trade' : 'no_trade',
-        reason: llmSummary,
+        reason: isTrade ? llmSummary : `LLM veto (hold) · gate passed · ${llmSummary}`,
         entry_price: analysis.suggested_entry,
         stop_loss: analysis.suggested_stop_loss,
         take_profit: analysis.suggested_take_profit,
@@ -353,7 +413,9 @@ export class GroqDispatchService {
     return {
       decision: isTrade ? 'trade' : 'no_trade',
       analysis,
-      reason: analysis.reason_summary || 'LLM approved trade',
+      reason: isTrade
+        ? `LLM confirmed trade · ${llmSummary}`
+        : 'LLM veto (hold) — no entry',
       memory_context: memoryContext,
       decisionRecordId,
     };
@@ -492,6 +554,10 @@ export class GroqDispatchService {
     const minSlLabel = (minSlPct * 100).toFixed(2);
 
     prompt +=
+      '\nCRITICAL — YOUR ROLE IS VETO / CONFIRM ONLY:\n' +
+      '- Signal gate already approved this setup. Respond "hold" to VETO (skip trade).\n' +
+      '- Respond "buy" or "sell" ONLY to CONFIRM entry with valid SL/TP.\n' +
+      '- Do not invent marginal trades; when uncertain, respond "hold".\n' +
       '\nCRITICAL — STOP LOSS (system rejects tighter stops):\n' +
       `- Minimum |entry - suggested_stop_loss| / entry >= ${minSlLabel}% (your last outputs near 0.3% were rejected).\n` +
       '- Place SL beyond the recent swing liquidity (swing high for SHORT, swing low for LONG), not only inside the current candle wick.\n' +

@@ -1,6 +1,6 @@
 /**
  * Position Monitor Scheduler
- * Monitors open positions and applies HOLD / REDUCE / EXIT actions
+ * Monitors open positions — conservative: prefer exchange SL/TP, max one reduce.
  */
 
 import cron, { type ScheduledTask } from 'node-cron';
@@ -19,22 +19,25 @@ import {
   type PositionData,
 } from '../analyzers/position-health.analyzer';
 import { syncTestnetAccountFromBinance } from '../services/binance-balance-sync.service';
+import {
+  deferToExchangeSlTp,
+  getMinMinutesBeforeMonitorAction,
+  getMinPnlPercentForMonitorAction,
+  getPrecisionSkipMs,
+  isPositionMonitorExitEnabled,
+  isPositionMonitorReduceEnabled,
+} from '../config/position-monitor-policy';
 
 let positionMonitorTask: ScheduledTask | null = null;
 let isRunning = false;
 
 /** Avoid spamming Binance when reduce/close qty cannot be normalized. */
 const precisionSkipUntil = new Map<string, number>();
-const PRECISION_SKIP_MS = 5 * 60 * 1000;
 
 const REDUCE_FRACTION = 0.5;
 
 function isPositionMonitorEnabled(): boolean {
   return process.env.POSITION_MONITOR_ENABLED !== 'false';
-}
-
-function isReduceEnabled(): boolean {
-  return process.env.POSITION_MONITOR_ALLOW_REDUCE !== 'false';
 }
 
 function shouldSkipPrecisionAction(positionId: string): boolean {
@@ -43,15 +46,23 @@ function shouldSkipPrecisionAction(positionId: string): boolean {
 }
 
 function markPrecisionSkip(positionId: string, reason: string): void {
-  precisionSkipUntil.set(positionId, Date.now() + PRECISION_SKIP_MS);
+  const ms = getPrecisionSkipMs();
+  precisionSkipUntil.set(positionId, Date.now() + ms);
   console.warn(
-    `[PositionMonitor] Skipping reduce/close for ${positionId} for ${PRECISION_SKIP_MS / 60000}m: ${reason}`
+    `[PositionMonitor] Skipping reduce/close for ${positionId} for ${Math.round(ms / 60000)}m: ${reason}`
   );
 }
 
-/** At most one monitor-driven 50% reduce per position (tracked via partial_closed). */
+/** At most one monitor-driven reduce per position. */
 function canReduceAgain(position: { partial_closed: number }): boolean {
-  return position.partial_closed < REDUCE_FRACTION - 0.01;
+  return (position.partial_closed ?? 0) < 0.01;
+}
+
+function hasExchangeSlTp(position: {
+  binance_sl_order_id?: string | null;
+  binance_tp_order_id?: string | null;
+}): boolean {
+  return Boolean(position.binance_sl_order_id && position.binance_tp_order_id);
 }
 
 function toPositionData(position: {
@@ -117,9 +128,20 @@ async function runPositionMonitor() {
       );
       await updateTestnetPosition(position.position_id, { current_price: mark });
 
-      const refreshed = { ...position, current_price: mark };
+      const refreshed = await prisma.testnetPosition.findUnique({
+        where: { position_id: position.position_id },
+        include: { account: true },
+      });
+      if (!refreshed || refreshed.status !== 'open') continue;
+
+      const exchangeActive =
+        deferToExchangeSlTp() && hasExchangeSlTp(refreshed);
+
       const health = analyzePositionHealth(toPositionData(refreshed), {
         partial_closed: refreshed.partial_closed ?? 0,
+        exchange_sl_tp_active: exchangeActive,
+        min_minutes_before_action: getMinMinutesBeforeMonitorAction(),
+        min_pnl_percent_for_action: getMinPnlPercentForMonitorAction(),
       });
 
       const qty = Math.abs(refreshed.size_qty);
@@ -139,6 +161,12 @@ async function runPositionMonitor() {
       console.log(`[PositionMonitor] Reason: ${health.reason}`);
 
       if (health.recommended_action === 'exit') {
+        if (!isPositionMonitorExitEnabled()) {
+          console.log(
+            `[PositionMonitor] EXIT skipped (POSITION_MONITOR_ALLOW_EXIT=false) for ${position.position_id}`
+          );
+          continue;
+        }
         if (shouldSkipPrecisionAction(position.position_id)) {
           continue;
         }
@@ -162,15 +190,15 @@ async function runPositionMonitor() {
           }
         }
       } else if (health.recommended_action === 'reduce') {
-        if (!isReduceEnabled()) {
+        if (!isPositionMonitorReduceEnabled()) {
           console.log(
-            `[PositionMonitor] REDUCE skipped (POSITION_MONITOR_ALLOW_REDUCE=false) for ${position.position_id}`
+            `[PositionMonitor] REDUCE skipped (POSITION_MONITOR_ALLOW_REDUCE not true) for ${position.position_id}`
           );
           continue;
         }
         if (!canReduceAgain(refreshed)) {
           console.log(
-            `[PositionMonitor] REDUCE skipped — already partial_closed=${refreshed.partial_closed} or cooldown active for ${position.position_id}`
+            `[PositionMonitor] REDUCE skipped — already reduced (partial_closed=${refreshed.partial_closed}) for ${position.position_id}`
           );
           continue;
         }
@@ -180,38 +208,36 @@ async function runPositionMonitor() {
         hookPositionMonitorAction(position.symbol, 'REDUCE', health.reason);
         const totalQty = Math.abs(refreshed.size_qty);
         const reduceQty = totalQty * REDUCE_FRACTION;
-        if (reduceQty > 0) {
-          const closeResult = await closePositionOnBinanceMarket(refreshed, reduceQty);
-          if (!closeResult.ok) {
-            markPrecisionSkip(position.position_id, closeResult.reason ?? 'reduce close failed');
-            continue;
-          }
-          const closedQty = closeResult.normalizedQty ?? reduceQty;
-          const remainingQty = Math.max(0, totalQty - closedQty);
-          const sizeUsd =
-            refreshed.size_usd > 0
-              ? (refreshed.size_usd * remainingQty) / totalQty
-              : remainingQty * mark;
-          const newPartialClosed = Math.min(
-            1,
-            (refreshed.partial_closed ?? 0) + closedQty / totalQty
-          );
-          await updateTestnetPosition(position.position_id, {
-            size_qty: remainingQty,
-            size_usd: sizeUsd,
-            current_price: mark,
-            partial_closed: newPartialClosed,
-          });
-          console.log(
-            `[PositionMonitor] Reduced ${position.position_id} by 50% (remaining qty ${remainingQty}, partial_closed=${newPartialClosed.toFixed(2)})`
-          );
-          if (process.env.BINANCE_ENABLED === 'true') {
-            try {
-              await syncTestnetAccountFromBinance(position.account_id);
-            } catch (syncErr: unknown) {
-              const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-              console.warn(`[PositionMonitor] Balance sync after reduce failed: ${msg}`);
-            }
+        if (reduceQty <= 0) {
+          console.log(`[PositionMonitor] REDUCE skipped — qty too small for ${position.position_id}`);
+          continue;
+        }
+        const closeResult = await closePositionOnBinanceMarket(refreshed, reduceQty);
+        if (!closeResult.ok) {
+          markPrecisionSkip(position.position_id, closeResult.reason ?? 'reduce close failed');
+          continue;
+        }
+        const closedQty = closeResult.normalizedQty ?? reduceQty;
+        const remainingQty = Math.max(0, totalQty - closedQty);
+        const sizeUsd =
+          refreshed.size_usd > 0
+            ? (refreshed.size_usd * remainingQty) / totalQty
+            : remainingQty * mark;
+        await updateTestnetPosition(position.position_id, {
+          size_qty: refreshed.side === 'short' ? -remainingQty : remainingQty,
+          size_usd: sizeUsd,
+          current_price: mark,
+          partial_closed: 1,
+        });
+        console.log(
+          `[PositionMonitor] Reduced ${position.position_id} once (remaining qty ${remainingQty}, partial_closed=1.00)`
+        );
+        if (process.env.BINANCE_ENABLED === 'true') {
+          try {
+            await syncTestnetAccountFromBinance(position.account_id);
+          } catch (syncErr: unknown) {
+            const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+            console.warn(`[PositionMonitor] Balance sync after reduce failed: ${msg}`);
           }
         }
       }
@@ -232,7 +258,9 @@ export function startPositionMonitorScheduler(cronExpression: string = '*/1 * * 
   }
 
   console.log(
-    `[PositionMonitor] Starting scheduler cron=${cronExpression} enabled=${isPositionMonitorEnabled()} allow_reduce=${isReduceEnabled()}`
+    `[PositionMonitor] Starting scheduler cron=${cronExpression} enabled=${isPositionMonitorEnabled()} ` +
+      `allow_reduce=${isPositionMonitorReduceEnabled()} allow_exit=${isPositionMonitorExitEnabled()} ` +
+      `defer_sl_tp=${deferToExchangeSlTp()}`
   );
   positionMonitorTask = cron.schedule(cronExpression, runPositionMonitor);
   runPositionMonitor();

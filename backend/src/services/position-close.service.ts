@@ -11,6 +11,11 @@ import {
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { normalizeQuantityForSymbol, placeMarketOrder } from './binanceClient';
 import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
+import {
+  recordTradeOutcomeOnClose,
+  type CloseOutcomeContext,
+} from './trade-outcome.service';
+import { getPositionRisk } from './binanceClient';
 
 function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
@@ -43,13 +48,28 @@ export async function closeLocalPosition(
     account_id: number;
     side: string;
     entry_price: number;
+    entry_time?: Date;
     size_qty: number;
+    stop_loss?: number;
+    take_profit?: number;
+    expected_rr?: number;
+    risk_usd?: number;
+    entry_fee?: number;
+    exit_fee?: number;
+    funding_fee?: number;
+    symbol?: string;
+    status?: string;
     account: { current_balance: number };
   },
   closePrice: number,
   closeReason: string,
   eventMeta?: Record<string, unknown>
 ): Promise<number> {
+  if (position.status === 'closed') {
+    console.warn(`[PositionClose] ${position.position_id} already closed — skip`);
+    return 0;
+  }
+
   const qty = Math.abs(position.size_qty);
   const realizedPnl = calculatePnl(position.side, position.entry_price, closePrice, qty);
 
@@ -61,11 +81,16 @@ export async function closeLocalPosition(
   });
 
   const isWin = realizedPnl > 0;
+  const useBinanceBalance = process.env.BINANCE_ENABLED === 'true';
   await prisma.testnetAccount.update({
     where: { id: position.account_id },
     data: {
-      current_balance: position.account.current_balance + realizedPnl,
-      equity: position.account.current_balance + realizedPnl,
+      ...(!useBinanceBalance
+        ? {
+            current_balance: position.account.current_balance + realizedPnl,
+            equity: position.account.current_balance + realizedPnl,
+          }
+        : {}),
       unrealized_pnl: 0,
       realized_pnl: { increment: realizedPnl },
       total_trades: { increment: 1 },
@@ -87,6 +112,25 @@ export async function closeLocalPosition(
   console.log(
     `[PositionClose] Closed ${position.position_id} @ ${closePrice} (${closeReason}) PnL=${realizedPnl.toFixed(2)}`
   );
+
+  const outcomeCtx: CloseOutcomeContext = {
+    position_id: position.position_id,
+    symbol: position.symbol ?? 'BTC',
+    side: position.side,
+    entry_price: position.entry_price,
+    entry_time: position.entry_time ?? new Date(),
+    stop_loss: position.stop_loss ?? position.entry_price,
+    take_profit: position.take_profit ?? position.entry_price,
+    expected_rr: position.expected_rr ?? 0,
+    risk_usd: position.risk_usd ?? 0,
+    entry_fee: position.entry_fee,
+    exit_fee: position.exit_fee,
+    funding_fee: position.funding_fee,
+    close_reason: closeReason,
+    decision_id:
+      typeof eventMeta?.decision_id === 'number' ? eventMeta.decision_id : undefined,
+  };
+  await recordTradeOutcomeOnClose(outcomeCtx, closePrice, realizedPnl);
 
   if (process.env.BINANCE_ENABLED === 'true') {
     try {
@@ -160,21 +204,18 @@ export async function closeOpenPositionFromBinanceFill(
   orderType: string,
   executedQty: number,
   avgPrice: number,
-  symbolUsdt: string
+  _symbolUsdt: string
 ): Promise<boolean> {
   if (avgPrice <= 0 || executedQty <= 0) return false;
 
-  let position = await findOpenPositionByBinanceOrderId(binanceOrderId);
+  const position = await findOpenPositionByBinanceOrderId(binanceOrderId);
 
   if (!position) {
-    const symbol = symbolUsdt.replace('USDT', '');
-    position = await prisma.testnetPosition.findFirst({
-      where: { status: 'open', symbol },
-      include: { account: true },
-    });
+    console.warn(
+      `[PositionClose] No open position matched binance order ${binanceOrderId} — skip phantom close`
+    );
+    return false;
   }
-
-  if (!position) return false;
 
   const closeReason =
     orderType === 'TAKE_PROFIT_MARKET' || orderType === 'TAKE_PROFIT'
@@ -214,9 +255,31 @@ export async function syncClosedPositionsFromAccountUpdate(
     });
     if (!open) continue;
 
+    if (process.env.BINANCE_ENABLED === 'true') {
+      try {
+        const risks = await getPositionRisk({} as object, `${symbol}USDT`);
+        const live = risks.find(
+          (r: { positionSide?: string; positionAmt?: string }) =>
+            String(r.positionSide).toUpperCase() === (side === 'long' ? 'LONG' : 'SHORT')
+        );
+        const liveAmt = Math.abs(parseFloat(live?.positionAmt ?? '0'));
+        if (liveAmt > 1e-8) {
+          console.warn(
+            `[PositionClose] ACCOUNT_UPDATE zero ${symbol} ${side} but Binance still has ${liveAmt} — skip DB close`
+          );
+          continue;
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[PositionClose] Binance verify failed for ${symbol} ${side}: ${msg} — skip close`);
+        continue;
+      }
+    }
+
     const mark = open.current_price > 0 ? open.current_price : open.entry_price;
     await closeLocalPosition(open, mark, 'account_update_zero_position', {
       binance_position_side: ps,
+      verified_binance_zero: true,
     });
   }
 }

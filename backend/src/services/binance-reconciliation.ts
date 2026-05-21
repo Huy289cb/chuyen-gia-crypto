@@ -200,27 +200,13 @@ async function reconcilePhantomLocalCloses(activeBinancePositions: any[]): Promi
       size_usd: Math.abs(amt * phantom.entry_price),
     });
 
-    if (phantom.account_id) {
-      const account = phantom.account;
-      const balAdj = (account?.current_balance ?? 0) - phantomPnl;
-      const eqAdj = (account?.equity ?? 0) - phantomPnl;
-      await prisma.testnetAccount.update({
-        where: { id: phantom.account_id },
-        data: {
-          current_balance: balAdj,
-          equity: eqAdj,
-          realized_pnl: { decrement: phantomPnl },
-          total_trades: { decrement: 1 },
-          ...(phantomPnl > 0 ? { winning_trades: { decrement: 1 } } : {}),
-          ...(phantomPnl < 0 ? { losing_trades: { decrement: 1 } } : {}),
-        },
-      });
-    }
+    // Do not rewrite account win/loss counters — phantom close should not have credited PnL.
+    // Balance is synced from Binance separately.
 
     await recordTestnetTradeEvent(phantom.position_id, 'reconciliation_reopened', {
-      reason: 'phantom_candle_close_reverted',
+      reason: 'phantom_close_reverted_position_only',
       binance_position_amt: amt,
-      reverted_pnl: phantomPnl,
+      prior_phantom_pnl: phantomPnl,
     });
   }
 }

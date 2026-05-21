@@ -32,6 +32,12 @@ export interface PositionHealthResult {
 export interface PositionHealthOptions {
   /** Cumulative fraction already closed by monitor (0–1). Blocks repeat REDUCE. */
   partial_closed?: number;
+  /** When set, monitor defers to exchange SL/TP — no discretionary reduce/exit. */
+  exchange_sl_tp_active?: boolean;
+  /** Minimum minutes in trade before monitor may act. */
+  min_minutes_before_action?: number;
+  /** Minimum |pnl%| before discretionary reduce (not SL-progress exit). */
+  min_pnl_percent_for_action?: number;
 }
 
 /** Fraction of entry→SL distance consumed (0 at entry, 1 at SL). */
@@ -56,7 +62,10 @@ export function analyzePositionHealth(
 ): PositionHealthResult {
   const { entry_price, current_price, stop_loss, take_profit, entry_time, side } = position;
   const partialClosed = options?.partial_closed ?? 0;
-  const alreadyReduced = partialClosed >= 0.45;
+  const alreadyReduced = partialClosed >= 0.01;
+  const exchangeSlTp = options?.exchange_sl_tp_active === true;
+  const minMinutes = options?.min_minutes_before_action ?? 0;
+  const minPnlPct = options?.min_pnl_percent_for_action ?? 0;
 
   // Calculate PnL percentage
   let pnlPercent = 0;
@@ -85,28 +94,55 @@ export function analyzePositionHealth(
 
   let health: 'healthy' | 'warning' | 'critical' = 'healthy';
   let recommendedAction: 'hold' | 'reduce' | 'exit' = 'hold';
-  let reason = 'Position is healthy';
+  let reason = 'Position is healthy — deferring to exchange SL/TP';
 
-  if (slProgress != null && slProgress >= 0.9) {
+  if (exchangeSlTp) {
+    return {
+      health,
+      pnl_percent: pnlPercent,
+      time_in_position_minutes: timeInPositionMinutes,
+      distance_to_sl_percent: distanceToSlPercent,
+      distance_to_tp_percent: distanceToTpPercent,
+      sl_progress: slProgress,
+      recommended_action: 'hold',
+      reason,
+    };
+  }
+
+  if (timeInPositionMinutes < minMinutes) {
+    reason = `Hold — position age ${timeInPositionMinutes.toFixed(0)}m < min ${minMinutes}m`;
+    return {
+      health,
+      pnl_percent: pnlPercent,
+      time_in_position_minutes: timeInPositionMinutes,
+      distance_to_sl_percent: distanceToSlPercent,
+      distance_to_tp_percent: distanceToTpPercent,
+      sl_progress: slProgress,
+      recommended_action: 'hold',
+      reason,
+    };
+  }
+
+  reason = 'Position is healthy';
+
+  // Critical exit only — avoid early discretionary cuts that erode R:R
+  if (slProgress != null && slProgress >= 0.95) {
     health = 'critical';
     recommendedAction = 'exit';
-    reason = 'Price within 10% of stop-loss range — full exit';
-  } else if (pnlPercent < -0.8) {
+    reason = 'SL progress >= 95% — emergency exit (exchange SL may have failed)';
+  } else if (pnlPercent <= -1.5) {
     health = 'critical';
     recommendedAction = 'exit';
-    reason = 'Large loss - exit to prevent further damage';
-  } else if (!alreadyReduced && slProgress != null && slProgress >= 0.75) {
+    reason = `Unrealized loss ${pnlPercent.toFixed(2)}% — emergency exit`;
+  } else if (
+    !alreadyReduced &&
+    slProgress != null &&
+    slProgress >= 0.85 &&
+    pnlPercent <= -minPnlPct
+  ) {
     health = 'warning';
     recommendedAction = 'reduce';
-    reason = 'Traveled 75%+ toward stop loss — one-time 50% reduce';
-  } else if (!alreadyReduced && pnlPercent > 1.0 && timeInPositionMinutes > 60) {
-    health = 'healthy';
-    recommendedAction = 'reduce';
-    reason = 'Position in profit for extended time — one-time partial take-profit';
-  } else if (pnlPercent < -0.5 && timeInPositionMinutes > 120) {
-    health = 'warning';
-    recommendedAction = 'exit';
-    reason = 'Position losing for extended time';
+    reason = `SL progress ${(slProgress * 100).toFixed(0)}% with loss ${pnlPercent.toFixed(2)}% — one-time 50% reduce`;
   }
 
   return {

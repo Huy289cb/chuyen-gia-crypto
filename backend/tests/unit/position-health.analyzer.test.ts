@@ -31,11 +31,21 @@ describe('analyzePositionHealth', () => {
 
   it('does not repeat reduce after partial_closed', () => {
     const nearSl = { ...base, current_price: 77400 };
-    const first = analyzePositionHealth(nearSl, { partial_closed: 0 });
+    const first = analyzePositionHealth(nearSl, {
+      partial_closed: 0,
+      min_minutes_before_action: 0,
+      min_pnl_percent_for_action: 0,
+    });
     expect(first.recommended_action).toBe('reduce');
 
     const second = analyzePositionHealth(nearSl, { partial_closed: 0.5 });
     expect(second.recommended_action).toBe('hold');
+  });
+
+  it('holds when exchange SL/TP active', () => {
+    const nearSl = { ...base, current_price: 77400 };
+    const h = analyzePositionHealth(nearSl, { exchange_sl_tp_active: true });
+    expect(h.recommended_action).toBe('hold');
   });
 
   it('exits when sl progress >= 90%', () => {

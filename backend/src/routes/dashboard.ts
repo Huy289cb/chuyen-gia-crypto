@@ -782,22 +782,29 @@ router.get('/llm', async (_req: Request, res: Response) => {
 router.get('/memory', async (_req: Request, res: Response) => {
   try {
     // Get similar setups from recent trade decisions
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const recentDecisions = await prisma.tradeDecision.findMany({
+      where: { timestamp: { gte: since } },
       orderBy: { timestamp: 'desc' },
-      take: 3,
+      take: 10,
       include: { trade_outcome: true },
     });
 
-    const similarSetups = recentDecisions.map((decision) => ({
-      id: decision.id,
-      playbook: decision.playbook_key,
-      result: (decision.trade_outcome?.outcome || 'pending').toUpperCase(),
-      pnl: decision.trade_outcome?.realized_pnl || 0,
-      date: decision.timestamp.toISOString(),
-    }));
+    const withOutcomes = recentDecisions.filter((d) => d.trade_outcome != null);
+    const similarSetups = (withOutcomes.length > 0 ? withOutcomes : recentDecisions)
+      .slice(0, 5)
+      .map((decision) => ({
+        id: decision.id,
+        playbook: decision.playbook_key,
+        result: (decision.trade_outcome?.outcome || 'pending').toUpperCase(),
+        pnl: decision.trade_outcome?.realized_pnl ?? 0,
+        date: decision.timestamp.toISOString(),
+      }));
 
-    // Get playbook stats
-    const playbookStats = await prisma.playbookStats.findMany();
+    // Playbook stats with at least one recorded trade only
+    const playbookStats = await prisma.playbookStats.findMany({
+      where: { total_trades: { gt: 0 } },
+    });
     const playbookWinrate: Record<string, number> = {};
     playbookStats.forEach((stat) => {
       playbookWinrate[stat.playbook_key] = stat.win_rate * 100;

@@ -25,6 +25,8 @@ export interface V3TradeExecutionInput {
   timeframe: string;
   analysis: GroqAnalysis;
   methodId?: string;
+  /** trade_decisions.id from LLM dispatch — links outcome on close */
+  decisionRecordId?: number;
 }
 
 export interface V3TradeExecutionResult {
@@ -67,7 +69,7 @@ function validatePriceLevels(
 export async function executeV3Trade(
   input: V3TradeExecutionInput
 ): Promise<V3TradeExecutionResult> {
-  const { symbol, timeframe, analysis, methodId = 'kim_nghia' } = input;
+  const { symbol, timeframe, analysis, methodId = 'kim_nghia', decisionRecordId } = input;
 
   if (process.env.BINANCE_ENABLED !== 'true') {
     const reason = 'BINANCE_ENABLED is not true — cannot place live testnet order';
@@ -180,6 +182,9 @@ export async function executeV3Trade(
     };
   }
   const normalizedSizeQty = qtyCheck.normalizedQty;
+  if (normalizedSizeQty <= 0) {
+    return { success: false, reason: 'Normalized quantity is zero — order blocked' };
+  }
 
   const expectedRr =
     computeExpectedRrFromPrices(entry, stopLoss, takeProfit) ??
@@ -252,6 +257,17 @@ export async function executeV3Trade(
     orderId,
     binanceOrderId,
   });
+
+  if (decisionRecordId) {
+    const { recordPipelineEvent } = await import('../repositories/testnet.repository');
+    await recordPipelineEvent('pending_order_linked', {
+      order_id: orderId,
+      binance_order_id: binanceOrderId,
+      decision_id: decisionRecordId,
+      symbol: symbol.toUpperCase(),
+      timeframe,
+    });
+  }
 
   return {
     success: true,

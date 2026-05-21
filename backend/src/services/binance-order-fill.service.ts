@@ -116,12 +116,40 @@ export async function materializePositionFromPendingFill(
 
   await executeTestnetPendingOrder(localOrder.order_id, positionId);
 
+  let linkedDecisionId: number | undefined;
+  try {
+    const { prisma: db } = await import('../lib/prisma');
+    const { PIPELINE_EVENT_POSITION_ID } = await import('../repositories/testnet.repository');
+    const linkEvents = await db.testnetTradeEvent.findMany({
+      where: {
+        position_id: PIPELINE_EVENT_POSITION_ID,
+        event_type: 'pending_order_linked',
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 30,
+    });
+    for (const ev of linkEvents) {
+      if (!ev.event_data) continue;
+      const data = JSON.parse(ev.event_data) as {
+        order_id?: string;
+        decision_id?: number;
+      };
+      if (data.order_id === localOrder.order_id && typeof data.decision_id === 'number') {
+        linkedDecisionId = data.decision_id;
+        break;
+      }
+    }
+  } catch {
+    /* non-fatal */
+  }
+
   await recordTestnetTradeEvent(positionId, 'entry_order_filled', {
     order_id: localOrder.order_id,
     binance_order_id: localOrder.binance_order_id,
     executed_qty: qty,
     avg_price: avgPrice,
     timestamp: new Date(eventTime ?? Date.now()).toISOString(),
+    ...(linkedDecisionId != null ? { decision_id: linkedDecisionId } : {}),
   });
 
   await placeSlTpForPosition(positionId, localOrder, qty);
