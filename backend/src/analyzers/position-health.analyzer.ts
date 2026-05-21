@@ -23,15 +23,40 @@ export interface PositionHealthResult {
   time_in_position_minutes: number;
   distance_to_sl_percent: number;
   distance_to_tp_percent: number;
+  /** 0 = at entry, 1 = at SL (fraction of entry→SL range consumed). */
+  sl_progress: number | null;
   recommended_action: 'hold' | 'reduce' | 'exit';
   reason: string;
+}
+
+export interface PositionHealthOptions {
+  /** Cumulative fraction already closed by monitor (0–1). Blocks repeat REDUCE. */
+  partial_closed?: number;
+}
+
+/** Fraction of entry→SL distance consumed (0 at entry, 1 at SL). */
+export function computeSlProgress(position: PositionData): number | null {
+  const { entry_price, current_price, stop_loss, side } = position;
+  if (side === 'long') {
+    const range = entry_price - stop_loss;
+    if (range <= 0) return null;
+    return Math.max(0, Math.min(1, (entry_price - current_price) / range));
+  }
+  const range = stop_loss - entry_price;
+  if (range <= 0) return null;
+  return Math.max(0, Math.min(1, (current_price - entry_price) / range));
 }
 
 /**
  * Analyze position health
  */
-export function analyzePositionHealth(position: PositionData): PositionHealthResult {
+export function analyzePositionHealth(
+  position: PositionData,
+  options?: PositionHealthOptions
+): PositionHealthResult {
   const { entry_price, current_price, stop_loss, take_profit, entry_time, side } = position;
+  const partialClosed = options?.partial_closed ?? 0;
+  const alreadyReduced = partialClosed >= 0.45;
 
   // Calculate PnL percentage
   let pnlPercent = 0;
@@ -44,7 +69,9 @@ export function analyzePositionHealth(position: PositionData): PositionHealthRes
   // Calculate time in position
   const timeInPositionMinutes = (Date.now() - entry_time.getTime()) / (1000 * 60);
 
-  // Calculate distance to SL and TP
+  const slProgress = computeSlProgress(position);
+
+  // Display metrics (% of entry — informational only)
   let distanceToSlPercent = 0;
   let distanceToTpPercent = 0;
 
@@ -56,41 +83,30 @@ export function analyzePositionHealth(position: PositionData): PositionHealthRes
     distanceToTpPercent = ((current_price - take_profit) / entry_price) * 100;
   }
 
-  // Determine health and recommended action
   let health: 'healthy' | 'warning' | 'critical' = 'healthy';
   let recommendedAction: 'hold' | 'reduce' | 'exit' = 'hold';
   let reason = 'Position is healthy';
 
-  // Critical conditions
-  if (distanceToSlPercent < 0.2) {
+  if (slProgress != null && slProgress >= 0.9) {
     health = 'critical';
     recommendedAction = 'exit';
-    reason = 'Position near stop loss - exit immediately';
+    reason = 'Price within 10% of stop-loss range — full exit';
   } else if (pnlPercent < -0.8) {
     health = 'critical';
     recommendedAction = 'exit';
     reason = 'Large loss - exit to prevent further damage';
-  }
-
-  // Warning conditions
-  if (health === 'healthy') {
-    if (distanceToSlPercent < 0.5) {
-      health = 'warning';
-      recommendedAction = 'reduce';
-      reason = 'Position approaching stop loss - consider reducing size';
-    } else if (pnlPercent < -0.4) {
-      health = 'warning';
-      recommendedAction = 'reduce';
-      reason = 'Moderate loss - consider reducing exposure';
-    } else if (pnlPercent > 1.0 && timeInPositionMinutes > 60) {
-      health = 'healthy';
-      recommendedAction = 'reduce';
-      reason = 'Position in profit for extended time - take partial profit';
-    } else if (pnlPercent < -0.2 && timeInPositionMinutes > 120) {
-      health = 'warning';
-      recommendedAction = 'exit';
-      reason = 'Position losing for extended time - exit to cut losses';
-    }
+  } else if (!alreadyReduced && slProgress != null && slProgress >= 0.75) {
+    health = 'warning';
+    recommendedAction = 'reduce';
+    reason = 'Traveled 75%+ toward stop loss — one-time 50% reduce';
+  } else if (!alreadyReduced && pnlPercent > 1.0 && timeInPositionMinutes > 60) {
+    health = 'healthy';
+    recommendedAction = 'reduce';
+    reason = 'Position in profit for extended time — one-time partial take-profit';
+  } else if (pnlPercent < -0.5 && timeInPositionMinutes > 120) {
+    health = 'warning';
+    recommendedAction = 'exit';
+    reason = 'Position losing for extended time';
   }
 
   return {
@@ -99,8 +115,9 @@ export function analyzePositionHealth(position: PositionData): PositionHealthRes
     time_in_position_minutes: timeInPositionMinutes,
     distance_to_sl_percent: distanceToSlPercent,
     distance_to_tp_percent: distanceToTpPercent,
+    sl_progress: slProgress,
     recommended_action: recommendedAction,
-    reason
+    reason,
   };
 }
 

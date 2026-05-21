@@ -1,0 +1,80 @@
+/**
+ * Sync testnet account balances from Binance Futures account API (source of truth).
+ */
+
+import { prisma } from '../lib/prisma';
+import { getAccount } from './binance/account';
+
+export interface BinanceBalanceSnapshot {
+  walletBalance: number;
+  unrealizedPnl: number;
+  equity: number;
+  availableBalance?: number;
+}
+
+/**
+ * Fetch wallet + equity from Binance /fapi/v2/account (not /balance sum, which double-counts assets).
+ */
+export async function fetchBinanceBalanceSnapshot(): Promise<BinanceBalanceSnapshot> {
+  const account = await getAccount();
+  const usdt = account.assets.find((a) => a.asset === 'USDT');
+  const walletBalance = usdt?.walletBalance ?? account.totalWalletBalance;
+  const unrealizedPnl = account.totalUnrealizedProfit;
+  const equity = account.totalMarginBalance;
+  return {
+    walletBalance,
+    unrealizedPnl,
+    equity,
+  };
+}
+
+/**
+ * Write Binance wallet/equity into testnet_accounts for one account row.
+ */
+export async function syncTestnetAccountFromBinance(accountId: number): Promise<BinanceBalanceSnapshot> {
+  const snap = await fetchBinanceBalanceSnapshot();
+
+  await prisma.testnetAccount.update({
+    where: { id: accountId },
+    data: {
+      current_balance: snap.walletBalance,
+      equity: snap.equity,
+      unrealized_pnl: snap.unrealizedPnl,
+      updated_at: new Date(),
+    },
+  });
+
+  console.log(
+    `[BinanceBalanceSync] account=${accountId} wallet=${snap.walletBalance.toFixed(2)} equity=${snap.equity.toFixed(2)} uPnL=${snap.unrealizedPnl.toFixed(2)}`
+  );
+
+  return snap;
+}
+
+export async function syncTestnetAccountBySymbol(
+  symbol: string,
+  methodId: string
+): Promise<BinanceBalanceSnapshot | null> {
+  const account = await prisma.testnetAccount.findUnique({
+    where: { symbol_method_id: { symbol: symbol.toUpperCase(), method_id: methodId } },
+  });
+  if (!account) return null;
+  return syncTestnetAccountFromBinance(account.id);
+}
+
+/** Sync all testnet accounts when Binance is enabled (worker periodic job). */
+export async function syncAllTestnetAccountsFromBinance(): Promise<void> {
+  if (process.env.BINANCE_ENABLED !== 'true') return;
+
+  const accounts = await prisma.testnetAccount.findMany({ select: { id: true, symbol: true, method_id: true } });
+  for (const account of accounts) {
+    try {
+      await syncTestnetAccountFromBinance(account.id);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[BinanceBalanceSync] Failed for ${account.symbol}/${account.method_id}: ${msg}`
+      );
+    }
+  }
+}

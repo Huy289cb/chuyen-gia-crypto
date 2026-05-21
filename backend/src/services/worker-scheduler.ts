@@ -16,6 +16,7 @@ import { startMarketScanScheduler } from '../schedulers/market-scan.scheduler';
 import { startLLMDispatchScheduler } from '../schedulers/llm-dispatch.scheduler';
 import { V3_LLM_DISPATCH_CRON, V3_MARKET_SCAN_CRON } from '../config/v3-schedulers';
 import { startPositionMonitorScheduler } from '../schedulers/position-monitor.scheduler';
+import { syncAllTestnetAccountsFromBinance } from './binance-balance-sync.service';
 
 let priceSyncInterval: NodeJS.Timeout | null = null;
 const cronTasks: ScheduledTask[] = [];
@@ -161,6 +162,14 @@ export async function startWorkerScheduler(): Promise<void> {
   
   // Position monitor scheduler - runs every minute
   startPositionMonitorScheduler('*/1 * * * *');
+
+  if (workerConfig.enableTestnetSync && process.env.BINANCE_ENABLED === 'true') {
+    const balanceSyncTask = cron.schedule('*/5 * * * *', () => {
+      void syncAllTestnetAccountsFromBinance();
+    });
+    cronTasks.push(balanceSyncTask);
+    void syncAllTestnetAccountsFromBinance();
+  }
 
   console.log(
     `[WorkerScheduler] Started. symbols=${workerConfig.syncSymbols.join(',')} timeframe=${workerConfig.ohlcvTimeframe} testnetSync=${workerConfig.enableTestnetSync} priceInterval=${appConfig.priceUpdateIntervalMs}ms validationCron="${appConfig.predictionValidationCron}" snapshotCron="${appConfig.snapshotCron}" maintenanceCron="${appConfig.dailyMaintenanceCron}" analysisCron="${appConfig.analysisCronSchedule}"`

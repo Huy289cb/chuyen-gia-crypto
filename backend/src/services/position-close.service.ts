@@ -10,6 +10,7 @@ import {
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { normalizeQuantityForSymbol, placeMarketOrder } from './binanceClient';
+import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
 
 function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
@@ -86,6 +87,16 @@ export async function closeLocalPosition(
   console.log(
     `[PositionClose] Closed ${position.position_id} @ ${closePrice} (${closeReason}) PnL=${realizedPnl.toFixed(2)}`
   );
+
+  if (process.env.BINANCE_ENABLED === 'true') {
+    try {
+      await syncTestnetAccountFromBinance(position.account_id);
+    } catch (syncErr: unknown) {
+      const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+      console.warn(`[PositionClose] Binance balance sync failed: ${msg}`);
+    }
+  }
+
   return realizedPnl;
 }
 

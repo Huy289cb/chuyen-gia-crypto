@@ -249,32 +249,25 @@ router.get('/sync/:accountId', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Testnet account not found' });
     }
 
-    const { initTestnetClient, getAccountBalance } = await getBinanceHelpers();
-    const client = initTestnetClient();
-    if (!client) {
+    if (process.env.BINANCE_ENABLED !== 'true') {
       return res.status(503).json({
         success: false,
-        error: 'Testnet client not initialized',
+        error: 'BINANCE_ENABLED is not true',
       });
     }
 
-    const balance: any = await getAccountBalance(client);
-    const walletBalance = Number(balance.walletBalance || balance.availableBalance || 0);
-    const unrealizedPnl = Number(balance.totalUnrealizedProfit || 0);
-    const equity = Number(balance.totalWalletBalance || walletBalance + unrealizedPnl);
+    const { syncTestnetAccountFromBinance } = await import('../services/binance-balance-sync.service');
+    const snap = await syncTestnetAccountFromBinance(accountId);
+    const walletBalance = snap.walletBalance;
+    const unrealizedPnl = snap.unrealizedPnl;
+    const equity = snap.equity;
 
-    await prismaClient.testnetAccount.update({
-      where: { id: accountId },
-      data: {
-        current_balance: walletBalance,
-        equity,
-        unrealized_pnl: unrealizedPnl,
-        // Fix: On first sync (no trades yet), set starting_balance to actual Binance balance
-        // so Total Return calculates correctly instead of using default 100
-        ...(account.total_trades === 0 && { starting_balance: walletBalance }),
-        updated_at: new Date(),
-      },
-    });
+    if (account.total_trades === 0) {
+      await prismaClient.testnetAccount.update({
+        where: { id: accountId },
+        data: { starting_balance: walletBalance },
+      });
+    }
 
     await prismaClient.testnetAccountSnapshot.create({
       data: {
@@ -306,20 +299,14 @@ router.get('/sync/:accountId', async (req: Request, res: Response) => {
 
 router.get('/balance', async (_req: Request, res: Response) => {
   try {
-    const { initTestnetClient, getAccountBalance } = await getBinanceHelpers();
-    const client = initTestnetClient();
-    if (!client) {
-      return res.status(503).json({ success: false, error: 'Testnet client not initialized' });
-    }
-
-    const balance: any = await getAccountBalance(client);
+    const { fetchBinanceBalanceSnapshot } = await import('../services/binance-balance-sync.service');
+    const snap = await fetchBinanceBalanceSnapshot();
     return res.json({
       success: true,
       data: {
-        wallet_balance: balance.walletBalance,
-        available_balance: balance.availableBalance,
-        total_wallet_balance: balance.totalWalletBalance,
-        total_unrealized_profit: balance.totalUnrealizedProfit,
+        wallet_balance: snap.walletBalance,
+        equity: snap.equity,
+        unrealized_pnl: snap.unrealizedPnl,
         fetched_at: new Date().toISOString(),
       },
     });

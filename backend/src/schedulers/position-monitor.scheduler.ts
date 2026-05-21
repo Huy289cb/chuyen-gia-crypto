@@ -14,6 +14,11 @@ import {
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 import { hookPositionMonitorAction } from '../services/telegram/telegram-hooks';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
+import {
+  analyzePositionHealth,
+  type PositionData,
+} from '../analyzers/position-health.analyzer';
+import { syncTestnetAccountFromBinance } from '../services/binance-balance-sync.service';
 
 let positionMonitorTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -21,6 +26,16 @@ let isRunning = false;
 /** Avoid spamming Binance when reduce/close qty cannot be normalized. */
 const precisionSkipUntil = new Map<string, number>();
 const PRECISION_SKIP_MS = 5 * 60 * 1000;
+
+const REDUCE_FRACTION = 0.5;
+
+function isPositionMonitorEnabled(): boolean {
+  return process.env.POSITION_MONITOR_ENABLED !== 'false';
+}
+
+function isReduceEnabled(): boolean {
+  return process.env.POSITION_MONITOR_ALLOW_REDUCE !== 'false';
+}
 
 function shouldSkipPrecisionAction(positionId: string): boolean {
   const until = precisionSkipUntil.get(positionId);
@@ -34,21 +49,43 @@ function markPrecisionSkip(positionId: string, reason: string): void {
   );
 }
 
-export interface PositionHealth {
+/** At most one monitor-driven 50% reduce per position (tracked via partial_closed). */
+function canReduceAgain(position: { partial_closed: number }): boolean {
+  return position.partial_closed < REDUCE_FRACTION - 0.01;
+}
+
+function toPositionData(position: {
   position_id: string;
   symbol: string;
   side: string;
   entry_price: number;
   current_price: number;
+  stop_loss: number;
+  take_profit: number;
+  entry_time: Date;
+  size_qty: number;
   unrealized_pnl: number;
-  unrealized_pnl_percent: number;
-  time_in_position_minutes: number;
-  health: 'healthy' | 'warning' | 'critical';
-  recommended_action: 'hold' | 'reduce' | 'exit';
-  reason: string;
+}): PositionData {
+  const side = position.side.toLowerCase() === 'short' ? 'short' : 'long';
+  return {
+    position_id: position.position_id,
+    symbol: position.symbol,
+    side,
+    entry_price: position.entry_price,
+    current_price: position.current_price,
+    stop_loss: position.stop_loss,
+    take_profit: position.take_profit,
+    entry_time: position.entry_time,
+    size_qty: position.size_qty,
+    unrealized_pnl: position.unrealized_pnl,
+  };
 }
 
 async function runPositionMonitor() {
+  if (!isPositionMonitorEnabled()) {
+    return;
+  }
+
   if (isRunning) {
     console.warn('[PositionMonitor] Previous monitor still running, skipping cycle');
     return;
@@ -81,13 +118,23 @@ async function runPositionMonitor() {
       await updateTestnetPosition(position.position_id, { current_price: mark });
 
       const refreshed = { ...position, current_price: mark };
-      const health = await analyzePositionHealth(refreshed);
+      const health = analyzePositionHealth(toPositionData(refreshed), {
+        partial_closed: refreshed.partial_closed ?? 0,
+      });
+
+      const qty = Math.abs(refreshed.size_qty);
+      let unrealizedPnl = 0;
+      if (refreshed.side === 'long') {
+        unrealizedPnl = (mark - refreshed.entry_price) * qty;
+      } else {
+        unrealizedPnl = (refreshed.entry_price - mark) * qty;
+      }
 
       console.log(
         `[PositionMonitor] ${position.symbol} ${position.side}: ${health.health.toUpperCase()}`
       );
       console.log(
-        `[PositionMonitor] PnL: ${health.unrealized_pnl.toFixed(2)} (${health.unrealized_pnl_percent.toFixed(2)}%), Action: ${health.recommended_action}`
+        `[PositionMonitor] PnL: ${unrealizedPnl.toFixed(2)} (${health.pnl_percent.toFixed(2)}%), sl_progress: ${health.sl_progress != null ? (health.sl_progress * 100).toFixed(0) + '%' : 'n/a'}, Action: ${health.recommended_action}`
       );
       console.log(`[PositionMonitor] Reason: ${health.reason}`);
 
@@ -106,13 +153,33 @@ async function runPositionMonitor() {
           mark,
           'position_monitor_exit'
         );
+        if (process.env.BINANCE_ENABLED === 'true') {
+          try {
+            await syncTestnetAccountFromBinance(position.account_id);
+          } catch (syncErr: unknown) {
+            const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+            console.warn(`[PositionMonitor] Balance sync after exit failed: ${msg}`);
+          }
+        }
       } else if (health.recommended_action === 'reduce') {
+        if (!isReduceEnabled()) {
+          console.log(
+            `[PositionMonitor] REDUCE skipped (POSITION_MONITOR_ALLOW_REDUCE=false) for ${position.position_id}`
+          );
+          continue;
+        }
+        if (!canReduceAgain(refreshed)) {
+          console.log(
+            `[PositionMonitor] REDUCE skipped — already partial_closed=${refreshed.partial_closed} or cooldown active for ${position.position_id}`
+          );
+          continue;
+        }
         if (shouldSkipPrecisionAction(position.position_id)) {
           continue;
         }
         hookPositionMonitorAction(position.symbol, 'REDUCE', health.reason);
         const totalQty = Math.abs(refreshed.size_qty);
-        const reduceQty = totalQty * 0.5;
+        const reduceQty = totalQty * REDUCE_FRACTION;
         if (reduceQty > 0) {
           const closeResult = await closePositionOnBinanceMarket(refreshed, reduceQty);
           if (!closeResult.ok) {
@@ -125,14 +192,27 @@ async function runPositionMonitor() {
             refreshed.size_usd > 0
               ? (refreshed.size_usd * remainingQty) / totalQty
               : remainingQty * mark;
+          const newPartialClosed = Math.min(
+            1,
+            (refreshed.partial_closed ?? 0) + closedQty / totalQty
+          );
           await updateTestnetPosition(position.position_id, {
             size_qty: remainingQty,
             size_usd: sizeUsd,
             current_price: mark,
+            partial_closed: newPartialClosed,
           });
           console.log(
-            `[PositionMonitor] Reduced ${position.position_id} by 50% (remaining qty ${remainingQty})`
+            `[PositionMonitor] Reduced ${position.position_id} by 50% (remaining qty ${remainingQty}, partial_closed=${newPartialClosed.toFixed(2)})`
           );
+          if (process.env.BINANCE_ENABLED === 'true') {
+            try {
+              await syncTestnetAccountFromBinance(position.account_id);
+            } catch (syncErr: unknown) {
+              const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+              console.warn(`[PositionMonitor] Balance sync after reduce failed: ${msg}`);
+            }
+          }
         }
       }
     }
@@ -145,80 +225,15 @@ async function runPositionMonitor() {
   }
 }
 
-async function analyzePositionHealth(position: any): Promise<PositionHealth> {
-  const currentPrice = position.current_price;
-  const entryPrice = position.entry_price;
-  const side = position.side;
-  const qty = Math.abs(position.size_qty);
-
-  let unrealizedPnl = 0;
-  let unrealizedPnlPercent = 0;
-
-  if (side === 'long') {
-    unrealizedPnl = (currentPrice - entryPrice) * qty;
-    unrealizedPnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
-  } else {
-    unrealizedPnl = (entryPrice - currentPrice) * qty;
-    unrealizedPnlPercent = ((entryPrice - currentPrice) / entryPrice) * 100;
-  }
-
-  const entryTime = new Date(position.entry_time);
-  const now = new Date();
-  const timeInPositionMinutes = (now.getTime() - entryTime.getTime()) / (1000 * 60);
-
-  let health: 'healthy' | 'warning' | 'critical' = 'healthy';
-  let recommendedAction: 'hold' | 'reduce' | 'exit' = 'hold';
-  let reason = 'Position is healthy';
-
-  const slDistance =
-    side === 'long'
-      ? ((currentPrice - position.stop_loss) / entryPrice) * 100
-      : ((position.stop_loss - currentPrice) / entryPrice) * 100;
-
-  if (slDistance < 0.2) {
-    health = 'critical';
-    recommendedAction = 'exit';
-    reason = 'Position near stop loss';
-  } else if (slDistance < 0.5) {
-    health = 'warning';
-    recommendedAction = 'reduce';
-    reason = 'Position approaching stop loss';
-  }
-
-  if (unrealizedPnlPercent > 1.0 && timeInPositionMinutes > 60) {
-    health = 'healthy';
-    recommendedAction = 'reduce';
-    reason = 'Position in profit for extended time, consider taking partial profit';
-  }
-
-  if (unrealizedPnlPercent < -0.5 && timeInPositionMinutes > 120) {
-    health = 'warning';
-    recommendedAction = 'exit';
-    reason = 'Position losing for extended time';
-  }
-
-  return {
-    position_id: position.position_id,
-    symbol: position.symbol,
-    side: position.side,
-    entry_price: position.entry_price,
-    current_price: position.current_price,
-    unrealized_pnl: unrealizedPnl,
-    unrealized_pnl_percent: unrealizedPnlPercent,
-    time_in_position_minutes: timeInPositionMinutes,
-    health,
-    recommended_action: recommendedAction,
-    reason,
-  };
-}
-
 export function startPositionMonitorScheduler(cronExpression: string = '*/1 * * * *') {
   if (positionMonitorTask) {
     console.warn('[PositionMonitor] Scheduler already running');
     return;
   }
 
-  console.log(`[PositionMonitor] Starting scheduler with cron: ${cronExpression}`);
+  console.log(
+    `[PositionMonitor] Starting scheduler cron=${cronExpression} enabled=${isPositionMonitorEnabled()} allow_reduce=${isReduceEnabled()}`
+  );
   positionMonitorTask = cron.schedule(cronExpression, runPositionMonitor);
   runPositionMonitor();
 }
