@@ -11,6 +11,7 @@ import {
   updateTestnetPendingOrder,
   getTestnetPositions,
   updateTestnetPosition,
+  recordTestnetTradeEvent,
 } from '../repositories/testnet.repository';
 import { recoverPendingOrderFromBinance } from './binance-order-fill.service';
 import { getOpenOrders, getPositionRisk } from './binanceClient';
@@ -150,24 +151,102 @@ async function recoverMislabeledPendingOrders(): Promise<void> {
 }
 
 /**
+ * DB was closed by paper candle SL/TP simulation while Binance position is still open.
+ */
+async function reconcilePhantomLocalCloses(activeBinancePositions: any[]): Promise<void> {
+  for (const bp of activeBinancePositions) {
+    const symbol = String(bp.symbol || '').replace('USDT', '');
+    const positionSide = String(bp.positionSide || '').toUpperCase();
+    const side = positionSide === 'LONG' ? 'long' : positionSide === 'SHORT' ? 'short' : null;
+    const amt = Math.abs(parseFloat(bp.positionAmt ?? '0'));
+    if (!symbol || !side || amt < 1e-8) continue;
+
+    const hasOpenLocal = await prisma.testnetPosition.findFirst({
+      where: { symbol, side, status: 'open' },
+    });
+    if (hasOpenLocal) continue;
+
+    const phantom = await prisma.testnetPosition.findFirst({
+      where: {
+        symbol,
+        side,
+        status: 'closed',
+        close_reason: { in: ['take_profit', 'stop_loss'] },
+        close_time: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+      },
+      orderBy: { close_time: 'desc' },
+      include: { account: true },
+    });
+
+    if (!phantom) continue;
+
+    const phantomPnl = Number(phantom.realized_pnl) || 0;
+    const mark = parseFloat(bp.markPrice) || phantom.entry_price;
+
+    console.warn(
+      `[BinanceReconciliation] Reopening phantom close ${phantom.position_id} ` +
+        `(${symbol} ${side} still ${amt} on Binance)`
+    );
+
+    await updateTestnetPosition(phantom.position_id, {
+      status: 'open',
+      close_time: null,
+      close_price: null,
+      close_reason: null,
+      realized_pnl: 0,
+      unrealized_pnl: 0,
+      current_price: mark,
+      size_qty: side === 'short' ? -amt : amt,
+      size_usd: Math.abs(amt * phantom.entry_price),
+    });
+
+    if (phantom.account_id) {
+      const account = phantom.account;
+      const balAdj = (account?.current_balance ?? 0) - phantomPnl;
+      const eqAdj = (account?.equity ?? 0) - phantomPnl;
+      await prisma.testnetAccount.update({
+        where: { id: phantom.account_id },
+        data: {
+          current_balance: balAdj,
+          equity: eqAdj,
+          realized_pnl: { decrement: phantomPnl },
+          total_trades: { decrement: 1 },
+          ...(phantomPnl > 0 ? { winning_trades: { decrement: 1 } } : {}),
+          ...(phantomPnl < 0 ? { losing_trades: { decrement: 1 } } : {}),
+        },
+      });
+    }
+
+    await recordTestnetTradeEvent(phantom.position_id, 'reconciliation_reopened', {
+      reason: 'phantom_candle_close_reverted',
+      binance_position_amt: amt,
+      reverted_pnl: phantomPnl,
+    });
+  }
+}
+
+/**
  * Reconcile positions between local DB and Binance
  */
 async function reconcilePositions(): Promise<void> {
   console.log('[BinanceReconciliation] Reconciling positions...');
 
   const localPositions = await getTestnetPositions({ status: 'open' });
-  
-  if (localPositions.length === 0) {
-    console.log('[BinanceReconciliation] No local open positions to reconcile');
-    return;
-  }
+  const recentClosed = await prisma.testnetPosition.findMany({
+    where: { close_time: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) } },
+    select: { symbol: true },
+  });
+  const symbols = [
+    ...new Set([
+      ...localPositions.map((p) => p.symbol),
+      ...recentClosed.map((p) => p.symbol),
+      'BTC',
+    ]),
+  ];
 
   const client = {} as any; // Binance client is not needed for module functions
 
-  // Fetch position risk from Binance
   const binancePositions: any[] = [];
-  const symbols = [...new Set(localPositions.map(p => p.symbol))];
-  
   for (const symbol of symbols) {
     try {
       const positions = await getPositionRisk(client, `${symbol}USDT`);
@@ -177,8 +256,14 @@ async function reconcilePositions(): Promise<void> {
     }
   }
 
-  // Filter to only positions with non-zero position amount
   const activeBinancePositions = binancePositions.filter((p: any) => parseFloat(p.positionAmt) !== 0);
+
+  await reconcilePhantomLocalCloses(activeBinancePositions);
+
+  if (localPositions.length === 0) {
+    console.log('[BinanceReconciliation] No local open positions to reconcile');
+    return;
+  }
 
   // Create a map for quick lookup
   const binancePositionMap = new Map(

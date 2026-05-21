@@ -72,7 +72,8 @@ async function executeTriggeredPendingOrders(symbol: string, candle: RealtimeCan
   }
 }
 
-async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promise<void> {
+/** Update mark price and unrealized PnL only (safe when Binance is source of truth for fills). */
+async function syncOpenPositionMarks(symbol: string, candle: RealtimeCandle): Promise<void> {
   const openPositions = await getTestnetPositions({ symbol, status: 'open' });
   for (const position of openPositions) {
     const unrealizedPnl = calculateUnrealizedPnl(
@@ -81,13 +82,21 @@ async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promis
       candle.price,
       position.size_qty
     );
-    const rrDenominator = position.risk_usd || 1;
 
     await updateTestnetPosition(position.position_id, {
       current_price: candle.price,
       unrealized_pnl: unrealizedPnl,
     });
+  }
+}
 
+/**
+ * Paper-trading only: close on candle SL/TP touch without Binance.
+ * Must NOT run when BINANCE_ENABLED=true — otherwise DB shows closed while Binance position stays open.
+ */
+async function simulatePaperSlTpOnCandle(symbol: string, candle: RealtimeCandle): Promise<void> {
+  const openPositions = await getTestnetPositions({ symbol, status: 'open' });
+  for (const position of openPositions) {
     const slHit = isLongSide(position.side)
       ? candle.low <= position.stop_loss
       : candle.high >= position.stop_loss;
@@ -106,6 +115,7 @@ async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promis
       closePrice,
       position.size_qty
     );
+    const rrDenominator = position.risk_usd || 1;
 
     await closeTestnetPosition(position.position_id, closePrice, closeReason);
     await updateTestnetPosition(position.position_id, {
@@ -128,14 +138,18 @@ async function syncOpenPositions(symbol: string, candle: RealtimeCandle): Promis
       close_price: closePrice,
       realized_pnl: realizedPnl,
       r_multiple: realizedPnl / rrDenominator,
+      source: 'paper_candle_simulation',
     });
   }
 }
 
 export async function syncTestnetForSymbol(symbol: string, candle: RealtimeCandle): Promise<void> {
-  // Binance handles order execution when enabled; still refresh mark/PnL on open positions.
-  if (process.env.BINANCE_ENABLED !== 'true') {
-    await executeTriggeredPendingOrders(symbol, candle);
+  if (process.env.BINANCE_ENABLED === 'true') {
+    await syncOpenPositionMarks(symbol, candle);
+    return;
   }
-  await syncOpenPositions(symbol, candle);
+
+  await executeTriggeredPendingOrders(symbol, candle);
+  await syncOpenPositionMarks(symbol, candle);
+  await simulatePaperSlTpOnCandle(symbol, candle);
 }
