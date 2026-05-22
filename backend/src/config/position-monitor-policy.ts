@@ -7,8 +7,9 @@ export function isPositionMonitorReduceEnabled(): boolean {
   return process.env.POSITION_MONITOR_ALLOW_REDUCE === 'true';
 }
 
+/** Default false — exchange SL/TP close positions (PnL+ P0). */
 export function isPositionMonitorExitEnabled(): boolean {
-  return process.env.POSITION_MONITOR_ALLOW_EXIT !== 'false';
+  return process.env.POSITION_MONITOR_ALLOW_EXIT === 'true';
 }
 
 /** Skip monitor actions on young positions (let exchange orders work). */

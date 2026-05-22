@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { getRiskPolicy } from '../config/risk-policy';
 
 /**
  * Testnet Repository
@@ -254,23 +255,25 @@ export async function shouldEnterTestnetCooldown(accountId: number): Promise<{
   }
 
   const consecutiveLosses = account.consecutive_losses || 0;
+  const threshold = getRiskPolicy().maxConsecutiveLosses;
+  const cooldownHours = parseFloat(process.env.CONSECUTIVE_LOSS_COOLDOWN_HOURS || '4');
 
-  if (consecutiveLosses >= 3) {
+  if (consecutiveLosses >= threshold) {
     const cooldownUntil = new Date();
-    cooldownUntil.setHours(cooldownUntil.getHours() + 4);
+    cooldownUntil.setHours(cooldownUntil.getHours() + (Number.isFinite(cooldownHours) ? cooldownHours : 4));
 
     return {
       shouldCooldown: true,
       cooldownUntil: cooldownUntil.toISOString(),
       consecutiveLosses,
-      reason: `${consecutiveLosses} consecutive losses, entering 4h cooldown`,
+      reason: `${consecutiveLosses} consecutive losses, entering ${cooldownHours}h cooldown`,
     };
   }
 
   return {
     shouldCooldown: false,
     consecutiveLosses,
-    reason: `${consecutiveLosses} consecutive losses, below threshold of 3`,
+    reason: `${consecutiveLosses} consecutive losses, below threshold of ${threshold}`,
   };
 }
 

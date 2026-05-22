@@ -144,7 +144,7 @@ export function V3DashboardDataProvider({
 
   /** Refresh balance/positions/orders on an interval (mark & unrealized PnL). */
   useEffect(() => {
-    const intervalMs = 60_000;
+    const intervalMs = 120_000;
     const id = setInterval(() => {
       void refreshAccount();
     }, intervalMs);

@@ -2,11 +2,7 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { appConfig } from '../config/app';
 import { validateWorkerConfig, workerConfig } from '../config/worker';
 import { validatePredictions } from '../repositories/analysis.repository';
-import {
-  saveLatestPrice,
-  saveOhlcvCandle,
-  savePriceHistory,
-} from '../repositories/market.repository';
+import { saveLatestPrice, savePriceHistory } from '../repositories/market.repository';
 import { createTradingSnapshots, runDataRetention } from './runtime-maintenance';
 import { syncTestnetForSymbol } from './testnet-sync';
 import { fetchRealTimePrices } from './price-fetcher';
@@ -22,6 +18,10 @@ let priceSyncInterval: NodeJS.Timeout | null = null;
 const cronTasks: ScheduledTask[] = [];
 let priceSyncJobRunning = false;
 
+const priceHistoryIntervalMs = parseInt(process.env.PRICE_HISTORY_INTERVAL_MS || '300000', 10);
+const lastPriceHistoryAt = new Map<string, number>();
+const lastTickerPrice = new Map<string, number>();
+
 async function runPriceSyncJob() {
   if (priceSyncJobRunning) {
     console.warn('[WorkerScheduler] Previous price sync still running, skipping cycle');
@@ -31,7 +31,6 @@ async function runPriceSyncJob() {
   priceSyncJobRunning = true;
   try {
     const prices = await fetchRealTimePrices();
-    const now = new Date();
     const symbolToCandle = {
       BTC: prices.btc,
       ETH: prices.eth,
@@ -54,22 +53,25 @@ async function runPriceSyncJob() {
     }
 
     for (const item of updates) {
-      await saveLatestPrice({
-        coin: item.coin,
-        price: item.price,
-        volume24h: item.volume,
-      });
-      await savePriceHistory(item.coin, item.price);
-      await saveOhlcvCandle({
-        coin: item.coin,
-        timestamp: now,
-        open: item.price,
-        high: item.price,
-        low: item.price,
-        close: item.price,
-        volume: item.volume,
-        timeframe: workerConfig.ohlcvTimeframe,
-      });
+      const prevPrice = lastTickerPrice.get(item.coin);
+      const priceMoved =
+        prevPrice == null ||
+        Math.abs(item.price - prevPrice) / Math.max(Math.abs(prevPrice), 1e-9) >= 0.0001;
+      lastTickerPrice.set(item.coin, item.price);
+
+      if (priceMoved) {
+        await saveLatestPrice({
+          coin: item.coin,
+          price: item.price,
+          volume24h: item.volume,
+        });
+      }
+
+      const lastHist = lastPriceHistoryAt.get(item.coin) ?? 0;
+      if (Date.now() - lastHist >= priceHistoryIntervalMs) {
+        await savePriceHistory(item.coin, item.price);
+        lastPriceHistoryAt.set(item.coin, Date.now());
+      }
 
       const candle = symbolToCandle[item.coin as keyof typeof symbolToCandle];
       if (workerConfig.enableTestnetSync && candle) {

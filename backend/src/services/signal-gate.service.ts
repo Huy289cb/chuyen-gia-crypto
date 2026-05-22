@@ -6,6 +6,7 @@
 
 import { analyzeSetupGate, SetupGateInput, SetupGateResult } from '../analyzers/setup-gate.analyzer';
 import { getRiskPolicy } from '../config/risk-policy';
+import { getSignalGateAllowedRegimes } from '../config/v3-entry-policy';
 import { formatSignalGateBlockReason } from '../utils/signal-gate-format';
 import { generateCandleHash } from '../utils/candle-hash';
 
@@ -190,6 +191,7 @@ function buildSignalGateConfigFromEnv(): Partial<SignalGateConfig> {
   return {
     minGrade: (['A', 'B', 'C', 'D'].includes(minGrade) ? minGrade : 'A') as SignalGateConfig['minGrade'],
     minConfidence: policy.minSignalConfidence,
+    allowedRegimes: getSignalGateAllowedRegimes(),
   };
 }
 

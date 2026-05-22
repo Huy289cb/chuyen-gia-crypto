@@ -16,6 +16,7 @@ import {
   type CloseOutcomeContext,
 } from './trade-outcome.service';
 import { getPositionRisk } from './binanceClient';
+import { applyConsecutiveLossCooldownIfNeeded } from './account-risk-guard.service';
 
 function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
@@ -68,6 +69,20 @@ export async function closeLocalPosition(
   if (position.status === 'closed') {
     console.warn(`[PositionClose] ${position.position_id} already closed — skip`);
     return 0;
+  }
+
+  const needsBinanceProof =
+    closeReason === 'stop_loss' || closeReason === 'take_profit';
+  if (needsBinanceProof && process.env.BINANCE_ENABLED === 'true') {
+    const hasProof =
+      typeof eventMeta?.binance_order_id === 'string' ||
+      eventMeta?.verified_binance_zero === true;
+    if (!hasProof) {
+      console.warn(
+        `[PositionClose] Block unverified ${closeReason} close for ${position.position_id} — require Binance fill or verified zero`
+      );
+      return 0;
+    }
   }
 
   const qty = Math.abs(position.size_qty);
@@ -139,6 +154,10 @@ export async function closeLocalPosition(
       const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
       console.warn(`[PositionClose] Binance balance sync failed: ${msg}`);
     }
+  }
+
+  if (!isWin) {
+    await applyConsecutiveLossCooldownIfNeeded(position.account_id);
   }
 
   return realizedPnl;

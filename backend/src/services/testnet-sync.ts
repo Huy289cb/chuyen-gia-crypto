@@ -12,6 +12,10 @@ import {
   updateTestnetPosition,
 } from '../repositories/testnet.repository';
 import { calculateUnrealizedPnl, isLongSide } from './position-mark';
+import {
+  notePositionMarkPersisted,
+  shouldPersistPositionMark,
+} from '../utils/position-mark-persist';
 
 export interface RealtimeCandle {
   price: number;
@@ -83,10 +87,25 @@ async function syncOpenPositionMarks(symbol: string, candle: RealtimeCandle): Pr
       position.size_qty
     );
 
+    const storedMark = position.current_price || position.entry_price;
+    const storedUnrealized = position.unrealized_pnl || 0;
+    if (
+      !shouldPersistPositionMark(
+        position.position_id,
+        candle.price,
+        storedMark,
+        unrealizedPnl,
+        storedUnrealized
+      )
+    ) {
+      continue;
+    }
+
     await updateTestnetPosition(position.position_id, {
       current_price: candle.price,
       unrealized_pnl: unrealizedPnl,
     });
+    notePositionMarkPersisted(position.position_id);
   }
 }
 

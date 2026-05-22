@@ -7,10 +7,24 @@ import { prisma } from '../lib/prisma';
 export type SchedulerName = 'MarketScan' | 'LLMDispatch' | 'PositionMonitor';
 
 const lastRuns = new Map<SchedulerName, Date>();
+const lastPersistedAt = new Map<SchedulerName, number>();
+
+/** Min interval between DB upserts (in-memory lastRuns still update every cycle). */
+const MIN_HEARTBEAT_PERSIST_MS = parseInt(
+  process.env.SCHEDULER_HEARTBEAT_PERSIST_INTERVAL_MS || '120000',
+  10
+);
 
 export function recordSchedulerRun(name: SchedulerName): void {
   const now = new Date();
   lastRuns.set(name, now);
+
+  const lastPersist = lastPersistedAt.get(name) ?? 0;
+  if (Date.now() - lastPersist < MIN_HEARTBEAT_PERSIST_MS) {
+    return;
+  }
+  lastPersistedAt.set(name, Date.now());
+
   void persistSchedulerHeartbeat(name, now).catch((err) => {
     console.error(`[SchedulerHeartbeat] Failed to persist ${name}:`, err);
   });

@@ -124,7 +124,7 @@ async function cacheBinanceCandles(
   }));
 
   try {
-    await saveOhlcvCandlesBatch(batch);
+    await saveOhlcvCandlesBatch(batch, { maxBars: 2 });
   } catch (err) {
     console.warn(
       `[CandleService] Failed to cache ${symbol} ${timeframe} candles:`,

@@ -34,6 +34,11 @@ export interface RiskPolicyConfig {
   /** Max combined USD notional: open positions + pending limit orders */
   maxTotalExposureUsd: number;
 
+  /**
+   * When set via MAX_EXPOSURE_PCT_OF_EQUITY env, caps exposure as fraction of wallet (overrides flat USD if > 0).
+   */
+  maxExposurePercentOfEquity: number | null;
+
   /** Min |entry − SL| / entry before placing order (e.g. 0.005 = 0.5%) */
   minSlDistancePercent: number;
 }
@@ -53,6 +58,7 @@ export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
   maxPositionsPerSymbol: 1,
   maxTotalPositions: 2,
   maxTotalExposureUsd: 2000,
+  maxExposurePercentOfEquity: null,
   minSlDistancePercent: 0.005,
 };
 
@@ -79,6 +85,12 @@ export function getRiskPolicy(): RiskPolicyConfig {
         process.env.MAX_PENDING_VOLUME_USD ||
         '2000'
     ),
+    maxExposurePercentOfEquity: (() => {
+      const v = process.env.MAX_EXPOSURE_PCT_OF_EQUITY?.trim();
+      if (!v) return null;
+      const pct = parseFloat(v);
+      return Number.isFinite(pct) && pct > 0 ? pct : null;
+    })(),
     minSlDistancePercent: parseFloat(process.env.MIN_SL_DISTANCE_PERCENT || '0.005'),
   };
 }

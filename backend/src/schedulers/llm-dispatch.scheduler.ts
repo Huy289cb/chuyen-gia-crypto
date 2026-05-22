@@ -12,7 +12,11 @@ import { getMethodConfig } from '../config/methods';
 import { executeV3Trade } from '../services/v3-trade-execution.service';
 import { hookLlmDispatchSummary } from '../services/telegram/telegram-hooks';
 import { memoryService } from '../services/memory.service';
-import { recordPipelineEvent } from '../repositories/testnet.repository';
+import {
+  getTestnetPendingOrders,
+  getTestnetPositions,
+  recordPipelineEvent,
+} from '../repositories/testnet.repository';
 import { formatLlmTradeSummary } from '../utils/trade-levels';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
@@ -81,6 +85,17 @@ async function runLLMDispatch() {
     const symbols = ['BTC'];
 
     for (const symbol of symbols) {
+      const [openPositions, pendingOrders] = await Promise.all([
+        getTestnetPositions({ symbol, status: 'open' }),
+        getTestnetPendingOrders({ symbol, status: 'pending' }),
+      ]);
+      if (openPositions.length > 0 || pendingOrders.length > 0) {
+        console.log(
+          `[LLMDispatch] ${symbol}: skip dispatch — open=${openPositions.length} pending=${pendingOrders.length}`
+        );
+        continue;
+      }
+
       const picked = pickBestScanResult(symbol);
       if (!picked) {
         continue;

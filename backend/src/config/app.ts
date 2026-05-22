@@ -37,7 +37,7 @@ export const appConfig: AppConfig = {
   priceUpdateIntervalMs: parseInt(process.env.PRICE_UPDATE_INTERVAL_MS || '30000', 10),
   predictionValidationCron: process.env.PREDICTION_VALIDATION_CRON || '0 * * * *',
   dailyMaintenanceCron: process.env.DAILY_MAINTENANCE_CRON || '0 3 * * *',
-  snapshotCron: process.env.SNAPSHOT_CRON || '*/5 * * * *',
+  snapshotCron: process.env.SNAPSHOT_CRON || '*/15 * * * *',
   analysisCronSchedule: process.env.CRON_SCHEDULE || '*/15 * * * *',
   retentionDaysPriceHistory: parseInt(process.env.RETENTION_DAYS_PRICE_HISTORY || '30', 10),
   retentionDaysOhlcv: parseInt(process.env.RETENTION_DAYS_OHLCV || '90', 10),

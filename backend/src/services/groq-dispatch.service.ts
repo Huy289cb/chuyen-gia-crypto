@@ -16,6 +16,8 @@ import {
   reconcileExpectedRr,
 } from '../utils/trade-levels';
 import { getRiskPolicy } from '../config/risk-policy';
+import { isRegimeAllowedForEntry } from '../config/v3-entry-policy';
+import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import type { UnifiedCandle } from './candle.service';
 import { generateCandleHash } from '../utils/candle-hash';
 import {
@@ -113,24 +115,17 @@ export class GroqDispatchService {
       }
 
       if (!signalResult.shouldCallGroq) {
-        if (this.config.enableMemory && !signalResult.isDuplicate) {
-          await memoryService.storeDecision({
-            symbol,
-            timeframe,
-            playbook_key: signalResult.setupResult.playbookKey || 'none',
-            grade: signalResult.setupResult.grade,
-            confidence: signalResult.setupResult.confidence,
-            regime: signalResult.setupResult.regime,
-            decision: 'no_trade',
-            reason: `Signal gate: ${signalResult.reason}`,
-            method_id,
-            candle_hash: candleHash,
-          });
-        }
-
         return {
           decision: 'no_trade',
           reason: `Signal gate blocked: ${signalResult.reason}`
+        };
+      }
+
+      const gateRegime = signalResult.setupResult.regime ?? 'unknown';
+      if (!isRegimeAllowedForEntry(gateRegime)) {
+        return {
+          decision: 'no_trade',
+          reason: `Regime ${gateRegime} not in V3_ALLOWED_REGIMES (${process.env.V3_ALLOWED_REGIMES ?? 'trend'})`,
         };
       }
     }
@@ -284,6 +279,30 @@ export class GroqDispatchService {
     // Step 5: Risk Check before allowing trade
     if (this.config.enableRiskCheck && analysis.action !== 'hold') {
       const account = await getOrCreateTestnetAccount(symbol, method_id, 10000);
+
+      const accountGuard = await assertTestnetAccountCanOpenTrade(account.id);
+      if (!accountGuard.allowed) {
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: signalResult?.setupResult.playbookKey || 'unknown',
+            grade: signalResult?.setupResult.grade ?? 'D',
+            confidence: signalResult?.setupResult.confidence ?? 0,
+            regime: signalResult?.setupResult.regime ?? 'unknown',
+            decision: 'no_trade',
+            reason: `Account guard: ${accountGuard.reason}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return {
+          decision: 'no_trade',
+          reason: `Account guard: ${accountGuard.reason}`,
+          memory_context: memoryContext,
+        };
+      }
+
       const accountBalance = Number(
         account.current_balance ?? account.equity ?? account.starting_balance ?? 10000
       );

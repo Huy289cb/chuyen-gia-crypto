@@ -12,6 +12,10 @@ import {
   closePositionOnBinanceMarket,
 } from '../services/position-close.service';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
+import {
+  notePositionMarkPersisted,
+  shouldPersistPositionMark,
+} from '../utils/position-mark-persist';
 import { hookPositionMonitorAction } from '../services/telegram/telegram-hooks';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 import {
@@ -126,13 +130,42 @@ async function runPositionMonitor() {
         position.symbol,
         position.current_price || position.entry_price
       );
-      await updateTestnetPosition(position.position_id, { current_price: mark });
 
-      const refreshed = await prisma.testnetPosition.findUnique({
-        where: { position_id: position.position_id },
-        include: { account: true },
-      });
-      if (!refreshed || refreshed.status !== 'open') continue;
+      const storedMark = position.current_price || position.entry_price;
+      const qty = Math.abs(position.size_qty);
+      let markUnrealized = 0;
+      if (position.side === 'long') {
+        markUnrealized = (mark - position.entry_price) * qty;
+      } else {
+        markUnrealized = (position.entry_price - mark) * qty;
+      }
+
+      let refreshed = position;
+      if (
+        shouldPersistPositionMark(
+          position.position_id,
+          mark,
+          storedMark,
+          markUnrealized,
+          position.unrealized_pnl || 0
+        )
+      ) {
+        await updateTestnetPosition(position.position_id, {
+          current_price: mark,
+          unrealized_pnl: markUnrealized,
+        });
+        notePositionMarkPersisted(position.position_id);
+        const row = await prisma.testnetPosition.findUnique({
+          where: { position_id: position.position_id },
+          include: { account: true },
+        });
+        if (!row || row.status !== 'open') continue;
+        refreshed = row;
+      } else {
+        refreshed = { ...position, current_price: mark, unrealized_pnl: markUnrealized };
+      }
+
+      if (refreshed.status !== 'open') continue;
 
       const exchangeActive =
         deferToExchangeSlTp() && hasExchangeSlTp(refreshed);
@@ -144,13 +177,7 @@ async function runPositionMonitor() {
         min_pnl_percent_for_action: getMinPnlPercentForMonitorAction(),
       });
 
-      const qty = Math.abs(refreshed.size_qty);
-      let unrealizedPnl = 0;
-      if (refreshed.side === 'long') {
-        unrealizedPnl = (mark - refreshed.entry_price) * qty;
-      } else {
-        unrealizedPnl = (refreshed.entry_price - mark) * qty;
-      }
+      const unrealizedPnl = markUnrealized;
 
       console.log(
         `[PositionMonitor] ${position.symbol} ${position.side}: ${health.health.toUpperCase()}`

@@ -15,6 +15,7 @@ import {
 } from '../repositories/testnet.repository';
 import { recoverPendingOrderFromBinance } from './binance-order-fill.service';
 import { getOpenOrders, getPositionRisk } from './binanceClient';
+import { isPhantomReopenEnabled } from '../config/v3-entry-policy';
 
 /**
  * Perform startup reconciliation between local DB and Binance
@@ -154,6 +155,10 @@ async function recoverMislabeledPendingOrders(): Promise<void> {
  * DB was closed by paper candle SL/TP simulation while Binance position is still open.
  */
 async function reconcilePhantomLocalCloses(activeBinancePositions: any[]): Promise<void> {
+  if (!isPhantomReopenEnabled()) {
+    return;
+  }
+
   for (const bp of activeBinancePositions) {
     const symbol = String(bp.symbol || '').replace('USDT', '');
     const positionSide = String(bp.positionSide || '').toUpperCase();

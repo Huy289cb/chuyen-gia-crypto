@@ -6,6 +6,8 @@
 import type { GroqAnalysis } from './groq-client';
 import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
+import { resolveMaxTotalExposureUsd } from '../config/v3-entry-policy';
+import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import {
   createTestnetPendingOrder,
   getOrCreateTestnetAccount,
@@ -110,6 +112,13 @@ export async function executeV3Trade(
   }
 
   const account = await getOrCreateTestnetAccount(symbol, methodId, 10000);
+
+  const accountGuard = await assertTestnetAccountCanOpenTrade(account.id);
+  if (!accountGuard.allowed) {
+    hookTradeRejected(symbol, accountGuard.reason);
+    return { success: false, reason: accountGuard.reason };
+  }
+
   const balance = Number(account.current_balance ?? account.equity ?? 10000);
 
   const [openPositions, pendingOrders] = await Promise.all([
@@ -154,7 +163,7 @@ export async function executeV3Trade(
     0
   );
   const totalExposure = openVolume + pendingVolume;
-  const maxExposure = riskPolicy.maxTotalExposureUsd;
+  const maxExposure = resolveMaxTotalExposureUsd(balance, riskPolicy.maxTotalExposureUsd);
 
   if (totalExposure >= maxExposure) {
     return {

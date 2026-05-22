@@ -62,13 +62,26 @@ export async function saveOhlcvCandle(data: OhlcvCandleData): Promise<number> {
   return candle.id;
 }
 
-/**
- * Batch save OHLCV candles
- */
-export async function saveOhlcvCandlesBatch(candles: OhlcvCandleData[]): Promise<number> {
-  let saved = 0;
+export interface SaveOhlcvBatchOptions {
+  /** Persist only the newest N bars (default: all). Market scan should pass 2–3. */
+  maxBars?: number;
+}
 
-  for (const candle of candles) {
+/**
+ * Batch save OHLCV candles (sequential upserts; keep maxBars small for Neon load).
+ */
+export async function saveOhlcvCandlesBatch(
+  candles: OhlcvCandleData[],
+  options?: SaveOhlcvBatchOptions
+): Promise<number> {
+  const maxBars = options?.maxBars;
+  const slice =
+    maxBars != null && maxBars > 0 && candles.length > maxBars
+      ? candles.slice(-maxBars)
+      : candles;
+
+  let saved = 0;
+  for (const candle of slice) {
     await saveOhlcvCandle(candle);
     saved++;
   }

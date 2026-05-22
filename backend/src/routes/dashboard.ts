@@ -1,10 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import {
-  getTestnetAccount,
-  PIPELINE_EVENT_POSITION_ID,
-  updateTestnetPosition,
-} from '../repositories/testnet.repository';
+  readCache,
+  DASHBOARD_READ_TTL_MS,
+  DASHBOARD_EVENTS_TTL_MS,
+  DASHBOARD_WARMUP_TTL_MS,
+  ACCOUNT_BALANCE_TTL_MS,
+} from '../lib/read-cache';
+import { getTestnetAccount, PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
@@ -218,6 +221,7 @@ function mapTradeDecisionToEvent(d: {
  */
 router.get('/system', async (_req: Request, res: Response) => {
   try {
+    const systemHealth = await readCache.get('dashboard:system', DASHBOARD_READ_TTL_MS, async () => {
     let databaseStatus = 'healthy';
     try {
       await prisma.$queryRaw`SELECT 1`;
@@ -275,13 +279,14 @@ router.get('/system', async (_req: Request, res: Response) => {
       safetyValidation = `failed: ${e?.message || 'validation error'}`;
     }
 
-    const systemHealth = {
+    return {
       workerStatus,
       databaseStatus,
       safetyValidation,
       btcOnlyScope,
       lockStatus,
     };
+    });
 
     res.json({
       ok: true,
@@ -299,6 +304,7 @@ router.get('/system', async (_req: Request, res: Response) => {
  */
 router.get('/schedulers', async (_req: Request, res: Response) => {
   try {
+    const schedulers = await readCache.get('dashboard:schedulers', DASHBOARD_READ_TTL_MS, async () => {
     const MARKET_CRON = V3_MARKET_SCAN_CRON;
     const LLM_CRON = V3_LLM_DISPATCH_CRON;
     const POS_CRON = '*/1 * * * *';
@@ -334,7 +340,7 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
       (lastKimDecision?.timestamp ? new Date(lastKimDecision.timestamp) : null);
     const posLast = persistedPos ?? posHb ?? null;
 
-    const schedulers = [
+    return [
       {
         name: 'MarketScan',
         cron: MARKET_CRON,
@@ -360,6 +366,7 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
         nextRun: estimateNextCronHint(posLast, POS_CRON),
       },
     ];
+    });
 
     res.json({
       ok: true,
@@ -422,34 +429,38 @@ router.get('/warmup', async (_req: Request, res: Response) => {
   });
 
   try {
-    const grouped = await prisma.ohlcvCandle.groupBy({
-      by: ['timeframe'],
-      where: { coin: symbol },
-      _count: { _all: true },
-    });
+    const data = await readCache.get('dashboard:warmup:BTC', DASHBOARD_WARMUP_TTL_MS, async () => {
+      const grouped = await prisma.ohlcvCandle.groupBy({
+        by: ['timeframe'],
+        where: { coin: symbol },
+        _count: { _all: true },
+      });
 
-    const countByTf = Object.fromEntries(
-      grouped.map((row) => [row.timeframe, row._count._all])
-    ) as Record<string, number>;
+      const countByTf = Object.fromEntries(
+        grouped.map((row) => [row.timeframe, row._count._all])
+      ) as Record<string, number>;
 
-    const timeframeStatus = timeframes.map((tf) => ({
-      name: tf,
-      loaded: countByTf[tf] ?? 0,
-      required: requiredCandles[tf],
-    }));
+      const timeframeStatus = timeframes.map((tf) => ({
+        name: tf,
+        loaded: countByTf[tf] ?? 0,
+        required: requiredCandles[tf],
+      }));
 
-    const totalLoaded = timeframeStatus.reduce((sum, tf) => sum + tf.loaded, 0);
-    const totalRequired = timeframeStatus.reduce((sum, tf) => sum + tf.required, 0);
-    const isWarmedUp = timeframeStatus.every((tf) => tf.loaded >= tf.required);
+      const totalLoaded = timeframeStatus.reduce((sum, tf) => sum + tf.loaded, 0);
+      const totalRequired = timeframeStatus.reduce((sum, tf) => sum + tf.required, 0);
+      const isWarmedUp = timeframeStatus.every((tf) => tf.loaded >= tf.required);
 
-    res.json({
-      ok: true,
-      data: {
+      return {
         totalCandles: totalLoaded,
         requiredCandles: totalRequired,
         isWarmedUp,
         timeframes: timeframeStatus,
-      },
+      };
+    });
+
+    res.json({
+      ok: true,
+      data,
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching warmup status:', error.message);
@@ -556,6 +567,10 @@ router.get('/signals', async (req: Request, res: Response) => {
     const take = parseInt(String(limit), 10);
     const sym = String(symbol).toUpperCase();
 
+    const signals = await readCache.get(
+      `dashboard:signals:${sym}:${take}`,
+      DASHBOARD_READ_TTL_MS,
+      async () => {
     const live = await buildLiveSignalGateView(sym);
 
     const decisions = await prisma.tradeDecision.findMany({
@@ -580,9 +595,11 @@ router.get('/signals', async (req: Request, res: Response) => {
       timestamp: decision.timestamp.toISOString(),
     }));
 
-    const signals = live
+    return live
       ? [live, ...historical.filter((h) => h.timestamp !== live.timestamp)].slice(0, take)
       : historical.slice(0, take);
+      }
+    );
 
     res.json({
       ok: true,
@@ -600,6 +617,7 @@ router.get('/signals', async (req: Request, res: Response) => {
  */
 router.get('/risk', async (_req: Request, res: Response) => {
   try {
+    const riskState = await readCache.get('dashboard:risk:BTC', DASHBOARD_READ_TTL_MS, async () => {
     const policy = getRiskPolicy();
     const accounts = await prisma.testnetAccount.findMany({
       where: { symbol: 'BTC' },
@@ -632,7 +650,7 @@ router.get('/risk', async (_req: Request, res: Response) => {
       dailyLossCurrent = delta < 0 ? Math.abs(delta) : 0;
     }
 
-    const riskState = {
+    return {
       riskPerTrade: policy.riskPerTradePercent,
       dailyLossCap: dailyLossCapUsd,
       dailyLossLimitPercent: policy.dailyLossLimitPercent,
@@ -643,6 +661,7 @@ router.get('/risk', async (_req: Request, res: Response) => {
       lockReason,
       allowedReason: lockReason,
     };
+    });
 
     res.json({
       ok: true,
@@ -674,6 +693,7 @@ router.get('/risk', async (_req: Request, res: Response) => {
  */
 router.get('/llm', async (_req: Request, res: Response) => {
   try {
+    const llmStats = await readCache.get('dashboard:llm:kim_nghia', DASHBOARD_READ_TTL_MS, async () => {
     const methodId = 'kim_nghia';
     const startUtc = new Date();
     startUtc.setUTCHours(0, 0, 0, 0);
@@ -751,7 +771,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
       responseStatus = 'success';
     }
 
-    const llmStats = {
+    return {
       callsToday: llmEngagedCount,
       lastCall: lastCallTs ? lastCallTs.toISOString() : null,
       lastEngagedSummary,
@@ -764,6 +784,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
       noTradeCount,
       skippedCallCount,
     };
+    });
 
     res.json({
       ok: true,
@@ -781,6 +802,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
  */
 router.get('/memory', async (_req: Request, res: Response) => {
   try {
+    const memory = await readCache.get('dashboard:memory', DASHBOARD_READ_TTL_MS, async () => {
     // Get similar setups from recent trade decisions
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const recentDecisions = await prisma.tradeDecision.findMany({
@@ -821,11 +843,12 @@ router.get('/memory', async (_req: Request, res: Response) => {
       .filter((w): w is string => w !== null && w !== undefined)
       .slice(0, 3);
 
-    const memory = {
+    return {
       similarSetups,
       playbookWinrate,
       failurePatterns,
     };
+    });
 
     res.json({
       ok: true,
@@ -843,6 +866,10 @@ router.get('/memory', async (_req: Request, res: Response) => {
  */
 router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
   try {
+    const noTradeReasons = await readCache.get(
+      'dashboard:no-trade-reasons',
+      DASHBOARD_READ_TTL_MS,
+      async () => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     // Recent no_trade decisions only (last 24h) — avoid stale historical aggregates
@@ -863,7 +890,7 @@ router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
     });
 
     // Map to frontend format
-    const noTradeReasons = Object.entries(reasonCounts)
+    return Object.entries(reasonCounts)
       .map(([reason, count]) => {
         let variant: 'warning' | 'danger' | 'default' = 'default';
         const rl = reason.toLowerCase();
@@ -872,6 +899,8 @@ router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
         return { reason, count, variant };
       })
       .sort((a, b) => b.count - a.count);
+      }
+    );
 
     res.json({
       ok: true,
@@ -895,8 +924,12 @@ router.get('/events', async (req: Request, res: Response) => {
       50
     );
     const moduleFilter = typeof req.query.module === 'string' ? req.query.module.toLowerCase() : '';
-    const poolSize = 400;
+    const poolSize = 80;
 
+    const payload = await readCache.get(
+      `dashboard:events:${page}:${pageSize}:${moduleFilter}`,
+      DASHBOARD_EVENTS_TTL_MS,
+      async () => {
     const [tradeEvents, decisions] = await Promise.all([
       prisma.testnetTradeEvent.findMany({
         orderBy: { timestamp: 'desc' },
@@ -997,8 +1030,7 @@ router.get('/events', async (req: Request, res: Response) => {
     const start = (safePage - 1) * pageSize;
     const data = merged.slice(start, start + pageSize);
 
-    res.json({
-      ok: true,
+    return {
       data,
       pagination: {
         page: safePage,
@@ -1006,6 +1038,14 @@ router.get('/events', async (req: Request, res: Response) => {
         total,
         totalPages,
       },
+    };
+      }
+    );
+
+    res.json({
+      ok: true,
+      data: payload.data,
+      pagination: payload.pagination,
     });
   } catch (error: any) {
     console.error('[Dashboard] Error fetching events:', error.message);
@@ -1020,25 +1060,26 @@ router.get('/events', async (req: Request, res: Response) => {
 router.get('/balance', async (req: Request, res: Response) => {
   try {
     const { symbol = 'BTC', method = 'kim_nghia' } = req.query;
+    const sym = String(symbol);
+    const meth = String(method);
 
-    const account = await getTestnetAccount(String(symbol), String(method));
+    const balance = await readCache.get(
+      `account:balance:${sym}:${meth}`,
+      ACCOUNT_BALANCE_TTL_MS,
+      async () => {
+    const account = await getTestnetAccount(sym, meth);
 
     if (!account) {
-      res.json({
-        ok: true,
-        success: true,
-        data: {
-          isInitialized: false,
-          totalBalance: 0,
-          availableBalance: 0,
-          equity: 0,
-          usedMargin: 0,
-          freeMargin: 0,
-          dailyPnL: 0,
-          weeklyPnL: 0,
-        },
-      });
-      return;
+      return {
+        isInitialized: false,
+        totalBalance: 0,
+        availableBalance: 0,
+        equity: 0,
+        usedMargin: 0,
+        freeMargin: 0,
+        dailyPnL: 0,
+        weeklyPnL: 0,
+      };
     }
 
     const dayStart = new Date();
@@ -1111,7 +1152,7 @@ router.get('/balance', async (req: Request, res: Response) => {
     const equity = account.equity ?? account.current_balance ?? 0;
     const freeMargin = Math.max(0, equity - usedMargin);
 
-    const balance = {
+    return {
       isInitialized: true,
       totalBalance: account.current_balance || 0,
       availableBalance: Math.max(0, (account.current_balance || 0) - usedMargin),
@@ -1121,6 +1162,8 @@ router.get('/balance', async (req: Request, res: Response) => {
       dailyPnL,
       weeklyPnL,
     };
+      }
+    );
 
     res.json({
       ok: true,
@@ -1192,15 +1235,6 @@ router.get('/positions', async (req: Request, res: Response) => {
         const timeInPosition = pos.entry_time
           ? `${Math.floor((Date.now() - new Date(pos.entry_time).getTime()) / 60000)}m`
           : '0m';
-
-        if (Math.abs(markPrice - storedMark) > 0.0001 || Math.abs(unrealizedPnL - (pos.unrealized_pnl || 0)) > 0.0001) {
-          void updateTestnetPosition(pos.position_id, {
-            current_price: markPrice,
-            unrealized_pnl: unrealizedPnL,
-          }).catch((err: Error) => {
-            console.warn(`[Dashboard] Failed to persist mark for ${pos.position_id}:`, err.message);
-          });
-        }
 
         return {
           id: pos.position_id,

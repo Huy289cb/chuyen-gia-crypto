@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { readCache, MARKET_READ_TTL_MS } from '../lib/read-cache';
 import { getCandles, toChartCandles, type UnifiedCandle } from '../services/candle.service';
 
 const router = Router();
@@ -121,15 +122,21 @@ router.get('/candles', async (req: Request, res: Response): Promise<void> => {
     const tf = String(timeframe);
     const limitNum = parseInt(String(limit), 10);
 
-    const { candles, source } = await getCandles({
-      symbol: String(symbol),
-      timeframe: tf,
-      limit: limitNum,
-    });
+    const sym = String(symbol).toUpperCase();
+    const { candles, source } = await readCache.get(
+      `market:candles:${sym}:${tf}:${limitNum}`,
+      MARKET_READ_TTL_MS,
+      () =>
+        getCandles({
+          symbol: sym,
+          timeframe: tf,
+          limit: limitNum,
+        })
+    );
 
     res.json({
       ok: true,
-      symbol: String(symbol).toUpperCase(),
+      symbol: sym,
       timeframe: tf,
       candles: toChartCandles(candles),
       source,
@@ -151,11 +158,16 @@ router.get('/indicators', async (req: Request, res: Response): Promise<void> => 
     const sym = String(symbol).toUpperCase();
     const tf = String(timeframe);
 
-    const { candles, source } = await getCandles({
-      symbol: sym,
-      timeframe: tf,
-      limit: 100,
-    });
+    const { candles, source } = await readCache.get(
+      `market:candles:${sym}:${tf}:100`,
+      MARKET_READ_TTL_MS,
+      () =>
+        getCandles({
+          symbol: sym,
+          timeframe: tf,
+          limit: 100,
+        })
+    );
 
     const latest = computeLatestIndicators(candles);
 
@@ -229,15 +241,20 @@ router.get('/signals', async (req: Request, res: Response) => {
   try {
     const { symbol = 'BTC', limit = 10 } = req.query;
 
-    const decisions = await prisma.tradeDecision.findMany({
-      where: {
-        symbol: String(symbol).toUpperCase(),
-      },
-      orderBy: { timestamp: 'desc' },
-      take: parseInt(String(limit)),
-    });
+    const sym = String(symbol).toUpperCase();
+    const take = parseInt(String(limit), 10);
 
-    const signals = decisions.map((decision) => ({
+    const signals = await readCache.get(
+      `market:signals:${sym}:${take}`,
+      MARKET_READ_TTL_MS,
+      async () => {
+        const decisions = await prisma.tradeDecision.findMany({
+          where: { symbol: sym },
+          orderBy: { timestamp: 'desc' },
+          take,
+        });
+
+        return decisions.map((decision) => ({
       id: decision.id.toString(),
       timestamp: decision.timestamp.toISOString(),
       grade: decision.grade,
@@ -246,11 +263,13 @@ router.get('/signals', async (req: Request, res: Response) => {
       regime: decision.regime,
       pass: decision.decision === 'trade',
       reasonCodes: decision.reason ? [decision.reason.substring(0, 50)] : [],
-    }));
+        }));
+      }
+    );
 
     res.json({
       ok: true,
-      symbol: String(symbol).toUpperCase(),
+      symbol: sym,
       signals,
     });
   } catch (error: unknown) {
