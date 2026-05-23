@@ -146,6 +146,7 @@ export function PriceChart({
 
     // Calculate interval in minutes based on selected timeframe
     const intervalMinutes =
+      timeframe === '5m' ? 5 :
       timeframe === '15m' ? 15 :
       timeframe === '1h' ? 60 :
       timeframe === '4h' ? 240 : 1440;

@@ -1,16 +1,16 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-
-type TimeFrame = '15m' | '1h' | '4h' | '1d';
+import type { MarketTimeframe } from '../contexts/V3DashboardDataContext';
 
 interface TimeframeSwitcherProps {
-  value: TimeFrame;
-  onChange: (value: TimeFrame) => void;
+  value: MarketTimeframe;
+  onChange: (value: MarketTimeframe) => void;
   className?: string;
 }
 
-const TIMEFRAMES: { label: string; value: TimeFrame }[] = [
+const TIMEFRAMES: { label: string; value: MarketTimeframe }[] = [
+  { label: '5m', value: '5m' },
   { label: '15m', value: '15m' },
   { label: '1H', value: '1h' },
   { label: '4H', value: '4h' },
