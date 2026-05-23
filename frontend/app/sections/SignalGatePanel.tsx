@@ -69,8 +69,8 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         title="Signal Gate"
         subtitle={
           signalData.timeframe
-            ? `Best of 15m / 1h / 4h · showing ${signalData.timeframe}`
-            : 'Best of 15m / 1h / 4h'
+            ? `Best of 5m / 15m / 1h · showing ${signalData.timeframe}`
+            : 'Best of 5m / 15m / 1h'
         }
         icon={<Signal className="w-5 h-5" />}
       />

@@ -6,11 +6,11 @@
 
 import cron, { type ScheduledTask } from 'node-cron';
 import { V3_LLM_DISPATCH_CRON } from '../config/v3-schedulers';
+import { getV3SignalGateTimeframes } from '../config/v3-schedulers';
 import { groqDispatchService } from '../services/groq-dispatch.service';
 import { getScanResult, type MarketScanResult } from './market-scan.scheduler';
 import { getMethodConfig } from '../config/methods';
 import { executeV3Trade } from '../services/v3-trade-execution.service';
-import { hookLlmDispatchSummary } from '../services/telegram/telegram-hooks';
 import { memoryService } from '../services/memory.service';
 import {
   getTestnetPendingOrders,
@@ -24,14 +24,16 @@ import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
 
-const V3_TIMEFRAMES = ['15m', '1h', '4h'] as const;
+function getV3Timeframes(): readonly string[] {
+  return getV3SignalGateTimeframes();
+}
 
 function pickBestScanResult(
   symbol: string
 ): { timeframe: string; scanResult: MarketScanResult } | null {
   const candidates: Array<{ timeframe: string; scanResult: MarketScanResult }> = [];
 
-  for (const timeframe of V3_TIMEFRAMES) {
+  for (const timeframe of getV3Timeframes()) {
     const scanResult = getScanResult(symbol, timeframe);
     if (!scanResult) continue;
 
@@ -115,11 +117,6 @@ async function runLLMDispatch() {
 
       console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);
 
-      let execState: 'pending_placed' | 'exec_failed' | 'none' = 'none';
-      let execDetail: string | undefined;
-      let orderId: string | undefined;
-      let binanceOrderId: string | undefined;
-
       if (dispatchResult.decision === 'no_trade') {
         const isRiskPreBlock =
           dispatchResult.reason.includes('Risk engine blocked') ||
@@ -155,16 +152,11 @@ async function runLLMDispatch() {
         });
 
         if (execResult.success) {
-          execState = 'pending_placed';
-          orderId = execResult.orderId != null ? String(execResult.orderId) : undefined;
-          binanceOrderId = execResult.binanceOrderId != null ? String(execResult.binanceOrderId) : undefined;
           console.log(
             `[LLMDispatch] Binance pending order ${execResult.orderId} ` +
               `(binance=${execResult.binanceOrderId}) for ${symbol}`
           );
         } else {
-          execState = 'exec_failed';
-          execDetail = execResult.reason;
           console.warn(`[LLMDispatch] Trade execution skipped: ${execResult.reason}`);
 
           const summary = formatLlmTradeSummary(dispatchResult.analysis);
@@ -189,21 +181,6 @@ async function runLLMDispatch() {
           });
         }
       }
-
-      hookLlmDispatchSummary({
-        symbol,
-        timeframe,
-        decision: dispatchResult.decision,
-        reason: dispatchResult.reason,
-        tradeSummary:
-          dispatchResult.analysis != null
-            ? formatLlmTradeSummary(dispatchResult.analysis)
-            : undefined,
-        execution: execState,
-        executionDetail: execDetail,
-        orderId,
-        binanceOrderId,
-      });
     }
 
     console.log('[LLMDispatch] LLM dispatch completed');

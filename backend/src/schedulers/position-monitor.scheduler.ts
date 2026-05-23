@@ -16,7 +16,6 @@ import {
   notePositionMarkPersisted,
   shouldPersistPositionMark,
 } from '../utils/position-mark-persist';
-import { hookPositionMonitorAction } from '../services/telegram/telegram-hooks';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 import {
   analyzePositionHealth,
@@ -197,7 +196,6 @@ async function runPositionMonitor() {
         if (shouldSkipPrecisionAction(position.position_id)) {
           continue;
         }
-        hookPositionMonitorAction(position.symbol, 'EXIT', health.reason);
         const closeResult = await closePositionOnBinanceMarket(refreshed);
         if (!closeResult.ok) {
           markPrecisionSkip(position.position_id, closeResult.reason ?? 'exit close failed');
@@ -232,7 +230,6 @@ async function runPositionMonitor() {
         if (shouldSkipPrecisionAction(position.position_id)) {
           continue;
         }
-        hookPositionMonitorAction(position.symbol, 'REDUCE', health.reason);
         const totalQty = Math.abs(refreshed.size_qty);
         const reduceQty = totalQty * REDUCE_FRACTION;
         if (reduceQty <= 0) {

@@ -43,11 +43,11 @@ function parseCronExpr(value: string | undefined, fallback: string): string {
 }
 
 function parseNotifyLevel(value: string | undefined): TelegramNotifyLevel {
-  const v = (value || 'verbose').toLowerCase();
+  const v = (value || 'trades_only').toLowerCase();
   if (v === 'off' || v === 'trades_only' || v === 'trades_risk' || v === 'verbose') {
     return v;
   }
-  return 'verbose';
+  return 'trades_only';
 }
 
 export const telegramConfig: TelegramConfig = {

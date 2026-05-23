@@ -4,6 +4,8 @@ import { getRiskPolicy } from '../config/risk-policy';
 import {
   V3_LLM_DISPATCH_CRON,
   V3_MARKET_SCAN_CRON,
+  getV3WarmupRequiredCandles,
+  getV3WarmupTimeframes,
 } from '../config/v3-schedulers';
 import {
   getPersistedSchedulerLastRun,
@@ -163,8 +165,8 @@ export async function getSystemHealthSnapshot(): Promise<SystemHealthSnapshot> {
     },
   ];
 
-  const timeframes = ['15m', '1h', '4h'] as const;
-  const requiredCandles = { '15m': 1000, '1h': 500, '4h': 300 };
+  const timeframes = getV3WarmupTimeframes();
+  const requiredCandles = getV3WarmupRequiredCandles();
   const grouped = await prisma.ohlcvCandle.groupBy({
     by: ['timeframe'],
     where: { coin: 'BTC' },
@@ -177,7 +179,7 @@ export async function getSystemHealthSnapshot(): Promise<SystemHealthSnapshot> {
   const tfStatus = timeframes.map((tf) => ({
     name: tf,
     loaded: countByTf[tf] ?? 0,
-    required: requiredCandles[tf],
+    required: requiredCandles[tf] ?? 100,
   }));
   const isWarmedUp = tfStatus.every((tf) => tf.loaded >= tf.required);
 

@@ -6,14 +6,10 @@
 
 import cron, { type ScheduledTask } from 'node-cron';
 import { getCandles } from '../services/candle.service';
+import { getV3SignalGateTimeframes } from '../config/v3-schedulers';
 import { signalGateService, type SignalGateOutput } from '../services/signal-gate.service';
 import type { UnifiedCandle } from '../services/candle.service';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
-import {
-  formatSignalGateTelegramScan,
-  type SignalGateTimeframeRow,
-} from '../utils/signal-gate-format';
-import { hookSignalGateScanSummary } from '../services/telegram/telegram-hooks';
 
 let marketScanTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -27,10 +23,6 @@ export interface MarketScanResult {
 }
 
 const scanResults = new Map<string, MarketScanResult>();
-
-/** Telegram signal-gate digest: align with LLMDispatch (~15m), not every 5m scan. */
-let lastSignalGateTelegramSentAt = 0;
-const SIGNAL_GATE_TELEGRAM_INTERVAL_MS = 15 * 60 * 1000;
 
 function lastBarOpenTimestamp(candles: UnifiedCandle[]): number | null {
   if (candles.length === 0) return null;
@@ -84,12 +76,9 @@ async function runMarketScan() {
     console.log('[MarketScan] Starting market scan');
 
     const symbols = ['BTC']; // BTC-only per Big Update Plan v3
-    const timeframes = ['15m', '1h', '4h'];
-    const gateConfig = signalGateService.getConfig();
+    const timeframes = [...getV3SignalGateTimeframes()];
 
     for (const symbol of symbols) {
-      const telegramRows: SignalGateTimeframeRow[] = [];
-
       await Promise.all(
         timeframes.map(async (timeframe) => {
           const { candles, source } = await getCandles({
@@ -137,22 +126,8 @@ async function runMarketScan() {
               `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
             );
           }
-
-          if (!signalResult.isDuplicate) {
-            telegramRows.push({ timeframe, output: signalResult });
-          }
         })
       );
-
-      if (telegramRows.length > 0) {
-        const now = Date.now();
-        if (now - lastSignalGateTelegramSentAt >= SIGNAL_GATE_TELEGRAM_INTERVAL_MS) {
-          lastSignalGateTelegramSentAt = now;
-          const { body } = formatSignalGateTelegramScan(symbol, telegramRows, gateConfig);
-          const allBlocked = telegramRows.every((r) => !r.output.pass);
-          hookSignalGateScanSummary(symbol, body, allBlocked);
-        }
-      }
     }
 
     console.log('[MarketScan] Market scan completed');

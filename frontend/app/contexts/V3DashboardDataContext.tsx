@@ -20,7 +20,7 @@ import {
   type DashboardMarketData,
 } from '../lib/v3DashboardFetchers';
 
-export type MarketTimeframe = '15m' | '1h' | '4h' | '1d';
+export type MarketTimeframe = '5m' | '15m' | '1h' | '4h' | '1d';
 
 type SummarySlice = {
   data: DashboardSummaryData | null;

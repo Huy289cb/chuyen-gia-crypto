@@ -106,7 +106,7 @@ export interface SignalGateView {
   setupReason?: string;
   detailReason?: string;
   evaluations?: SignalGateEvaluationRow[];
-  /** Timeframe that produced this view (live API picks best of 15m/1h/4h). */
+  /** Timeframe that produced this view (live API picks best of 5m/15m/1h). */
   timeframe?: string;
   timestamp?: string;
 }
@@ -287,12 +287,12 @@ const DEFAULT_SYSTEM_HEALTH: DashboardSummaryData['systemHealth'] = {
 
 const DEFAULT_WARMUP: DashboardSummaryData['candleWarmup'] = {
   totalCandles: 0,
-  requiredCandles: 1800,
+  requiredCandles: 3500,
   isWarmedUp: false,
   timeframes: [
+    { name: '5m', loaded: 0, required: 2000 },
     { name: '15m', loaded: 0, required: 1000 },
     { name: '1h', loaded: 0, required: 500 },
-    { name: '4h', loaded: 0, required: 300 },
   ],
 };
 

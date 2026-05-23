@@ -50,7 +50,7 @@ const copy = {
       subtitle: 'Khớp với panel Decision Pipeline trên Dashboard',
       steps: [
         { n: 1, name: 'System Ready', desc: 'Worker healthy, DB OK, safety validation passed, không bị lock.' },
-        { n: 2, name: 'Candle Warmup Ready', desc: 'Đủ nến BTC: 15m (1000), 1h (500), 4h (300) trong DB.' },
+        { n: 2, name: 'Candle Warmup Ready', desc: 'Đủ nến BTC: 5m (2000), 15m (1000), 1h (500) trong DB.' },
         { n: 3, name: 'Market Setup Detected', desc: 'MarketScan tìm playbook (liquidity sweep / breakout volume).' },
         { n: 4, name: 'Signal Gate Passed', desc: 'Grade/confidence theo env (MIN_SIGNAL_GRADE, MIN_SIGNAL_CONFIDENCE); regime trend hoặc range (không chop).' },
         { n: 5, name: 'Risk Approved', desc: 'Risk engine unlocked, chưa chạm daily loss cap.' },
@@ -63,8 +63,8 @@ const copy = {
       title: 'Worker & Lịch chạy',
       subtitle: 'Chỉ worker leader mới chạy scheduler (PostgreSQL advisory lock)',
       rows: [
-        { name: 'MarketScan', cron: '*/5 * * * *', role: 'Lấy 15m/1h/4h song song, Signal Gate, cache; lastRun từ worker heartbeat.' },
-        { name: 'LLMDispatch', cron: '2,17,32,47 * * * *', role: 'Best-of 1 TF PASS/cycle; Groq + reconcile R:R từ giá entry/SL/TP.' },
+        { name: 'MarketScan', cron: '*/5 * * * *', role: 'Lấy 5m/15m/1h song song, Signal Gate, cache; lastRun từ worker heartbeat.' },
+        { name: 'LLMDispatch', cron: '1,6,11,16,21,26,31,36,41,46,51,56 * * * *', role: 'Best-of 1 TF PASS/cycle; Groq + reconcile R:R từ giá entry/SL/TP.' },
         { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Thực thi REDUCE/EXIT trên Binance; WS đóng position khi SL/TP fill.' },
         { name: 'Price sync', cron: '~30s', role: 'Cập nhật giá BTC cho chart và risk.' },
       ],
@@ -84,7 +84,7 @@ const copy = {
         id: 'p2',
         title: 'Bước 2 — Signal Gate (trước LLM)',
         items: [
-          'MarketScan đánh giá 15m, 1h, 4h song song — không gọi Groq ở bước này.',
+          'MarketScan đánh giá 5m, 15m, 1h song song — không gọi Groq ở bước này.',
           'LLM chỉ chọn 1 timeframe tốt nhất mỗi chu kỳ (best-of ranking).',
           'Duplicate filter: cùng nến (hash) trong 15 phút → skip, không gọi LLM.',
           'Không PASS → no_trade (lý do lưu memory), không tốn token Groq.',
@@ -104,7 +104,7 @@ const copy = {
         id: 'p4',
         title: 'Bước 4 — LLM Dispatch (Groq)',
         items: [
-          'Chỉ chạy khi Signal Gate PASS (best-of 15m/1h/4h).',
+          'Chỉ chạy khi Signal Gate PASS (best-of 5m/15m/1h).',
           'Prompt v3: JSON `{ "btc": { ... } }`; expected_rr được tính lại từ entry/SL/TP.',
           'Validate: bias/action khớp; SL/TP đúng hướng; R:R tối thiểu từ risk policy.',
           'Thất bại parse/validate → NO_TRADE (không retry vô hạn).',
@@ -156,7 +156,7 @@ const copy = {
       title: 'Cấu hình tham chiếu (production)',
       rows: [
         ['Symbol', 'BTC only'],
-        ['Timeframes scan', '15m, 1h, 4h'],
+        ['Timeframes scan', '5m, 15m, 1h'],
         ['Signal Gate min grade', 'env: MIN_SIGNAL_GRADE (e.g. B)'],
         ['Signal Gate min confidence', 'env: MIN_SIGNAL_CONFIDENCE'],
         ['Max exposure (open+pending)', 'env: MAX_TOTAL_EXPOSURE_USD'],
@@ -211,7 +211,7 @@ const copy = {
       subtitle: 'Matches the Decision Pipeline panel on the Dashboard',
       steps: [
         { n: 1, name: 'System Ready', desc: 'Worker healthy, DB OK, safety validation passed, not locked.' },
-        { n: 2, name: 'Candle Warmup Ready', desc: 'Enough BTC candles in DB: 15m (1000), 1h (500), 4h (300).' },
+        { n: 2, name: 'Candle Warmup Ready', desc: 'Enough BTC candles in DB: 5m (2000), 15m (1000), 1h (500).' },
         { n: 3, name: 'Market Setup Detected', desc: 'MarketScan finds a playbook (liquidity sweep / breakout volume).' },
         { n: 4, name: 'Signal Gate Passed', desc: 'Grade/confidence from env (MIN_SIGNAL_GRADE, MIN_SIGNAL_CONFIDENCE); trend or range regime.' },
         { n: 5, name: 'Risk Approved', desc: 'Risk engine unlocked, daily loss cap not hit.' },
@@ -224,8 +224,8 @@ const copy = {
       title: 'Worker & schedules',
       subtitle: 'Only the worker leader runs schedulers (PostgreSQL advisory lock)',
       rows: [
-        { name: 'MarketScan', cron: '*/5 * * * *', role: 'Parallel 15m/1h/4h fetch, Signal Gate, cache; lastRun from worker heartbeat.' },
-        { name: 'LLMDispatch', cron: '2,17,32,47 * * * *', role: 'Best-of 1 PASS TF/cycle; Groq + R:R reconcile from prices.' },
+        { name: 'MarketScan', cron: '*/5 * * * *', role: 'Parallel 5m/15m/1h fetch, Signal Gate, cache; lastRun from worker heartbeat.' },
+        { name: 'LLMDispatch', cron: '1,6,11,16,21,26,31,36,41,46,51,56 * * * *', role: 'Best-of 1 PASS TF/cycle; Groq + R:R reconcile from prices.' },
         { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Executes REDUCE/EXIT on Binance; WS closes on SL/TP fill.' },
         { name: 'Price sync', cron: '~30s', role: 'Update BTC price for chart and risk.' },
       ],
@@ -245,7 +245,7 @@ const copy = {
         id: 'p2',
         title: 'Step 2 — Signal Gate (before LLM)',
         items: [
-          'MarketScan evaluates 15m, 1h, 4h in parallel — no Groq at this step.',
+          'MarketScan evaluates 5m, 15m, 1h in parallel — no Groq at this step.',
           'LLM picks one best PASS timeframe per cycle (best-of ranking).',
           'Duplicate filter: same candle hash within 15 min → skip, no LLM call.',
           'No PASS → no_trade (reason stored), no Groq tokens spent.',
@@ -265,7 +265,7 @@ const copy = {
         id: 'p4',
         title: 'Step 4 — LLM Dispatch (Groq)',
         items: [
-          'Runs only when Signal Gate PASS (best-of 15m/1h/4h).',
+          'Runs only when Signal Gate PASS (best-of 5m/15m/1h).',
           'Prompt v3: JSON `{ "btc": { ... } }`; expected_rr reconciled from entry/SL/TP.',
           'Validate: bias/action match; SL/TP direction; min R:R from risk policy.',
           'Parse/validate failure → NO_TRADE (no infinite retries).',
@@ -317,7 +317,7 @@ const copy = {
       title: 'Reference configuration (production)',
       rows: [
         ['Symbol', 'BTC only'],
-        ['Scan timeframes', '15m, 1h, 4h'],
+        ['Scan timeframes', '5m, 15m, 1h'],
         ['Signal Gate min grade', 'env: MIN_SIGNAL_GRADE (e.g. B)'],
         ['Signal Gate min confidence', 'env: MIN_SIGNAL_CONFIDENCE'],
         ['Max exposure (open+pending)', 'env: MAX_TOTAL_EXPOSURE_USD'],

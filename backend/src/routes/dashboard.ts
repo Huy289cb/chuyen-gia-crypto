@@ -16,7 +16,9 @@ import { signalGateService, type SignalGateOutput } from '../services/signal-gat
 import {
   V3_LLM_DISPATCH_CRON,
   V3_MARKET_SCAN_CRON,
-  V3_SIGNAL_GATE_TIMEFRAMES,
+  getV3SignalGateTimeframes,
+  getV3WarmupRequiredCandles,
+  getV3WarmupTimeframes,
 } from '../config/v3-schedulers';
 import {
   getPersistedSchedulerLastRun,
@@ -412,19 +414,18 @@ router.get('/scope', async (_req: Request, res: Response) => {
  * Get candle warmup progress
  */
 router.get('/warmup', async (_req: Request, res: Response) => {
-  // Align with MarketScan / LLMDispatch worker timeframes (no 1d fetch in v3 pipeline).
-  const timeframes = ['15m', '1h', '4h'] as const;
+  const timeframes = getV3WarmupTimeframes();
+  const requiredMap = getV3WarmupRequiredCandles();
   const symbol = 'BTC';
-  const requiredCandles = { '15m': 1000, '1h': 500, '4h': 300 };
 
   const emptyWarmup = () => ({
     totalCandles: 0,
-    requiredCandles: 1800,
+    requiredCandles: timeframes.reduce((s, tf) => s + (requiredMap[tf] ?? 100), 0),
     isWarmedUp: false,
     timeframes: timeframes.map((name) => ({
       name,
       loaded: 0,
-      required: requiredCandles[name],
+      required: requiredMap[name] ?? 100,
     })),
   });
 
@@ -443,7 +444,7 @@ router.get('/warmup', async (_req: Request, res: Response) => {
       const timeframeStatus = timeframes.map((tf) => ({
         name: tf,
         loaded: countByTf[tf] ?? 0,
-        required: requiredCandles[tf],
+        required: requiredMap[tf] ?? 100,
       }));
 
       const totalLoaded = timeframeStatus.reduce((sum, tf) => sum + tf.loaded, 0);
@@ -474,7 +475,7 @@ async function buildLiveSignalGateView(symbol: string) {
   let latestCandleMs = 0;
 
   await Promise.all(
-    V3_SIGNAL_GATE_TIMEFRAMES.map(async (timeframe) => {
+    getV3SignalGateTimeframes().map(async (timeframe) => {
       const { candles } = await getCandles({ symbol, timeframe, limit: 100 });
       if (candles.length < 50) return;
       const lastTs = candles[candles.length - 1]?.timestamp;

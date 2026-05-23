@@ -64,3 +64,12 @@ export function resolveMaxTotalExposureUsd(walletBalance: number, fallbackUsd: n
 export function isPhantomReopenEnabled(): boolean {
   return process.env.PHANTOM_REOPEN_ENABLED === 'true';
 }
+
+/** When set (e.g. `1h`), LTF pass must align with HTF trend regime before trade. */
+export function getV3RequireHtfTrend(): string | null {
+  const raw = process.env.V3_REQUIRE_HTF_TREND?.trim();
+  if (!raw || raw === 'false') {
+    return null;
+  }
+  return raw;
+}

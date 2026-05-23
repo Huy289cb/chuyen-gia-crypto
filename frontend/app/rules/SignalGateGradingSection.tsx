@@ -18,7 +18,7 @@ const copy = {
     title: 'Signal Gate — Chấm điểm A / B / C / D',
     subtitle: 'Code thuần (không LLM): regime → 2 playbook → lọc env',
     overview:
-      'MarketScan gọi analyzer trên nến 15m / 1h / 4h. Grade + confidence + regime quyết định PASS trước khi gọi Groq.',
+      'MarketScan gọi analyzer trên nến 5m / 15m / 1h. Grade + confidence + regime quyết định PASS trước khi gọi Groq. LTF cần 1h trend khi bật V3_REQUIRE_HTF_TREND.',
     flow: [
       { label: 'Nến (≥50)', sub: 'OHLCV từ Binance/DB' },
       { label: 'Regime', sub: 'trend / range / chop' },
@@ -115,7 +115,7 @@ const copy = {
     title: 'Signal Gate — A / B / C / D grading',
     subtitle: 'Pure code (no LLM): regime → 2 playbooks → env filters',
     overview:
-      'MarketScan runs analyzers on 15m / 1h / 4h candles. Grade + confidence + regime decide PASS before Groq.',
+      'MarketScan runs analyzers on 5m / 15m / 1h candles. Grade + confidence + regime decide PASS before Groq. LTF entries require 1h trend when V3_REQUIRE_HTF_TREND is set.',
     flow: [
       { label: 'Candles (≥50)', sub: 'OHLCV from Binance/DB' },
       { label: 'Regime', sub: 'trend / range / chop' },

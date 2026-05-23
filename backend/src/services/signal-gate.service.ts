@@ -7,6 +7,7 @@
 import { analyzeSetupGate, SetupGateInput, SetupGateResult } from '../analyzers/setup-gate.analyzer';
 import { getRiskPolicy } from '../config/risk-policy';
 import { getSignalGateAllowedRegimes } from '../config/v3-entry-policy';
+import { getSignalGateCacheTtlMs } from '../config/v3-schedulers';
 import { formatSignalGateBlockReason } from '../utils/signal-gate-format';
 import { generateCandleHash } from '../utils/candle-hash';
 
@@ -37,7 +38,10 @@ export interface CandleData {
 
 // Cache for duplicate signal detection
 const signalCache = new Map<string, { timestamp: number; result: SetupGateResult }>();
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+
+function getCacheTtl(): number {
+  return getSignalGateCacheTtlMs();
+}
 
 /**
  * Generate cache key for signal
@@ -52,7 +56,7 @@ function generateCacheKey(symbol: string, timeframe: string, candleHash: string)
 function cleanExpiredCache(): void {
   const now = Date.now();
   for (const [key, value] of signalCache.entries()) {
-    if (now - value.timestamp > CACHE_TTL) {
+    if (now - value.timestamp > getCacheTtl()) {
       signalCache.delete(key);
     }
   }

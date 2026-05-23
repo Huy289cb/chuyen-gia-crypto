@@ -59,7 +59,7 @@ export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
   maxTotalPositions: 2,
   maxTotalExposureUsd: 2000,
   maxExposurePercentOfEquity: null,
-  minSlDistancePercent: 0.005,
+  minSlDistancePercent: 0.004,
 };
 
 /**
@@ -91,6 +91,6 @@ export function getRiskPolicy(): RiskPolicyConfig {
       const pct = parseFloat(v);
       return Number.isFinite(pct) && pct > 0 ? pct : null;
     })(),
-    minSlDistancePercent: parseFloat(process.env.MIN_SL_DISTANCE_PERCENT || '0.005'),
+    minSlDistancePercent: parseFloat(process.env.MIN_SL_DISTANCE_PERCENT || '0.004'),
   };
 }

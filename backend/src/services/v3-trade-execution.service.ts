@@ -17,10 +17,7 @@ import {
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { computeExpectedRrFromPrices } from '../utils/trade-levels';
 import { initTestnetClient, normalizeQuantityForSymbol, placeLimitOrder } from './binanceClient';
-import {
-  hookPendingOrderPlaced,
-  hookTradeRejected,
-} from './telegram/telegram-hooks';
+import { hookPendingOrderPlaced } from './telegram/telegram-hooks';
 
 export interface V3TradeExecutionInput {
   symbol: string;
@@ -75,7 +72,6 @@ export async function executeV3Trade(
 
   if (process.env.BINANCE_ENABLED !== 'true') {
     const reason = 'BINANCE_ENABLED is not true — cannot place live testnet order';
-    hookTradeRejected(symbol, reason);
     return { success: false, reason };
   }
 
@@ -115,7 +111,6 @@ export async function executeV3Trade(
 
   const accountGuard = await assertTestnetAccountCanOpenTrade(account.id);
   if (!accountGuard.allowed) {
-    hookTradeRejected(symbol, accountGuard.reason);
     return { success: false, reason: accountGuard.reason };
   }
 

@@ -1,4 +1,5 @@
 import type { SignalGateConfig, SignalGateOutput } from '../services/signal-gate.service';
+import { getV3SignalGateTimeframes } from '../config/v3-schedulers';
 
 export interface SignalGateTimeframeRow {
   timeframe: string;
@@ -86,8 +87,10 @@ export function formatSignalGateTelegramScan(
   const title = anyPass ? '✅ Signal Gate — quét xong' : '🚫 Signal Gate BLOCK — quét xong';
 
   const sorted = [...rows].sort((a, b) => {
-    const order = ['15m', '1h', '4h'];
-    return order.indexOf(a.timeframe) - order.indexOf(b.timeframe);
+    const order = [...getV3SignalGateTimeframes()];
+    const ai = order.indexOf(a.timeframe);
+    const bi = order.indexOf(b.timeframe);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
   const lines = sorted.map((r) => formatTimeframeBlock(r, config));

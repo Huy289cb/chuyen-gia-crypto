@@ -2,16 +2,18 @@
 
 Operational behavior for Big Update v3 (BTC-only, Kim Nghia, Binance Futures testnet).
 
+**Signal gate stack (May 2026):** `5m`, `15m`, `1h` — see [v3-5m-reset-plan.md](./v3-5m-reset-plan.md).
+
 ## Pipeline (worker)
 
 ```
-MarketScan (*/5) → Signal Gate cache (15m/1h/4h parallel)
+MarketScan (*/5) → Signal Gate cache (5m/15m/1h parallel)
        ↓
-LLMDispatch (2,17,32,47 * * * *) → best PASS timeframe only → Groq → executeV3Trade
+LLMDispatch (1,6,11,…56 * * * *) → best PASS timeframe → HTF 1h trend guard → Groq → executeV3Trade
        ↓
 Binance limit order + pending → WS fill → open position + SL/TP on Binance
        ↓
-PositionMonitor (*/1) → HOLD / REDUCE / EXIT (executes on Binance when not hold)
+PositionMonitor (*/1) → defer to exchange SL/TP (PnL+ P0: reduce/exit off by default)
 ```
 
 ## Schedulers
@@ -19,46 +21,48 @@ PositionMonitor (*/1) → HOLD / REDUCE / EXIT (executes on Binance when not hol
 | Scheduler | Cron | Notes |
 |-----------|------|--------|
 | MarketScan | `*/5 * * * *` | Fetches 3 TFs in parallel; runs immediately on worker start |
-| LLMDispatch | `2,17,32,47 * * * *` | +2 min after scan boundary; **one** best TF per cycle |
-| PositionMonitor | `*/1 * * * *` | Mark price refresh; REDUCE 50% or EXIT via market close |
+| LLMDispatch | `1,6,11,16,21,26,31,36,41,46,51,56` | +1 min after each 5m scan; **one** best TF per cycle |
+| PositionMonitor | `*/1 * * * *` | Mark refresh; REDUCE/EXIT only if env enabled |
 
-**MarketScan snapshot vs duplicate:** Re-scans on the same closed bar hit the signal-gate in-memory duplicate branch (`isDuplicate`). The scheduler keeps the last **fresh** `PASS + shouldCallGroq` snapshot for that bar’s open timestamp so LLMDispatch is not starved before the next bar closes.
+Env overrides: `V3_MARKET_SCAN_CRON`, `V3_LLM_DISPATCH_CRON`, `V3_SIGNAL_GATE_TIMEFRAMES`.
+
+**MarketScan snapshot vs duplicate:** Re-scans on the same closed bar hit the signal-gate in-memory duplicate branch (`isDuplicate`). The scheduler keeps the last **fresh** `PASS + shouldCallGroq` snapshot for that bar’s open timestamp so LLMDispatch is not starved before the next bar closes. Cache TTL: `SIGNAL_GATE_CACHE_TTL_MS` (default 5 min when 5m in stack).
 
 Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/scheduler-heartbeat.ts`), with DB fallbacks when worker just restarted.
 
-**Telegram (verbose):** Signal gate digest is sent at most **once per 15 minutes** from MarketScan (scan still every 5m). Each successful LLM dispatch cron run sends **one** `LLM Dispatch — kết quả` summary (decision, reason, levels summary, execution / order ids when applicable). Dedup slots in `telegram-hooks.ts` use 15m windows for those hooks.
+**Telegram (verbose):** Signal gate digest at most **once per 15 minutes** from MarketScan. Each LLM dispatch cron run sends **one** `LLM Dispatch — kết quả` summary.
 
 ## Key modules (May 2026)
 
 | Area | Module |
 |------|--------|
-| Signal gate env | `signal-gate.service.ts` ← `MIN_SIGNAL_GRADE`, `MIN_SIGNAL_CONFIDENCE` via `getRiskPolicy()` |
-| Best-of ranking | `utils/signal-gate-ranking.ts` (dashboard + LLM) |
-| R:R from prices | `utils/trade-levels.ts` — `reconcileExpectedRr()` overwrites LLM `expected_rr`; blocks if below `MIN_RR_RATIO` |
-| Trade execution | `v3-trade-execution.service.ts` — Binance limit + pending (not local-only position) |
+| Timeframes | `config/v3-schedulers.ts` — `getV3SignalGateTimeframes()` |
+| HTF guard | `V3_REQUIRE_HTF_TREND=1h` in `groq-dispatch.service.ts` |
+| Signal gate env | `signal-gate.service.ts` ← `MIN_SIGNAL_GRADE`, `MIN_SIGNAL_CONFIDENCE` |
+| Best-of ranking | `utils/signal-gate-ranking.ts` — `V3_TF_PRIORITY` |
+| R:R from prices | `utils/trade-levels.ts` |
+| Trade execution | `v3-trade-execution.service.ts` |
 | Fill / position | `binance-order-fill.service.ts`, `position-close.service.ts` |
-| WS sync | `binance-websocket-sync.ts` — SL/TP fill closes local position; `ACCOUNT_UPDATE` zero position sync |
-| Exposure cap | `config/risk-policy.ts` — `MAX_TOTAL_EXPOSURE_USD` (open + pending notional) |
-| Hedge mode | `binance-hedge-mode.ts` — `getDualSidePosition()` on worker startup |
+| WS sync | `binance-websocket-sync.ts` |
+| P0 policy | [pnl-plus-p0-plan.md](./pnl-plus-p0-plan.md) |
 
-## Environment (risk / gate)
-
-See `backend/.env.example`:
-
-- `MIN_SIGNAL_GRADE` — `A` \| `B` \| `C` \| `D` (gate minimum)
-- `MIN_SIGNAL_CONFIDENCE` — 0–1 (production: `0.7` with `MIN_SIGNAL_GRADE=B` so grade B at conf 0.70 can pass)
-- `MAX_POSITIONS_PER_SYMBOL`, `MAX_TOTAL_EXPOSURE_USD`
-- `BINANCE_ENABLED=true` for real testnet orders
-- Safety: do **not** set `DISABLE_SIGNAL_GATE`, `DISABLE_RISK_CHECK`, `DISABLE_MEMORY_LAYER`
-
-## Maintenance scripts
+## Reset for 5m experiment
 
 ```bash
-cd backend
-npm run testnet:cleanup          # phantom positions, recover filled pending
-npx tsx scripts/pipeline-v3-test.ts   # one-shot pipeline smoke
+cd backend && npm run v3:reset-5m
+pm2 delete crypto-api crypto-worker; pm2 start ecosystem.config.cjs && pm2 save
 ```
 
-## Deploy
+## Environment (5m stack + P0)
 
-Backend only on VPS: `scripts/deploy.sh`. Frontend on Vercel: git push. See `docs/deployment.md`.
+```env
+V3_SIGNAL_GATE_TIMEFRAMES=5m,15m,1h
+V3_TF_PRIORITY=5m,15m,1h
+V3_LLM_DISPATCH_CRON=1,6,11,16,21,26,31,36,41,46,51,56
+SIGNAL_GATE_CACHE_TTL_MS=300000
+V3_REQUIRE_HTF_TREND=1h
+V3_ALLOWED_REGIMES=trend
+POSITION_MONITOR_ALLOW_REDUCE=false
+POSITION_MONITOR_ALLOW_EXIT=false
+PHANTOM_REOPEN_ENABLED=false
+```

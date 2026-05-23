@@ -16,8 +16,9 @@ import {
   reconcileExpectedRr,
 } from '../utils/trade-levels';
 import { getRiskPolicy } from '../config/risk-policy';
-import { isRegimeAllowedForEntry } from '../config/v3-entry-policy';
+import { isRegimeAllowedForEntry, getV3RequireHtfTrend } from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
+import { getScanResult } from '../schedulers/market-scan.scheduler';
 import type { UnifiedCandle } from './candle.service';
 import { generateCandleHash } from '../utils/candle-hash';
 import {
@@ -377,6 +378,35 @@ export class GroqDispatchService {
       };
     }
 
+    const htfTf = getV3RequireHtfTrend();
+    if (llmConfirms && htfTf) {
+      const htfScan = getScanResult(symbol, htfTf);
+      const htfRegime = htfScan?.signalResult.setupResult.regime ?? 'unknown';
+      if (htfRegime !== 'trend') {
+        const reason = `HTF ${htfTf} regime ${htfRegime} !== trend (V3_REQUIRE_HTF_TREND)`;
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: gatePlaybook,
+            grade: gateGrade,
+            confidence: gateConfidence,
+            regime: gateRegime,
+            decision: 'no_trade',
+            reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return {
+          decision: 'no_trade',
+          reason,
+          analysis,
+          memory_context: memoryContext,
+        };
+      }
+    }
+
     const minLlmConf = parseFloat(process.env.V3_MIN_LLM_CONFIRM_CONFIDENCE || '0.75');
     if (llmConfirms && (analysis.confidence ?? 0) < minLlmConf) {
       const reason = `LLM confidence ${((analysis.confidence ?? 0) * 100).toFixed(0)}% below min ${(minLlmConf * 100).toFixed(0)}%`;
@@ -580,7 +610,7 @@ export class GroqDispatchService {
       '\nCRITICAL — STOP LOSS (system rejects tighter stops):\n' +
       `- Minimum |entry - suggested_stop_loss| / entry >= ${minSlLabel}% (your last outputs near 0.3% were rejected).\n` +
       '- Place SL beyond the recent swing liquidity (swing high for SHORT, swing low for LONG), not only inside the current candle wick.\n' +
-      `- On ${timeframe} BTC, aim SL roughly ${minSlLabel}%-1.0% from entry unless structure requires wider.\n` +
+      `- On ${timeframe} BTC, aim SL roughly ${minSlLabel}%-0.8% from entry unless structure requires wider.\n` +
       '\nCRITICAL — R:R:\n' +
       'expected_rr MUST equal |take_profit - entry| / |entry - stop_loss| (2 decimal places). ' +
       'Compute from suggested_entry, suggested_stop_loss, suggested_take_profit — do not invent expected_rr.\n';

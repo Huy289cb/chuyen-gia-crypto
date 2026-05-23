@@ -269,12 +269,12 @@ CRITICAL BIAS-ACTION CONSISTENCY:
 CRITICAL SL/TP PLACEMENT:
 - For LONG: entry > current price, SL < entry, TP > entry
 - For SHORT: entry < current price, SL > entry, TP < entry
-- SL distance MUST be at least 0.5% from entry (prefer 0.5%-1.0% on 15m); place SL beyond swing liquidity, not inside the wick only
-- R:R ratio should be at least 1.0 for Kim Nghia
+- SL distance MUST be at least 0.4% from entry (prefer 0.4%-0.8% on 5m/15m); place SL beyond swing liquidity, not inside the wick only
+- R:R ratio should be at least 2.0 for Kim Nghia (PnL+)
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
       minConfidence: Number(process.env.KIM_NGHIA_CONFIDENCE_THRESHOLD) * 100 || 80, // Read from env or default to 80
-      minRRRatio: 1.0, // Reduced from 2.5 to 1.0 - allow more trades to pass
+      minRRRatio: parseFloat(process.env.MIN_RR_RATIO || '2') || 2,
       riskPerTrade: 0.08, // Reduced from 0.10 to 0.08 (8% risk per trade)
       maxPositionsPerSymbol: 6,
       maxVolumePerAccount: 2000, // Max 2k USD total volume per account (backward compatibility)
@@ -290,7 +290,7 @@ CRITICAL SL/TP PLACEMENT:
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1h'],
       minAlignment: 0.6, // Increased from 0.5 to 0.6 for stricter HTF alignment
-      minSLDistancePercent: 0.005, // Reduced to 0.5% SL distance for easier entry
+      minSLDistancePercent: 0.004, // Fallback when MIN_SL_DISTANCE_PERCENT unset (5m stack)
       requireConfluence: true,
       minConfluenceCount: 3, // Kept at 3 (3/4 met) - 4/4 is too strict for current AI outputs
       requireHighLiquiditySession: false,
