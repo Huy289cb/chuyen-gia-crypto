@@ -89,6 +89,16 @@ export async function saveOhlcvCandlesBatch(
   return saved;
 }
 
+/** Count stored bars for warmup progress / backfill checks. */
+export async function countOhlcvCandles(coin: string, timeframe: string): Promise<number> {
+  return prisma.ohlcvCandle.count({
+    where: {
+      coin: coin.toUpperCase(),
+      timeframe,
+    },
+  });
+}
+
 /**
  * Get OHLCV candles for a time range
  */

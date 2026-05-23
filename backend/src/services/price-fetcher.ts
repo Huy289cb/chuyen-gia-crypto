@@ -161,6 +161,64 @@ export async function fetchHistoricalCandles(symbol: string, interval: string = 
   throw new Error('Failed to fetch historical candles after all retries');
 }
 
+const BINANCE_KLINES_MAX = 1000;
+
+/**
+ * Fetch up to totalLimit historical klines from Binance (paginated backwards).
+ * Returns ascending rows: [openTime, open, high, low, close, volume, ...].
+ */
+export async function fetchHistoricalCandlesPaginated(
+  symbol: string,
+  interval: string,
+  totalLimit: number
+): Promise<number[][]> {
+  if (totalLimit <= 0) return [];
+
+  const coin = symbol.replace(/USDT$/i, '').toUpperCase();
+  const byOpenTime = new Map<number, number[]>();
+  let endTime: number | undefined = undefined;
+  const pageDelayMs = 250;
+
+  while (byOpenTime.size < totalLimit) {
+    const pageSize = Math.min(BINANCE_KLINES_MAX, totalLimit - byOpenTime.size);
+    const params = new URLSearchParams({
+      symbol: `${coin}USDT`,
+      interval,
+      limit: String(pageSize),
+    });
+    if (endTime != null) {
+      params.set('endTime', String(endTime));
+    }
+
+    const response = await fetchWithTimeout(
+      `${BINANCE_API}/klines?${params.toString()}`,
+      {},
+      15000
+    );
+    if (!response.ok) {
+      throw new Error(`Binance klines error: ${response.status}`);
+    }
+
+    const klines = (await response.json()) as number[][];
+    if (klines.length === 0) break;
+
+    for (const row of klines) {
+      const openTime = row[0];
+      if (Number.isFinite(openTime)) {
+        byOpenTime.set(openTime, row);
+      }
+    }
+
+    const oldestOpen = klines[0][0];
+    endTime = oldestOpen - 1;
+
+    if (klines.length < pageSize) break;
+    await delay(pageDelayMs);
+  }
+
+  return Array.from(byOpenTime.values()).sort((a, b) => a[0] - b[0]).slice(-totalLimit);
+}
+
 /**
  * Fetch prices with fallback chain: Binance -> Database -> CoinGecko
  */

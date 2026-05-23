@@ -15,6 +15,7 @@
     "setup:data": "node scripts/ensure-data-dir.js",
     "testnet:cleanup": "tsx scripts/testnet-cleanup.ts",
     "v3:reset-5m": "tsx scripts/v3-reset-for-5m.ts",
+    "v3:backfill-ohlcv": "tsx scripts/v3-backfill-ohlcv.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",

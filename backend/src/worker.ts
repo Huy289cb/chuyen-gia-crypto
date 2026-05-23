@@ -132,6 +132,24 @@ async function startWorker() {
     }
   }
 
+  const {
+    backfillOhlcvIfNeeded,
+    isOhlcvBackfillOnStartEnabled,
+  } = await import('./services/ohlcv-backfill.service');
+  if (isOhlcvBackfillOnStartEnabled()) {
+    void backfillOhlcvIfNeeded('BTC')
+      .then((result) => {
+        const summary = result.timeframes
+          .map((t) => `${t.timeframe}:${t.before}→${t.after}${t.skipped ? '(skip)' : ''}`)
+          .join(' ');
+        console.log(`[Worker] OHLCV backfill complete — ${summary}`);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[Worker] OHLCV backfill failed (non-fatal): ${msg}`);
+      });
+  }
+
   // Start scheduler
   await startWorkerScheduler();
 
