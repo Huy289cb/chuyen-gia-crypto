@@ -69,8 +69,8 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         title="Signal Gate"
         subtitle={
           signalData.timeframe
-            ? `Best of 5m / 15m / 1h · showing ${signalData.timeframe}`
-            : 'Best of 5m / 15m / 1h'
+            ? `Entry ưu tiên 15m → 1h → 5m · đang xem ${signalData.timeframe}`
+            : 'Entry ưu tiên 15m → 1h → 5m'
         }
         icon={<Signal className="w-5 h-5" />}
       />
@@ -159,6 +159,11 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
                   </div>
                   <p className="text-xs text-foreground-tertiary">
                     {row.regime}
+                    {'gateRegime' in row &&
+                    row.gateRegime &&
+                    row.gateRegime !== row.regime
+                      ? ` → gate ${String(row.gateRegime)}`
+                      : ''}
                     {row.playbook !== 'none' ? ` · ${row.playbook}` : ''}
                   </p>
                   {!row.pass && (row.detailReason || row.setupReason) ? (

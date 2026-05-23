@@ -12,6 +12,9 @@ import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
 import { getCandles } from '../services/candle.service';
+import { getV3LtfAlignRegimeHtf } from '../config/v3-entry-policy';
+import { getSignalGateCandleLimit } from '../config/signal-gate-windows';
+import type { MarketRegime } from '../analyzers/market-regime.analyzer';
 import { signalGateService, type SignalGateOutput } from '../services/signal-gate.service';
 import {
   V3_LLM_DISPATCH_CRON,
@@ -474,19 +477,36 @@ async function buildLiveSignalGateView(symbol: string) {
   const gateConfig = signalGateService.getConfig();
   let latestCandleMs = 0;
 
-  await Promise.all(
-    getV3SignalGateTimeframes().map(async (timeframe) => {
-      const { candles } = await getCandles({ symbol, timeframe, limit: 100 });
-      if (candles.length < 50) return;
-      const lastTs = candles[candles.length - 1]?.timestamp;
-      if (lastTs) {
-        const ms = typeof lastTs === 'number' ? lastTs : new Date(lastTs).getTime();
-        if (ms > latestCandleMs) latestCandleMs = ms;
-      }
-      const result = await signalGateService.evaluate({ candles, symbol, timeframe });
-      evaluations.push({ timeframe, result });
-    })
-  );
+  const alignHtf = getV3LtfAlignRegimeHtf();
+  const gateTfs = [...getV3SignalGateTimeframes()];
+  const scanOrder = alignHtf
+    ? [alignHtf, ...gateTfs.filter((t) => t !== alignHtf)]
+    : gateTfs;
+  let htfRegime: MarketRegime | null = null;
+
+  for (const timeframe of scanOrder) {
+    const { candles } = await getCandles({
+      symbol,
+      timeframe,
+      limit: getSignalGateCandleLimit(timeframe),
+    });
+    if (candles.length < 50) continue;
+    const lastTs = candles[candles.length - 1]?.timestamp;
+    if (lastTs) {
+      const ms = typeof lastTs === 'number' ? lastTs : new Date(lastTs).getTime();
+      if (ms > latestCandleMs) latestCandleMs = ms;
+    }
+    const result = await signalGateService.evaluate({
+      candles,
+      symbol,
+      timeframe,
+      htfRegime: alignHtf && timeframe !== alignHtf ? htfRegime : undefined,
+    });
+    evaluations.push({ timeframe, result });
+    if (alignHtf && timeframe === alignHtf) {
+      htfRegime = result.setupResult.regime;
+    }
+  }
 
   if (evaluations.length === 0) return null;
 
@@ -499,6 +519,7 @@ async function buildLiveSignalGateView(symbol: string) {
     grade: r.setupResult.grade,
     confidence: r.setupResult.confidence,
     regime: r.setupResult.regime,
+    gateRegime: r.gateRegime ?? r.setupResult.regime,
     playbook: r.setupResult.playbookKey || 'none',
     pass: r.pass,
     setupReason: r.setupResult.reason,
@@ -510,7 +531,9 @@ async function buildLiveSignalGateView(symbol: string) {
   const reasonCodes: string[] = [];
   for (const row of perTimeframe) {
     if (row.pass) {
-      reasonCodes.push(`${row.timeframe}: PASS · grade ${row.grade}`);
+      const align =
+        row.gateRegime !== row.regime ? ` · gate ${row.gateRegime} (LTF ${row.regime})` : '';
+      reasonCodes.push(`${row.timeframe}: PASS · grade ${row.grade}${align}`);
     } else {
       const short =
         row.detailReason?.split('\n')[1]?.trim() ||

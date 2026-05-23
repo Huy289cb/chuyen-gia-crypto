@@ -18,12 +18,23 @@ function fmt(n: number, d = 2): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: d });
 }
 
-export function analyzeLiquiditySweep(candles: CandleData[]): LiquiditySweepResult {
+export interface LiquiditySweepOptions {
+  /** Prior bars before current candle (default 19). */
+  priorBars?: number;
+}
+
+export function analyzeLiquiditySweep(
+  candles: CandleData[],
+  options?: LiquiditySweepOptions
+): LiquiditySweepResult {
+  const priorBars = options?.priorBars ?? 19;
+  const windowCandles = priorBars + 1;
+
   const baseMetrics: PlaybookEvidence['metrics'] = {
-    windowCandles: 20,
+    windowCandles,
   };
 
-  if (candles.length < 20) {
+  if (candles.length < windowCandles) {
     return {
       detected: false,
       grade: 'D',
@@ -34,13 +45,13 @@ export function analyzeLiquiditySweep(candles: CandleData[]): LiquiditySweepResu
         playbook: 'liquidity_sweep',
         detected: false,
         grade: 'D',
-        summary: `Thiếu dữ liệu (${candles.length}/20 nến)`,
+        summary: `Thiếu dữ liệu (${candles.length}/${windowCandles} nến)`,
         metrics: baseMetrics,
       },
     };
   }
 
-  const recentCandles = candles.slice(-20);
+  const recentCandles = candles.slice(-windowCandles);
   const currentCandle = recentCandles[recentCandles.length - 1];
   const recentHighs = recentCandles.slice(0, -1).map((c) => c.high);
   const recentLows = recentCandles.slice(0, -1).map((c) => c.low);

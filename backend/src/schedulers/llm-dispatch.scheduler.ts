@@ -18,7 +18,7 @@ import {
   recordPipelineEvent,
 } from '../repositories/testnet.repository';
 import { formatLlmTradeSummary } from '../utils/trade-levels';
-import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
+import { compareSignalGateForEntry } from '../utils/signal-gate-ranking';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 
 let llmDispatchTask: ScheduledTask | null = null;
@@ -56,7 +56,7 @@ function pickBestScanResult(
   if (candidates.length === 0) return null;
 
   const sorted = [...candidates].sort((a, b) =>
-    compareSignalGateEvaluations(
+    compareSignalGateForEntry(
       { timeframe: a.timeframe, result: a.scanResult.signalResult },
       { timeframe: b.timeframe, result: b.scanResult.signalResult }
     )

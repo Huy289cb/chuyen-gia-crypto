@@ -16,7 +16,7 @@ export interface MarketRegimeResult {
 }
 
 function computeCoreMetrics(candles: CandleData[]) {
-  const recentCandles = candles.slice(-50);
+  const recentCandles = candles;
   const closes = recentCandles.map((c) => c.close);
   const n = closes.length;
   let sumX = 0;
@@ -61,11 +61,23 @@ function computeCoreMetrics(candles: CandleData[]) {
   };
 }
 
+export interface RegimeEvidenceOptions {
+  regimeBars?: number;
+  timeframe?: string;
+}
+
 /**
  * Regime + rule path + numbers used for that scan.
  */
-export function computeRegimeEvidence(candles: CandleData[]): RegimeEvidence {
-  if (candles.length < 50) {
+export function computeRegimeEvidence(
+  candles: CandleData[],
+  options?: RegimeEvidenceOptions
+): RegimeEvidence {
+  const regimeBars = options?.regimeBars ?? 50;
+  const is5m = options?.timeframe === '5m';
+  const minBars = Math.min(50, regimeBars);
+
+  if (candles.length < minBars) {
     const last = candles[candles.length - 1];
     return {
       regime: 'chop',
@@ -79,21 +91,26 @@ export function computeRegimeEvidence(candles: CandleData[]): RegimeEvidence {
     };
   }
 
-  const m = computeCoreMetrics(candles);
+  const recent = candles.slice(-regimeBars);
+  const m = computeCoreMetrics(recent);
   let regime: MarketRegime = 'range';
   let matchedRule: string;
 
-  if (m.volatilityPct > 2.0 && m.trendStrengthPct < 0.1) {
+  const chopVol = is5m ? 2.5 : 2.0;
+  const rangeBandPct = is5m ? 1.0 : 1.5;
+  const rangeVolPct = is5m ? 1.2 : 1.0;
+
+  if (m.volatilityPct > chopVol && m.trendStrengthPct < 0.1) {
     regime = 'chop';
     matchedRule =
-      `CHOP: biến động ${m.volatilityPct.toFixed(2)}% > 2% và độ trend ${m.trendStrengthPct.toFixed(2)}% < 0.1% (nhiễu, không có hướng rõ)`;
+      `CHOP: biến động ${m.volatilityPct.toFixed(2)}% > ${chopVol}% và độ trend ${m.trendStrengthPct.toFixed(2)}% < 0.1% (nhiễu, không có hướng rõ)`;
   } else if (m.trendStrengthPct > 0.3) {
     regime = 'trend';
     matchedRule = `TREND: độ trend ${m.trendStrengthPct.toFixed(2)}% > 0.3%`;
-  } else if (m.rangePct < 1.5 && m.volatilityPct < 1.0) {
+  } else if (m.rangePct < rangeBandPct && m.volatilityPct < rangeVolPct) {
     regime = 'range';
     matchedRule =
-      `RANGE: biên 50n ${m.rangePct.toFixed(2)}% < 1.5% và biến động ${m.volatilityPct.toFixed(2)}% < 1%`;
+      `RANGE: biên ${regimeBars}n ${m.rangePct.toFixed(2)}% < ${rangeBandPct}% và biến động ${m.volatilityPct.toFixed(2)}% < ${rangeVolPct}%`;
   } else if (m.trendStrengthPct > 0.15) {
     regime = 'trend';
     matchedRule = `TREND (vừa): độ trend ${m.trendStrengthPct.toFixed(2)}% > 0.15%`;

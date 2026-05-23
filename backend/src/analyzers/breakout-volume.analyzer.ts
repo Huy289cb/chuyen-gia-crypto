@@ -18,8 +18,17 @@ function fmt(n: number, d = 2): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: d });
 }
 
-export function analyzeBreakoutVolume(candles: CandleData[]): BreakoutVolumeResult {
-  if (candles.length < 30) {
+export interface BreakoutVolumeOptions {
+  windowBars?: number;
+}
+
+export function analyzeBreakoutVolume(
+  candles: CandleData[],
+  options?: BreakoutVolumeOptions
+): BreakoutVolumeResult {
+  const windowBars = options?.windowBars ?? 30;
+
+  if (candles.length < windowBars) {
     return {
       detected: false,
       grade: 'D',
@@ -30,13 +39,13 @@ export function analyzeBreakoutVolume(candles: CandleData[]): BreakoutVolumeResu
         playbook: 'breakout_volume',
         detected: false,
         grade: 'D',
-        summary: `Thiếu dữ liệu (${candles.length}/30 nến)`,
-        metrics: { windowCandles: 30 },
+        summary: `Thiếu dữ liệu (${candles.length}/${windowBars} nến)`,
+        metrics: { windowCandles: windowBars },
       },
     };
   }
 
-  const recentCandles = candles.slice(-30);
+  const recentCandles = candles.slice(-windowBars);
   const currentCandle = recentCandles[recentCandles.length - 1];
   const consolidationCandles = recentCandles.slice(0, -5);
   const highs = consolidationCandles.map((c) => c.high);
@@ -50,7 +59,7 @@ export function analyzeBreakoutVolume(candles: CandleData[]): BreakoutVolumeResu
   const minVolRatio = 1.5;
 
   const metrics: PlaybookEvidence['metrics'] = {
-    windowCandles: 30,
+    windowCandles: windowBars,
     consolidationBars: consolidationCandles.length,
     resistance,
     support,

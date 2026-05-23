@@ -7,8 +7,11 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { getCandles } from '../services/candle.service';
 import { getV3SignalGateTimeframes } from '../config/v3-schedulers';
+import { getV3LtfAlignRegimeHtf } from '../config/v3-entry-policy';
+import { getSignalGateCandleLimit } from '../config/signal-gate-windows';
 import { signalGateService, type SignalGateOutput } from '../services/signal-gate.service';
 import type { UnifiedCandle } from '../services/candle.service';
+import type { MarketRegime } from '../analyzers/market-regime.analyzer';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 
 let marketScanTask: ScheduledTask | null = null;
@@ -27,6 +30,16 @@ const scanResults = new Map<string, MarketScanResult>();
 function lastBarOpenTimestamp(candles: UnifiedCandle[]): number | null {
   if (candles.length === 0) return null;
   return candles[candles.length - 1].timestamp;
+}
+
+/** HTF first when LTF regime align is enabled (1h before 5m/15m). */
+function marketScanTimeframeOrder(timeframes: readonly string[]): string[] {
+  const htf = getV3LtfAlignRegimeHtf();
+  if (!htf) {
+    return [...timeframes];
+  }
+  const rest = timeframes.filter((t) => t !== htf);
+  return [htf, ...rest];
 }
 
 /**
@@ -61,6 +74,61 @@ function mergeDuplicateScanWithPriorEligible(
   return incoming;
 }
 
+async function scanSymbolTimeframe(
+  symbol: string,
+  timeframe: string,
+  htfRegime: MarketRegime | null
+): Promise<void> {
+  const limit = getSignalGateCandleLimit(timeframe);
+  const { candles, source } = await getCandles({
+    symbol,
+    timeframe,
+    limit,
+    cacheToDb: true,
+  });
+
+  console.log(
+    `[MarketScan] Fetched ${candles.length} candles for ${symbol} ${timeframe} (source: ${source})`
+  );
+
+  if (candles.length < 50) {
+    console.warn(`[MarketScan] Insufficient candles for ${symbol} ${timeframe}, skipping gate`);
+    return;
+  }
+
+  const alignHtf = getV3LtfAlignRegimeHtf();
+  const signalResult = await signalGateService.evaluate({
+    candles,
+    symbol,
+    timeframe,
+    htfRegime: alignHtf && timeframe !== alignHtf ? htfRegime : undefined,
+  });
+
+  const result: MarketScanResult = {
+    symbol,
+    timeframe,
+    candles,
+    signalResult,
+    timestamp: new Date(),
+  };
+
+  const key = `${symbol}_${timeframe}`;
+  const prev = scanResults.get(key);
+  const toStore = mergeDuplicateScanWithPriorEligible(prev, result);
+  scanResults.set(key, toStore);
+
+  const dupTag = signalResult.isDuplicate ? ' (duplicate)' : '';
+  if (toStore !== result) {
+    console.log(
+      `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} — kept prior fresh signal for LLM (same bar)`
+    );
+  } else {
+    console.log(
+      `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
+    );
+  }
+}
+
 /**
  * Run market scan for configured symbols
  */
@@ -75,59 +143,20 @@ async function runMarketScan() {
   try {
     console.log('[MarketScan] Starting market scan');
 
-    const symbols = ['BTC']; // BTC-only per Big Update Plan v3
-    const timeframes = [...getV3SignalGateTimeframes()];
+    const symbols = ['BTC'];
+    const timeframes = marketScanTimeframeOrder(getV3SignalGateTimeframes());
+    const alignHtf = getV3LtfAlignRegimeHtf();
 
     for (const symbol of symbols) {
-      await Promise.all(
-        timeframes.map(async (timeframe) => {
-          const { candles, source } = await getCandles({
-            symbol,
-            timeframe,
-            limit: 100,
-            cacheToDb: true,
-          });
+      let htfRegime: MarketRegime | null = null;
 
-          console.log(
-            `[MarketScan] Fetched ${candles.length} candles for ${symbol} ${timeframe} (source: ${source})`
-          );
-
-          if (candles.length < 50) {
-            console.warn(`[MarketScan] Insufficient candles for ${symbol} ${timeframe}, skipping gate`);
-            return;
-          }
-
-          const signalResult = await signalGateService.evaluate({
-            candles,
-            symbol,
-            timeframe,
-          });
-
-          const result: MarketScanResult = {
-            symbol,
-            timeframe,
-            candles,
-            signalResult,
-            timestamp: new Date(),
-          };
-
-          const key = `${symbol}_${timeframe}`;
-          const prev = scanResults.get(key);
-          const toStore = mergeDuplicateScanWithPriorEligible(prev, result);
-          scanResults.set(key, toStore);
-
-          const dupTag = signalResult.isDuplicate ? ' (duplicate)' : '';
-          if (toStore !== result) {
-            console.log(
-              `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} — kept prior fresh signal for LLM (same bar)`
-            );
-          } else {
-            console.log(
-              `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
-            );
-          }
-        })
-      );
+      for (const timeframe of timeframes) {
+        await scanSymbolTimeframe(symbol, timeframe, htfRegime);
+        if (alignHtf && timeframe === alignHtf) {
+          const snap = getScanResult(symbol, timeframe);
+          htfRegime = snap?.signalResult.setupResult.regime ?? null;
+        }
+      }
     }
 
     console.log('[MarketScan] Market scan completed');
@@ -157,8 +186,7 @@ export function startMarketScanScheduler(cronExpression: string = '*/5 * * * *')
 
   console.log(`[MarketScan] Starting scheduler with cron: ${cronExpression}`);
   marketScanTask = cron.schedule(cronExpression, runMarketScan);
-  
-  // Run immediately on start
+
   runMarketScan();
 }
 

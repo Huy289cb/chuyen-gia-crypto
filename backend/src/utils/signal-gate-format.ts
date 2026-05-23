@@ -19,7 +19,8 @@ export function formatGateFailureReason(
   const gradeIndex = gradeOrder.indexOf(setupResult.grade);
   const gradePass = gradeIndex <= minIndex;
   const confidencePass = setupResult.confidence >= config.minConfidence;
-  const regimePass = config.allowedRegimes.includes(setupResult.regime);
+  const gateRegime = output.gateRegime ?? setupResult.regime;
+  const regimePass = config.allowedRegimes.includes(gateRegime);
 
   if (!gradePass) {
     return `Grade ${setupResult.grade} dưới ngưỡng ${config.minGrade}`;
@@ -28,7 +29,11 @@ export function formatGateFailureReason(
     return `Confidence ${(setupResult.confidence * 100).toFixed(0)}% dưới ngưỡng ${(config.minConfidence * 100).toFixed(0)}%`;
   }
   if (!regimePass) {
-    return `Regime ${setupResult.regime} không thuộc ${config.allowedRegimes.join('/')}`;
+    const localNote =
+      gateRegime !== setupResult.regime
+        ? ` (LTF ${setupResult.regime}, gate ${gateRegime})`
+        : '';
+    return `Regime ${setupResult.regime} không thuộc ${config.allowedRegimes.join('/')}${localNote}`;
   }
   return output.reason || null;
 }

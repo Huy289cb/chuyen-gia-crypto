@@ -122,7 +122,8 @@ export class GroqDispatchService {
         };
       }
 
-      const gateRegime = signalResult.setupResult.regime ?? 'unknown';
+      const gateRegime =
+        signalResult.gateRegime ?? signalResult.setupResult.regime ?? 'unknown';
       if (!isRegimeAllowedForEntry(gateRegime)) {
         return {
           decision: 'no_trade',

@@ -73,3 +73,32 @@ export function getV3RequireHtfTrend(): string | null {
   }
   return raw;
 }
+
+/** HTF used to align LTF regime for gate pass (default: same as V3_REQUIRE_HTF_TREND or 1h). */
+export function getV3LtfAlignRegimeHtf(): string | null {
+  const raw = process.env.V3_LTF_ALIGN_REGIME_HTF?.trim();
+  if (raw === 'false' || raw === 'off') {
+    return null;
+  }
+  if (raw) {
+    return raw;
+  }
+  return getV3RequireHtfTrend();
+}
+
+export function isLtfRegimeAlignHtfEnabled(): boolean {
+  return getV3LtfAlignRegimeHtf() != null;
+}
+
+const LTF_ALIGN_TFS = new Set(['5m', '15m']);
+
+/** 5m/15m may pass regime filter when HTF is trend but local bar structure is range/chop. */
+export function canAlignLtfRegimeFromHtf(timeframe: string, htfRegime: string | null | undefined): boolean {
+  if (!isLtfRegimeAlignHtfEnabled() || !htfRegime) {
+    return false;
+  }
+  if (!LTF_ALIGN_TFS.has(timeframe)) {
+    return false;
+  }
+  return htfRegime === 'trend';
+}

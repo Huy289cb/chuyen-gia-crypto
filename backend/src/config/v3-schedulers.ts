@@ -29,17 +29,39 @@ export function getV3SignalGateTimeframes(): readonly string[] {
   return filtered.length > 0 ? filtered : DEFAULT_SIGNAL_GATE_TIMEFRAMES;
 }
 
-/** Lower rank = preferred when grade/confidence tie (first in env wins). */
-export function getV3TfPriorityRank(): Record<string, number> {
-  const raw = process.env.V3_TF_PRIORITY?.trim();
+function parseTfOrder(envKey: string, fallback: readonly string[]): string[] {
+  const raw = process.env[envKey]?.trim();
   const order = raw
     ? raw.split(',').map((s) => s.trim()).filter(Boolean)
-    : [...getV3SignalGateTimeframes()];
+    : [...fallback];
+  return order.length > 0 ? order : [...fallback];
+}
+
+function buildTfRank(order: string[]): Record<string, number> {
   const rank: Record<string, number> = {};
   order.forEach((tf, i) => {
     rank[tf] = i;
   });
   return rank;
+}
+
+/** Lower rank = preferred when grade/confidence tie (dashboard display). */
+export function getV3TfPriorityRank(): Record<string, number> {
+  return buildTfRank(parseTfOrder('V3_TF_PRIORITY', getV3SignalGateTimeframes()));
+}
+
+/**
+ * LLM entry dispatch priority — default structure-first: 15m → 1h → 5m.
+ * When 15m passes gate, prefer it over 5m for Groq/execution.
+ */
+export function getV3EntryTfPriorityRank(): Record<string, number> {
+  const defaultEntry = ['15m', '1h', '5m'] as const;
+  const gateTfs = getV3SignalGateTimeframes();
+  const preferred = parseTfOrder('V3_ENTRY_TF_PRIORITY', defaultEntry).filter((tf) =>
+    gateTfs.includes(tf)
+  );
+  const rest = gateTfs.filter((tf) => !preferred.includes(tf));
+  return buildTfRank([...preferred, ...rest]);
 }
 
 /** Duplicate-signal cache TTL — 5m when stack includes 5m. */

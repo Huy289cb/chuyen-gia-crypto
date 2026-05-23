@@ -2,6 +2,7 @@
  * Setup Gate Analyzer
  */
 
+import { getSignalGateWindows } from '../config/signal-gate-windows';
 import { analyzeLiquiditySweep } from './liquidity-sweep.analyzer';
 import { analyzeBreakoutVolume } from './breakout-volume.analyzer';
 import { computeRegimeEvidence } from './market-regime.analyzer';
@@ -65,10 +66,14 @@ function withDetail(
 }
 
 export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGateResult> {
-  const { candles } = input;
+  const { candles, timeframe } = input;
+  const windows = getSignalGateWindows(timeframe);
 
-  if (candles.length < 50) {
-    const regimeEvidence = computeRegimeEvidence(candles);
+  if (candles.length < windows.minCandles) {
+    const regimeEvidence = computeRegimeEvidence(candles, {
+      regimeBars: windows.regimeBars,
+      timeframe,
+    });
     const emptyPb = {
       playbook: 'liquidity_sweep' as const,
       detected: false,
@@ -102,16 +107,19 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
         grade: 'D',
         confidence: 0,
         regime: 'chop',
-        reason: `Thiếu dữ liệu: ${candles.length}/50 nến`,
+        reason: `Thiếu dữ liệu: ${candles.length}/${windows.minCandles} nến`,
       },
       evidence
     );
   }
 
-  const regimeEvidence = computeRegimeEvidence(candles);
+  const regimeEvidence = computeRegimeEvidence(candles, {
+    regimeBars: windows.regimeBars,
+    timeframe,
+  });
   const regime = regimeEvidence.regime;
-  const liquiditySweep = analyzeLiquiditySweep(candles);
-  const breakoutVolume = analyzeBreakoutVolume(candles);
+  const liquiditySweep = analyzeLiquiditySweep(candles, { priorBars: windows.sweepPriorBars });
+  const breakoutVolume = analyzeBreakoutVolume(candles, { windowBars: windows.breakoutBars });
   const evidence = buildEvidence(input, regimeEvidence, liquiditySweep, breakoutVolume);
 
   if (regime === 'chop') {

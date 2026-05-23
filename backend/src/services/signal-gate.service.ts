@@ -8,8 +8,10 @@ import { analyzeSetupGate, SetupGateInput, SetupGateResult } from '../analyzers/
 import { getRiskPolicy } from '../config/risk-policy';
 import { getSignalGateAllowedRegimes } from '../config/v3-entry-policy';
 import { getSignalGateCacheTtlMs } from '../config/v3-schedulers';
+import { canAlignLtfRegimeFromHtf } from '../config/v3-entry-policy';
 import { formatSignalGateBlockReason } from '../utils/signal-gate-format';
 import { generateCandleHash } from '../utils/candle-hash';
+import type { MarketRegime } from '../analyzers/market-regime.analyzer';
 
 export interface SignalGateConfig {
   minGrade: 'A' | 'B' | 'C' | 'D';
@@ -25,6 +27,13 @@ export interface SignalGateOutput {
   shouldCallGroq: boolean;
   /** True when this evaluation reused in-memory cache (not a fresh setup read). */
   isDuplicate: boolean;
+  /** Regime used for pass/fail (may follow HTF when LTF aligned). */
+  gateRegime?: MarketRegime;
+}
+
+export interface SignalGateEvaluateInput extends SetupGateInput {
+  /** HTF regime from earlier scan in same cycle (e.g. 1h trend for 5m/15m). */
+  htfRegime?: MarketRegime | null;
 }
 
 export interface CandleData {
@@ -86,8 +95,8 @@ export class SignalGateService {
   /**
    * Evaluate signal and determine if it should proceed to LLM
    */
-  async evaluate(input: SetupGateInput): Promise<SignalGateOutput> {
-    const { candles, symbol, timeframe } = input;
+  async evaluate(input: SignalGateEvaluateInput): Promise<SignalGateOutput> {
+    const { candles, symbol, timeframe, htfRegime } = input;
 
     // Clean expired cache
     if (this.config.enableDuplicateFilter) {
@@ -103,9 +112,14 @@ export class SignalGateService {
       const cached = signalCache.get(cacheKey);
       if (cached) {
         // Use proper evaluation logic for the cached result
+        const gateRegime = this.resolveGateRegime(
+          timeframe,
+          cached.result.regime,
+          htfRegime
+        );
         const gradePass = this.isGradeAcceptable(cached.result.grade);
         const confidencePass = cached.result.confidence >= this.config.minConfidence;
-        const regimePass = this.config.allowedRegimes.includes(cached.result.regime);
+        const regimePass = this.config.allowedRegimes.includes(gateRegime);
         const pass = gradePass && confidencePass && regimePass;
 
         console.log(`[SignalGate] Duplicate signal detected for ${symbol} ${timeframe}, using cached result. Pass: ${pass}`);
@@ -115,6 +129,7 @@ export class SignalGateService {
           reason: 'Duplicate signal - using cached result',
           shouldCallGroq: false,
           isDuplicate: true,
+          gateRegime,
         };
       }
     }
@@ -131,15 +146,20 @@ export class SignalGateService {
     }
 
     // Determine if signal passes gate
+    const gateRegime = this.resolveGateRegime(timeframe, setupResult.regime, htfRegime);
     const gradePass = this.isGradeAcceptable(setupResult.grade);
     const confidencePass = setupResult.confidence >= this.config.minConfidence;
-    const regimePass = this.config.allowedRegimes.includes(setupResult.regime);
+    const regimePass = this.config.allowedRegimes.includes(gateRegime);
 
     const pass = gradePass && confidencePass && regimePass;
 
     let reason: string;
     if (pass) {
-      reason = 'Signal passes all gate conditions';
+      const align =
+        gateRegime !== setupResult.regime
+          ? ` (regime LTF ${setupResult.regime} → HTF ${gateRegime})`
+          : '';
+      reason = `Signal passes all gate conditions${align}`;
     } else {
       reason = formatSignalGateBlockReason(
         { pass, setupResult, reason: '', shouldCallGroq: false, isDuplicate: false },
@@ -153,7 +173,23 @@ export class SignalGateService {
       reason,
       shouldCallGroq: pass,
       isDuplicate: false,
+      gateRegime,
     };
+  }
+
+  private resolveGateRegime(
+    timeframe: string,
+    localRegime: MarketRegime,
+    htfRegime?: MarketRegime | null
+  ): MarketRegime {
+    if (
+      canAlignLtfRegimeFromHtf(timeframe, htfRegime) &&
+      htfRegime === 'trend' &&
+      (localRegime === 'range' || localRegime === 'chop')
+    ) {
+      return 'trend';
+    }
+    return localRegime;
   }
 
   /**
