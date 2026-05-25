@@ -42,7 +42,14 @@ export function isRangeEntryBlocked(regime: string): boolean {
 }
 
 export function getSignalGateAllowedRegimes(): SignalGateConfig['allowedRegimes'] {
+  if (isV3FastSampleMode()) {
+    return ['trend', 'range'];
+  }
   return getV3AllowedRegimes();
+}
+
+export function isV3FastSampleMode(): boolean {
+  return process.env.V3_TEST_FAST_SAMPLE === 'true';
 }
 
 /**

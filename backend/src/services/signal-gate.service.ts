@@ -6,9 +6,13 @@
 
 import { analyzeSetupGate, SetupGateInput, SetupGateResult } from '../analyzers/setup-gate.analyzer';
 import { getRiskPolicy } from '../config/risk-policy';
-import { getSignalGateAllowedRegimes } from '../config/v3-entry-policy';
+import {
+  canAlignLtfRegimeFromHtf,
+  getSignalGateAllowedRegimes,
+  isV3FastSampleMode,
+} from '../config/v3-entry-policy';
 import { getSignalGateCacheTtlMs } from '../config/v3-schedulers';
-import { canAlignLtfRegimeFromHtf } from '../config/v3-entry-policy';
+import { regimeForGatePass, shouldBypassRegimeForBreakout } from '../config/v3-regime-policy';
 import { formatSignalGateBlockReason } from '../utils/signal-gate-format';
 import { generateCandleHash } from '../utils/candle-hash';
 import type { MarketRegime } from '../analyzers/market-regime.analyzer';
@@ -115,7 +119,9 @@ export class SignalGateService {
         const gateRegime = this.resolveGateRegime(
           timeframe,
           cached.result.regime,
-          htfRegime
+          htfRegime,
+          cached.result.playbookKey,
+          cached.result.grade
         );
         const gradePass = this.isGradeAcceptable(cached.result.grade);
         const confidencePass = cached.result.confidence >= this.config.minConfidence;
@@ -146,7 +152,13 @@ export class SignalGateService {
     }
 
     // Determine if signal passes gate
-    const gateRegime = this.resolveGateRegime(timeframe, setupResult.regime, htfRegime);
+    const gateRegime = this.resolveGateRegime(
+      timeframe,
+      setupResult.regime,
+      htfRegime,
+      setupResult.playbookKey,
+      setupResult.grade
+    );
     const gradePass = this.isGradeAcceptable(setupResult.grade);
     const confidencePass = setupResult.confidence >= this.config.minConfidence;
     const regimePass = this.config.allowedRegimes.includes(gateRegime);
@@ -157,7 +169,9 @@ export class SignalGateService {
     if (pass) {
       const align =
         gateRegime !== setupResult.regime
-          ? ` (regime LTF ${setupResult.regime} → HTF ${gateRegime})`
+          ? shouldBypassRegimeForBreakout(timeframe, setupResult.playbookKey, setupResult.grade)
+            ? ` (breakout ${setupResult.grade} → gate trend; LTF ${setupResult.regime})`
+            : ` (regime LTF ${setupResult.regime} → gate ${gateRegime})`
           : '';
       reason = `Signal passes all gate conditions${align}`;
     } else {
@@ -180,16 +194,27 @@ export class SignalGateService {
   private resolveGateRegime(
     timeframe: string,
     localRegime: MarketRegime,
-    htfRegime?: MarketRegime | null
+    htfRegime: MarketRegime | null | undefined,
+    playbookKey: string | null,
+    grade: 'A' | 'B' | 'C' | 'D'
   ): MarketRegime {
-    if (
-      canAlignLtfRegimeFromHtf(timeframe, htfRegime) &&
-      htfRegime === 'trend' &&
-      (localRegime === 'range' || localRegime === 'chop')
-    ) {
-      return 'trend';
-    }
-    return localRegime;
+    return regimeForGatePass({
+      timeframe,
+      localRegime,
+      htfRegime,
+      playbookKey,
+      grade,
+      alignHtf: (tf, local, htf) => {
+        if (
+          canAlignLtfRegimeFromHtf(tf, htf) &&
+          htf === 'trend' &&
+          (local === 'range' || local === 'chop')
+        ) {
+          return 'trend';
+        }
+        return local;
+      },
+    });
   }
 
   /**
@@ -227,10 +252,10 @@ export class SignalGateService {
 
 function buildSignalGateConfigFromEnv(): Partial<SignalGateConfig> {
   const policy = getRiskPolicy();
-  const minGrade = policy.minSignalGrade;
+  const minGrade = isV3FastSampleMode() ? 'C' : policy.minSignalGrade;
   return {
     minGrade: (['A', 'B', 'C', 'D'].includes(minGrade) ? minGrade : 'A') as SignalGateConfig['minGrade'],
-    minConfidence: policy.minSignalConfidence,
+    minConfidence: isV3FastSampleMode() ? 0.55 : policy.minSignalConfidence,
     allowedRegimes: getSignalGateAllowedRegimes(),
   };
 }

@@ -3,6 +3,7 @@
  * Detects: trend | range | chop (with numeric evidence)
  */
 
+import { getRegimeStrongTrendMinPct, getRegimeTrendMinPct } from '../config/v3-regime-policy';
 import { CandleData } from './setup-gate.analyzer';
 import type { RegimeEvidence } from './setup-gate.types';
 
@@ -96,6 +97,9 @@ export function computeRegimeEvidence(
   let regime: MarketRegime = 'range';
   let matchedRule: string;
 
+  const tf = options?.timeframe ?? '15m';
+  const trendMin = getRegimeTrendMinPct(tf);
+  const strongTrendMin = getRegimeStrongTrendMinPct();
   const chopVol = is5m ? 2.5 : 2.0;
   const rangeBandPct = is5m ? 1.0 : 1.5;
   const rangeVolPct = is5m ? 1.2 : 1.0;
@@ -104,16 +108,16 @@ export function computeRegimeEvidence(
     regime = 'chop';
     matchedRule =
       `CHOP: biến động ${m.volatilityPct.toFixed(2)}% > ${chopVol}% và độ trend ${m.trendStrengthPct.toFixed(2)}% < 0.1% (nhiễu, không có hướng rõ)`;
-  } else if (m.trendStrengthPct > 0.3) {
+  } else if (m.trendStrengthPct > strongTrendMin) {
     regime = 'trend';
-    matchedRule = `TREND: độ trend ${m.trendStrengthPct.toFixed(2)}% > 0.3%`;
+    matchedRule = `TREND: độ trend ${m.trendStrengthPct.toFixed(2)}% > ${strongTrendMin}%`;
   } else if (m.rangePct < rangeBandPct && m.volatilityPct < rangeVolPct) {
     regime = 'range';
     matchedRule =
       `RANGE: biên ${regimeBars}n ${m.rangePct.toFixed(2)}% < ${rangeBandPct}% và biến động ${m.volatilityPct.toFixed(2)}% < ${rangeVolPct}%`;
-  } else if (m.trendStrengthPct > 0.15) {
+  } else if (m.trendStrengthPct > trendMin) {
     regime = 'trend';
-    matchedRule = `TREND (vừa): độ trend ${m.trendStrengthPct.toFixed(2)}% > 0.15%`;
+    matchedRule = `TREND (${tf}): độ trend ${m.trendStrengthPct.toFixed(2)}% > ${trendMin}%`;
   } else {
     regime = 'range';
     matchedRule =
