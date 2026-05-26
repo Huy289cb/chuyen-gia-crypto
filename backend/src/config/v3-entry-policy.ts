@@ -41,6 +41,13 @@ export function isRangeEntryBlocked(regime: string): boolean {
   return regime === 'range' || regime === 'chop' || regime === 'unknown';
 }
 
+/** Effective regime for entry checks — matches signal gate pass logic (incl. breakout bypass). */
+export function resolveGateRegimeFromSignal(
+  signalResult: { gateRegime?: MarketRegime; setupResult: { regime: MarketRegime } } | null | undefined
+): MarketRegime | 'unknown' {
+  return signalResult?.gateRegime ?? signalResult?.setupResult.regime ?? 'unknown';
+}
+
 export function getSignalGateAllowedRegimes(): SignalGateConfig['allowedRegimes'] {
   if (isV3FastSampleMode()) {
     return ['trend', 'range'];

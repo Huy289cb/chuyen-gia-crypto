@@ -16,7 +16,12 @@ import {
   reconcileExpectedRr,
 } from '../utils/trade-levels';
 import { getRiskPolicy } from '../config/risk-policy';
-import { isRegimeAllowedForEntry, getV3RequireHtfTrend } from '../config/v3-entry-policy';
+import {
+  getV3RequireHtfTrend,
+  isRangeEntryBlocked,
+  isRegimeAllowedForEntry,
+  resolveGateRegimeFromSignal,
+} from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import { getScanResult } from '../schedulers/market-scan.scheduler';
 import type { UnifiedCandle } from './candle.service';
@@ -122,8 +127,7 @@ export class GroqDispatchService {
         };
       }
 
-      const gateRegime =
-        signalResult.gateRegime ?? signalResult.setupResult.regime ?? 'unknown';
+      const gateRegime = resolveGateRegimeFromSignal(signalResult);
       if (!isRegimeAllowedForEntry(gateRegime)) {
         return {
           decision: 'no_trade',
@@ -291,7 +295,7 @@ export class GroqDispatchService {
             playbook_key: signalResult?.setupResult.playbookKey || 'unknown',
             grade: signalResult?.setupResult.grade ?? 'D',
             confidence: signalResult?.setupResult.confidence ?? 0,
-            regime: signalResult?.setupResult.regime ?? 'unknown',
+            regime: resolveGateRegimeFromSignal(signalResult ?? undefined),
             decision: 'no_trade',
             reason: `Account guard: ${accountGuard.reason}`,
             method_id,
@@ -346,17 +350,18 @@ export class GroqDispatchService {
 
     const gateGrade = signalResult?.setupResult.grade ?? 'D';
     const gateConfidence = signalResult?.setupResult.confidence ?? 0;
-    const gateRegime = signalResult?.setupResult.regime ?? 'unknown';
+    const gateRegime = resolveGateRegimeFromSignal(signalResult);
+    const localRegime = signalResult?.setupResult.regime ?? 'unknown';
     const gatePlaybook = signalResult?.setupResult.playbookKey || 'unknown';
 
     // LLM veto-only: hold = veto; buy/sell = confirm signal gate pass
     const llmConfirms = analysis.action !== 'hold';
-    const blockRange =
-      process.env.V3_BLOCK_RANGE_ENTRIES !== 'false' &&
-      (gateRegime === 'range' || gateRegime === 'chop');
+    const blockRange = isRangeEntryBlocked(gateRegime);
 
     if (llmConfirms && blockRange) {
-      const reason = `Regime ${gateRegime} blocked for entries (V3_BLOCK_RANGE_ENTRIES)`;
+      const ltfNote =
+        localRegime !== gateRegime ? ` (LTF ${localRegime}, gate ${gateRegime})` : '';
+      const reason = `Regime ${gateRegime} blocked for entries (V3_BLOCK_RANGE_ENTRIES)${ltfNote}`;
       if (this.config.enableMemory) {
         await memoryService.storeDecision({
           symbol,
@@ -382,7 +387,9 @@ export class GroqDispatchService {
     const htfTf = getV3RequireHtfTrend();
     if (llmConfirms && htfTf) {
       const htfScan = getScanResult(symbol, htfTf);
-      const htfRegime = htfScan?.signalResult.setupResult.regime ?? 'unknown';
+      const htfRegime = htfScan?.signalResult
+        ? resolveGateRegimeFromSignal(htfScan.signalResult)
+        : 'unknown';
       if (htfRegime !== 'trend') {
         const reason = `HTF ${htfTf} regime ${htfRegime} !== trend (V3_REQUIRE_HTF_TREND)`;
         if (this.config.enableMemory) {

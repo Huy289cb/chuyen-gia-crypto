@@ -62,6 +62,10 @@ grep "PASS\|breakout.*gate trend" backend/logs/worker-out.log | tail -20
 curl -s http://127.0.0.1:3000/api/dashboard/signals?symbol=BTC | jq '.data[0].pass, .data[0].reasonCodes'
 ```
 
+## Execution layer (groq-dispatch)
+
+After signal gate PASS with `gateRegime=trend` (breakout bypass), LLM dispatch must use **`signalResult.gateRegime`**, not `setupResult.regime`, for `V3_BLOCK_RANGE_ENTRIES`. Fixed 2026-05-26 — keep `V3_BLOCK_RANGE_ENTRIES=true` on PnL+.
+
 ## Rollback
 
 ```env
