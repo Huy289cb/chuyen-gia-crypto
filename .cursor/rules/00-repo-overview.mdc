@@ -8,7 +8,8 @@ alwaysApply: true
 ## Layout
 - `backend/` — Express + TypeScript + Prisma (primary API/worker); deploy on **VPS** via `scripts/deploy.sh`
 - `frontend/` — Next.js 15 App Router dashboard (port **3001**); deploy on **Vercel** (git push only)
-- `docs/` — `docs/deployment.md`, `docs/v3-operations.md`, `docs/api-spec.md`, `docs/architecture.md`
+- `docs/` — `docs/deployment.md`, `docs/local-postgres.md`, `docs/v3-operations.md`, `docs/api-spec.md`, `docs/architecture.md`
+- `docker/local/` — Docker Compose **Postgres** on VPS/dev; see `docs/local-postgres.md`
 - `scripts/deploy.sh` — VPS backend rollout (PM2 reload + health check)
 - `backend-go/` — separate Go service; do not assume it when editing Node backend unless the task says so
 - `frontend-old/` — legacy Vite app; avoid unless migrating

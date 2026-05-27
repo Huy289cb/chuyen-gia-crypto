@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## Environment
 - Copy from `backend/.env.example`; never commit secrets (`BINANCE_API_SECRET`, `GROQ_API_KEY*`, `DATABASE_URL`)
-- Production requires `DATABASE_URL`; optional `PRISMA_CONNECTION_LIMIT` for Neon pool sizing (`lib/prisma.ts`)
+- Production requires `DATABASE_URL`; optional `PRISMA_CONNECTION_LIMIT` for Prisma pool sizing (`lib/prisma.ts`)
 - CORS: `ALLOWED_ORIGINS` (see `config/cors.ts`)
 - Binance: gated by `BINANCE_ENABLED=true`; base URL, keys, `BINANCE_SYMBOL` in `.env.example`
 - Signal gate: `MIN_SIGNAL_GRADE`, `MIN_SIGNAL_CONFIDENCE` (see `getRiskPolicy()` / `signal-gate.service.ts`)

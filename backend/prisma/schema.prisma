@@ -1,6 +1,6 @@
 // Prisma Schema for Crypto Analyzer Backend
 // Source of truth for database structure
-// Target: Neon Postgres
+// Target: PostgreSQL (Prisma)
 
 generator client {
   provider = "prisma-client-js"

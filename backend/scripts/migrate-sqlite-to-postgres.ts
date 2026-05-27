@@ -1,7 +1,7 @@
 /**
  * SQLite to Postgres Migration Script
  * 
- * This script migrates data from the existing SQLite database to Neon Postgres.
+ * This script migrates data from the existing SQLite database to PostgreSQL.
  * It reads from backend/data/predictions.db and writes to the Postgres database.
  * 
  * Usage:

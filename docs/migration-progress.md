@@ -1,9 +1,11 @@
-# TypeScript + Prisma + Neon Postgres Migration Progress
+# TypeScript + Prisma + Postgres — Migration progress (lịch sử)
+
+> **Vận hành hiện tại (2026-05):** Database production/dev là **PostgreSQL self-hosted** qua Docker (`docker/local/`, `docs/local-postgres.md`). Tài liệu này giữ lại **lịch sử** chuyển từ SQLite sang TypeScript + Prisma; không còn phụ thuộc Neon.
 
 ## Overview
-This document tracks the implementation progress for migrating the backend from Node.js + SQLite to Node.js + TypeScript + Prisma + Neon Postgres.
+This document tracks the implementation progress for migrating the backend from Node.js + SQLite to Node.js + TypeScript + Prisma + **PostgreSQL**.
 
-**Plan Document:** `docs/plans/big-update-nodejs-typescript-prisma-neon-postgres.md`
+**Plan document (tên file lịch sử):** `docs/plans/big-update-nodejs-typescript-prisma-neon-postgres.md`
 
 ## Completed Tasks
 
@@ -90,7 +92,7 @@ This document tracks the implementation progress for migrating the backend from 
 
 ### 5. Deployment Configuration ✅
 - **Environment Variables** (`.env.example`)
-  - Added `DATABASE_URL` (Neon Postgres)
+  - Added `DATABASE_URL` (PostgreSQL)
   - Added `DIRECT_URL` (connection pooling)
   - Added `WORKER_LEADER_LOCK_KEY`
   - Added `API_ONLY` / `WORKER_ONLY` flags
@@ -162,15 +164,14 @@ cd backend
 npm install
 ```
 
-### 2. Set Up Neon Postgres
-1. Create a Neon account at https://console.neon.tech/
-2. Create a new project
-3. Copy the connection string
-4. Update `.env` with:
-   ```
-   DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
-   DIRECT_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
-   ```
+### 2. Set Up PostgreSQL
+
+Khuyến nghị: **[local-postgres.md](./local-postgres.md)** (`docker/local/`).
+
+1. `cd docker/local && cp env.example .env && docker compose up -d`
+2. Trong `backend/.env`, đặt `DATABASE_URL` và `DIRECT_URL` trỏ `127.0.0.1` (cùng user/password/db với `docker/local/.env`).
+
+*(Postgres managed trên cloud vẫn dùng được: chỉ cần URL + `sslmode` theo nhà cung cấp.)*
 
 ### 3. Run Prisma Migrations
 ```bash
@@ -211,11 +212,11 @@ The next major task is porting business services and route logic from legacy JS 
 ### Memory Constraints (1 vCPU / 1 GB RAM)
 - API: 300M max memory
 - Worker: 350M max memory
-- Database: Offloaded to Neon (not on VPS)
+- Database: **PostgreSQL** (Docker trên VPS hoặc host riêng; xem `docs/local-postgres.md`)
 
 ### Data Flow
 ```
-Frontend → Nginx → API Process → Prisma → Neon Postgres
+Frontend → Nginx → API Process → Prisma → PostgreSQL
                     ↓
                  Worker Process (scheduler, sync tasks)
 ```
@@ -234,7 +235,7 @@ If the migration encounters issues:
 1. Stop new processes
 2. Continue using old `node src/index.js` backend
 3. SQLite database remains unchanged
-4. Neon data can be kept for diagnosis
+4. Giữ bản backup Postgres / `pg_dump` nếu cần chẩn đoán sau
 
 ## File Structure
 
@@ -276,7 +277,7 @@ Overall Progress: **100% complete for the defined migration scope**
 
 - Prisma schema (`prisma/schema.prisma`) is fully defined with all models, relations, and indexes
 - No migration history files exist in `prisma/migrations/` because:
-  - This is a fresh deployment to Neon Postgres
+  - Fresh deployment often uses `prisma db push` before migration history is committed
   - Schema will be applied directly via `prisma db push` or initial migration on first deployment
   - Migration history will be created after first deployment
 - For new deployments, use: `npx prisma db push` or `npx prisma migrate dev --name init`

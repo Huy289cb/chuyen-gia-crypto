@@ -6,7 +6,7 @@ Crypto Trend Analyzer là hệ thống phân tích crypto sử dụng **ICT Smar
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Frontend      │────▶│   Backend API   │────▶│  Neon Postgres  │
+│   Frontend      │────▶│   Backend API   │────▶│   PostgreSQL    │
 │ (Next.js 15)    │     │   (Express/TS)  │     │   (Prisma ORM)  │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                                │
@@ -34,9 +34,9 @@ Crypto Trend Analyzer là hệ thống phân tích crypto sử dụng **ICT Smar
                               └──────────────┬──────────────┘
                                              ▼
                                     ┌─────────────────┐
-                                    │  Neon Postgres  │
+                                    │  PostgreSQL     │
                                     │  (OHLCV +       │
-                                    │   Predictions)  │
+                                    │   Predictions, │
                                     │   Positions)    │
                                     └─────────────────┘
 ```
@@ -44,7 +44,7 @@ Crypto Trend Analyzer là hệ thống phân tích crypto sử dụng **ICT Smar
 **Architecture Notes:**
 - Backend rewritten in TypeScript with Prisma ORM
 - Two-process architecture: `crypto-api` (HTTP) + `crypto-worker` (scheduler/sync)
-- Production database: Neon Postgres (managed PostgreSQL)
+- Production database: **PostgreSQL** (mặc định: container `docker/local/` trên VPS, bind `127.0.0.1`)
 - SQLite retained only for migration input during cutover
 - Worker uses PostgreSQL advisory lock for leader election
 
@@ -162,7 +162,7 @@ The system is designed to support multiple trading methods running in parallel. 
 - **API Calls**: Chỉ gọi backend, không gọi trực tiếp external APIs
 
 ### Backend (Port 3000)
-- **Stack**: Node.js, TypeScript, Express, node-cron, Prisma ORM, Neon Postgres
+- **Stack**: Node.js, TypeScript, Express, node-cron, Prisma ORM, PostgreSQL
 - **Architecture**: Two-process split (API + Worker)
   - `crypto-api`: HTTP API server (serves endpoints)
   - `crypto-worker`: Background worker (scheduler, price sync, testnet sync)
@@ -266,8 +266,8 @@ The system is designed to support multiple trading methods running in parallel. 
   }
   ```
 
-### Database Layer (Neon Postgres + Prisma)
-- **Production Database**: Neon Postgres (managed PostgreSQL)
+### Database Layer (PostgreSQL + Prisma)
+- **Database**: PostgreSQL — cấu hình qua `DATABASE_URL` / `DIRECT_URL` (xem `docs/local-postgres.md`, `backend/.env.example`)
 - **ORM**: Prisma with schema as source of truth
 - **Schema File**: `prisma/schema.prisma`
 - **Migration**: Fresh deployment uses `prisma db push` or `prisma migrate dev --name init`
@@ -309,7 +309,7 @@ Deploy: backend `scripts/deploy.sh` on VPS; frontend Vercel (`docs/deployment.md
 
 ### Current (Production)
 - Two-process architecture (API + Worker) on 1 vCPU / 1 GB RAM VPS
-- Neon Postgres for database (offloaded from VPS)
+- PostgreSQL (thường chạy cùng host qua Docker; xem `docker/local/`)
 - In-memory cache with TTL
 - Worker leader lock via PostgreSQL advisory lock
 - PM2 for process management with memory caps (API: 300M, Worker: 350M)

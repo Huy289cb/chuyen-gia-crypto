@@ -5,7 +5,7 @@
 - Node.js >= 18
 - npm or yarn
 - Groq API Key (free tier available)
-- Neon Postgres account (for production deployment)
+- Docker + Docker Compose v2 (để chạy Postgres local — xem `docs/local-postgres.md`)
 
 ## Installation
 
@@ -24,7 +24,7 @@ npm install
 - Node.js + TypeScript 5.7
 - Express 4.19
 - Prisma ORM 5.22
-- Neon Postgres (production)
+- PostgreSQL (Docker trên VPS hoặc máy dev)
 - node-cron 3.0
 
 ### 3. Install Frontend Dependencies (Next.js + TypeScript)
@@ -39,15 +39,26 @@ npm install
 - Tailwind CSS 3.4
 - Lucide React icons
 
-### 4. Set Up Neon Postgres (Production)
-1. Create a Neon account at https://console.neon.tech/
-2. Create a new project
-3. Copy the connection string
-4. Update `backend/.env` with:
-   ```
-   DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
-   DIRECT_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
-   ```
+### 4. PostgreSQL (Docker — khuyến nghị)
+
+Xem hướng dẫn đầy đủ: **[local-postgres.md](./local-postgres.md)**.
+
+Tóm tắt:
+
+```bash
+cd docker/local
+cp env.example .env
+docker compose up -d   # hoặc: sudo docker compose up -d
+```
+
+Sau đó trong `backend/.env`:
+
+```env
+DATABASE_URL="postgresql://crypto:crypto_local_dev@127.0.0.1:5432/chuyen_gia?schema=public"
+DIRECT_URL="postgresql://crypto:crypto_local_dev@127.0.0.1:5432/chuyen_gia?schema=public"
+```
+
+*(Đổi user/mật khẩu/db nếu bạn đã sửa `docker/local/.env`.)*
 
 ### 5. Initialize Database Schema
 ```bash
@@ -73,9 +84,9 @@ Create `backend/.env` (see `.env.example` for reference):
 NODE_ENV=development
 PORT=3000
 
-# Database (Neon Postgres)
-DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
-DIRECT_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+# Database (PostgreSQL — Docker local, xem docs/local-postgres.md)
+DATABASE_URL=postgresql://crypto:crypto_local_dev@127.0.0.1:5432/chuyen_gia?schema=public
+DIRECT_URL=postgresql://crypto:crypto_local_dev@127.0.0.1:5432/chuyen_gia?schema=public
 
 # Process Configuration
 API_ONLY=false
@@ -222,8 +233,8 @@ npm run prisma:migrate
 - Check rate limits (Groq free tier: 20 requests/minute)
 
 ### Database errors
-- Verify DATABASE_URL is correct
-- Check Neon Postgres is accessible
+- Verify `DATABASE_URL` / `DIRECT_URL` in `backend/.env`
+- Ensure Postgres container is running: `cd docker/local && docker compose ps`
 - Run `npm run prisma:generate` to regenerate client
 - Run `npm run prisma:db:push` to sync schema
 
@@ -231,13 +242,14 @@ npm run prisma:migrate
 
 ### Environment
 - Set NODE_ENV=production
-- Configure DATABASE_URL and DIRECT_URL (Neon Postgres)
+- Configure `DATABASE_URL` and `DIRECT_URL` (PostgreSQL — xem `docs/local-postgres.md`)
 - Set API_ONLY=true for API process, WORKER_ONLY=true for worker process
 - Configure ALLOWED_ORIGINS for production domains
 - Add rate limiting middleware
 
-### Database (Neon Postgres)
-- Production database: Neon Postgres (managed PostgreSQL)
+### Database (PostgreSQL)
+
+- Database: **PostgreSQL** (mặc định Docker trên VPS — `docker/local/`)
 - Schema source of truth: `prisma/schema.prisma`
 - Use Prisma migrations for schema changes
 - Data retention: 15m candles kept for 30 days (auto-cleanup)

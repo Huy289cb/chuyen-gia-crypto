@@ -68,7 +68,7 @@ export interface SaveOhlcvBatchOptions {
 }
 
 /**
- * Batch save OHLCV candles (sequential upserts; keep maxBars small for Neon load).
+ * Batch save OHLCV candles (sequential upserts; keep maxBars small for DB load).
  */
 export async function saveOhlcvCandlesBatch(
   candles: OhlcvCandleData[],

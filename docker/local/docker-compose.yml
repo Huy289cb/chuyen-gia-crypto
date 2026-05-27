@@ -1,0 +1,29 @@
+# Local PostgreSQL for backend Prisma (dev / VPS self-host).
+# Usage: see docker/local/README.md
+#
+#   cd docker/local && cp env.example .env && docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chuyen-gia-postgres
+    restart: unless-stopped
+    # Bind localhost only on the host (VPS-safe). Use 0.0.0.0 in env if you need LAN access.
+    ports:
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crypto}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crypto_local_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-chuyen_gia}
+    volumes:
+      - chuyen_gia_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  chuyen_gia_pgdata:
+    name: chuyen_gia_pgdata

@@ -1,7 +1,7 @@
 # Overnight V3 Run Review — 2026-05-20 → 2026-05-21 (UTC)
 
 **Review window:** `2026-05-20T00:00:00Z` through `2026-05-21T02:00:00Z` (log tail at review time)  
-**Evidence sources:** PM2 (`crypto-api`, `crypto-worker` v1.2.37), `backend/logs/*.log`, Neon Postgres (Prisma), live `http://127.0.0.1:3000/api/*`, Vercel proxy spot-check  
+**Evidence sources:** PM2 (`crypto-api`, `crypto-worker` v1.2.37), `backend/logs/*.log`, PostgreSQL (Prisma), live `http://127.0.0.1:3000/api/*`, Vercel proxy spot-check  
 **Stable V3 worker period:** last deploy restart cluster around `2026-05-20T14:53:27Z`; PM2 uptime ~11h at review  
 
 ---

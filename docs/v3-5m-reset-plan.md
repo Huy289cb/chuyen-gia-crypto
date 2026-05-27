@@ -215,7 +215,7 @@ SELECT COUNT(*) AS decisions FROM trade_decisions;
 SELECT COUNT(*) AS outcomes FROM trade_outcomes;
 SELECT COUNT(*) AS positions FROM testnet_positions;
 SQL
-# Hoặc pg_dump snapshot Neon nếu có quyền
+# Hoặc pg_dump toàn DB trước khi wipe (khuyến nghị trên production)
 ```
 
 ### Bước 1 — Binance testnet sạch
@@ -355,7 +355,7 @@ curl -s http://127.0.0.1:3000/api/account/balance
 |----------|-----------|
 | TF về cũ | `V3_SIGNAL_GATE_TIMEFRAMES=15m,1h,4h`, cron `2,17,32,47` |
 | Tắt 5m experiment | Không cần restore DB cũ nếu đã backup; chấp nhận mất sample 5m |
-| Khôi phục lịch sử | Restore Neon snapshot pre-wipe |
+| Khôi phục lịch sử | Restore từ file `pg_dump` / backup volume Postgres trước khi wipe |
 
 ---
 

@@ -21,7 +21,7 @@
 - No hallucinated APIs, env vars, DB columns, market data, balances, or trading results.
 - If the repo or runtime does not prove a fact, say it is unknown and inspect first.
 - Prefer `hold` or no change over unsafe automation when trading intent is ambiguous.
-- When DB or schema matters, use `backend/prisma/schema.prisma` and `backend/src/lib/prisma.ts` (PostgreSQL/Neon), not legacy SQLite docs.
+- When DB or schema matters, use `backend/prisma/schema.prisma` and `backend/src/lib/prisma.ts` (PostgreSQL), not legacy SQLite docs.
 - When runtime behavior, thresholds, or active methods matter, prefer code in `backend/src/config`, `backend/src/db`, and live services over historical docs or plan files.
 
 ## Crypto And Trading Domain

@@ -8,7 +8,7 @@
 
 ## 1. Executive summary
 
-The deployment exhibited three tightly coupled failure modes visible in code: **(A)** a redundant `useEffect` in `MarketChartPanel` that depended on a non-memoized `refresh` function, which could cause **repeated `/api/market/*` calls** and UI loading flicker; **(B)** the v3 dashboard mounted **multiple independent copies** of the same hooks (`useDashboardSummary` x3, `useAccountData` x4, `useIntelligenceData` x5), each firing parallel `fetch` batches, which **amplified Prisma load** on every dashboard load; **(C)** `IndicatorPanel` and `MarketChartPanel` each called `useMarketData` with **different timeframes** (chart user-selectable vs indicators fixed `15m`), so the UI could show **inconsistent** market state. Testnet balances show zeros when `getTestnetAccount` finds no row—`/api/account/balance` returns explicit zeros rather than an error. Infrastructure risk: **two PM2 processes** (`crypto-api` + `crypto-worker`) each use Prisma; against Neon `connection_limit=3`, timeouts are likely under burst load.
+The deployment exhibited three tightly coupled failure modes visible in code: **(A)** a redundant `useEffect` in `MarketChartPanel` that depended on a non-memoized `refresh` function, which could cause **repeated `/api/market/*` calls** and UI loading flicker; **(B)** the v3 dashboard mounted **multiple independent copies** of the same hooks (`useDashboardSummary` x3, `useAccountData` x4, `useIntelligenceData` x5), each firing parallel `fetch` batches, which **amplified Prisma load** on every dashboard load; **(C)** `IndicatorPanel` and `MarketChartPanel` each called `useMarketData` with **different timeframes** (chart user-selectable vs indicators fixed `15m`), so the UI could show **inconsistent** market state. Testnet balances show zeros when `getTestnetAccount` finds no row—`/api/account/balance` returns explicit zeros rather than an error. Infrastructure risk: **two PM2 processes** (`crypto-api` + `crypto-worker`) each use Prisma; with a **small Postgres `max_connections` / pool limit**, timeouts are likely under burst load.
 
 **Implemented mitigations (this pass):** shared `V3DashboardDataProvider` with single fetch streams per category; `useMarketData` stabilized with `useCallback` and duplicate chart `useEffect` removed; shared chart timeframe for chart + indicators; Prisma client `datasources.db.url` resolver appends configurable `connection_limit` for production.
 
@@ -104,7 +104,7 @@ flowchart TD
   end
   API[Express /api] --> Prisma[Prisma per process]
   Worker[crypto-worker] --> Prisma
-  Prisma --> DB[(Postgres / Neon)]
+  Prisma --> DB[(PostgreSQL)]
 ```
 
 1. **Unstable `refresh` + redundant effect** → repeated market routes (addressed).

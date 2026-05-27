@@ -5,8 +5,8 @@ import { PrismaClient } from '@prisma/client';
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
 /**
- * Optionally caps Prisma engine connections per Node process (important for Neon
- * and other small pools when running `crypto-api` + `crypto-worker` together).
+ * Optionally caps Prisma engine connections per Node process (important for small
+ * Postgres pools when running `crypto-api` + `crypto-worker` together).
  *
  * - If `PRISMA_CONNECTION_LIMIT` is set, it is applied (overwriting any existing
  *   `connection_limit` query param).

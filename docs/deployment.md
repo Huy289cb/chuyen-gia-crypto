@@ -1,5 +1,11 @@
 # Deployment
 
+## Database (PostgreSQL)
+
+- **Default / recommended:** Postgres trong Docker trên cùng VPS (hoặc máy dev) — xem [local-postgres.md](./local-postgres.md) và thư mục `docker/local/`.
+- **`DATABASE_URL` / `DIRECT_URL`:** trỏ tới instance Postgres của bạn (local thường giống nhau; managed cloud thì thêm `sslmode=require` nếu nhà cung cấp yêu cầu).
+- Sau khi đổi URL: `pm2 restart crypto-api crypto-worker --update-env` (hoặc `./scripts/deploy.sh`).
+
 ## Overview
 
 | Target | What deploys | How |

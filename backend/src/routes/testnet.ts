@@ -1,5 +1,5 @@
 /**
- * Testnet Routes backed by Prisma + Neon/Postgres
+ * Testnet Routes backed by Prisma + PostgreSQL
  */
 
 import { Router, Request, Response } from 'express';
