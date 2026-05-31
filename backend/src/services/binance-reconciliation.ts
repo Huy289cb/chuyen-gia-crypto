@@ -21,7 +21,7 @@ import {
   fetchActiveBinancePositions,
   fetchBinancePositionRiskRows,
 } from './binance-exposure.service';
-import { getOpenOrders } from './binanceClient';
+import { getOpenOrders, getOpenAlgoOrders, cancelAlgoOrder } from './binanceClient';
 import { isPhantomReopenEnabled } from '../config/v3-entry-policy';
 import {
   findBinancePositionForSide,
@@ -40,15 +40,17 @@ export async function performStartupReconciliation(): Promise<void> {
     return;
   }
 
-  console.log('[BinanceReconciliation] Starting startup reconciliation...');
+  console.log('[BinanceReconciliation] Running reconciliation cycle...');
 
   try {
     await reconcilePendingOrders();
+    await reconcileOrphanBinanceLimitOrders();
+    await cleanupOrphanBinanceAlgoOrders('BTC');
     await recoverMislabeledPendingOrders();
     await reconcileExecutedOrdersMissingPositions();
     await reconcilePositions();
     
-    console.log('[BinanceReconciliation] Startup reconciliation completed successfully');
+    console.log('[BinanceReconciliation] Reconciliation cycle completed successfully');
   } catch (error: any) {
     console.error('[BinanceReconciliation] Startup reconciliation failed:', error.message);
     // Don't throw - allow the backend to start even if reconciliation fails
@@ -69,16 +71,15 @@ async function reconcilePendingOrders(): Promise<void> {
     return;
   }
 
-  const client = {} as any; // Binance client is not needed for module functions
-
-  // Fetch open orders from Binance
+  const client = {} as any;
   const binanceOrders: any[] = [];
-  for (const order of localPendingOrders) {
+  const symbols = [...new Set(localPendingOrders.map((o) => o.symbol))];
+  for (const sym of symbols) {
     try {
-      const orders = await getOpenOrders(client, `${order.symbol}USDT`);
+      const orders = await getOpenOrders(client, `${sym}USDT`);
       binanceOrders.push(...orders);
     } catch (error: any) {
-      console.error(`[BinanceReconciliation] Failed to fetch open orders for ${order.symbol}:`, error.message);
+      console.error(`[BinanceReconciliation] Failed to fetch open orders for ${sym}:`, error.message);
     }
   }
 
@@ -142,6 +143,84 @@ async function reconcilePendingOrders(): Promise<void> {
       // For now, just log it - user can manually clean up
     }
   }
+}
+
+/**
+ * Detect Binance GTC limit entry orders not tracked locally (DB write failed after place).
+ */
+async function reconcileOrphanBinanceLimitOrders(): Promise<void> {
+  const client = {} as any;
+  let binanceOrders: any[] = [];
+  try {
+    binanceOrders = await getOpenOrders(client, 'BTCUSDT');
+  } catch (error: any) {
+    console.error('[BinanceReconciliation] Failed to fetch BTC open orders:', error.message);
+    return;
+  }
+
+  const limits = binanceOrders.filter(
+    (o) => o.type === 'LIMIT' && (o.status === 'NEW' || o.status === 'PARTIALLY_FILLED')
+  );
+  if (limits.length === 0) return;
+
+  const localPending = await getTestnetPendingOrders({ status: 'pending' });
+  const localIds = new Set(localPending.map((o) => o.binance_order_id).filter(Boolean));
+
+  for (const order of limits) {
+    const binanceOrderId = String(order.orderId);
+    if (localIds.has(binanceOrderId)) continue;
+
+    console.warn(
+      `[BinanceReconciliation] Orphan LIMIT on Binance id=${binanceOrderId} ` +
+        `${order.side} @ ${order.price} qty=${order.quantity} — not in local DB`
+    );
+  }
+}
+
+/**
+ * Cancel SL/TP algo orders when no matching open position on Binance.
+ */
+export async function cleanupOrphanBinanceAlgoOrders(symbol = 'BTC'): Promise<number> {
+  const client = {} as any;
+  const pair = `${symbol.toUpperCase()}USDT`;
+
+  let activePositions: ParsedBinancePosition[] = [];
+  try {
+    activePositions = await fetchActiveBinancePositions();
+  } catch {
+    return 0;
+  }
+
+  const hasExposure = activePositions.some(
+    (p) => p.symbol === symbol.toUpperCase() && p.positionAmt >= 1e-8
+  );
+  if (hasExposure) return 0;
+
+  let algoOrders: any[] = [];
+  try {
+    algoOrders = await getOpenAlgoOrders(client, pair);
+  } catch (error: any) {
+    console.warn(`[BinanceReconciliation] Algo order fetch failed: ${error.message}`);
+    return 0;
+  }
+
+  if (algoOrders.length === 0) return 0;
+
+  let cancelled = 0;
+  for (const order of algoOrders) {
+    const algoId = String(order.algoId ?? order.orderId);
+    try {
+      await cancelAlgoOrder(client, pair, algoId);
+      cancelled += 1;
+      console.log(
+        `[BinanceReconciliation] Cancelled orphan algo ${order.orderType ?? order.type} algoId=${algoId}`
+      );
+    } catch (error: any) {
+      console.warn(`[BinanceReconciliation] Failed to cancel algo ${algoId}: ${error.message}`);
+    }
+  }
+
+  return cancelled;
 }
 
 /**

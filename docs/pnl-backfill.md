@@ -73,6 +73,22 @@ Backfill **never** touches:
 - `pipeline_v3_kim_nghia` (`PIPELINE_EVENT_POSITION_ID`) — pipeline event anchor, not a trade
 - Rows with `size_qty` ≤ 0
 
+## Wallet vs DB gap
+
+Demo account **TRANSFER** top-ups (e.g. +5000×3) inflate stale `starting_balance` while `realized_pnl` only sums DB positions.
+
+Fix: reconcile from Binance **income API** (source of truth for trading PnL):
+
+```bash
+cd backend
+npm run testnet:reconcile-wallet
+npm run testnet:reconcile-wallet -- --cleanup-algo   # also cancel orphan SL/TP algo
+```
+
+Sets `starting_balance = wallet - (REALIZED_PNL + COMMISSION + FUNDING_FEE)` so `wallet - starting ≈ net trading PnL`.
+
+Worker auto-runs every `WALLET_RECONCILE_INTERVAL_MS` (default 15 min) during balance sync.
+
 If an older backfill run included the pipeline row by mistake:
 
 ```bash

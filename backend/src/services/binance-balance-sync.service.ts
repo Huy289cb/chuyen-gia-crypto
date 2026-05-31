@@ -84,6 +84,14 @@ export async function resolveTestnetAccountBalances(
 }
 
 /** Sync all testnet accounts when Binance is enabled (worker periodic job). */
+let lastWalletReconcileAt = 0;
+
+function walletReconcileIntervalMs(): number {
+  const raw = process.env.WALLET_RECONCILE_INTERVAL_MS?.trim();
+  const parsed = raw ? parseInt(raw, 10) : 900_000;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 900_000;
+}
+
 export async function syncAllTestnetAccountsFromBinance(): Promise<void> {
   if (process.env.BINANCE_ENABLED !== 'true') return;
 
@@ -96,6 +104,20 @@ export async function syncAllTestnetAccountsFromBinance(): Promise<void> {
       console.warn(
         `[BinanceBalanceSync] Failed for ${account.symbol}/${account.method_id}: ${msg}`
       );
+    }
+  }
+
+  const now = Date.now();
+  if (now - lastWalletReconcileAt >= walletReconcileIntervalMs()) {
+    lastWalletReconcileAt = now;
+    try {
+      const { reconcileTestnetWalletFromBinance } = await import('./wallet-reconcile.service');
+      for (const account of accounts) {
+        await reconcileTestnetWalletFromBinance(account.id);
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[BinanceBalanceSync] Wallet reconcile skipped: ${msg}`);
     }
   }
 }

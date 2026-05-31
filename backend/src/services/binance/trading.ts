@@ -324,24 +324,27 @@ export async function cancelAllAlgoOrders(symbol: string): Promise<any> {
  */
 export async function getOpenAlgoOrders(symbol: string): Promise<any[]> {
   try {
-    const response: any = await get(endpoints.ALGO_ORDER, { symbol }, true);
-    
-    return response.map((order: any) => ({
+    const response: any = await get(endpoints.OPEN_ALGO_ORDERS, { symbol }, true);
+    const rows = Array.isArray(response) ? response : response?.orders ?? [];
+
+    return rows.map((order: any) => ({
+      algoId: order.algoId,
       orderId: order.algoId,
       clientOrderId: order.clientAlgoId,
       symbol: order.symbol,
       side: order.side,
-      type: order.type,
+      type: order.orderType ?? order.type,
+      orderType: order.orderType ?? order.type,
+      algoStatus: order.algoStatus ?? order.status,
       positionSide: order.positionSide,
       price: order.price ? parseFloat(order.price) : null,
       stopPrice: order.stopPrice ? parseFloat(order.stopPrice) : null,
       triggerPrice: order.triggerPrice ? parseFloat(order.triggerPrice) : null,
-      origQty: parseFloat(order.origQty),
-      executedQty: parseFloat(order.executedQty),
-      cummulativeQuoteQty: parseFloat(order.cummulativeQuoteQty),
-      status: order.status,
+      quantity: parseFloat(order.quantity ?? order.origQty ?? 0),
+      origQty: parseFloat(order.quantity ?? order.origQty ?? 0),
+      status: order.algoStatus ?? order.status,
       timeInForce: order.timeInForce,
-      transactTime: order.transactTime,
+      reduceOnly: order.reduceOnly === true || order.reduceOnly === 'true',
       updateTime: order.updateTime,
     }));
   } catch (error: any) {

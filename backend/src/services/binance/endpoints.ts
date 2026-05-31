@@ -26,6 +26,8 @@ export const endpoints = {
   OPEN_ORDERS: '/fapi/v1/openOrders',
   ALL_ORDERS: '/fapi/v1/allOrders',
   USER_TRADES: '/fapi/v1/userTrades',
+  INCOME: '/fapi/v1/income',
+  OPEN_ALGO_ORDERS: '/fapi/v1/openAlgoOrders',
   
   // Position management (SIGNED)
   LEVERAGE: '/fapi/v1/leverage',

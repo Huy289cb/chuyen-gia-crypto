@@ -16,6 +16,7 @@
     "testnet:cleanup": "tsx scripts/testnet-cleanup.ts",
     "testnet:backfill-pnl": "tsx scripts/backfill-testnet-pnl.ts",
     "testnet:fix-pipeline-backfill": "tsx scripts/fix-pipeline-backfill-artifact.ts",
+    "testnet:reconcile-wallet": "tsx scripts/reconcile-testnet-wallet.ts",
     "v3:reset-5m": "tsx scripts/v3-reset-for-5m.ts",
     "v3:backfill-ohlcv": "tsx scripts/v3-backfill-ohlcv.ts",
     "test": "vitest",
