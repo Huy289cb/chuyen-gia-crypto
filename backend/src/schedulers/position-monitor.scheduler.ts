@@ -111,7 +111,9 @@ async function runPositionMonitor() {
     console.log('[PositionMonitor] Starting position monitor');
 
     const openPositions = await prisma.testnetPosition.findMany({
-      where: { status: 'open' },
+      where: {
+        status: { in: ['open', 'reconciliation_failed_not_on_binance'] },
+      },
       include: { account: true },
     });
 

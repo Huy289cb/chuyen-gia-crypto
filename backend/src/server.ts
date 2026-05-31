@@ -53,31 +53,26 @@ async function startServer() {
     console.log('Health check: http://localhost:' + appConfig.port + '/health');
     console.log('=================================');
 
-    // Initialize Binance services if enabled
-    if (process.env.BINANCE_ENABLED === 'true') {
-      console.log('[Server] BINANCE_ENABLED is true, initializing Binance services...');
+    // Binance user stream + reconciliation run on worker (see binance-runtime-bootstrap).
+    if (
+      process.env.BINANCE_ENABLED === 'true' &&
+      process.env.BINANCE_USER_STREAM_ON_WORKER === 'false'
+    ) {
+      console.log('[Server] Legacy mode: Binance WS/reconciliation on API process');
       import('./services/binance-websocket-sync').then(({ startBinanceWebSocketSync }) => {
         startBinanceWebSocketSync().catch((error) => {
           console.error('[Server] Failed to start Binance WebSocket sync:', error);
         });
-      }).catch((error) => {
-        console.error('[Server] Failed to import Binance WebSocket sync:', error);
       });
-
       import('./services/binance-reconciliation').then(({ initializeBinanceReconciliation }) => {
         initializeBinanceReconciliation().catch((error) => {
           console.error('[Server] Failed to initialize Binance reconciliation:', error);
         });
-      }).catch((error) => {
-        console.error('[Server] Failed to import Binance reconciliation:', error);
       });
-
       import('./services/binance-hedge-mode').then(({ initializeHedgeModeDetection }) => {
         initializeHedgeModeDetection().catch((error) => {
           console.error('[Server] Failed to initialize hedge mode detection:', error);
         });
-      }).catch((error) => {
-        console.error('[Server] Failed to import hedge mode detection:', error);
       });
     }
   });

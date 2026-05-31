@@ -8,6 +8,9 @@ export function hookPendingOrderPlaced(input: {
   entry: number;
   stopLoss: number;
   takeProfit: number;
+  sizeQty?: number;
+  sizeUsd?: number;
+  accountBalance?: number;
   orderId?: string;
   binanceOrderId?: string;
 }): void {
@@ -20,6 +23,9 @@ export function hookPendingOrderPlaced(input: {
       entry: input.entry,
       stopLoss: input.stopLoss,
       takeProfit: input.takeProfit,
+      sizeQty: input.sizeQty,
+      sizeUsd: input.sizeUsd,
+      accountBalance: input.accountBalance,
       extra: {
         order_id: input.orderId,
         binance_order_id: input.binanceOrderId,

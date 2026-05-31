@@ -322,6 +322,47 @@ export async function createTestnetPosition(data: TestnetPositionData): Promise<
   });
 }
 
+/** Statuses that still block new entries (open or wrongly reconciled). */
+export const ACTIVE_TESTNET_POSITION_STATUSES = [
+  'open',
+  'reconciliation_failed_not_on_binance',
+] as const;
+
+/**
+ * Open or recoverable positions (blocks stacking).
+ */
+export async function getActiveTestnetPositions(filters: {
+  accountId?: number;
+  symbol?: string;
+  positionId?: string;
+  methodId?: string;
+  limit?: number;
+}): Promise<any[]> {
+  const where: Record<string, unknown> = {
+    status: { in: [...ACTIVE_TESTNET_POSITION_STATUSES] },
+  };
+
+  if (filters.accountId) where.account_id = filters.accountId;
+  if (filters.symbol) where.symbol = filters.symbol.toUpperCase();
+  if (filters.positionId) where.position_id = filters.positionId;
+  if (filters.methodId) where.account = { method_id: filters.methodId };
+
+  return prisma.testnetPosition.findMany({
+    where,
+    orderBy: { entry_time: 'desc' },
+    take: filters.limit,
+  });
+}
+
+export async function findTestnetPositionByBinanceOrderId(
+  binanceOrderId: string
+): Promise<{ position_id: string } | null> {
+  return prisma.testnetPosition.findFirst({
+    where: { binance_order_id: binanceOrderId },
+    select: { position_id: true },
+  });
+}
+
 /**
  * Get testnet positions
  */

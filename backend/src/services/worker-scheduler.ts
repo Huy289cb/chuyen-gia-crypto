@@ -12,6 +12,7 @@ import { startMarketScanScheduler } from '../schedulers/market-scan.scheduler';
 import { startLLMDispatchScheduler } from '../schedulers/llm-dispatch.scheduler';
 import { V3_LLM_DISPATCH_CRON, V3_MARKET_SCAN_CRON } from '../config/v3-schedulers';
 import { startPositionMonitorScheduler } from '../schedulers/position-monitor.scheduler';
+import { startPendingOrderScheduler } from '../schedulers/pending-order.scheduler';
 import { syncAllTestnetAccountsFromBinance } from './binance-balance-sync.service';
 
 let priceSyncInterval: NodeJS.Timeout | null = null;
@@ -164,6 +165,9 @@ export async function startWorkerScheduler(): Promise<void> {
   
   // Position monitor scheduler - runs every minute
   startPositionMonitorScheduler('*/1 * * * *');
+
+  // Pending limit TTL / drift — every 5 min (also runs at start of LLM dispatch)
+  startPendingOrderScheduler();
 
   if (workerConfig.enableTestnetSync && process.env.BINANCE_ENABLED === 'true') {
     const balanceSyncTask = cron.schedule('*/5 * * * *', () => {

@@ -153,6 +153,11 @@ export class GroqDispatchService {
       userPrompt += '\n\n' + memoryService.formatContextForPrompt(memoryContext);
     }
 
+    const reflectionPrompt = await memoryService.formatRecentReflectionsForPrompt(symbol);
+    if (reflectionPrompt) {
+      userPrompt += '\n\n' + reflectionPrompt;
+    }
+
     // Step 4: Call Groq with strict validation
     let analysis = await this.callGroqWithValidation(systemPrompt, userPrompt);
 

@@ -2,9 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/repositories/testnet.repository', () => ({
   getOrCreateTestnetAccount: vi.fn(),
-  getTestnetPositions: vi.fn(),
+  getActiveTestnetPositions: vi.fn(),
   getTestnetPendingOrders: vi.fn(),
   createTestnetPendingOrder: vi.fn(),
+}));
+
+vi.mock('../../src/services/binance-exposure.service', () => ({
+  hasBinanceExposureForSide: vi.fn(),
+}));
+
+vi.mock('../../src/services/account-risk-guard.service', () => ({
+  assertTestnetAccountCanOpenTrade: vi.fn().mockResolvedValue({ allowed: true }),
+}));
+
+vi.mock('../../src/services/binance-hedge-mode', () => ({
+  ensurePositionModeDetected: vi.fn().mockResolvedValue('ONE_WAY'),
 }));
 
 vi.mock('../../src/services/binanceClient', () => ({
@@ -27,10 +39,11 @@ vi.mock('../../src/config/methods', () => ({
 import { executeV3Trade } from '../../src/services/v3-trade-execution.service';
 import {
   getOrCreateTestnetAccount,
-  getTestnetPositions,
+  getActiveTestnetPositions,
   getTestnetPendingOrders,
   createTestnetPendingOrder,
 } from '../../src/repositories/testnet.repository';
+import { hasBinanceExposureForSide } from '../../src/services/binance-exposure.service';
 import {
   initTestnetClient,
   normalizeQuantityForSymbol,
@@ -41,6 +54,7 @@ describe('executeV3Trade', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BINANCE_ENABLED = 'true';
+    vi.mocked(hasBinanceExposureForSide).mockResolvedValue(false);
   });
 
   it('rejects when BINANCE_ENABLED is false', async () => {
@@ -66,7 +80,7 @@ describe('executeV3Trade', () => {
       id: 1,
       current_balance: 10000,
     } as never);
-    vi.mocked(getTestnetPositions).mockResolvedValue([]);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
     vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
     vi.mocked(initTestnetClient).mockReturnValue({} as never);
     vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
@@ -110,7 +124,7 @@ describe('executeV3Trade', () => {
       id: 1,
       current_balance: 10000,
     } as never);
-    vi.mocked(getTestnetPositions).mockResolvedValue([
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([
       { side: 'long', size_usd: 500 },
     ] as never);
     vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
@@ -133,12 +147,39 @@ describe('executeV3Trade', () => {
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 
+  it('rejects when Binance already has same-side exposure', async () => {
+    vi.mocked(hasBinanceExposureForSide).mockResolvedValue(true);
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      id: 1,
+      current_balance: 10000,
+    } as never);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
+    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
+
+    const result = await executeV3Trade({
+      symbol: 'BTC',
+      timeframe: '1h',
+      analysis: {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.9,
+        suggested_entry: 100000,
+        suggested_stop_loss: 99000,
+        suggested_take_profit: 102000,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain('Binance already has');
+    expect(placeLimitOrder).not.toHaveBeenCalled();
+  });
+
   it('rejects when normalized quantity is invalid', async () => {
     vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
       id: 1,
       current_balance: 10000,
     } as never);
-    vi.mocked(getTestnetPositions).mockResolvedValue([]);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
     vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
     vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
       rawQty: 0.00001,

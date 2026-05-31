@@ -62,6 +62,27 @@ export async function syncTestnetAccountBySymbol(
   return syncTestnetAccountFromBinance(account.id);
 }
 
+/** Wallet/equity for Telegram trade notifications (syncs from Binance when enabled). */
+export async function resolveTestnetAccountBalances(
+  accountId: number,
+  syncFromBinance = true
+): Promise<{ account_balance: number; account_equity: number }> {
+  if (syncFromBinance && process.env.BINANCE_ENABLED === 'true') {
+    try {
+      const snap = await syncTestnetAccountFromBinance(accountId);
+      return { account_balance: snap.walletBalance, account_equity: snap.equity };
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[BinanceBalanceSync] resolveTestnetAccountBalances sync failed: ${msg}`);
+    }
+  }
+
+  const row = await prisma.testnetAccount.findUnique({ where: { id: accountId } });
+  const balance = Number(row?.current_balance ?? 0);
+  const equity = Number(row?.equity ?? balance);
+  return { account_balance: balance, account_equity: equity };
+}
+
 /** Sync all testnet accounts when Binance is enabled (worker periodic job). */
 export async function syncAllTestnetAccountsFromBinance(): Promise<void> {
   if (process.env.BINANCE_ENABLED !== 'true') return;

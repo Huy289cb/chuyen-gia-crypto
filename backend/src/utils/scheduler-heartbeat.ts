@@ -4,7 +4,11 @@
 
 import { prisma } from '../lib/prisma';
 
-export type SchedulerName = 'MarketScan' | 'LLMDispatch' | 'PositionMonitor';
+export type SchedulerName =
+  | 'MarketScan'
+  | 'LLMDispatch'
+  | 'PositionMonitor'
+  | 'PendingOrderLifecycle';
 
 const lastRuns = new Map<SchedulerName, Date>();
 const lastPersistedAt = new Map<SchedulerName, number>();
@@ -59,5 +63,6 @@ export function getAllSchedulerHeartbeats(): Record<SchedulerName, string | null
     MarketScan: lastRuns.get('MarketScan')?.toISOString() ?? null,
     LLMDispatch: lastRuns.get('LLMDispatch')?.toISOString() ?? null,
     PositionMonitor: lastRuns.get('PositionMonitor')?.toISOString() ?? null,
+    PendingOrderLifecycle: lastRuns.get('PendingOrderLifecycle')?.toISOString() ?? null,
   };
 }

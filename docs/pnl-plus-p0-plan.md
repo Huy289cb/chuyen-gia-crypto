@@ -102,7 +102,7 @@ POSITION_MONITOR_MIN_MINUTES=30
 | Cooldown hours | `CONSECUTIVE_LOSS_COOLDOWN_HOURS=4` |
 | Exposure cap | `MAX_EXPOSURE_PCT_OF_EQUITY=0.15` (15% of wallet, replaces flat $2000 cap when set) |
 | Account guard | `assertTestnetAccountCanOpenTrade` in Groq + V3 execution |
-| Skip LLM if open/pending | `llm-dispatch.scheduler.ts` skips dispatch when position/pending exists |
+| Skip LLM new trade if open/pending | `llm-dispatch.scheduler.ts` skips **new** trades; runs pending lifecycle/review first |
 
 **Env:**
 
@@ -133,9 +133,11 @@ MAX_EXPOSURE_PCT_OF_EQUITY=0.15
 | `backend/src/services/account-risk-guard.service.ts` | Cooldown + consecutive loss guard |
 | `backend/src/services/groq-dispatch.service.ts` | Trend-only, account guard, regime in decisions |
 | `backend/src/services/v3-trade-execution.service.ts` | Exposure %, account guard |
-| `backend/src/services/position-close.service.ts` | Verified close only, cooldown after losses |
-| `backend/src/services/binance-reconciliation.ts` | Phantom reopen gated |
-| `backend/src/schedulers/llm-dispatch.scheduler.ts` | Skip when open/pending |
+| `backend/src/services/position-close.service.ts` | Verified close, merge PnL, cooldown |
+| `backend/src/services/position-pnl-backfill.service.ts` | Historical PnL backfill |
+| `backend/src/services/binance-reconciliation.ts` | Phantom reopen gated, close with PnL |
+| `backend/src/schedulers/llm-dispatch.scheduler.ts` | Pending lifecycle before skip new trade |
+| `backend/src/schedulers/pending-order.scheduler.ts` | TTL / drift / LLM review cron |
 | `backend/src/repositories/testnet.repository.ts` | Cooldown threshold from risk policy |
 | `backend/.env.example` | P0 env documentation |
 | `backend/.env` | Production P0 values (VPS) |
@@ -168,12 +170,32 @@ grep "blocked for entries\|not in V3_ALLOWED_REGIMES" backend/logs/worker-out.lo
 
 ---
 
-## Out of scope (P1+)
+## P1 — Pending lifecycle + PnL measurement (May 2026)
+
+| Item | Doc / module |
+|------|----------------|
+| Pending TTL / drift / LLM review | [pending-order-lifecycle.md](./pending-order-lifecycle.md) |
+| Reconciliation close with PnL | `position-close.service.ts` → `closeLocalPosition` |
+| Merge duplicate rows with PnL | `closeDuplicateForMerge()` in reconciliation |
+| Reflection in Groq dispatch | `memory.service.ts` → `formatRecentReflectionsForPrompt` |
+| Historical backfill script | [pnl-backfill.md](./pnl-backfill.md), `npm run testnet:backfill-pnl` |
+
+**Verify after backfill:**
+
+```bash
+cd backend && npm run testnet:backfill-pnl
+# outcomes > 0, null close_price on closed → 0
+```
+
+---
+
+## Out of scope (P2+)
 
 - Auto-block playbook from `trade_outcomes` stats (needs ≥30 samples)
 - Dashboard PnL from outcomes only (partial in P0 memory filter)
 - Leverage reduction (manual env `BINANCE_LEVERAGE`)
-- Backfill historical `trade_outcomes`
+- Binance income API for exact historical realized PnL per fill
+- Amend limit price on exchange when LLM `modify` pending
 
 ---
 

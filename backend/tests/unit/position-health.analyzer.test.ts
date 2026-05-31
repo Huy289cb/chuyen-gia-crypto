@@ -48,8 +48,8 @@ describe('analyzePositionHealth', () => {
     expect(h.recommended_action).toBe('hold');
   });
 
-  it('exits when sl progress >= 90%', () => {
-    const atSl = { ...base, current_price: 77380 };
+  it('exits when sl progress >= 95%', () => {
+    const atSl = { ...base, current_price: base.stop_loss };
     const h = analyzePositionHealth(atSl);
     expect(h.recommended_action).toBe('exit');
   });

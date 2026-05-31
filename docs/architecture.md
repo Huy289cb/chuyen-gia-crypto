@@ -299,7 +299,7 @@ Worker schedulers (see `docs/v3-operations.md`):
 2. **LLMDispatch** (`2,17,32,47`) — pick **one** best PASS timeframe, Groq, `executeV3Trade`
 3. **PositionMonitor** (`*/1`) — mark price, REDUCE 50% or EXIT on Binance when triggered
 
-Execution: Binance Futures testnet limit entry → pending order → user-data WS fill → open position + SL/TP orders. Local DB synced via `binance-order-fill.service.ts` and `position-close.service.ts`.
+Execution: Binance Futures testnet limit entry → pending order → TTL/drift/LLM review → WS fill → open position + SL/TP. Sync: `binance-order-fill.service.ts`, `position-close.service.ts`, `pending-order-lifecycle.md`. Historical PnL: `npm run testnet:backfill-pnl` ([pnl-backfill.md](./pnl-backfill.md)).
 
 API process: HTTP + Binance WebSocket + reconciliation. Dashboard scheduler status uses worker heartbeats (`utils/scheduler-heartbeat.ts`).
 

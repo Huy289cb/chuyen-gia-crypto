@@ -423,11 +423,19 @@ export async function placeStopLossOrder(
       console.log(`[BinanceClient] STOP LOSS ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} positionSide=${positionSide} type=STOP_MARKET stopPrice=${normalizedStopPrice} orderId=${response.orderId || response.algoId}`);
       return response;
     } else {
-      // In single position mode, use reduceOnly to close position
-      params.type = 'STOP_MARKET';
-      params.reduceOnly = true;
-      const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] STOP LOSS ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} type=STOP_MARKET stopPrice=${normalizedStopPrice} orderId=${response.orderId}`);
+      // ONE_WAY: conditional orders use Algo API; Demo requires positionSide BOTH
+      const response = await placeStopMarketOrderAPI({
+        symbol,
+        side,
+        quantity: params.quantity,
+        stopPrice: params.stopPrice,
+        positionSide: 'BOTH',
+        reduceOnly: true,
+      });
+      console.log(
+        `[BinanceClient] STOP LOSS ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} ` +
+          `type=STOP_MARKET (algo) stopPrice=${normalizedStopPrice} orderId=${response.orderId || response.algoId}`
+      );
       return response;
     }
   } catch (error: any) {
@@ -495,11 +503,18 @@ export async function placeTakeProfitOrder(
       console.log(`[BinanceClient] TAKE PROFIT ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} positionSide=${positionSide} type=TAKE_PROFIT_MARKET price=${normalizedPrice} orderId=${response.orderId || response.algoId}`);
       return response;
     } else {
-      // In single position mode, use reduceOnly to close position
-      params.type = 'TAKE_PROFIT_MARKET';
-      params.reduceOnly = true;
-      const response = await placeOrderAPI(params);
-      console.log(`[BinanceClient] TAKE PROFIT ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} type=TAKE_PROFIT_MARKET price=${normalizedPrice} orderId=${response.orderId}`);
+      const response = await placeTakeProfitMarketOrderAPI({
+        symbol,
+        side,
+        quantity: params.quantity,
+        stopPrice: params.stopPrice,
+        positionSide: 'BOTH',
+        reduceOnly: true,
+      });
+      console.log(
+        `[BinanceClient] TAKE PROFIT ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} ` +
+          `type=TAKE_PROFIT_MARKET (algo) price=${normalizedPrice} orderId=${response.orderId || response.algoId}`
+      );
       return response;
     }
   } catch (error: any) {

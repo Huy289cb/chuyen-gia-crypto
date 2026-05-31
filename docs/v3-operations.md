@@ -13,6 +13,8 @@ LLMDispatch (1,6,11,…56 * * * *) → best PASS timeframe → HTF 1h trend guar
        ↓
 Binance limit order + pending → WS fill → open position + SL/TP on Binance
        ↓
+PendingOrderLifecycle (*/5) → TTL / drift cancel → optional LLM pending review
+       ↓
 PositionMonitor (*/1) → defer to exchange SL/TP (PnL+ P0: reduce/exit off by default)
 ```
 
@@ -21,7 +23,8 @@ PositionMonitor (*/1) → defer to exchange SL/TP (PnL+ P0: reduce/exit off by d
 | Scheduler | Cron | Notes |
 |-----------|------|--------|
 | MarketScan | `*/5 * * * *` | Fetches 3 TFs in parallel; runs immediately on worker start |
-| LLMDispatch | `1,6,11,16,21,26,31,36,41,46,51,56` | +1 min after each 5m scan; **one** best TF per cycle |
+| LLMDispatch | `1,6,11,16,21,26,31,36,41,46,51,56` | +1 min after each 5m scan; **one** best TF per cycle; lifecycle/review if pending |
+| PendingOrderLifecycle | `*/5 * * * *` | TTL + drift + LLM review — see [pending-order-lifecycle.md](./pending-order-lifecycle.md) |
 | PositionMonitor | `*/1 * * * *` | Mark refresh; REDUCE/EXIT only if env enabled |
 
 Env overrides: `V3_MARKET_SCAN_CRON`, `V3_LLM_DISPATCH_CRON`, `V3_SIGNAL_GATE_TIMEFRAMES`.
@@ -43,8 +46,23 @@ Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/schedul
 | R:R from prices | `utils/trade-levels.ts` |
 | Trade execution | `v3-trade-execution.service.ts` |
 | Fill / position | `binance-order-fill.service.ts`, `position-close.service.ts` |
+| Pending lifecycle | `pending-order-lifecycle.service.ts`, `pending-order-review.service.ts` |
+| PnL backfill | `position-pnl-backfill.service.ts`, `npm run testnet:backfill-pnl` — [pnl-backfill.md](./pnl-backfill.md) |
+| Pending limits | [pending-order-lifecycle.md](./pending-order-lifecycle.md) |
 | WS sync | `binance-websocket-sync.ts` |
 | P0 policy | [pnl-plus-p0-plan.md](./pnl-plus-p0-plan.md) |
+
+### Maintenance (PnL measurement)
+
+After deploy when `trade_outcomes` is empty but positions were closed in DB:
+
+```bash
+cd backend
+npm run testnet:backfill-pnl -- --dry-run   # preview
+npm run testnet:backfill-pnl                # apply + sync wallet from Binance
+```
+
+Going forward, reconciliation merge and phantom close paths record PnL via `closeDuplicateForMerge` / `closeLocalPosition`.
 
 ## Reset for 5m experiment
 

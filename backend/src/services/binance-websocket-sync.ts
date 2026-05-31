@@ -239,14 +239,16 @@ async function handleAlgoOrderFilled(
     symbol
   );
 
-  await recordTestnetTradeEvent('unknown', closed ? 'position_closed_algo' : 'algo_order_filled', {
-    binance_order_id: binanceOrderId,
-    order_type: orderType,
-    executed_qty: executedQty,
-    avg_price: avgPrice,
-    position_closed: closed,
-    timestamp: new Date(eventTime).toISOString(),
-  });
+  if (!closed) {
+    await recordTestnetTradeEvent('unknown', 'algo_order_filled', {
+      binance_order_id: binanceOrderId,
+      order_type: orderType,
+      executed_qty: executedQty,
+      avg_price: avgPrice,
+      position_closed: false,
+      timestamp: new Date(eventTime).toISOString(),
+    });
+  }
 }
 
 function handleAccountUpdate(event: any): void {

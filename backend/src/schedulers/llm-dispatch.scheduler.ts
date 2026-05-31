@@ -20,6 +20,8 @@ import {
 import { formatLlmTradeSummary } from '../utils/trade-levels';
 import { compareSignalGateForEntry } from '../utils/signal-gate-ranking';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
+import { runPendingOrderLifecycle } from '../services/pending-order-lifecycle.service';
+import { runPendingOrderReview } from '../services/pending-order-review.service';
 
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -91,9 +93,33 @@ async function runLLMDispatch() {
         getTestnetPositions({ symbol, status: 'open' }),
         getTestnetPendingOrders({ symbol, status: 'pending' }),
       ]);
-      if (openPositions.length > 0 || pendingOrders.length > 0) {
+
+      if (pendingOrders.length > 0) {
+        const lifecycle = await runPendingOrderLifecycle(symbol);
+        if (lifecycle.cancelled > 0) {
+          console.log(
+            `[LLMDispatch] ${symbol}: pending lifecycle cancelled ${lifecycle.cancelled} order(s)`
+          );
+        }
+        const review = await runPendingOrderReview(symbol);
+        if (review.cancelled > 0 || review.modified > 0) {
+          console.log(
+            `[LLMDispatch] ${symbol}: pending LLM review cancelled=${review.cancelled} modified=${review.modified}`
+          );
+        }
+      }
+
+      if (openPositions.length > 0) {
         console.log(
-          `[LLMDispatch] ${symbol}: skip dispatch — open=${openPositions.length} pending=${pendingOrders.length}`
+          `[LLMDispatch] ${symbol}: skip new trade — open=${openPositions.length}`
+        );
+        continue;
+      }
+
+      const pendingAfterReview = await getTestnetPendingOrders({ symbol, status: 'pending' });
+      if (pendingAfterReview.length > 0) {
+        console.log(
+          `[LLMDispatch] ${symbol}: skip new trade — pending=${pendingAfterReview.length} (lifecycle reviewed)`
         );
         continue;
       }

@@ -76,10 +76,11 @@ main() {
   fi
 
   log "Install dependencies..."
+  # NODE_ENV=production on VPS skips devDependencies; TypeScript is required for build.
   if [[ -f package-lock.json ]]; then
-    npm ci
+    npm ci --include=dev
   else
-    npm install
+    npm install --include=dev
   fi
 
   if [[ "${DEPLOY_DB_PUSH:-0}" == "1" ]]; then

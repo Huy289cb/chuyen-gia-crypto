@@ -153,6 +153,19 @@ export async function getRecentFailures(symbol: string, limit: number = 3) {
   });
 }
 
+/** Closed trades with reflections for LLM learning (same symbol). */
+export async function getRecentOutcomesWithReflection(symbol: string, limit = 5) {
+  return await prisma.tradeOutcome.findMany({
+    where: { symbol },
+    orderBy: { timestamp: 'desc' },
+    take: limit,
+    include: {
+      reflection: true,
+      decision: { select: { timeframe: true, playbook_key: true, regime: true, reason: true } },
+    },
+  });
+}
+
 /**
  * Get or create playbook stats
  */

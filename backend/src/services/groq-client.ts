@@ -334,7 +334,12 @@ class GroqClient {
 
 // Factory function for easy instantiation
 export function createGroqClient(apiKeyOrKeys?: string | string[]): GroqClient | null {
-  const keys = Array.isArray(apiKeyOrKeys) ? apiKeyOrKeys : getApiKeys();
+  const keys =
+    apiKeyOrKeys === undefined || apiKeyOrKeys === null
+      ? getApiKeys()
+      : Array.isArray(apiKeyOrKeys)
+        ? apiKeyOrKeys
+        : [apiKeyOrKeys];
   if (!keys || keys.length === 0) {
     console.log('[GroqClient] No API key provided, client will use fallback');
     return null;

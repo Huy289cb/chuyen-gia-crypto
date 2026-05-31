@@ -36,6 +36,43 @@ export async function resolveDecisionIdForPosition(ctx: CloseOutcomeContext): Pr
     return ctx.decision_id;
   }
 
+  const position = await prisma.testnetPosition.findUnique({
+    where: { position_id: ctx.position_id },
+    select: { binance_order_id: true },
+  });
+
+  if (position?.binance_order_id) {
+    const pending = await prisma.testnetPendingOrder.findFirst({
+      where: { binance_order_id: position.binance_order_id },
+      select: { order_id: true },
+    });
+    if (pending?.order_id) {
+      const { PIPELINE_EVENT_POSITION_ID } = await import('../repositories/testnet.repository');
+      const linkEvents = await prisma.testnetTradeEvent.findMany({
+        where: {
+          position_id: PIPELINE_EVENT_POSITION_ID,
+          event_type: 'pending_order_linked',
+        },
+        orderBy: { timestamp: 'desc' },
+        take: 40,
+      });
+      for (const ev of linkEvents) {
+        if (!ev.event_data) continue;
+        try {
+          const data = JSON.parse(ev.event_data) as {
+            order_id?: string;
+            decision_id?: number;
+          };
+          if (data.order_id === pending.order_id && typeof data.decision_id === 'number') {
+            return data.decision_id;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
   const events = await prisma.testnetTradeEvent.findMany({
     where: { position_id: ctx.position_id },
     orderBy: { timestamp: 'asc' },

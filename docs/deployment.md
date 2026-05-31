@@ -111,4 +111,16 @@ TELEGRAM_POLLING_ENABLED=true
 
 Commands: `/help`, `/lenh`, `/show`, `/pnl`, `/pipeline`, `/sukien`, `/baocao`, `/tat`, `/bat`.
 
+### Post-deploy: historical PnL (optional)
+
+When upgrading to merge-PnL / outcome recording, run once on VPS (worker can stay up):
+
+```bash
+cd ~/chuyen-gia-crypto/backend
+npm run testnet:backfill-pnl -- --dry-run
+npm run testnet:backfill-pnl
+```
+
+Details: [pnl-backfill.md](./pnl-backfill.md). Pending limit lifecycle env: [pending-order-lifecycle.md](./pending-order-lifecycle.md).
+
 See also: `docs/v3-operations.md`, `docs/setup.md`, `docs/binance-testnet-integration.md`.

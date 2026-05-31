@@ -240,6 +240,34 @@ export class MemoryService {
   }
 
   /**
+   * Recent trade reflections for groq dispatch / pending review (TradingAgents-style learning).
+   */
+  async formatRecentReflectionsForPrompt(symbol: string): Promise<string> {
+    const outcomes = await MemoryRepository.getRecentOutcomesWithReflection(symbol, 5);
+    if (outcomes.length === 0) {
+      return '';
+    }
+
+    const lines: string[] = ['RECENT TRADE REFLECTIONS (learn from outcomes):'];
+    for (const o of outcomes) {
+      const r = o.reflection;
+      const lesson = r?.lesson_learned?.trim();
+      if (!lesson) continue;
+      lines.push(
+        `- ${o.outcome.toUpperCase()} PnL ${o.realized_pnl.toFixed(2)} RR ${o.realized_rr.toFixed(2)} (${o.close_reason}): ${lesson}`
+      );
+      if (r?.what_went_wrong) {
+        lines.push(`  Avoid: ${r.what_went_wrong}`);
+      }
+      if (r?.what_worked) {
+        lines.push(`  Repeat: ${r.what_worked}`);
+      }
+    }
+
+    return lines.length > 1 ? lines.join('\n') : '';
+  }
+
+  /**
    * Analyze loss reason (simple heuristic)
    */
   private analyzeLossReason(pnl: number): string {

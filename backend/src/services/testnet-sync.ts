@@ -152,10 +152,22 @@ async function simulatePaperSlTpOnCandle(symbol: string, candle: RealtimeCandle)
       await updateTestnetAccountStats(account.id, realizedPnl > 0);
     }
 
+    const updatedAccount = await prisma.testnetAccount.findUnique({
+      where: { id: position.account_id },
+    });
+
     await recordTestnetTradeEvent(position.position_id, 'position_closed', {
+      symbol: position.symbol,
+      side: position.side,
+      entry_price: position.entry_price,
+      size_qty: position.size_qty,
+      size_usd: position.size_usd,
       reason: closeReason,
       close_price: closePrice,
+      close_reason: closeReason,
       realized_pnl: realizedPnl,
+      account_balance: updatedAccount?.current_balance,
+      account_equity: updatedAccount?.equity,
       r_multiple: realizedPnl / rrDenominator,
       source: 'paper_candle_simulation',
     });

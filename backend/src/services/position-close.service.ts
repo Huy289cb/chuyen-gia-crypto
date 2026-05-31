@@ -10,7 +10,7 @@ import {
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { normalizeQuantityForSymbol, placeMarketOrder } from './binanceClient';
-import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
+import { syncTestnetAccountFromBinance, resolveTestnetAccountBalances } from './binance-balance-sync.service';
 import {
   recordTradeOutcomeOnClose,
   type CloseOutcomeContext,
@@ -18,10 +18,38 @@ import {
 import { getPositionRisk } from './binanceClient';
 import { applyConsecutiveLossCooldownIfNeeded } from './account-risk-guard.service';
 
-function calculatePnl(side: string, entry: number, close: number, qty: number): number {
+export function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
   const isLong = side.toLowerCase() === 'long' || side.toLowerCase() === 'buy';
   return isLong ? raw : -raw;
+}
+
+/**
+ * Close duplicate DB row when consolidating exposure (records PnL + outcome).
+ */
+export async function closeDuplicateForMerge(
+  positionId: string,
+  primaryPositionId: string
+): Promise<void> {
+  const full = await prisma.testnetPosition.findUnique({
+    where: { position_id: positionId },
+    include: { account: true },
+  });
+
+  if (!full || full.status !== 'open' || !full.account) {
+    return;
+  }
+
+  const closePrice = full.current_price > 0 ? full.current_price : full.entry_price;
+  await closeLocalPosition(
+    {
+      ...full,
+      account: { current_balance: full.account.current_balance },
+    },
+    closePrice,
+    `merged_into_${primaryPositionId}`,
+    { merged_into: primaryPositionId }
+  );
 }
 
 export async function findOpenPositionByBinanceOrderId(
@@ -117,10 +145,19 @@ export async function closeLocalPosition(
     },
   });
 
+  const balances = await resolveTestnetAccountBalances(position.account_id);
+
   await recordTestnetTradeEvent(position.position_id, 'position_closed', {
+    symbol: position.symbol ?? 'BTC',
+    side: position.side,
+    entry_price: position.entry_price,
+    size_qty: qty,
+    size_usd: qty * closePrice,
     close_price: closePrice,
     close_reason: closeReason,
     realized_pnl: realizedPnl,
+    account_balance: balances.account_balance,
+    account_equity: balances.account_equity,
     ...eventMeta,
   });
 

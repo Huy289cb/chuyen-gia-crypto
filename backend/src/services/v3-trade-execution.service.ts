@@ -8,11 +8,12 @@ import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
 import { resolveMaxTotalExposureUsd } from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
+import { hasBinanceExposureForSide } from './binance-exposure.service';
 import {
   createTestnetPendingOrder,
+  getActiveTestnetPositions,
   getOrCreateTestnetAccount,
   getTestnetPendingOrders,
-  getTestnetPositions,
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { computeExpectedRrFromPrices } from '../utils/trade-levels';
@@ -116,8 +117,21 @@ export async function executeV3Trade(
 
   const balance = Number(account.current_balance ?? account.equity ?? 10000);
 
+  try {
+    const onExchange = await hasBinanceExposureForSide(symbol, side);
+    if (onExchange) {
+      return {
+        success: false,
+        reason: `Binance already has ${side} exposure for ${symbol} (scaling-in disabled)`,
+      };
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[V3TradeExecution] Binance exposure check failed: ${message}`);
+  }
+
   const [openPositions, pendingOrders] = await Promise.all([
-    getTestnetPositions({ symbol, status: 'open', methodId }),
+    getActiveTestnetPositions({ symbol, methodId }),
     getTestnetPendingOrders({ symbol, status: 'pending', methodId }),
   ]);
 
@@ -258,6 +272,9 @@ export async function executeV3Trade(
     entry,
     stopLoss,
     takeProfit,
+    sizeQty: normalizedSizeQty,
+    sizeUsd,
+    accountBalance: balance,
     orderId,
     binanceOrderId,
   });

@@ -66,16 +66,55 @@ export function notifyFromTradeEvent(
   if (!title) return;
 
   const d = eventData || {};
+  const entry =
+    typeof d.entry_price === 'number'
+      ? d.entry_price
+      : typeof d.entry === 'number'
+        ? d.entry
+        : typeof d.avg_price === 'number'
+          ? d.avg_price
+          : undefined;
+  const sizeQty =
+    typeof d.size_qty === 'number'
+      ? d.size_qty
+      : typeof d.executed_qty === 'number'
+        ? d.executed_qty
+        : undefined;
   notifyTrade(
     {
       title,
-      symbol: String(d.symbol ?? d.coin ?? ''),
+      symbol: d.symbol != null ? String(d.symbol) : d.coin != null ? String(d.coin) : undefined,
       side: d.side != null ? String(d.side) : undefined,
-      entry: typeof d.entry_price === 'number' ? d.entry_price : typeof d.entry === 'number' ? d.entry : undefined,
+      entry,
+      closePrice: typeof d.close_price === 'number' ? d.close_price : undefined,
       stopLoss: typeof d.stop_loss === 'number' ? d.stop_loss : undefined,
       takeProfit: typeof d.take_profit === 'number' ? d.take_profit : undefined,
-      pnl: typeof d.realized_pnl === 'number' ? d.realized_pnl : typeof d.pnl === 'number' ? d.pnl : undefined,
-      reason: d.close_reason != null ? String(d.close_reason) : d.reason != null ? String(d.reason) : undefined,
+      sizeQty,
+      sizeUsd: typeof d.size_usd === 'number' ? d.size_usd : undefined,
+      pnl:
+        typeof d.realized_pnl === 'number'
+          ? d.realized_pnl
+          : typeof d.pnl === 'number'
+            ? d.pnl
+            : undefined,
+      accountBalance:
+        typeof d.account_balance === 'number'
+          ? d.account_balance
+          : typeof d.current_balance === 'number'
+            ? d.current_balance
+            : undefined,
+      accountEquity:
+        typeof d.account_equity === 'number'
+          ? d.account_equity
+          : typeof d.equity === 'number'
+            ? d.equity
+            : undefined,
+      reason:
+        d.close_reason != null
+          ? String(d.close_reason)
+          : d.reason != null
+            ? String(d.reason)
+            : undefined,
       extra: {
         position_id: positionId,
         order_id: d.order_id != null ? String(d.order_id) : undefined,

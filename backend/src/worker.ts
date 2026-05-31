@@ -124,11 +124,11 @@ async function startWorker() {
 
   if (process.env.BINANCE_ENABLED === 'true') {
     try {
-      const { initializeHedgeModeDetection } = await import('./services/binance-hedge-mode');
-      await initializeHedgeModeDetection();
+      const { bootstrapBinanceOnWorker } = await import('./services/binance-runtime-bootstrap');
+      await bootstrapBinanceOnWorker();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[Worker] Failed to initialize Binance hedge mode:', message);
+      console.error('[Worker] Failed to bootstrap Binance runtime:', message);
     }
   }
 
@@ -170,6 +170,13 @@ const gracefulShutdown = async (signal: string) => {
   stopWorkerScheduler();
   stopTelegramDailyReportScheduler();
   stopTelegramBot();
+
+  try {
+    const { shutdownBinanceRuntime } = await import('./services/binance-runtime-bootstrap');
+    await shutdownBinanceRuntime();
+  } catch {
+    /* non-fatal */
+  }
 
   // Release leader lock
   await releaseLeaderLock();
