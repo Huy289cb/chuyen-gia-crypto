@@ -18,6 +18,7 @@ import {
 import { getPositionRisk } from './binanceClient';
 import { applyConsecutiveLossCooldownIfNeeded } from './account-risk-guard.service';
 import { resolveClosePnlFromUserTrades } from './binance-fill-pnl.service';
+import { resolveVerifiedCloseReason } from './close-reason-resolve.service';
 
 export function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
@@ -90,6 +91,8 @@ export async function closeLocalPosition(
     symbol?: string;
     status?: string;
     binance_order_id?: string | null;
+    binance_sl_order_id?: string | null;
+    binance_tp_order_id?: string | null;
     account: { current_balance: number };
   },
   closePrice: number,
@@ -131,10 +134,9 @@ export async function closeLocalPosition(
   const realizedPnl = fill.verified
     ? fill.realizedPnl
     : calculatePnl(position.side, position.entry_price, finalClosePrice, qty);
-  const finalCloseReason =
-    fill.verified && closeReason.startsWith('reconciliation')
-      ? 'reconciliation_fill'
-      : closeReason;
+  const finalCloseReason = fill.verified
+    ? resolveVerifiedCloseReason(closeReason, eventMeta, position)
+    : closeReason;
 
   await closeTestnetPosition(position.position_id, finalClosePrice, finalCloseReason);
   await updateTestnetPosition(position.position_id, {

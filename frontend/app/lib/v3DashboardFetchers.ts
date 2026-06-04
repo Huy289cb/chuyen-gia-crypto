@@ -43,6 +43,15 @@ export interface AccountData {
     freeMargin: number;
     dailyPnL: number;
     weeklyPnL: number;
+    walletPnl?: number;
+    binanceRealizedPnl?: number;
+    dbPositionPnlSum?: number;
+    dbPositionPnlGap?: number;
+    dbPositionPnlTrusted?: boolean;
+    pnlSource?: 'wallet';
+    totalFees?: number;
+    fundingFees?: number;
+    startingBalance?: number;
   };
   positions: Array<{
     id: string;

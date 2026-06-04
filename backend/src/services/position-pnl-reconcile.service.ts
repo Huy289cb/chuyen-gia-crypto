@@ -7,6 +7,7 @@ import { PIPELINE_EVENT_POSITION_ID, updateTestnetPosition } from '../repositori
 import { resolveClosePnlFromUserTrades } from './binance-fill-pnl.service';
 import { recomputeTestnetAccountTradeStats } from './position-pnl-backfill.service';
 import { reconcileTestnetWalletFromBinance } from './wallet-reconcile.service';
+import { resolveVerifiedCloseReason } from './close-reason-resolve.service';
 
 export interface PositionPnlReconcileResult {
   position_id: string;
@@ -40,6 +41,8 @@ export async function reconcileClosedPositionPnlFromFills(
     size_qty: number;
     close_reason: string | null;
     binance_order_id: string | null;
+    binance_sl_order_id?: string | null;
+    binance_tp_order_id?: string | null;
   },
   options?: { dryRun?: boolean }
 ): Promise<PositionPnlReconcileResult> {
@@ -72,10 +75,11 @@ export async function reconcileClosedPositionPnlFromFills(
 
   const oldPnl = position.realized_pnl;
   const newPnl = fill.realizedPnl;
-  const closeReason =
-    position.close_reason?.startsWith('reconciliation') || position.close_reason === 'backfill_pnl'
-      ? 'reconciliation_fill'
-      : position.close_reason ?? 'reconciliation_fill';
+  const closeReason = resolveVerifiedCloseReason(
+    position.close_reason ?? 'reconciliation_fill',
+    { fill_verified: true },
+    position
+  );
 
   if (options?.dryRun) {
     return {

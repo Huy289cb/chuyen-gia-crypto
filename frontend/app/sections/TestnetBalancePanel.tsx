@@ -128,24 +128,64 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
         />
       </div>
 
-      <div className="mt-4 pt-4 border-t border-border-default grid grid-cols-2 gap-3">
-        <div className="p-3 bg-surface-1/50 rounded-lg">
-          <p className="text-xs text-foreground-tertiary mb-1">Daily PnL (UTC)</p>
-          <p className={cn(
-            'text-sm font-mono font-semibold',
-            balanceData.dailyPnL >= 0 ? 'text-success' : 'text-danger'
-          )}>
-            {balanceData.dailyPnL >= 0 ? '+' : ''}{formatPrice(balanceData.dailyPnL)}
-          </p>
-        </div>
-        <div className="p-3 bg-surface-1/50 rounded-lg">
-          <p className="text-xs text-foreground-tertiary mb-1">7-day PnL</p>
-          <p className={cn(
-            'text-sm font-mono font-semibold',
-            balanceData.weeklyPnL >= 0 ? 'text-success' : 'text-danger'
-          )}>
-            {balanceData.weeklyPnL >= 0 ? '+' : ''}{formatPrice(balanceData.weeklyPnL)}
-          </p>
+      <div className="mt-4 pt-4 border-t border-border-default space-y-3">
+        {typeof balanceData.walletPnl === 'number' && (
+          <div className="p-3 bg-surface-1/50 rounded-lg border border-accent-primary/20">
+            <p className="text-xs text-foreground-tertiary mb-1">Wallet PnL (Binance)</p>
+            <p
+              className={cn(
+                'text-base font-mono font-semibold',
+                balanceData.walletPnl >= 0 ? 'text-success' : 'text-danger'
+              )}
+            >
+              {balanceData.walletPnl >= 0 ? '+' : ''}
+              {formatPrice(balanceData.walletPnl)}
+            </p>
+            {typeof balanceData.binanceRealizedPnl === 'number' && (
+              <p className="text-xs text-foreground-tertiary mt-1">
+                Realized income: {formatPrice(balanceData.binanceRealizedPnl)}
+                {typeof balanceData.totalFees === 'number' && balanceData.totalFees > 0
+                  ? ` · Fees ${formatPrice(balanceData.totalFees)}`
+                  : ''}
+                {typeof balanceData.fundingFees === 'number' && balanceData.fundingFees !== 0
+                  ? ` · Funding ${formatPrice(balanceData.fundingFees)}`
+                  : ''}
+              </p>
+            )}
+            {balanceData.dbPositionPnlTrusted === false &&
+              typeof balanceData.dbPositionPnlGap === 'number' && (
+                <p className="text-xs text-amber-500/90 mt-1">
+                  DB position sum differs by {formatPrice(balanceData.dbPositionPnlGap)} — wallet is
+                  source of truth
+                </p>
+              )}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 bg-surface-1/50 rounded-lg">
+            <p className="text-xs text-foreground-tertiary mb-1">Daily PnL (UTC)</p>
+            <p
+              className={cn(
+                'text-sm font-mono font-semibold',
+                balanceData.dailyPnL >= 0 ? 'text-success' : 'text-danger'
+              )}
+            >
+              {balanceData.dailyPnL >= 0 ? '+' : ''}
+              {formatPrice(balanceData.dailyPnL)}
+            </p>
+          </div>
+          <div className="p-3 bg-surface-1/50 rounded-lg">
+            <p className="text-xs text-foreground-tertiary mb-1">7-day PnL</p>
+            <p
+              className={cn(
+                'text-sm font-mono font-semibold',
+                balanceData.weeklyPnL >= 0 ? 'text-success' : 'text-danger'
+              )}
+            >
+              {balanceData.weeklyPnL >= 0 ? '+' : ''}
+              {formatPrice(balanceData.weeklyPnL)}
+            </p>
+          </div>
         </div>
       </div>
     </Card>

@@ -54,6 +54,8 @@ Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/schedul
 
 ### Maintenance (PnL measurement)
 
+**Tracking:** live checklist + metrics — [pnl-plus-tracking.md](./pnl-plus-tracking.md) (wallet-first; cập nhật sau mỗi reconcile).
+
 After deploy when `trade_outcomes` is empty but positions were closed in DB:
 
 ```bash

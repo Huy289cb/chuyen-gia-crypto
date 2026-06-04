@@ -4,6 +4,9 @@ import { getDayBoundsICT } from '../utils/ict-time';
 import { getRiskPolicy } from '../config/risk-policy';
 import { resolveMarkPrice, calculateUnrealizedPnl } from './position-mark';
 
+/** Max |wallet − Σ position PnL| before DB position stats are hidden in UI. */
+export const PNL_DB_GAP_TRUST_USD = 5;
+
 export interface AccountBalanceSummary {
   isInitialized: boolean;
   symbol: string;
@@ -24,6 +27,14 @@ export interface AccountBalanceSummary {
   binanceRealizedPnl: number;
   /** Sum of closed position rows (may differ until fill backfill). */
   dbPositionPnlSum: number;
+  /** walletPnl − dbPositionPnlSum (0 when aligned). */
+  dbPositionPnlGap: number;
+  /** True when gap is small enough to show per-position / DB win stats. */
+  dbPositionPnlTrusted: boolean;
+  /** Primary PnL label for UI: always wallet (Binance-aligned). */
+  pnlSource: 'wallet';
+  totalFees: number;
+  fundingFees: number;
   startingBalance: number;
 }
 
@@ -33,6 +44,8 @@ export interface TodayTradeStats {
   losses: number;
   totalRealizedPnl: number;
   totalFees: number;
+  /** False when wallet vs DB closed-PnL gap exceeds trust threshold. */
+  fromDbPositions: boolean;
 }
 
 export async function getAccountBalanceSummary(
@@ -57,6 +70,11 @@ export async function getAccountBalanceSummary(
     walletPnl: 0,
     binanceRealizedPnl: 0,
     dbPositionPnlSum: 0,
+    dbPositionPnlGap: 0,
+    dbPositionPnlTrusted: true,
+    pnlSource: 'wallet',
+    totalFees: 0,
+    fundingFees: 0,
     startingBalance: 0,
   };
 
@@ -142,6 +160,10 @@ export async function getAccountBalanceSummary(
   const pendingVol = pendingOrders.reduce((s, o) => s + Math.abs(Number(o.size_usd) || 0), 0);
   const startingBalance = account.starting_balance || 0;
   const totalBalance = account.current_balance || 0;
+  const walletPnl = totalBalance - startingBalance;
+  const dbPositionPnlSum = dbClosedSum._sum.realized_pnl ?? 0;
+  const dbPositionPnlGap = walletPnl - dbPositionPnlSum;
+  const dbPositionPnlTrusted = Math.abs(dbPositionPnlGap) <= PNL_DB_GAP_TRUST_USD;
 
   return {
     isInitialized: true,
@@ -157,9 +179,14 @@ export async function getAccountBalanceSummary(
     openUnrealized,
     exposureUsd: openVol + pendingVol,
     maxExposureUsd: getRiskPolicy().maxTotalExposureUsd,
-    walletPnl: totalBalance - startingBalance,
+    walletPnl,
     binanceRealizedPnl: account.realized_pnl ?? 0,
-    dbPositionPnlSum: dbClosedSum._sum.realized_pnl ?? 0,
+    dbPositionPnlSum,
+    dbPositionPnlGap,
+    dbPositionPnlTrusted,
+    pnlSource: 'wallet',
+    totalFees: account.accumulated_trading_fees ?? 0,
+    fundingFees: account.accumulated_funding_fee ?? 0,
     startingBalance,
   };
 }
@@ -170,7 +197,14 @@ export async function getTodayTradeStatsIct(
 ): Promise<TodayTradeStats> {
   const account = await getTestnetAccount(symbol, methodId);
   if (!account) {
-    return { closedCount: 0, wins: 0, losses: 0, totalRealizedPnl: 0, totalFees: 0 };
+    return {
+      closedCount: 0,
+      wins: 0,
+      losses: 0,
+      totalRealizedPnl: 0,
+      totalFees: 0,
+      fromDbPositions: false,
+    };
   }
 
   const { dayStart } = getDayBoundsICT();
@@ -195,12 +229,15 @@ export async function getTodayTradeStatsIct(
     else if (pnl < 0) losses++;
   }
 
+  const balance = await getAccountBalanceSummary(symbol, methodId, true);
+
   return {
     closedCount: closed.length,
     wins,
     losses,
     totalRealizedPnl,
     totalFees,
+    fromDbPositions: balance.dbPositionPnlTrusted,
   };
 }
 

@@ -63,8 +63,14 @@ async function handleCommand(chatId: string, text: string): Promise<void> {
 
     case '/pnl': {
       const b = await getAccountBalanceSummary(symbol, methodId, true);
+      const gapNote = b.dbPositionPnlTrusted
+        ? ''
+        : `\n⚠️ DB positions ${fmtUsd(b.dbPositionPnlSum)} (gap ${fmtUsd(b.dbPositionPnlGap)})`;
       enqueueTelegramMessage(
-        `<b>PnL (ICT)</b>\nHôm nay: ${fmtUsd(b.dailyPnL)}\n7 ngày: ${fmtUsd(b.weeklyPnL)}\nUnrealized: ${fmtUsd(b.openUnrealized)}\nEquity: ${fmtUsd(b.equity)}`,
+        `<b>PnL (wallet)</b>\nAll-time: ${fmtUsd(b.walletPnl)}\nBinance realized: ${fmtUsd(b.binanceRealizedPnl)}` +
+          `\nPhí: ${fmtUsd(b.totalFees)} | Funding: ${fmtUsd(b.fundingFees)}` +
+          `\nHôm nay (ICT): ${fmtUsd(b.dailyPnL)} | 7d: ${fmtUsd(b.weeklyPnL)}` +
+          `\nUnrealized: ${fmtUsd(b.openUnrealized)} | Equity: ${fmtUsd(b.equity)}${gapNote}`,
         chatId
       );
       return;
@@ -116,7 +122,7 @@ async function handleCommand(chatId: string, text: string): Promise<void> {
       const lines = [
         '<b>Tài khoản</b>',
         `Equity ${fmtUsd(b.equity)} | Balance ${fmtUsd(b.totalBalance)}`,
-        `PnL today ${fmtUsd(b.dailyPnL)} | 7d ${fmtUsd(b.weeklyPnL)}`,
+        `Wallet PnL ${fmtUsd(b.walletPnl)} | today ${fmtUsd(b.dailyPnL)} | 7d ${fmtUsd(b.weeklyPnL)}`,
         `Exposure ${fmtUsd(b.exposureUsd)} / ${fmtUsd(b.maxExposureUsd)}`,
         '',
         '<b>Pipeline</b>',

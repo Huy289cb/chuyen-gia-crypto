@@ -34,13 +34,25 @@ export async function buildDailyReportMessage(): Promise<string> {
     `Balance: ${fmtUsd(balance.totalBalance)} | Equity: ${fmtUsd(balance.equity)}`,
     `Margin dùng: ${fmtUsd(balance.usedMargin)} | Exposure: ${fmtUsd(balance.exposureUsd)} / ${fmtUsd(balance.maxExposureUsd)}`,
     '',
-    '<b>PnL (ICT)</b>',
-    `Hôm nay: ${fmtUsd(balance.dailyPnL)} | 7 ngày: ${fmtUsd(balance.weeklyPnL)}`,
+    '<b>PnL (Binance wallet)</b>',
+    `All-time: ${fmtUsd(balance.walletPnl)} | Realized (income): ${fmtUsd(balance.binanceRealizedPnl)}`,
+    `Phí: ${fmtUsd(balance.totalFees)} | Funding: ${fmtUsd(balance.fundingFees)}`,
+    `Hôm nay (ICT): ${fmtUsd(balance.dailyPnL)} | 7 ngày: ${fmtUsd(balance.weeklyPnL)}`,
     `Unrealized: ${fmtUsd(balance.openUnrealized)}`,
+    ...(balance.dbPositionPnlTrusted
+      ? []
+      : [
+          '',
+          `⚠️ Σ position PnL ${fmtUsd(balance.dbPositionPnlSum)} (gap ${fmtUsd(balance.dbPositionPnlGap)} — chưa khớp wallet)`,
+        ]),
     '',
     '<b>Giao dịch hôm nay</b>',
-    `Đóng: ${todayStats.closedCount} (W${todayStats.wins}/L${todayStats.losses})`,
-    `Realized: ${fmtUsd(todayStats.totalRealizedPnl)} | Phí: ${fmtUsd(todayStats.totalFees)}`,
+    ...(todayStats.fromDbPositions
+      ? [
+          `Đóng: ${todayStats.closedCount} (W${todayStats.wins}/L${todayStats.losses})`,
+          `Realized (DB): ${fmtUsd(todayStats.totalRealizedPnl)} | Phí: ${fmtUsd(todayStats.totalFees)}`,
+        ]
+      : [`Đóng: ${todayStats.closedCount} — dùng wallet PnL, không tin W/L DB`]),
     '',
     `<b>Đang mở</b> (${positions.length} pos, ${pending.length} pending)`,
   ];

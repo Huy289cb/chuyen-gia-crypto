@@ -1,7 +1,21 @@
 # PnL+ Roadmap (fix & cải thiện)
 
-**Cập nhật:** 2026-06-02  
+**Cập nhật:** 2026-06-04  
 **Bối cảnh:** P0/P1 đã deploy. Wallet reconcile khớp Binance; PnL **từng position / win-rate** trong DB vẫn sai do close path ước lượng.
+
+---
+
+## Tracking (updated 2026-06-04)
+
+**Checklist + snapshot số live:** [pnl-plus-tracking.md](./pnl-plus-tracking.md)
+
+| Chỉ số (VPS live) | Giá trị |
+|-------------------|---------|
+| walletPnl | −$34.27 |
+| dbPositionPnlSum | −$23.09 (post-phantom zero) |
+| dbPositionPnlGap | −$11.18 (abs $11.18; `dbPositionPnlTrusted`: false; ≈ fees $13.06 + funding $0.15) |
+| Fill-verified closes | ~83% (19/23) |
+| Blocker chính | `dbPositionPnlTrusted` (fee-aware gap); frontend Vercel chưa push |
 
 ---
 
@@ -14,7 +28,7 @@
 | Wallet ↔ Binance | ✅ | `wallet-reconcile`, baseline $5k, gap ≈ 0 |
 | Position PnL / outcomes | ❌ | ~100% `reconciliation_closed_not_on_binance`, mark price |
 | Reflection / học từ outcomes | ⚠️ | Có data nhưng **không đáng tin** cho tối ưu |
-| Dashboard win-rate | ⚠️ | 8W/7L vs wallet −$9 từ baseline — misleading |
+| Dashboard win-rate | ⚠️ | DB sum −$23 vs wallet −$34 (gap ~$11 phí/funding); dùng wallet-first API |
 
 **Quy tắc đo lường tạm thời:** Dùng `wallet − starting_balance` và Binance income (`REALIZED_PNL`, phí, funding). **Không** dùng sum `testnet_positions.realized_pnl` hay win% DB để đánh giá edge.
 
@@ -157,6 +171,7 @@ npm run testnet:backfill-pnl -- --dry-run
 
 ## Tham chiếu
 
+- [pnl-plus-tracking.md](./pnl-plus-tracking.md) — checklist + snapshot (cập nhật định kỳ)  
 - [pnl-plus-p0-plan.md](./pnl-plus-p0-plan.md) — P0 đã xong  
 - [pnl-backfill.md](./pnl-backfill.md) — backfill + wallet  
 - [pending-order-lifecycle.md](./pending-order-lifecycle.md) — TTL/drift/review  

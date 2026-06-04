@@ -7,7 +7,7 @@ import {
   DASHBOARD_WARMUP_TTL_MS,
   ACCOUNT_BALANCE_TTL_MS,
 } from '../lib/read-cache';
-import { getTestnetAccount, PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
+import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
@@ -33,6 +33,7 @@ import {
   calculateUnrealizedPnl,
   resolveMarkPrice,
 } from '../services/position-mark';
+import { getAccountBalanceSummary } from '../services/account-summary.service';
 const router = Router();
 
 function formatRelativeAgo(ts: Date | null): string {
@@ -1091,116 +1092,28 @@ router.get('/balance', async (req: Request, res: Response) => {
       `account:balance:${sym}:${meth}`,
       ACCOUNT_BALANCE_TTL_MS,
       async () => {
-    const account = await getTestnetAccount(sym, meth);
-
-    if (!account) {
-      return {
-        isInitialized: false,
-        totalBalance: 0,
-        availableBalance: 0,
-        equity: 0,
-        usedMargin: 0,
-        freeMargin: 0,
-        dailyPnL: 0,
-        weeklyPnL: 0,
-      };
-    }
-
-    const dayStart = new Date();
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const weekStart = new Date();
-    weekStart.setUTCDate(weekStart.getUTCDate() - 7);
-    weekStart.setUTCHours(0, 0, 0, 0);
-
-    const [baselineDay, baselineWeek, marginAgg, realizedTodayAgg, realizedWeekAgg, unrealizedOpenAgg] =
-      await Promise.all([
-        prisma.testnetAccountSnapshot.findFirst({
-          where: { account_id: account.id, timestamp: { lt: dayStart } },
-          orderBy: { timestamp: 'desc' },
-        }),
-        prisma.testnetAccountSnapshot.findFirst({
-          where: { account_id: account.id, timestamp: { lt: weekStart } },
-          orderBy: { timestamp: 'desc' },
-        }),
-        prisma.testnetPosition.aggregate({
-          where: {
-            account_id: account.id,
-            status: { in: ['open', 'OPEN'] },
-          },
-          _sum: { risk_usd: true },
-        }),
-        prisma.testnetPosition.aggregate({
-          where: {
-            account_id: account.id,
-            status: { in: ['closed', 'CLOSED'] },
-            close_time: { gte: dayStart },
-          },
-          _sum: { realized_pnl: true },
-        }),
-        prisma.testnetPosition.aggregate({
-          where: {
-            account_id: account.id,
-            status: { in: ['closed', 'CLOSED'] },
-            close_time: { gte: weekStart },
-          },
-          _sum: { realized_pnl: true },
-        }),
-        prisma.testnetPosition.aggregate({
-          where: {
-            account_id: account.id,
-            status: { in: ['open', 'OPEN'] },
-          },
-          _sum: { unrealized_pnl: true },
-        }),
-      ]);
-
-    const openUnrealized = unrealizedOpenAgg._sum.unrealized_pnl ?? 0;
-    const realizedToday = realizedTodayAgg._sum.realized_pnl ?? 0;
-    const realizedWeek = realizedWeekAgg._sum.realized_pnl ?? 0;
-
-    const startDayEquity = baselineDay?.equity ?? account.equity;
-    const startWeekEquity = baselineWeek?.equity ?? account.equity;
-    const equityDeltaDay = (account.equity ?? 0) - startDayEquity;
-    const equityDeltaWeek = (account.equity ?? 0) - startWeekEquity;
-
-    const dailyPnL =
-      realizedToday !== 0 || openUnrealized !== 0
-        ? realizedToday + openUnrealized
-        : equityDeltaDay;
-    const weeklyPnL =
-      realizedWeek !== 0 || openUnrealized !== 0
-        ? realizedWeek + openUnrealized
-        : equityDeltaWeek;
-
-    const usedMargin = marginAgg._sum.risk_usd || 0;
-    const equity = account.equity ?? account.current_balance ?? 0;
-    const freeMargin = Math.max(0, equity - usedMargin);
-
-    const startingBalance = account.starting_balance || 0;
-    const totalBal = account.current_balance || 0;
-    const dbClosedSum = await prisma.testnetPosition.aggregate({
-      where: {
-        account_id: account.id,
-        status: { in: ['closed', 'CLOSED'] },
-        position_id: { not: 'pipeline_v3_kim_nghia' },
-      },
-      _sum: { realized_pnl: true },
-    });
-
-    return {
-      isInitialized: true,
-      totalBalance: totalBal,
-      availableBalance: Math.max(0, totalBal - usedMargin),
-      equity,
-      usedMargin,
-      freeMargin,
-      dailyPnL,
-      weeklyPnL,
-      walletPnl: totalBal - startingBalance,
-      binanceRealizedPnl: account.realized_pnl ?? 0,
-      dbPositionPnlSum: dbClosedSum._sum.realized_pnl ?? 0,
-      startingBalance,
-    };
+        const summary = await getAccountBalanceSummary(sym, meth, false);
+        if (!summary.isInitialized) {
+          return {
+            isInitialized: false,
+            totalBalance: 0,
+            availableBalance: 0,
+            equity: 0,
+            usedMargin: 0,
+            freeMargin: 0,
+            dailyPnL: 0,
+            weeklyPnL: 0,
+          };
+        }
+        const {
+          symbol: _s,
+          methodId: _m,
+          openUnrealized: _u,
+          exposureUsd: _e,
+          maxExposureUsd: _x,
+          ...apiBalance
+        } = summary;
+        return apiBalance;
       }
     );
 
