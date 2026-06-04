@@ -27,17 +27,10 @@ export async function assertTestnetAccountCanOpenTrade(
 
   const now = new Date();
   if (account.cooldown_until && account.cooldown_until > now) {
+    const policy = getRiskPolicy();
     return {
       allowed: false,
-      reason: `Account cooldown active until ${account.cooldown_until.toISOString()}`,
-    };
-  }
-
-  const policy = getRiskPolicy();
-  if ((account.consecutive_losses ?? 0) >= policy.maxConsecutiveLosses) {
-    return {
-      allowed: false,
-      reason: `${account.consecutive_losses} consecutive losses (max ${policy.maxConsecutiveLosses}) — no new entries`,
+      reason: `Account cooldown active until ${account.cooldown_until.toISOString()} (${account.consecutive_losses ?? 0} consecutive losses, max ${policy.maxConsecutiveLosses})`,
     };
   }
 

@@ -1176,15 +1176,30 @@ router.get('/balance', async (req: Request, res: Response) => {
     const equity = account.equity ?? account.current_balance ?? 0;
     const freeMargin = Math.max(0, equity - usedMargin);
 
+    const startingBalance = account.starting_balance || 0;
+    const totalBal = account.current_balance || 0;
+    const dbClosedSum = await prisma.testnetPosition.aggregate({
+      where: {
+        account_id: account.id,
+        status: { in: ['closed', 'CLOSED'] },
+        position_id: { not: 'pipeline_v3_kim_nghia' },
+      },
+      _sum: { realized_pnl: true },
+    });
+
     return {
       isInitialized: true,
-      totalBalance: account.current_balance || 0,
-      availableBalance: Math.max(0, (account.current_balance || 0) - usedMargin),
+      totalBalance: totalBal,
+      availableBalance: Math.max(0, totalBal - usedMargin),
       equity,
       usedMargin,
       freeMargin,
       dailyPnL,
       weeklyPnL,
+      walletPnl: totalBal - startingBalance,
+      binanceRealizedPnl: account.realized_pnl ?? 0,
+      dbPositionPnlSum: dbClosedSum._sum.realized_pnl ?? 0,
+      startingBalance,
     };
       }
     );

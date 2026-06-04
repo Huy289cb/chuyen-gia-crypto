@@ -29,7 +29,9 @@ import {
   getPrecisionSkipMs,
   isPositionMonitorExitEnabled,
   isPositionMonitorReduceEnabled,
+  isUnhedgedEmergencyExitEnabled,
 } from '../config/position-monitor-policy';
+import { emergencyMarketCloseUnhedged } from '../services/protective-order.service';
 
 let positionMonitorTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -189,11 +191,27 @@ async function runPositionMonitor() {
       console.log(`[PositionMonitor] Reason: ${health.reason}`);
 
       if (health.recommended_action === 'exit') {
-        if (!isPositionMonitorExitEnabled()) {
+        const unhedged =
+          !refreshed.binance_sl_order_id && process.env.BINANCE_ENABLED === 'true';
+        const allowUnhedgedExit =
+          unhedged &&
+          isUnhedgedEmergencyExitEnabled() &&
+          health.sl_progress != null &&
+          health.sl_progress >= 0.95;
+
+        if (!isPositionMonitorExitEnabled() && !allowUnhedgedExit) {
           console.log(
             `[PositionMonitor] EXIT skipped (POSITION_MONITOR_ALLOW_EXIT=false) for ${position.position_id}`
           );
           continue;
+        }
+
+        if (allowUnhedgedExit && !isPositionMonitorExitEnabled()) {
+          console.warn(
+            `[PositionMonitor] Unhedged emergency exit for ${position.position_id} (no binance SL)`
+          );
+          const closed = await emergencyMarketCloseUnhedged(refreshed, mark, 'monitor_unhedged_sl_progress');
+          if (closed) continue;
         }
         if (shouldSkipPrecisionAction(position.position_id)) {
           continue;

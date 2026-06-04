@@ -20,6 +20,11 @@ export interface CloseOutcomeContext {
   funding_fee?: number;
   close_reason: string;
   decision_id?: number;
+  fill_verified?: boolean;
+}
+
+export interface RecordOutcomeOptions {
+  skipReflection?: boolean;
 }
 
 function outcomeLabel(pnl: number): 'win' | 'loss' | 'breakeven' {
@@ -120,7 +125,8 @@ export async function resolveDecisionIdForPosition(ctx: CloseOutcomeContext): Pr
 export async function recordTradeOutcomeOnClose(
   ctx: CloseOutcomeContext,
   closePrice: number,
-  realizedPnl: number
+  realizedPnl: number,
+  options?: RecordOutcomeOptions
 ): Promise<void> {
   const decisionId = await resolveDecisionIdForPosition(ctx);
   if (decisionId == null) {
@@ -162,7 +168,18 @@ export async function recordTradeOutcomeOnClose(
       close_reason: ctx.close_reason,
     });
 
-    await memoryService.generateReflection(outcome.id, label, realizedPnl);
+    const skipReflection =
+      options?.skipReflection === true ||
+      (ctx.fill_verified === false &&
+        (ctx.close_reason.startsWith('reconciliation') || ctx.close_reason === 'backfill_pnl'));
+
+    if (!skipReflection) {
+      await memoryService.generateReflection(outcome.id, label, realizedPnl);
+    } else {
+      console.log(
+        `[TradeOutcome] Skipped reflection for ${ctx.position_id} (${ctx.close_reason}, unverified fill)`
+      );
+    }
     console.log(
       `[TradeOutcome] Stored ${label} for ${ctx.symbol} decision=${decisionId} pnl=${realizedPnl.toFixed(2)} rr=${realizedRr.toFixed(2)}`
     );

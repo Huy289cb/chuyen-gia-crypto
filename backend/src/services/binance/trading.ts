@@ -563,19 +563,31 @@ export async function getAllOrders(symbol: string, limit: number = 500): Promise
   }
 }
 
+export interface GetUserTradesOptions {
+  limit?: number;
+  startTime?: number;
+  endTime?: number;
+}
+
 /**
  * Get user trades for a symbol
- * @param {string} symbol - Trading symbol
- * @param {number} [limit] - Number of trades to return (default 500, max 1000)
- * @returns {Promise<Array>} Array of trades
  */
-export async function getUserTrades(symbol: string, limit: number = 500): Promise<any[]> {
+export async function getUserTrades(
+  symbol: string,
+  limitOrOptions: number | GetUserTradesOptions = 500
+): Promise<any[]> {
   try {
-    const response: any = await get(endpoints.USER_TRADES, {
+    const opts =
+      typeof limitOrOptions === 'number' ? { limit: limitOrOptions } : limitOrOptions;
+    const params: Record<string, string> = {
       symbol,
-      limit: limit.toString(),
-    }, true);
-    
+      limit: String(opts.limit ?? 500),
+    };
+    if (opts.startTime != null) params.startTime = String(opts.startTime);
+    if (opts.endTime != null) params.endTime = String(opts.endTime);
+
+    const response: any = await get(endpoints.USER_TRADES, params, true);
+
     return response.map((trade: any) => ({
       orderId: trade.orderId,
       symbol: trade.symbol,
@@ -584,6 +596,7 @@ export async function getUserTrades(symbol: string, limit: number = 500): Promis
       qty: parseFloat(trade.qty),
       commission: parseFloat(trade.commission),
       commissionAsset: trade.commissionAsset,
+      realizedPnl: parseFloat(trade.realizedPnl ?? '0'),
       time: trade.time,
       isMaker: trade.isMaker,
     }));

@@ -667,6 +667,20 @@ export async function getTestnetPendingOrderByBinanceId(
   });
 }
 
+/** Lookup by internal order_id (from clientOrderId x-v3_*). */
+export async function getTestnetPendingOrderByOrderId(
+  orderId: string
+): Promise<any | null> {
+  return prisma.testnetPendingOrder.findFirst({
+    where: {
+      order_id: orderId,
+      status: {
+        in: ['pending', 'partially_filled', 'reconciliation_failed_not_on_binance'],
+      },
+    },
+  });
+}
+
 /**
  * Execute testnet pending order
  */

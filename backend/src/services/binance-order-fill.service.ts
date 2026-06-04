@@ -10,7 +10,10 @@ import {
   recordTestnetTradeEvent,
   updateTestnetPendingOrder,
 } from '../repositories/testnet.repository';
-import { placeStopLossOrder, placeTakeProfitOrder } from './binanceClient';
+import {
+  placeProtectiveOrdersForPosition,
+  resolveLevelsForFill,
+} from './protective-order.service';
 
 /** Binance ORDER_TRADE_UPDATE `o` payload (subset). */
 export interface BinanceOrderTradeUpdate {
@@ -86,7 +89,7 @@ export async function materializePositionFromPendingFill(
         where: { position_id: existing.position_id },
       });
       if (full) {
-        await ensureProtectiveOrdersForPosition(full);
+        await placeProtectiveOrdersForPosition(full);
       }
       return existing.position_id;
     }
@@ -110,14 +113,33 @@ export async function materializePositionFromPendingFill(
   const positionId = `pos_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const sizeUsd = qty * avgPrice;
 
+  const plannedEntry =
+    Number(localOrder.entry_price) > 0 ? Number(localOrder.entry_price) : avgPrice;
+  let mark: number | undefined;
+  try {
+    const { fetchBinanceNetPosition } = await import('./binance-exposure.service');
+    const live = await fetchBinanceNetPosition(localOrder.symbol);
+    if (live?.markPrice && live.markPrice > 0) mark = live.markPrice;
+  } catch {
+    /* optional */
+  }
+  const levels = resolveLevelsForFill(
+    localOrder.side,
+    avgPrice,
+    plannedEntry,
+    localOrder.stop_loss,
+    localOrder.take_profit,
+    mark
+  );
+
   await createTestnetPosition({
     positionId,
     accountId: localOrder.account_id,
     symbol: localOrder.symbol,
     side: localOrder.side,
     entryPrice: avgPrice,
-    stopLoss: localOrder.stop_loss,
-    takeProfit: localOrder.take_profit,
+    stopLoss: levels.stop_loss,
+    takeProfit: levels.take_profit,
     sizeUsd,
     sizeQty: qty,
     riskUsd: localOrder.risk_usd,
@@ -171,8 +193,9 @@ export async function materializePositionFromPendingFill(
     symbol: localOrder.symbol,
     side: localOrder.side,
     entry_price: avgPrice,
-    stop_loss: localOrder.stop_loss,
-    take_profit: localOrder.take_profit,
+    planned_entry: plannedEntry,
+    stop_loss: levels.stop_loss,
+    take_profit: levels.take_profit,
     executed_qty: qty,
     size_qty: qty,
     size_usd: sizeUsd,
@@ -182,10 +205,14 @@ export async function materializePositionFromPendingFill(
     ...(linkedDecisionId != null ? { decision_id: linkedDecisionId } : {}),
   });
 
-  await placeSlTpForPosition(positionId, localOrder.symbol, localOrder.side, qty, localOrder);
+  const { prisma: db } = await import('../lib/prisma');
+  const created = await db.testnetPosition.findUnique({ where: { position_id: positionId } });
+  if (created) {
+    await placeProtectiveOrdersForPosition(created);
+  }
 
   console.log(
-    `[BinanceOrderFill] Position ${positionId} from order ${localOrder.order_id} @ ${avgPrice}`
+    `[BinanceOrderFill] Position ${positionId} from order ${localOrder.order_id} @ ${avgPrice} SL=${levels.stop_loss} TP=${levels.take_profit}`
   );
   return positionId;
 }
@@ -195,103 +222,21 @@ export async function materializePositionFromPendingFill(
  */
 export async function ensureProtectiveOrdersForPosition(position: {
   position_id: string;
+  account_id?: number;
   symbol: string;
   side: string;
+  entry_price?: number;
   size_qty: number;
   stop_loss: number;
   take_profit: number;
   binance_sl_order_id?: string | null;
   binance_tp_order_id?: string | null;
+  account?: { current_balance?: number };
 }): Promise<void> {
-  if (position.binance_sl_order_id && position.binance_tp_order_id) {
-    return;
-  }
-  const qty = Math.abs(Number(position.size_qty));
-  if (!Number.isFinite(qty) || qty <= 0) return;
-
-  const side = String(position.side).toLowerCase();
-  try {
-    const { fetchBinanceNetPosition } = await import('./binance-exposure.service');
-    const live = await fetchBinanceNetPosition(position.symbol);
-    const mark = live?.markPrice ?? 0;
-    if (mark > 0) {
-      if (side === 'long' && position.stop_loss >= mark) {
-        console.warn(
-          `[BinanceOrderFill] Skip SL/TP for ${position.position_id}: long SL ${position.stop_loss} >= mark ${mark} (would trigger immediately)`
-        );
-        return;
-      }
-      if (side === 'short' && position.stop_loss <= mark) {
-        console.warn(
-          `[BinanceOrderFill] Skip SL/TP for ${position.position_id}: short SL ${position.stop_loss} <= mark ${mark} (would trigger immediately)`
-        );
-        return;
-      }
-    }
-  } catch {
-    /* proceed if mark lookup fails */
-  }
-
-  await placeSlTpForPosition(position.position_id, position.symbol, position.side, qty, {
-    stop_loss: position.stop_loss,
-    take_profit: position.take_profit,
+  await placeProtectiveOrdersForPosition({
+    ...position,
+    entry_price: position.entry_price ?? 0,
   });
-}
-
-async function placeSlTpForPosition(
-  positionId: string,
-  symbol: string,
-  positionSideLocal: string,
-  executedQty: number,
-  levels: { stop_loss: number; take_profit: number }
-): Promise<void> {
-  try {
-    const { ensurePositionModeDetected, getPositionMode } = await import('./binance-hedge-mode');
-    await ensurePositionModeDetected();
-
-    const client = {};
-    const symbolUsdt = `${symbol.toUpperCase().replace(/USDT$/i, '')}USDT`;
-    const closeSide = positionSideLocal === 'long' ? 'SELL' : 'BUY';
-    const signedAmt = positionSideLocal === 'long' ? executedQty : -executedQty;
-    const mode = getPositionMode();
-    const currentPosition = {
-      positionAmt: signedAmt,
-      ...(mode === 'HEDGE'
-        ? { positionSide: positionSideLocal === 'long' ? 'LONG' : 'SHORT' }
-        : {}),
-    };
-
-    const slOrder = await placeStopLossOrder(
-      client,
-      symbolUsdt,
-      closeSide,
-      executedQty,
-      levels.stop_loss,
-      'CLOSE',
-      currentPosition,
-      null
-    );
-
-    const tpOrder = await placeTakeProfitOrder(
-      client,
-      symbolUsdt,
-      closeSide,
-      executedQty,
-      levels.take_profit,
-      'CLOSE',
-      currentPosition,
-      null
-    );
-
-    const { updateTestnetPosition } = await import('../repositories/testnet.repository');
-    await updateTestnetPosition(positionId, {
-      binance_sl_order_id: String(slOrder.orderId),
-      binance_tp_order_id: String(tpOrder.orderId),
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[BinanceOrderFill] SL/TP placement failed for ${positionId}:`, message);
-  }
 }
 
 /**
@@ -360,10 +305,45 @@ export async function recoverPendingOrderFromBinance(
   }
 }
 
+const WS_FILL_LOOKUP_RETRIES = 3;
+const WS_FILL_LOOKUP_DELAY_MS = 500;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Parse x-v3_<ts>_<suffix> → v3_<ts>_<suffix> */
+export function parseV3ClientOrderId(clientOrderId: string | undefined): string | null {
+  if (!clientOrderId || typeof clientOrderId !== 'string') return null;
+  const trimmed = clientOrderId.trim();
+  if (trimmed.startsWith('x-v3_')) return trimmed.slice(2);
+  if (trimmed.startsWith('x-') && trimmed.includes('v3_')) return trimmed.slice(2);
+  if (trimmed.startsWith('v3_')) return trimmed;
+  return null;
+}
+
 export async function findLocalOrderForBinanceEvent(
   binanceOrderId: string,
-  symbolUsdt: string
+  symbolUsdt: string,
+  clientOrderId?: string
 ): Promise<Awaited<ReturnType<typeof getTestnetPendingOrderByBinanceId>>> {
-  const symbol = symbolUsdt.replace('USDT', '');
-  return getTestnetPendingOrderByBinanceId(binanceOrderId, symbol);
+  const symbol = symbolUsdt.replace(/USDT/i, '').toUpperCase();
+  const orderIdFromClient = parseV3ClientOrderId(clientOrderId);
+
+  for (let attempt = 0; attempt < WS_FILL_LOOKUP_RETRIES; attempt++) {
+    const byBinance = await getTestnetPendingOrderByBinanceId(binanceOrderId, symbol);
+    if (byBinance) return byBinance;
+
+    if (orderIdFromClient) {
+      const { getTestnetPendingOrderByOrderId } = await import('../repositories/testnet.repository');
+      const byOrderId = await getTestnetPendingOrderByOrderId(orderIdFromClient);
+      if (byOrderId) return byOrderId;
+    }
+
+    if (attempt < WS_FILL_LOOKUP_RETRIES - 1) {
+      await sleepMs(WS_FILL_LOOKUP_DELAY_MS);
+    }
+  }
+
+  return null;
 }

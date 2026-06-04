@@ -18,6 +18,13 @@ export interface AccountBalanceSummary {
   openUnrealized: number;
   exposureUsd: number;
   maxExposureUsd: number;
+  /** Wallet − starting_balance (Binance-aligned baseline). */
+  walletPnl: number;
+  /** account.realized_pnl from Binance income sync. */
+  binanceRealizedPnl: number;
+  /** Sum of closed position rows (may differ until fill backfill). */
+  dbPositionPnlSum: number;
+  startingBalance: number;
 }
 
 export interface TodayTradeStats {
@@ -47,6 +54,10 @@ export async function getAccountBalanceSummary(
     openUnrealized: 0,
     exposureUsd: 0,
     maxExposureUsd: getRiskPolicy().maxTotalExposureUsd,
+    walletPnl: 0,
+    binanceRealizedPnl: 0,
+    dbPositionPnlSum: 0,
+    startingBalance: 0,
   };
 
   const account = await getTestnetAccount(symbol, methodId);
@@ -68,7 +79,7 @@ export async function getAccountBalanceSummary(
         return d;
       })();
 
-  const [baselineDay, baselineWeek, marginAgg, realizedTodayAgg, realizedWeekAgg, unrealizedOpenAgg, openPositions, pendingOrders] =
+  const [baselineDay, baselineWeek, marginAgg, realizedTodayAgg, realizedWeekAgg, unrealizedOpenAgg, dbClosedSum, openPositions, pendingOrders] =
     await Promise.all([
       prisma.testnetAccountSnapshot.findFirst({
         where: { account_id: account.id, timestamp: { lt: dayStart } },
@@ -102,6 +113,14 @@ export async function getAccountBalanceSummary(
         where: { account_id: account.id, status: { in: ['open', 'OPEN'] } },
         _sum: { unrealized_pnl: true },
       }),
+      prisma.testnetPosition.aggregate({
+        where: {
+          account_id: account.id,
+          status: { in: ['closed', 'CLOSED'] },
+          position_id: { not: 'pipeline_v3_kim_nghia' },
+        },
+        _sum: { realized_pnl: true },
+      }),
       getTestnetPositions({ symbol, status: 'open', methodId }),
       getTestnetPendingOrders({ symbol, status: 'pending', methodId }),
     ]);
@@ -121,13 +140,15 @@ export async function getAccountBalanceSummary(
   const usedMargin = marginAgg._sum.risk_usd || 0;
   const openVol = openPositions.reduce((s, p) => s + Math.abs(Number(p.size_usd) || 0), 0);
   const pendingVol = pendingOrders.reduce((s, o) => s + Math.abs(Number(o.size_usd) || 0), 0);
+  const startingBalance = account.starting_balance || 0;
+  const totalBalance = account.current_balance || 0;
 
   return {
     isInitialized: true,
     symbol,
     methodId,
-    totalBalance: account.current_balance || 0,
-    availableBalance: Math.max(0, (account.current_balance || 0) - usedMargin),
+    totalBalance,
+    availableBalance: Math.max(0, totalBalance - usedMargin),
     equity,
     usedMargin,
     freeMargin: Math.max(0, equity - usedMargin),
@@ -136,6 +157,10 @@ export async function getAccountBalanceSummary(
     openUnrealized,
     exposureUsd: openVol + pendingVol,
     maxExposureUsd: getRiskPolicy().maxTotalExposureUsd,
+    walletPnl: totalBalance - startingBalance,
+    binanceRealizedPnl: account.realized_pnl ?? 0,
+    dbPositionPnlSum: dbClosedSum._sum.realized_pnl ?? 0,
+    startingBalance,
   };
 }
 

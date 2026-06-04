@@ -189,13 +189,22 @@ cd backend && npm run testnet:backfill-pnl
 
 ---
 
-## Out of scope (P2+)
+## P1.5+ roadmap
 
-- Auto-block playbook from `trade_outcomes` stats (needs ≥30 samples)
-- Dashboard PnL from outcomes only (partial in P0 memory filter)
+Chi tiết fix/cải thiện tiếp theo (measurement → learning): **[pnl-plus-roadmap.md](./pnl-plus-roadmap.md)**.
+
+Tóm tắt ưu tiên:
+
+1. **P1.5** — Close PnL từ `userTrades`/income; dashboard wallet-first; tắt reflection trên close ước lượng  
+2. **P2** — Verified close taxonomy; WS fill sync; pending E2E; modify limit trên exchange  
+3. **P3** — Entry quality (HTF guard, cooldown từ income, exposure)  
+4. **P4** — Reflection / auto-block (sau ≥30 verified closes)
+
+## Out of scope (until P2 done)
+
+- Auto-block playbook from `trade_outcomes` stats (needs ≥30 **verified** samples)
+- Strategy tuning from DB win-rate (misleading until fill-based PnL)
 - Leverage reduction (manual env `BINANCE_LEVERAGE`)
-- Binance income API for exact historical realized PnL per fill
-- Amend limit price on exchange when LLM `modify` pending
 
 ---
 

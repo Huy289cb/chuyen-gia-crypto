@@ -109,12 +109,20 @@ async function handleOrderTradeUpdate(event: any): Promise<void> {
     `[BinanceWebSocketSync] ORDER_TRADE_UPDATE: binanceOrderId=${binanceOrderId} status=${orderStatus} executedQty=${executedQty} avgPrice=${avgPrice}`
   );
 
-  const localOrder = await findLocalOrderForBinanceEvent(binanceOrderId, symbol);
+  const clientOrderId = typeof order.c === 'string' ? order.c : undefined;
+  let localOrder = await findLocalOrderForBinanceEvent(binanceOrderId, symbol, clientOrderId);
   const isAlgoClose =
     orderType === 'STOP_MARKET' ||
     orderType === 'TAKE_PROFIT_MARKET' ||
     orderType === 'STOP' ||
     orderType === 'TAKE_PROFIT';
+
+  if (!localOrder && orderType === 'LIMIT' && orderStatus === 'FILLED') {
+    console.warn(
+      `[BinanceWebSocketSync] FILLED without local row binanceOrderId=${binanceOrderId} clientOrderId=${clientOrderId ?? 'n/a'} — reconciliation will recover`
+    );
+    return;
+  }
 
   if (!localOrder && orderType === 'LIMIT') {
     console.log(`[BinanceWebSocketSync] No local order found for binanceOrderId=${binanceOrderId}, skipping`);

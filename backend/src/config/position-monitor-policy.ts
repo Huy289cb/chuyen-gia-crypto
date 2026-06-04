@@ -12,6 +12,14 @@ export function isPositionMonitorExitEnabled(): boolean {
   return process.env.POSITION_MONITOR_ALLOW_EXIT === 'true';
 }
 
+/**
+ * P1.6: Allow emergency market exit when exchange SL missing and price at/near planned SL.
+ * Default true — does not enable discretionary exit for hedged positions.
+ */
+export function isUnhedgedEmergencyExitEnabled(): boolean {
+  return process.env.POSITION_MONITOR_EXIT_ON_UNHEDGED !== 'false';
+}
+
 /** Skip monitor actions on young positions (let exchange orders work). */
 export function getMinMinutesBeforeMonitorAction(): number {
   const v = parseInt(process.env.POSITION_MONITOR_MIN_MINUTES || '30', 10);

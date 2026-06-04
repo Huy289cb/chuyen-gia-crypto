@@ -17,6 +17,7 @@ import {
 } from './trade-outcome.service';
 import { getPositionRisk } from './binanceClient';
 import { applyConsecutiveLossCooldownIfNeeded } from './account-risk-guard.service';
+import { resolveClosePnlFromUserTrades } from './binance-fill-pnl.service';
 
 export function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
@@ -88,6 +89,7 @@ export async function closeLocalPosition(
     funding_fee?: number;
     symbol?: string;
     status?: string;
+    binance_order_id?: string | null;
     account: { current_balance: number };
   },
   closePrice: number,
@@ -114,11 +116,29 @@ export async function closeLocalPosition(
   }
 
   const qty = Math.abs(position.size_qty);
-  const realizedPnl = calculatePnl(position.side, position.entry_price, closePrice, qty);
+  const fill = await resolveClosePnlFromUserTrades({
+    symbol: position.symbol ?? 'BTC',
+    side: position.side,
+    entryTime: position.entry_time ?? new Date(Date.now() - 3_600_000),
+    closeTime: new Date(),
+    entryOrderId: position.binance_order_id ?? null,
+    sizeQty: position.size_qty,
+    entryPrice: position.entry_price,
+    fallbackClosePrice: closePrice,
+  });
 
-  await closeTestnetPosition(position.position_id, closePrice, closeReason);
+  const finalClosePrice = fill.verified ? fill.closePrice : closePrice;
+  const realizedPnl = fill.verified
+    ? fill.realizedPnl
+    : calculatePnl(position.side, position.entry_price, finalClosePrice, qty);
+  const finalCloseReason =
+    fill.verified && closeReason.startsWith('reconciliation')
+      ? 'reconciliation_fill'
+      : closeReason;
+
+  await closeTestnetPosition(position.position_id, finalClosePrice, finalCloseReason);
   await updateTestnetPosition(position.position_id, {
-    current_price: closePrice,
+    current_price: finalClosePrice,
     realized_pnl: realizedPnl,
     unrealized_pnl: 0,
   });
@@ -152,17 +172,21 @@ export async function closeLocalPosition(
     side: position.side,
     entry_price: position.entry_price,
     size_qty: qty,
-    size_usd: qty * closePrice,
-    close_price: closePrice,
-    close_reason: closeReason,
+    size_usd: qty * finalClosePrice,
+    close_price: finalClosePrice,
+    close_reason: finalCloseReason,
     realized_pnl: realizedPnl,
     account_balance: balances.account_balance,
     account_equity: balances.account_equity,
+    fill_verified: fill.verified,
+    fill_source: fill.source,
+    fill_trade_ids: fill.tradeIds,
     ...eventMeta,
   });
 
   console.log(
-    `[PositionClose] Closed ${position.position_id} @ ${closePrice} (${closeReason}) PnL=${realizedPnl.toFixed(2)}`
+    `[PositionClose] Closed ${position.position_id} @ ${finalClosePrice.toFixed(2)} (${finalCloseReason}) ` +
+      `PnL=${realizedPnl.toFixed(2)} fill=${fill.source} verified=${fill.verified}`
   );
 
   const outcomeCtx: CloseOutcomeContext = {
@@ -178,11 +202,14 @@ export async function closeLocalPosition(
     entry_fee: position.entry_fee,
     exit_fee: position.exit_fee,
     funding_fee: position.funding_fee,
-    close_reason: closeReason,
+    close_reason: finalCloseReason,
     decision_id:
       typeof eventMeta?.decision_id === 'number' ? eventMeta.decision_id : undefined,
+    fill_verified: fill.verified,
   };
-  await recordTradeOutcomeOnClose(outcomeCtx, closePrice, realizedPnl);
+  await recordTradeOutcomeOnClose(outcomeCtx, finalClosePrice, realizedPnl, {
+    skipReflection: !fill.verified,
+  });
 
   if (process.env.BINANCE_ENABLED === 'true') {
     try {
