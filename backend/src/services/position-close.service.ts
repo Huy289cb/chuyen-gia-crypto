@@ -8,7 +8,7 @@ import {
   recordTestnetTradeEvent,
   updateTestnetPosition,
 } from '../repositories/testnet.repository';
-import { ensurePositionModeDetected } from './binance-hedge-mode';
+import { ensurePositionModeDetected, getPositionMode } from './binance-hedge-mode';
 import { normalizeQuantityForSymbol, placeMarketOrder } from './binanceClient';
 import { syncTestnetAccountFromBinance, resolveTestnetAccountBalances } from './binance-balance-sync.service';
 import {
@@ -262,21 +262,28 @@ export async function closePositionOnBinanceMarket(
   const normalizedQty = qtyCheck.normalizedQty;
   const isLong = position.side.toLowerCase() === 'long';
   const binanceSide = isLong ? 'SELL' : 'BUY';
-  const positionSide = isLong ? 'LONG' : 'SHORT';
+  const mode = getPositionMode();
   const currentPosition = {
     positionAmt: isLong ? normalizedQty : -normalizedQty,
-    positionSide,
+    ...(mode === 'HEDGE'
+      ? { positionSide: isLong ? 'LONG' : 'SHORT' }
+      : {}),
   };
 
-  await placeMarketOrder(
-    {},
-    symbol,
-    binanceSide,
-    normalizedQty,
-    'CLOSE',
-    currentPosition,
-    positionSide
-  );
+  try {
+    await placeMarketOrder(
+      {},
+      symbol,
+      binanceSide,
+      normalizedQty,
+      'CLOSE',
+      currentPosition,
+      null
+    );
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason };
+  }
 
   console.log(
     `[PositionClose] Binance market close ${symbol} ${binanceSide} qty=${normalizedQty} (raw ${qty})`

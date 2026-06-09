@@ -8,6 +8,7 @@ import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
 import { resolveMaxTotalExposureUsd } from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
+import { checkBinanceAccountTradable } from './binance-account-health.service';
 import { hasBinanceExposureForSide } from './binance-exposure.service';
 import {
   createTestnetPendingOrder,
@@ -113,6 +114,11 @@ export async function executeV3Trade(
   const accountGuard = await assertTestnetAccountCanOpenTrade(account.id);
   if (!accountGuard.allowed) {
     return { success: false, reason: accountGuard.reason };
+  }
+
+  const binanceHealth = await checkBinanceAccountTradable();
+  if (!binanceHealth.tradable) {
+    return { success: false, reason: binanceHealth.reason };
   }
 
   const balance = Number(account.current_balance ?? account.equity ?? 10000);

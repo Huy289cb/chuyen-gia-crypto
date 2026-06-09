@@ -2,9 +2,11 @@
  * P1.6 — Protective orders: recompute SL/TP from actual fill, handle -2021, emergency close.
  */
 
+import { computeSlProgress } from '../analyzers/position-health.analyzer';
 import { getRiskPolicy } from '../config/risk-policy';
 import { updateTestnetPosition, recordTestnetTradeEvent } from '../repositories/testnet.repository';
 import { placeStopLossOrder, placeTakeProfitOrder } from './binanceClient';
+import { ensurePositionModeDetected, getPositionMode } from './binance-hedge-mode';
 import {
   closeLocalPosition,
   closePositionOnBinanceMarket,
@@ -82,6 +84,96 @@ function slTpInvalidForMark(
   return stop_loss >= mark;
 }
 
+function pairSymbol(symbol: string): string {
+  return `${symbol.toUpperCase().replace(/USDT$/i, '')}USDT`;
+}
+
+export function extractOpenAlgoOrderIds(orders: unknown): Set<string> {
+  const rows = Array.isArray(orders) ? orders : [];
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as { algoId?: string | number; orderId?: string | number };
+    const id = String(o.algoId ?? o.orderId ?? '');
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+/** Fetch live algo order ids; empty set on failure (treat DB ids as stale). */
+export async function fetchOpenAlgoOrderIds(symbol: string): Promise<Set<string>> {
+  try {
+    const { getOpenAlgoOrders } = await import('./binanceClient');
+    const orders = await getOpenAlgoOrders({}, pairSymbol(symbol));
+    return extractOpenAlgoOrderIds(orders);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn(`[ProtectiveOrder] openAlgoOrders fetch failed for ${symbol}: ${msg}`);
+    return new Set();
+  }
+}
+
+/**
+ * Clear DB SL/TP ids that no longer exist on Binance (e.g. after demo wallet reset).
+ */
+export async function reconcileStaleProtectiveOrderIds(position: {
+  position_id: string;
+  symbol: string;
+  binance_sl_order_id?: string | null;
+  binance_tp_order_id?: string | null;
+}): Promise<{
+  binance_sl_order_id: string | null;
+  binance_tp_order_id: string | null;
+  clearedSl: boolean;
+  clearedTp: boolean;
+}> {
+  const slId = position.binance_sl_order_id ? String(position.binance_sl_order_id) : null;
+  const tpId = position.binance_tp_order_id ? String(position.binance_tp_order_id) : null;
+
+  if (!slId && !tpId) {
+    return {
+      binance_sl_order_id: null,
+      binance_tp_order_id: null,
+      clearedSl: false,
+      clearedTp: false,
+    };
+  }
+
+  const openIds = await fetchOpenAlgoOrderIds(position.symbol);
+  let clearedSl = false;
+  let clearedTp = false;
+  let newSlId = slId;
+  let newTpId = tpId;
+
+  if (slId && !openIds.has(slId)) {
+    clearedSl = true;
+    newSlId = null;
+  }
+  if (tpId && !openIds.has(tpId)) {
+    clearedTp = true;
+    newTpId = null;
+  }
+
+  if (clearedSl || clearedTp) {
+    await updateTestnetPosition(position.position_id, {
+      ...(clearedSl ? { binance_sl_order_id: null } : {}),
+      ...(clearedTp ? { binance_tp_order_id: null } : {}),
+    });
+    console.warn(
+      `[ProtectiveOrder] Cleared stale algo ids for ${position.position_id}: ` +
+        `sl=${clearedSl ? `${slId}→cleared` : 'ok'} tp=${clearedTp ? `${tpId}→cleared` : 'ok'} ` +
+        `(openAlgos=${openIds.size})`
+    );
+  }
+
+  return {
+    binance_sl_order_id: newSlId,
+    binance_tp_order_id: newTpId,
+    clearedSl,
+    clearedTp,
+  };
+}
+
 async function placeSlTpOnBinance(
   positionId: string,
   symbol: string,
@@ -90,7 +182,6 @@ async function placeSlTpOnBinance(
   levels: SlTpLevels,
   opts?: { skipSl?: boolean; skipTp?: boolean }
 ): Promise<{ slId?: string; tpId?: string; slError?: string; tpError?: string }> {
-  const { ensurePositionModeDetected, getPositionMode } = await import('./binance-hedge-mode');
   await ensurePositionModeDetected();
 
   const symbolUsdt = `${symbol.toUpperCase().replace(/USDT$/i, '')}USDT`;
@@ -174,6 +265,13 @@ export async function placeProtectiveOrdersForPosition(position: {
   binance_tp_order_id?: string | null;
   account?: { current_balance?: number };
 }): Promise<'ok' | 'partial' | 'closed' | 'skipped'> {
+  const reconciled = await reconcileStaleProtectiveOrderIds(position);
+  position = {
+    ...position,
+    binance_sl_order_id: reconciled.binance_sl_order_id,
+    binance_tp_order_id: reconciled.binance_tp_order_id,
+  };
+
   if (position.binance_sl_order_id && position.binance_tp_order_id) {
     return 'skipped';
   }
@@ -217,6 +315,36 @@ export async function placeProtectiveOrdersForPosition(position: {
     plannedTp: position.take_profit,
     markPrice: mark > 0 ? mark : undefined,
   });
+
+  if (mark > 0 && slTpInvalidForMark(side, levels.stop_loss, mark)) {
+    const slProgress = computeSlProgress({
+      position_id: position.position_id,
+      symbol: position.symbol,
+      side,
+      entry_price: position.entry_price,
+      current_price: mark,
+      stop_loss: position.stop_loss,
+      take_profit: position.take_profit,
+      entry_time: new Date(),
+      size_qty: qty,
+      unrealized_pnl: 0,
+    });
+    if (slProgress != null && slProgress >= 1) {
+      console.warn(
+        `[ProtectiveOrder] ${position.position_id} sl_progress=${(slProgress * 100).toFixed(0)}% — ` +
+          `SL=${levels.stop_loss} would trigger immediately at mark=${mark}, emergency market close`
+      );
+      const closed = await emergencyMarketCloseUnhedged(
+        position,
+        mark,
+        'sl_would_trigger_immediately'
+      );
+      return closed ? 'closed' : 'partial';
+    }
+    console.warn(
+      `[ProtectiveOrder] ${position.position_id} SL behind market (mark=${mark}, sl=${levels.stop_loss}) — will retry with buffer`
+    );
+  }
 
   const skipSl = Boolean(position.binance_sl_order_id);
   const skipTp = Boolean(position.binance_tp_order_id);

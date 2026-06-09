@@ -13,7 +13,12 @@ import { placeOrder as placeOrderAPI, cancelOrder as cancelOrderAPI, cancelAllOr
 import { setLeverage as setLeverageAPI, setMarginType as setMarginTypeAPI, placeStopMarketOrder as placeStopMarketOrderAPI, placeTakeProfitMarketOrder as placeTakeProfitMarketOrderAPI, cancelAlgoOrder as cancelAlgoOrderAPI, cancelAllAlgoOrders as cancelAllAlgoOrdersAPI, getOpenAlgoOrders as getOpenAlgoOrdersAPI } from './binance/trading';
 import { get } from './binance/client';
 import { endpoints } from './binance/endpoints';
-import { resolvePositionSide, validatePositionSide, OrderIntent } from './binance-hedge-mode';
+import {
+  ensurePositionModeDetected,
+  resolvePositionSide,
+  validatePositionSide,
+  OrderIntent,
+} from './binance-hedge-mode';
 import {
   evaluateNormalizedQuantity,
   normalizeToStepSize as normalizeQtyToStep,
@@ -237,6 +242,8 @@ export async function placeMarketOrder(
   }
 
   try {
+    await ensurePositionModeDetected();
+
     const filters = await getSymbolFilters(symbol);
     const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
     const normalizedQuantity = assertValidNormalizedQuantity(symbol, intent, qtyCheck);
@@ -315,6 +322,8 @@ export async function placeLimitOrder(
     throw new Error('[BinanceClient] Order rejected: currentPosition is required for CLOSE orders');
   }
 
+  await ensurePositionModeDetected();
+
   // Get precision filters and normalize values
   const filters = await getSymbolFilters(symbol);
   const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
@@ -389,6 +398,8 @@ export async function placeStopLossOrder(
   }
 
   try {
+    await ensurePositionModeDetected();
+
     // Get precision filters and normalize values
     const filters = await getSymbolFilters(symbol);
     const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
@@ -423,13 +434,12 @@ export async function placeStopLossOrder(
       console.log(`[BinanceClient] STOP LOSS ORDER PLACED: symbol=${symbol} side=${side} intent=${intent} positionSide=${positionSide} type=STOP_MARKET stopPrice=${normalizedStopPrice} orderId=${response.orderId || response.algoId}`);
       return response;
     } else {
-      // ONE_WAY: conditional orders use Algo API; Demo requires positionSide BOTH
+      // ONE_WAY: algo conditional orders — omit positionSide (not allowed in one-way mode)
       const response = await placeStopMarketOrderAPI({
         symbol,
         side,
         quantity: params.quantity,
         stopPrice: params.stopPrice,
-        positionSide: 'BOTH',
         reduceOnly: true,
       });
       console.log(
@@ -469,6 +479,8 @@ export async function placeTakeProfitOrder(
   }
 
   try {
+    await ensurePositionModeDetected();
+
     // Get precision filters and normalize values
     const filters = await getSymbolFilters(symbol);
     const qtyCheck = evaluateNormalizedQuantity(quantity, filters);
@@ -508,7 +520,6 @@ export async function placeTakeProfitOrder(
         side,
         quantity: params.quantity,
         stopPrice: params.stopPrice,
-        positionSide: 'BOTH',
         reduceOnly: true,
       });
       console.log(

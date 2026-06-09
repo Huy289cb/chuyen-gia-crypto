@@ -67,8 +67,10 @@ vi.mock('../../src/services/binance/client.js', () => ({
   get: mockGetExchangeInfo,
 }));
 
+const mockEnsurePositionModeDetected = vi.hoisted(() => vi.fn().mockResolvedValue('HEDGE'));
+
 vi.mock('../../src/services/binance-hedge-mode.js', () => ({
-  ensurePositionModeDetected: vi.fn().mockResolvedValue('HEDGE'),
+  ensurePositionModeDetected: mockEnsurePositionModeDetected,
   getPositionMode: vi.fn(() => 'HEDGE'),
   resolvePositionSide: vi.fn(() => 'LONG'),
   validatePositionSide: vi.fn(),
@@ -216,10 +218,10 @@ describe('Binance REST Client Wrapper', () => {
         symbol: 'BTCUSDT',
         side: 'SELL',
         stopPrice: '49000',
-        positionSide: 'BOTH',
         reduceOnly: true,
       })
     );
+    expect(mockPlaceStopMarketOrder.mock.calls[0][0]).not.toHaveProperty('positionSide');
     expect(mockPlaceOrder).not.toHaveBeenCalled();
   });
 
@@ -235,10 +237,10 @@ describe('Binance REST Client Wrapper', () => {
         symbol: 'BTCUSDT',
         side: 'SELL',
         stopPrice: '52000',
-        positionSide: 'BOTH',
         reduceOnly: true,
       })
     );
+    expect(mockPlaceTakeProfitMarketOrder.mock.calls[0][0]).not.toHaveProperty('positionSide');
     expect(mockPlaceOrder).not.toHaveBeenCalled();
   });
 

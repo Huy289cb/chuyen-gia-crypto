@@ -92,12 +92,11 @@ main() {
   rm -rf dist
   npm run build
 
-  log "PM2 reload..."
+  log "PM2 start (re-read backend/.env; reload does not refresh env_file)..."
   if pm2 describe crypto-api >/dev/null 2>&1; then
-    pm2 reload ecosystem.config.cjs --update-env
-  else
-    pm2 start ecosystem.config.cjs --update-env
+    pm2 delete ecosystem.config.cjs || true
   fi
+  pm2 start ecosystem.config.cjs
   pm2 save
 
   wait_for_health

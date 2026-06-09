@@ -81,4 +81,32 @@ describe('Binance Trading Adapter', () => {
       true
     );
   });
+
+  it('omits positionSide for one-way stop-market algo orders', async () => {
+    await placeStopMarketOrder({
+      symbol: 'BTCUSDT',
+      side: 'BUY',
+      quantity: '0.0119',
+      stopPrice: '70000',
+      reduceOnly: true,
+    });
+
+    const params = mockPost.mock.calls[0][1];
+    expect(params).not.toHaveProperty('positionSide');
+    expect(params.reduceOnly).toBe(true);
+  });
+
+  it('omits positionSide for one-way take-profit algo orders', async () => {
+    await placeTakeProfitMarketOrder({
+      symbol: 'BTCUSDT',
+      side: 'BUY',
+      quantity: '0.0119',
+      stopPrice: '60000',
+      reduceOnly: true,
+    });
+
+    const params = mockPost.mock.calls[0][1];
+    expect(params).not.toHaveProperty('positionSide');
+    expect(params.reduceOnly).toBe(true);
+  });
 });

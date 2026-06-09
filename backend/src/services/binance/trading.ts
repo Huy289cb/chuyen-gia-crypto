@@ -144,11 +144,14 @@ export async function placeStopMarketOrder(params: StopMarketOrderParams): Promi
       side: params.side,
       quantity: params.quantity,
       triggerPrice: params.stopPrice, // Algo Order API uses triggerPrice instead of stopPrice
-      positionSide: params.positionSide,
       timeInForce: params.timeInForce || 'GTC',
       algoType: 'CONDITIONAL',
       type: 'STOP_MARKET',
     };
+
+    if (params.positionSide) {
+      requestParams.positionSide = params.positionSide;
+    }
 
     // Only set closePosition if it's true (for hedge mode)
     if (params.closePosition) {
@@ -206,11 +209,14 @@ export async function placeTakeProfitMarketOrder(params: TakeProfitMarketOrderPa
       side: params.side,
       quantity: params.quantity,
       triggerPrice: params.stopPrice, // Algo Order API uses triggerPrice instead of stopPrice
-      positionSide: params.positionSide,
       timeInForce: params.timeInForce || 'GTC',
       algoType: 'CONDITIONAL',
       type: 'TAKE_PROFIT_MARKET',
     };
+
+    if (params.positionSide) {
+      requestParams.positionSide = params.positionSide;
+    }
 
     // Only set closePosition if it's true (for hedge mode)
     if (params.closePosition) {

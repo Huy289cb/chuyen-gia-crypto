@@ -33,12 +33,27 @@ interface BinanceApiError extends Error {
   nonRetriable?: boolean;
 }
 
-function createBinanceApiError(code: number, msg: string): BinanceApiError {
+function isOrderEndpoint(path: string): boolean {
+  return /\/order(\/test)?$/.test(path) || path === '/fapi/v1/algoOrder';
+}
+
+function isRetriableBinanceError(code: number, path: string): boolean {
+  if (RETRIABLE_ERROR_CODES.has(code)) {
+    return true;
+  }
+  // Demo can return transient -1109 on order endpoints; balance/positionRisk -1109 is persistent.
+  if (code === -1109 && isOrderEndpoint(path)) {
+    return true;
+  }
+  return false;
+}
+
+function createBinanceApiError(code: number, msg: string, path: string): BinanceApiError {
   const error = new Error(`Binance API Error ${code}: ${msg}`) as BinanceApiError;
   error.code = code;
   error.binanceCode = code;
-  error.retriable = RETRIABLE_ERROR_CODES.has(code);
-  error.nonRetriable = NON_RETRIABLE_ERROR_CODES.has(code);
+  error.retriable = isRetriableBinanceError(code, path);
+  error.nonRetriable = NON_RETRIABLE_ERROR_CODES.has(code) && !error.retriable;
   return error;
 }
 
@@ -55,7 +70,10 @@ export async function request(method: string, path: string, params: any = {}, si
 
   let queryParams = new URLSearchParams({
     ...params,
-    ...(signed && { timestamp }),
+    ...(signed && {
+      timestamp: String(timestamp),
+      recvWindow: String(config.RECV_WINDOW),
+    }),
   }).toString();
 
   if (signed) {
@@ -81,12 +99,17 @@ export async function request(method: string, path: string, params: any = {}, si
     if (error.response) {
       // Binance API error
       const { code, msg } = error.response.data;
-      const apiError = createBinanceApiError(code, msg);
+      const apiError = createBinanceApiError(code, msg, path);
       
       // Handle specific error codes that are expected/normal
       if (code === -1021) {
         // Timestamp for this request is outside of the recvWindow
         console.error('[BinanceClient] Timestamp error - sync time with server');
+      } else if (code === -1109) {
+        const hint = isOrderEndpoint(path)
+          ? 'transient demo error on order endpoint — will retry if applicable'
+          : 'demo metadata endpoint (-1109); trading may still work via order/openOrders';
+        console.error(`[BinanceClient] Invalid account (-1109) on ${path}: ${hint}`);
       } else if (code === -2015) {
         // Invalid API-key, IP, or permissions
         console.error('[BinanceClient] Invalid API key or permissions');

@@ -20,6 +20,8 @@ import {
 import {
   fetchActiveBinancePositions,
   fetchBinancePositionRiskRows,
+  inferBinancePositionsFromFallback,
+  isBinancePositionRiskUnavailable,
 } from './binance-exposure.service';
 import { getOpenOrders, getOpenAlgoOrders, cancelAlgoOrder } from './binanceClient';
 import { isPhantomReopenEnabled } from '../config/v3-entry-policy';
@@ -28,6 +30,11 @@ import {
   type ParsedBinancePosition,
   type PositionSideLocal,
 } from '../utils/binance-position-match';
+import {
+  checkBinanceAccountTradable,
+  isBinanceAccountKnownUnhealthy,
+  recordBinanceTradingAccessObserved,
+} from './binance-account-health.service';
 
 /**
  * Perform startup reconciliation between local DB and Binance
@@ -37,6 +44,24 @@ import {
 export async function performStartupReconciliation(): Promise<void> {
   if (process.env.BINANCE_ENABLED !== 'true') {
     console.log('[BinanceReconciliation] BINANCE_ENABLED is not true, skipping reconciliation');
+    return;
+  }
+
+  // Probe trading endpoints first — demo order/test often returns -1109 while openOrders works.
+  try {
+    await getOpenOrders({} as never, 'BTCUSDT');
+    recordBinanceTradingAccessObserved('openOrders');
+  } catch {
+    /* softer demo gate in checkBinanceAccountTradable may still allow reconciliation */
+  }
+
+  if (isBinanceAccountKnownUnhealthy()) {
+    return;
+  }
+
+  const accountHealth = await checkBinanceAccountTradable();
+  if (!accountHealth.tradable) {
+    console.warn(`[BinanceReconciliation] Skipped cycle: ${accountHealth.reason}`);
     return;
   }
 
@@ -177,22 +202,47 @@ async function reconcileOrphanBinanceLimitOrders(): Promise<void> {
   }
 }
 
+const RECONCILE_REOPEN_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+function collectProtectedAlgoIds(
+  positions: Array<{ binance_sl_order_id?: string | null; binance_tp_order_id?: string | null }>
+): Set<string> {
+  const ids = new Set<string>();
+  for (const position of positions) {
+    if (position.binance_sl_order_id) ids.add(String(position.binance_sl_order_id));
+    if (position.binance_tp_order_id) ids.add(String(position.binance_tp_order_id));
+  }
+  return ids;
+}
+
 /**
  * Cancel SL/TP algo orders when no matching open position on Binance.
  */
 export async function cleanupOrphanBinanceAlgoOrders(symbol = 'BTC'): Promise<number> {
   const client = {} as any;
-  const pair = `${symbol.toUpperCase()}USDT`;
+  const base = symbol.toUpperCase().replace(/USDT$/i, '');
+  const pair = `${base}USDT`;
+
+  const localOpen = await getTestnetPositions({ symbol: base, status: 'open' });
+  if (localOpen.length > 0) {
+    return 0;
+  }
+
+  const protectedAlgoIds = collectProtectedAlgoIds(localOpen);
 
   let activePositions: ParsedBinancePosition[] = [];
   try {
-    activePositions = await fetchActiveBinancePositions();
+    activePositions = await fetchActiveBinancePositions(base);
   } catch {
     return 0;
   }
 
+  if (isBinancePositionRiskUnavailable() && activePositions.length === 0) {
+    return 0;
+  }
+
   const hasExposure = activePositions.some(
-    (p) => p.symbol === symbol.toUpperCase() && p.positionAmt >= 1e-8
+    (p) => p.symbol === base && p.positionAmt >= 1e-8
   );
   if (hasExposure) return 0;
 
@@ -209,6 +259,9 @@ export async function cleanupOrphanBinanceAlgoOrders(symbol = 'BTC'): Promise<nu
   let cancelled = 0;
   for (const order of algoOrders) {
     const algoId = String(order.algoId ?? order.orderId);
+    if (protectedAlgoIds.has(algoId)) {
+      continue;
+    }
     try {
       await cancelAlgoOrder(client, pair, algoId);
       cancelled += 1;
@@ -426,7 +479,14 @@ async function consolidateLocalExposureWithBinance(
       where: {
         symbol: bp.symbol,
         side: bp.side,
-        status: 'reconciliation_failed_not_on_binance',
+        OR: [
+          { status: 'reconciliation_failed_not_on_binance' },
+          {
+            status: 'closed',
+            close_reason: 'reconciliation_closed_not_on_binance',
+            close_time: { gte: new Date(Date.now() - RECONCILE_REOPEN_MAX_AGE_MS) },
+          },
+        ],
       },
       orderBy: { entry_time: 'desc' },
     });
@@ -488,6 +548,29 @@ async function reconcilePositions(): Promise<void> {
     const bp = activeBinance.find((p) => p.symbol === localPosition.symbol && p.side === side);
 
     if (!bp) {
+      if (isBinancePositionRiskUnavailable()) {
+        console.warn(
+          `[BinanceReconciliation] Local open ${localPosition.position_id} — positionRisk unavailable (-1109), skipping absent-on-Binance close`
+        );
+        await ensureProtectiveOrdersForPosition(localPosition);
+        continue;
+      }
+
+      const fallback = await inferBinancePositionsFromFallback(localPosition.symbol);
+      const fallbackMatch = fallback.find(
+        (p) =>
+          p.symbol === localPosition.symbol.toUpperCase() &&
+          p.side === side &&
+          p.positionAmt >= 1e-8
+      );
+      if (fallbackMatch) {
+        console.warn(
+          `[BinanceReconciliation] Local open ${localPosition.position_id} found via userTrades fallback — skipping close`
+        );
+        await ensureProtectiveOrdersForPosition(localPosition);
+        continue;
+      }
+
       console.warn(
         `[BinanceReconciliation] Local open ${localPosition.position_id} absent on Binance — closing with PnL`
       );

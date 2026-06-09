@@ -13,9 +13,17 @@ export async function bootstrapBinanceOnWorker(): Promise<void> {
 
   const runUserStream = process.env.BINANCE_USER_STREAM_ON_WORKER !== 'false';
   if (runUserStream) {
-    const { startBinanceWebSocketSync } = await import('./binance-websocket-sync');
-    await startBinanceWebSocketSync();
-    console.log('[BinanceRuntime] User data stream started on worker');
+    try {
+      const { startBinanceWebSocketSync } = await import('./binance-websocket-sync');
+      await startBinanceWebSocketSync();
+      console.log('[BinanceRuntime] User data stream started on worker');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        '[BinanceRuntime] User data stream failed (non-fatal, reconciliation will still run):',
+        message
+      );
+    }
   }
 
   const { initializeBinanceReconciliation } = await import('./binance-reconciliation');

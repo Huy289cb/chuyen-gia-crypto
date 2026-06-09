@@ -12,6 +12,7 @@ import {
   fetchBinanceIncomeSummary,
   type BinanceIncomeSummary,
 } from './binance-income.service';
+import { isBinanceDemoMetadataUnavailableError } from './binance-account-health.service';
 
 export interface WalletReconcileResult {
   accountId: number;
@@ -50,7 +51,17 @@ export async function reconcileTestnetWalletFromBinance(
     throw new Error(`Testnet account ${accountId} not found`);
   }
 
-  const snap = await fetchBinanceBalanceSnapshot();
+  let snap;
+  try {
+    snap = await fetchBinanceBalanceSnapshot();
+  } catch (error: unknown) {
+    if (isBinanceDemoMetadataUnavailableError(error)) {
+      throw new Error(
+        'Wallet reconcile skipped: Binance balance/account unavailable (-1109 on demo)'
+      );
+    }
+    throw error;
+  }
   const income = await fetchBinanceIncomeSummary();
 
   const newStartingBalance = deriveWalletBaseline(snap.walletBalance, income);
