@@ -2,9 +2,11 @@
 
 import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
+import { EmptyState } from '../components/EmptyState';
 import { TimeframeSwitcher } from '../components/TimeframeSwitcher';
 import { ChartToolbar } from '../components/ChartToolbar';
 import { PriceChart } from '../components/crypto/PriceChart';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMarketData } from '../hooks/useMarketData';
@@ -38,30 +40,27 @@ export function MarketChartPanel({
 }: MarketChartPanelProps) {
   const { data: marketData, loading, refresh, timeframe, setTimeframe } = useMarketData(symbol);
 
-  const handleRefresh = () => {
-    refresh();
-  };
-
   const chartData: ChartDataPoint[] = normalizeChartCandles(marketData?.candles || []);
 
   return (
     <Card className={cn('min-w-0', className)}>
       <SectionHeader
         title="Market Chart"
-        subtitle={`${symbol} ${timeframe}`}
+        subtitle={`${symbol} · ${timeframe}`}
         icon={<TrendingUp className="w-5 h-5" />}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <TimeframeSwitcher value={timeframe} onChange={setTimeframe} />
-            <ChartToolbar onRefresh={handleRefresh} isRefreshing={loading} />
+            <ChartToolbar onRefresh={refresh} isRefreshing={loading} />
           </div>
         }
       />
 
-      <div className="h-[300px] min-w-0">
+      <div className="relative h-[300px] min-w-0 rounded-lg border border-border-default/60 bg-surface-1/30 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-full text-foreground-secondary">
-            Loading chart data...
+          <div className="flex flex-col items-center justify-center h-full gap-3 p-6">
+            <LoadingSkeleton variant="text" width="40%" />
+            <p className="text-xs text-foreground-tertiary">Loading chart data…</p>
           </div>
         ) : chartData.length > 0 ? (
           <PriceChart
@@ -77,9 +76,12 @@ export function MarketChartPanel({
             method={method}
           />
         ) : (
-          <div className="flex items-center justify-center h-full text-foreground-secondary">
-            No chart data available
-          </div>
+          <EmptyState
+            icon={TrendingUp}
+            title="No chart data"
+            description="Market candles are not available for this timeframe yet."
+            size="sm"
+          />
         )}
       </div>
     </Card>

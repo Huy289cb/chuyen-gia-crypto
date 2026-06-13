@@ -225,7 +225,7 @@ function CriteriaTable({
   rows: readonly (readonly string[])[];
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border-default">
+    <div className="overflow-x-auto rounded-lg border border-border-default/60 panel-details">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-surface-2 text-left">
@@ -291,7 +291,7 @@ export function SignalGateGradingSection({ language }: SignalGateGradingSectionP
         <h4 className="font-semibold text-foreground mb-4">{t.grades.title}</h4>
         <div className="grid gap-3 sm:grid-cols-2">
           {t.grades.items.map((item) => (
-            <div key={item.g} className="rounded-lg border border-border-default p-3 bg-surface-1">
+            <div key={item.g} className="panel-stat">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <Badge variant={gradeStyles[item.g]?.badge ?? 'neutral'} size="md">
                   {item.g}

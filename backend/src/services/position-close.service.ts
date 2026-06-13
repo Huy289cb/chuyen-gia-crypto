@@ -2,6 +2,16 @@
  * Close local testnet positions and optionally mirror closes on Binance.
  */
 
+/** Close reasons when protective SL/TP placement fails or price already past levels. */
+export const PROTECTIVE_CLOSE_REASON = {
+  SL_BREACHED: 'protective_sl_breached_market',
+  TP_REACHED: 'protective_tp_reached_market',
+  FAILED: 'protective_failed_market_close',
+} as const;
+
+export type ProtectiveCloseReason =
+  (typeof PROTECTIVE_CLOSE_REASON)[keyof typeof PROTECTIVE_CLOSE_REASON];
+
 import { prisma } from '../lib/prisma';
 import {
   closeTestnetPosition,
@@ -146,16 +156,12 @@ export async function closeLocalPosition(
   });
 
   const isWin = realizedPnl > 0;
-  const useBinanceBalance = process.env.BINANCE_ENABLED === 'true';
+  const localBalance = position.account.current_balance + realizedPnl;
   await prisma.testnetAccount.update({
     where: { id: position.account_id },
     data: {
-      ...(!useBinanceBalance
-        ? {
-            current_balance: position.account.current_balance + realizedPnl,
-            equity: position.account.current_balance + realizedPnl,
-          }
-        : {}),
+      current_balance: localBalance,
+      equity: localBalance,
       unrealized_pnl: 0,
       realized_pnl: { increment: realizedPnl },
       total_trades: { increment: 1 },
@@ -167,7 +173,16 @@ export async function closeLocalPosition(
     },
   });
 
-  const balances = await resolveTestnetAccountBalances(position.account_id);
+  if (process.env.BINANCE_ENABLED === 'true') {
+    try {
+      await syncTestnetAccountFromBinance(position.account_id);
+    } catch (syncErr: unknown) {
+      const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+      console.warn(`[PositionClose] Binance balance sync before notify failed: ${msg}`);
+    }
+  }
+
+  const balances = await resolveTestnetAccountBalances(position.account_id, false);
 
   await recordTestnetTradeEvent(position.position_id, 'position_closed', {
     symbol: position.symbol ?? 'BTC',
@@ -212,15 +227,6 @@ export async function closeLocalPosition(
   await recordTradeOutcomeOnClose(outcomeCtx, finalClosePrice, realizedPnl, {
     skipReflection: !fill.verified,
   });
-
-  if (process.env.BINANCE_ENABLED === 'true') {
-    try {
-      await syncTestnetAccountFromBinance(position.account_id);
-    } catch (syncErr: unknown) {
-      const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-      console.warn(`[PositionClose] Binance balance sync failed: ${msg}`);
-    }
-  }
 
   if (!isWin) {
     await applyConsecutiveLossCooldownIfNeeded(position.account_id);

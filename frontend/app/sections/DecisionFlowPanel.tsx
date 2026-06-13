@@ -16,6 +16,7 @@ import {
 import { Card } from '../components/ui/Card';
 import { SectionHeader } from '../components/SectionHeader';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 import { cn, formatVietnamTime } from '@/lib/utils';
 import {
   useDecisionFlow,
@@ -69,7 +70,7 @@ function StageBadge({ status }: { status: PipelineStageStatus }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide',
+        'inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider',
         style.bg,
         style.text
       )}
@@ -164,7 +165,7 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
           subtitle="Error loading pipeline"
           icon={<GitBranch className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{flow.error}</div>
+        <PanelErrorState message={flow.error} />
       </Card>
     );
   }
@@ -186,21 +187,21 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
 
       <div className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Current stage</p>
             <p className="text-sm font-semibold text-accent-primary">{flow.currentStageLabel}</p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Readiness</p>
             <p className="text-sm font-semibold text-foreground">{flow.readinessScore}%</p>
-            <div className="mt-2 h-1.5 rounded-full bg-surface-2 overflow-hidden">
+            <div className="mt-2 progress-track">
               <div
-                className="h-full bg-accent-primary transition-all"
+                className="progress-fill"
                 style={{ width: `${flow.readinessScore}%` }}
               />
             </div>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg sm:col-span-2">
+          <div className="panel-stat sm:col-span-2">
             <p className="text-xs text-foreground-tertiary mb-1">Last blocking reason</p>
             <p className="text-sm text-foreground line-clamp-2">
               {flow.blockedReason || 'No active block — pipeline clear'}
@@ -250,18 +251,16 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
         </div>
 
         <div className="pt-3 border-t border-border-default">
-          <p className="text-xs text-foreground-tertiary uppercase tracking-wide mb-2">
-            Related panels
-          </p>
+          <p className="text-xs font-medium text-foreground-tertiary mb-2">Related panels</p>
           <div className="flex flex-wrap gap-2">
             {quickLinks.map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs',
-                  'bg-surface-1 hover:bg-surface-2 border border-border-default',
-                  'text-foreground-secondary hover:text-foreground transition-colors'
+                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium',
+                  'bg-surface-1/60 hover:bg-surface-2 border border-border-default/60 hover:border-border-strong',
+                  'text-foreground-secondary hover:text-foreground transition-all duration-200 active:scale-[0.98]'
                 )}
               >
                 <Icon className="w-3.5 h-3.5" />

@@ -6,6 +6,8 @@ import { Brain, AlertCircle } from 'lucide-react';
 import { cn, formatVietnamTime } from '@/lib/utils';
 import { useIntelligenceData } from '../hooks/useIntelligenceData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
+import { EmptyState } from '../components/EmptyState';
 
 interface MemoryInsightsPanelProps {
   className?: string;
@@ -35,7 +37,7 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
           subtitle="Error loading data"
           icon={<Brain className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -48,7 +50,12 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
           subtitle="No memory insights yet"
           icon={<Brain className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-foreground-secondary">No trade memory recorded yet.</div>
+        <EmptyState
+          icon={Brain}
+          title="No memory insights yet"
+          description="Trade memory will appear after the pipeline records outcomes."
+          size="sm"
+        />
       </Card>
     );
   }
@@ -72,7 +79,7 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
               memoryData.similarSetups.map((setup) => (
                 <div
                   key={setup.id}
-                  className="p-3 bg-surface-1/50 rounded-lg space-y-1"
+                  className="panel-stat space-y-1"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">{setup.playbook}</span>
@@ -97,7 +104,9 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
                 </div>
               ))
             ) : (
-              <div className="p-3 text-xs text-foreground-tertiary text-center">No similar setups found</div>
+              <div className="panel-stat text-xs text-foreground-tertiary text-center py-4">
+                No similar setups found
+              </div>
             )}
           </div>
         </div>
@@ -119,7 +128,9 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
                 </div>
               ))
             ) : (
-              <div className="p-3 text-xs text-foreground-tertiary text-center">No playbook data available</div>
+              <div className="panel-stat text-xs text-foreground-tertiary text-center py-4">
+                No playbook data available
+              </div>
             )}
           </div>
         </div>
@@ -139,7 +150,9 @@ export function MemoryInsightsPanel({ className }: MemoryInsightsPanelProps) {
                 </div>
               ))
             ) : (
-              <div className="p-3 text-xs text-foreground-tertiary text-center">No failure patterns recorded</div>
+              <div className="panel-stat text-xs text-foreground-tertiary text-center py-4">
+                No failure patterns recorded
+              </div>
             )}
           </div>
         </div>

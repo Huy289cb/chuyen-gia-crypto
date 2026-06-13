@@ -20,10 +20,16 @@ export function SectionHeader({
   return (
     <div className={cn('flex flex-wrap items-start justify-between gap-3 mb-4', className)}>
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        {icon && <span className="text-accent-primary shrink-0">{icon}</span>}
+        {icon && (
+          <span className="text-accent-primary shrink-0 p-1.5 rounded-lg bg-accent-primary/10">
+            {icon}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-foreground truncate">{title}</h3>
+            <h3 className="text-base font-semibold tracking-tight text-foreground truncate text-balance">
+              {title}
+            </h3>
             {badge}
           </div>
           {subtitle && (

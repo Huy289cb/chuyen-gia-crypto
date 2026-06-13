@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Activity, Database, Shield, Bitcoin, Lock } from 'lucide-react';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface SystemOverviewProps {
   className?: string;
@@ -35,7 +36,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
           subtitle="Error loading data"
           icon={<Activity className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load system data'}</div>
+        <PanelErrorState message={error || 'Failed to load system data'} />
       </Card>
     );
   }
@@ -53,7 +54,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
 
       <div className="space-y-4">
         {/* Worker Status */}
-        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-row flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Activity className="w-4 h-4 text-accent-primary" />
             <span className="text-sm text-foreground-secondary">Worker Status</span>
@@ -78,7 +79,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
         </div>
 
         {/* Database Status */}
-        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-row flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Database className="w-4 h-4 text-accent-primary" />
             <span className="text-sm text-foreground-secondary">Database Status</span>
@@ -90,7 +91,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
         </div>
 
         {/* Safety Validation */}
-        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-row flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Shield className="w-4 h-4 text-accent-primary" />
             <span className="text-sm text-foreground-secondary">Safety Validation</span>
@@ -106,7 +107,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
         )}
 
         {/* BTC-only Scope */}
-        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-row flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Bitcoin className="w-4 h-4 text-accent-primary" />
             <span className="text-sm text-foreground-secondary">BTC-only Scope</span>
@@ -119,7 +120,7 @@ export function SystemOverview({ className }: SystemOverviewProps) {
         </div>
 
         {/* Lock Status */}
-        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-row flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Lock className="w-4 h-4 text-accent-primary" />
             <span className="text-sm text-foreground-secondary">Lock Status</span>

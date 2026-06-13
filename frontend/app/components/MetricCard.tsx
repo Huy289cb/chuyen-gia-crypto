@@ -56,8 +56,8 @@ export function MetricCard({
   const content = (
     <div className="flex items-start justify-between gap-2">
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-foreground-tertiary uppercase tracking-wide mb-1">{title}</p>
-        <p className={cn('font-mono font-semibold truncate', valueSizeClasses[size], 'text-foreground')}>
+        <p className="text-xs text-foreground-tertiary font-medium tracking-wide mb-1.5">{title}</p>
+        <p className={cn('font-mono font-semibold tabular-nums truncate tracking-tight', valueSizeClasses[size], 'text-foreground')}>
           {value}
         </p>
         {footnote && (
@@ -84,7 +84,7 @@ export function MetricCard({
     return (
       <div
         className={cn(
-          'bg-surface-1/50 rounded-lg border border-border-default/60',
+          'panel-stat',
           sizeClasses[size],
           className
         )}

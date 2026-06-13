@@ -68,8 +68,13 @@ function DashboardPage() {
         lastDashboardUpdate={lastDashboardUpdate}
       />
 
-      <main className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden">
-        <DecisionFlowPanel className="mb-6" />
+      <main
+        id="main-content"
+        className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden animate-fade-in"
+      >
+        <div className="animate-slide-up">
+          <DecisionFlowPanel className="mb-6" />
+        </div>
 
         {/* Primary workspace: account | market | execution */}
         <section

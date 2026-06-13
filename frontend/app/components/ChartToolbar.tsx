@@ -12,24 +12,34 @@ interface ChartToolbarProps {
   className?: string;
 }
 
-export function ChartToolbar({ 
-  onRefresh, 
-  onFullscreen, 
+export function ChartToolbar({
+  onRefresh,
+  onFullscreen,
   onSettings,
   isRefreshing = false,
-  className 
+  className,
 }: ChartToolbarProps) {
+  if (!onRefresh && !onFullscreen && !onSettings) return null;
+
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div
+      className={cn(
+        'inline-flex items-center gap-0.5 p-0.5 rounded-lg border border-border-default/60 bg-surface-1/50',
+        className
+      )}
+      role="toolbar"
+      aria-label="Chart controls"
+    >
       {onRefresh && (
         <Button
           variant="ghost"
           size="sm"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="text-foreground-secondary hover:text-foreground"
+          className="h-7 w-7 p-0 text-foreground-secondary hover:text-foreground"
+          title="Refresh chart"
         >
-          <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
+          <RefreshCw className={cn('w-3.5 h-3.5', isRefreshing && 'animate-spin')} />
         </Button>
       )}
       {onFullscreen && (
@@ -37,9 +47,10 @@ export function ChartToolbar({
           variant="ghost"
           size="sm"
           onClick={onFullscreen}
-          className="text-foreground-secondary hover:text-foreground"
+          className="h-7 w-7 p-0 text-foreground-secondary hover:text-foreground"
+          title="Fullscreen"
         >
-          <Maximize2 className="w-4 h-4" />
+          <Maximize2 className="w-3.5 h-3.5" />
         </Button>
       )}
       {onSettings && (
@@ -47,9 +58,10 @@ export function ChartToolbar({
           variant="ghost"
           size="sm"
           onClick={onSettings}
-          className="text-foreground-secondary hover:text-foreground"
+          className="h-7 w-7 p-0 text-foreground-secondary hover:text-foreground"
+          title="Chart settings"
         >
-          <Settings className="w-4 h-4" />
+          <Settings className="w-3.5 h-3.5" />
         </Button>
       )}
     </div>

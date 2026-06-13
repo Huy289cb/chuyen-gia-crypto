@@ -8,6 +8,8 @@ import { formatPrice } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useAccountData } from '../hooks/useAccountData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
+import { EmptyState } from '../components/EmptyState';
 
 interface TestnetBalancePanelProps {
   className?: string;
@@ -37,7 +39,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           subtitle="Error loading data"
           icon={<Wallet className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -50,7 +52,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           subtitle="Error loading data"
           icon={<Wallet className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">Failed to load balance data</div>
+        <PanelErrorState message="Failed to load balance data" />
       </Card>
     );
   }
@@ -70,15 +72,12 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           subtitle="Status"
           icon={<Wallet className="w-5 h-5" />}
         />
-        <div className="p-8 flex flex-col items-center justify-center text-center">
-          <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center mb-3">
-            <Wallet className="w-6 h-6 text-foreground-tertiary" />
-          </div>
-          <p className="text-sm font-medium text-foreground-secondary mb-1">Account Not Initialized</p>
-          <p className="text-xs text-foreground-tertiary max-w-[200px]">
-            The testnet account for this method has not been set up or connected to a live source yet.
-          </p>
-        </div>
+        <EmptyState
+          icon={Wallet}
+          title="Account not initialized"
+          description="The testnet account for this method has not been set up or connected to a live source yet."
+          size="sm"
+        />
       </Card>
     );
   }
@@ -130,7 +129,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
 
       <div className="mt-4 pt-4 border-t border-border-default space-y-3">
         {typeof balanceData.walletPnl === 'number' && (
-          <div className="p-3 bg-surface-1/50 rounded-lg border border-accent-primary/20">
+          <div className="panel-stat panel-stat-accent">
             <p className="text-xs text-foreground-tertiary mb-1">Wallet PnL (Binance)</p>
             <p
               className={cn(
@@ -162,7 +161,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Daily PnL (UTC)</p>
             <p
               className={cn(
@@ -174,7 +173,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
               {formatPrice(balanceData.dailyPnL)}
             </p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">7-day PnL</p>
             <p
               className={cn(

@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Clock, PlayCircle, PauseCircle } from 'lucide-react';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface SchedulerStatusPanelProps {
   className?: string;
@@ -35,7 +36,7 @@ export function SchedulerStatusPanel({ className }: SchedulerStatusPanelProps) {
           subtitle="Error loading data"
           icon={<Clock className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load scheduler data'}</div>
+        <PanelErrorState message={error || 'Failed to load scheduler data'} />
       </Card>
     );
   }
@@ -54,7 +55,7 @@ export function SchedulerStatusPanel({ className }: SchedulerStatusPanelProps) {
         {schedulers.map((scheduler) => (
           <div
             key={scheduler.name}
-            className="p-3 bg-surface-1/50 rounded-lg space-y-2"
+            className="panel-stat space-y-2"
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-foreground">{scheduler.name}</span>

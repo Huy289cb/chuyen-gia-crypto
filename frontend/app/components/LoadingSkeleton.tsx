@@ -8,30 +8,24 @@ interface LoadingSkeletonProps {
   count?: number;
 }
 
-export function LoadingSkeleton({ 
-  className, 
+export function LoadingSkeleton({
+  className,
   variant = 'text',
   width,
   height,
-  count = 1
+  count = 1,
 }: LoadingSkeletonProps) {
   const variantClasses = {
-    text: 'h-4 rounded',
-    card: 'rounded-lg',
+    text: 'h-4 rounded-md',
+    card: 'rounded-xl',
     circular: 'rounded-full',
-    rectangular: 'rounded'
+    rectangular: 'rounded-md',
   };
-
-  const baseClass = 'animate-pulse bg-surface-1';
 
   const skeletons = Array.from({ length: count }).map((_, i) => (
     <div
       key={i}
-      className={cn(
-        baseClass,
-        variantClasses[variant],
-        className
-      )}
+      className={cn('skeleton-shimmer', variantClasses[variant], className)}
       style={{ width, height }}
     />
   ));
@@ -41,7 +35,7 @@ export function LoadingSkeleton({
 
 export function CardSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn('p-4 border border-border-default rounded-lg', className)}>
+    <div className={cn('p-4 sm:p-5 border border-border-default rounded-xl shadow-card', className)}>
       <LoadingSkeleton variant="text" width="40%" className="mb-3" />
       <LoadingSkeleton variant="text" width="70%" className="mb-2" />
       <LoadingSkeleton variant="text" width="50%" />
@@ -51,9 +45,9 @@ export function CardSkeleton({ className }: { className?: string }) {
 
 export function MetricSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn('p-4 border border-border-default rounded-lg', className)}>
-      <LoadingSkeleton variant="text" width="30%" className="mb-2" />
-      <LoadingSkeleton variant="text" width="60%" height="2rem" />
+    <div className={cn('p-4 border border-border-default rounded-xl shadow-card', className)}>
+      <LoadingSkeleton variant="text" width="30%" className="mb-2.5" />
+      <LoadingSkeleton variant="text" width="60%" height="2rem" className="rounded-lg" />
     </div>
   );
 }
@@ -62,7 +56,10 @@ export function TableSkeleton({ rows = 3, className }: { rows?: number; classNam
   return (
     <div className={cn('space-y-2', className)}>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 p-3 border border-border-default rounded">
+        <div
+          key={i}
+          className="flex items-center gap-4 p-3 border border-border-default/60 rounded-lg bg-surface-1/30"
+        >
           <LoadingSkeleton variant="circular" width={32} height={32} />
           <div className="flex-1 space-y-2">
             <LoadingSkeleton variant="text" width="40%" />

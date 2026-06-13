@@ -18,7 +18,7 @@ vi.mock('../../src/services/binance-hedge-mode', () => ({
 
 vi.mock('../../src/services/binance-exposure.service', () => ({
   fetchBinanceNetPosition: vi.fn().mockResolvedValue({
-    markPrice: 62000,
+    markPrice: 63200,
     side: 'long',
     positionAmt: 0.01,
   }),

@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { BarChart3 } from 'lucide-react';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface CandleWarmupPanelProps {
   className?: string;
@@ -35,7 +36,7 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
           subtitle="Error loading data"
           icon={<BarChart3 className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error || 'Failed to load warmup data'}</div>
+        <PanelErrorState message={error || 'Failed to load warmup data'} />
       </Card>
     );
   }
@@ -53,7 +54,7 @@ export function CandleWarmupPanel({ className }: CandleWarmupPanelProps) {
 
       <div className="space-y-4">
         {/* Overall Status */}
-        <div className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-row flex items-center justify-between">
           <div>
             <span className="text-sm text-foreground-secondary">Overall Status</span>
             <div className="text-xs text-foreground-tertiary mt-1">

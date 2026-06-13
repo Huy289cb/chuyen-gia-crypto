@@ -6,6 +6,7 @@ import { ReasonChip } from '../components/ReasonChip';
 import { Ban } from 'lucide-react';
 import { useIntelligenceData } from '../hooks/useIntelligenceData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface NoTradeReasonsPanelProps {
   className?: string;
@@ -35,7 +36,7 @@ export function NoTradeReasonsPanel({ className }: NoTradeReasonsPanelProps) {
           subtitle="Error loading data"
           icon={<Ban className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -55,7 +56,7 @@ export function NoTradeReasonsPanel({ className }: NoTradeReasonsPanelProps) {
         {noTradeReasons.map((item) => (
           <div 
             key={item.reason}
-            className="flex items-center justify-between gap-3 p-3 bg-surface-1/50 rounded-lg"
+            className="panel-row flex items-center justify-between gap-3"
           >
             <span className="text-sm text-foreground-secondary min-w-0 truncate">{item.reason}</span>
             <ReasonChip 

@@ -2,7 +2,6 @@
  * P1.6 — Protective orders: recompute SL/TP from actual fill, handle -2021, emergency close.
  */
 
-import { computeSlProgress } from '../analyzers/position-health.analyzer';
 import { getRiskPolicy } from '../config/risk-policy';
 import { updateTestnetPosition, recordTestnetTradeEvent } from '../repositories/testnet.repository';
 import { placeStopLossOrder, placeTakeProfitOrder } from './binanceClient';
@@ -11,10 +10,101 @@ import {
   closeLocalPosition,
   closePositionOnBinanceMarket,
 } from './position-close.service';
+import { notifyAlert } from './telegram/telegram-notify.service';
 
 export interface SlTpLevels {
   stop_loss: number;
   take_profit: number;
+}
+
+export type ProtectiveAction =
+  | 'place_sl_tp'
+  | 'close_at_market_loss'
+  | 'close_at_market_profit'
+  | 'recompute_and_place';
+
+const PROTECTIVE_RETRY_COOLDOWN_MS = 2 * 60_000;
+const PROTECTIVE_MARK_MOVE_THRESHOLD = 0.005;
+
+const protectiveRetryState = new Map<string, { failedAt: number; markAtFail: number }>();
+
+export function isPastStopLoss(
+  side: 'long' | 'short',
+  stop_loss: number,
+  mark: number
+): boolean {
+  if (!Number.isFinite(mark) || mark <= 0) return false;
+  return side === 'long' ? mark <= stop_loss : mark >= stop_loss;
+}
+
+export function isPastTakeProfit(
+  side: 'long' | 'short',
+  take_profit: number,
+  mark: number
+): boolean {
+  if (!Number.isFinite(mark) || mark <= 0) return false;
+  return side === 'long' ? mark >= take_profit : mark <= take_profit;
+}
+
+export function tpInvalidForMark(side: string, take_profit: number, mark: number): boolean {
+  const s = side.toLowerCase();
+  if (s === 'short') return take_profit >= mark;
+  return take_profit <= mark;
+}
+
+/**
+ * Decide protective action from planned/recomputed levels vs current mark.
+ */
+export function evaluateProtectiveAction(params: {
+  side: 'long' | 'short';
+  stop_loss: number;
+  take_profit: number;
+  mark: number;
+  levels?: SlTpLevels;
+}): ProtectiveAction {
+  const { side, stop_loss, take_profit, mark, levels } = params;
+  if (!Number.isFinite(mark) || mark <= 0) return 'place_sl_tp';
+
+  const sl = levels?.stop_loss ?? stop_loss;
+  const tp = levels?.take_profit ?? take_profit;
+
+  if (isPastStopLoss(side, sl, mark)) return 'close_at_market_loss';
+  if (isPastTakeProfit(side, tp, mark)) return 'close_at_market_profit';
+
+  if (slTpInvalidForMark(side, sl, mark) || tpInvalidForMark(side, tp, mark)) {
+    return 'recompute_and_place';
+  }
+
+  return 'place_sl_tp';
+}
+
+function shouldSkipProtectiveRetry(positionId: string, mark: number): boolean {
+  const state = protectiveRetryState.get(positionId);
+  if (!state) return false;
+  if (Date.now() - state.failedAt >= PROTECTIVE_RETRY_COOLDOWN_MS) return false;
+  if (state.markAtFail <= 0 || mark <= 0) return true;
+  const move = Math.abs(mark - state.markAtFail) / state.markAtFail;
+  return move < PROTECTIVE_MARK_MOVE_THRESHOLD;
+}
+
+function recordProtectiveFailure(positionId: string, mark: number): void {
+  protectiveRetryState.set(positionId, { failedAt: Date.now(), markAtFail: mark });
+}
+
+function clearProtectiveRetryState(positionId: string): void {
+  protectiveRetryState.delete(positionId);
+}
+
+function notifyProtectiveAction(
+  position: { position_id: string; symbol: string; side: string },
+  title: string,
+  detail: string
+): void {
+  notifyAlert(
+    title,
+    `${position.symbol} ${position.side} ${position.position_id}: ${detail}`,
+    `protective:${position.position_id}:${title}`
+  );
 }
 
 export function isOrderWouldTriggerImmediatelyError(error: unknown): boolean {
@@ -249,6 +339,33 @@ async function placeSlTpOnBinance(
   return { slId, tpId, slError, tpError };
 }
 
+async function marketCloseFromProtective(
+  position: {
+    position_id: string;
+    account_id?: number;
+    symbol: string;
+    side: string;
+    size_qty: number;
+    entry_price: number;
+    account?: { current_balance?: number };
+  },
+  mark: number,
+  closeReason: 'protective_sl_breached_market' | 'protective_tp_reached_market' | 'protective_failed_market_close',
+  eventReason: string
+): Promise<boolean> {
+  const label =
+    closeReason === 'protective_sl_breached_market'
+      ? 'SL breached — market close'
+      : closeReason === 'protective_tp_reached_market'
+        ? 'TP reached — market close'
+        : 'Protective failed — market close';
+  console.warn(
+    `[ProtectiveOrder] ${position.position_id} ${label} mark=${mark} (${eventReason})`
+  );
+  notifyProtectiveAction(position, label, `mark=${mark} reason=${eventReason}`);
+  return emergencyMarketCloseUnhedged(position, mark, eventReason, closeReason);
+}
+
 /**
  * Place or repair SL/TP; market-close if SL cannot be placed safely.
  */
@@ -289,21 +406,61 @@ export async function placeProtectiveOrdersForPosition(position: {
     /* proceed */
   }
 
+  if (mark > 0 && shouldSkipProtectiveRetry(position.position_id, mark)) {
+    console.log(
+      `[ProtectiveOrder] Skip retry for ${position.position_id} (cooldown, mark=${mark})`
+    );
+    return 'skipped';
+  }
+
+  const plannedAction = evaluateProtectiveAction({
+    side,
+    stop_loss: position.stop_loss,
+    take_profit: position.take_profit,
+    mark,
+  });
+  if (plannedAction === 'close_at_market_loss') {
+    const closed = await marketCloseFromProtective(
+      position,
+      mark,
+      'protective_sl_breached_market',
+      'price_past_planned_sl'
+    );
+    return closed ? 'closed' : 'partial';
+  }
+  if (plannedAction === 'close_at_market_profit') {
+    const closed = await marketCloseFromProtective(
+      position,
+      mark,
+      'protective_tp_reached_market',
+      'price_past_planned_tp'
+    );
+    return closed ? 'closed' : 'partial';
+  }
+
   let fillRef = position.entry_price;
   if (
     mark > 0 &&
-    (slTpInvalidForMark(side, position.stop_loss, mark) ||
-      slTpInvalidForMark(side, recomputeSlTpFromFill({
+    (plannedAction === 'recompute_and_place' ||
+      slTpInvalidForMark(side, position.stop_loss, mark) ||
+      slTpInvalidForMark(
         side,
-        fillPrice: position.entry_price,
-        plannedEntry: position.entry_price,
-        plannedSl: position.stop_loss,
-        plannedTp: position.take_profit,
-      }).stop_loss, mark))
+        recomputeSlTpFromFill({
+          side,
+          fillPrice: position.entry_price,
+          plannedEntry: position.entry_price,
+          plannedSl: position.stop_loss,
+          plannedTp: position.take_profit,
+        }).stop_loss,
+        mark
+      ))
   ) {
-    fillRef = side === 'short' ? Math.max(position.entry_price, mark) : Math.min(position.entry_price, mark);
+    fillRef =
+      side === 'short'
+        ? Math.max(position.entry_price, mark)
+        : Math.min(position.entry_price, mark);
     console.warn(
-      `[ProtectiveOrder] Recompute levels for ${position.position_id}: fillRef=${fillRef} mark=${mark} (SL was behind market)`
+      `[ProtectiveOrder] Recompute levels for ${position.position_id}: fillRef=${fillRef} mark=${mark}`
     );
   }
 
@@ -316,38 +473,35 @@ export async function placeProtectiveOrdersForPosition(position: {
     markPrice: mark > 0 ? mark : undefined,
   });
 
-  if (mark > 0 && slTpInvalidForMark(side, levels.stop_loss, mark)) {
-    const slProgress = computeSlProgress({
-      position_id: position.position_id,
-      symbol: position.symbol,
-      side,
-      entry_price: position.entry_price,
-      current_price: mark,
-      stop_loss: position.stop_loss,
-      take_profit: position.take_profit,
-      entry_time: new Date(),
-      size_qty: qty,
-      unrealized_pnl: 0,
-    });
-    if (slProgress != null && slProgress >= 1) {
-      console.warn(
-        `[ProtectiveOrder] ${position.position_id} sl_progress=${(slProgress * 100).toFixed(0)}% — ` +
-          `SL=${levels.stop_loss} would trigger immediately at mark=${mark}, emergency market close`
-      );
-      const closed = await emergencyMarketCloseUnhedged(
-        position,
-        mark,
-        'sl_would_trigger_immediately'
-      );
-      return closed ? 'closed' : 'partial';
-    }
-    console.warn(
-      `[ProtectiveOrder] ${position.position_id} SL behind market (mark=${mark}, sl=${levels.stop_loss}) — will retry with buffer`
+  const levelAction = evaluateProtectiveAction({
+    side,
+    stop_loss: position.stop_loss,
+    take_profit: position.take_profit,
+    mark,
+    levels,
+  });
+  if (levelAction === 'close_at_market_loss') {
+    const closed = await marketCloseFromProtective(
+      position,
+      mark,
+      'protective_sl_breached_market',
+      'recomputed_sl_breached'
     );
+    return closed ? 'closed' : 'partial';
+  }
+  if (levelAction === 'close_at_market_profit') {
+    const closed = await marketCloseFromProtective(
+      position,
+      mark,
+      'protective_tp_reached_market',
+      'recomputed_tp_reached'
+    );
+    return closed ? 'closed' : 'partial';
   }
 
   const skipSl = Boolean(position.binance_sl_order_id);
   const skipTp = Boolean(position.binance_tp_order_id);
+  const skipTpInvalid = mark > 0 && tpInvalidForMark(side, levels.take_profit, mark);
 
   let result = await placeSlTpOnBinance(
     position.position_id,
@@ -355,7 +509,7 @@ export async function placeProtectiveOrdersForPosition(position: {
     position.side,
     qty,
     levels,
-    { skipSl, skipTp }
+    { skipSl, skipTp: skipTp || skipTpInvalid }
   );
 
   if (
@@ -365,6 +519,16 @@ export async function placeProtectiveOrdersForPosition(position: {
     isOrderWouldTriggerImmediatelyError(result.slError) &&
     mark > 0
   ) {
+    if (isPastStopLoss(side, levels.stop_loss, mark)) {
+      const closed = await marketCloseFromProtective(
+        position,
+        mark,
+        'protective_sl_breached_market',
+        'sl_-2021_past_sl'
+      );
+      return closed ? 'closed' : 'partial';
+    }
+
     const retryLevels = recomputeSlTpFromFill({
       side,
       fillPrice: mark,
@@ -385,12 +549,53 @@ export async function placeProtectiveOrdersForPosition(position: {
       position.side,
       qty,
       retryLevels,
-      { skipTp: Boolean(position.binance_tp_order_id) }
+      {
+        skipTp:
+          Boolean(position.binance_tp_order_id) ||
+          tpInvalidForMark(side, retryLevels.take_profit, mark),
+      }
     );
     Object.assign(levels, retryLevels);
+
+    if (
+      !result.slId &&
+      result.slError &&
+      isOrderWouldTriggerImmediatelyError(result.slError) &&
+      isPastStopLoss(side, retryLevels.stop_loss, mark)
+    ) {
+      const closed = await marketCloseFromProtective(
+        position,
+        mark,
+        'protective_sl_breached_market',
+        'sl_-2021_retry_still_past_sl'
+      );
+      return closed ? 'closed' : 'partial';
+    }
   }
 
   if (result.slId) {
+    clearProtectiveRetryState(position.position_id);
+    if (
+      !result.tpId &&
+      !skipTp &&
+      result.tpError &&
+      isOrderWouldTriggerImmediatelyError(result.tpError) &&
+      mark > 0
+    ) {
+      if (isPastTakeProfit(side, levels.take_profit, mark)) {
+        const closed = await marketCloseFromProtective(
+          position,
+          mark,
+          'protective_tp_reached_market',
+          'tp_-2021_past_tp'
+        );
+        return closed ? 'closed' : 'partial';
+      }
+      console.warn(
+        `[ProtectiveOrder] TP -2021 for ${position.position_id} — SL ok, skipping invalid TP (mark=${mark})`
+      );
+      return 'partial';
+    }
     console.log(
       `[ProtectiveOrder] SL placed for ${position.position_id}: sl=${levels.stop_loss} id=${result.slId}` +
         (result.tpId ? ` tp=${levels.take_profit} id=${result.tpId}` : ' (TP pending/failed)')
@@ -398,11 +603,17 @@ export async function placeProtectiveOrdersForPosition(position: {
     return result.tpId ? 'ok' : 'partial';
   }
 
+  recordProtectiveFailure(position.position_id, mark);
   console.error(
     `[ProtectiveOrder] SL failed for ${position.position_id}: ${result.slError ?? 'unknown'} — emergency market close`
   );
 
-  const closed = await emergencyMarketCloseUnhedged(position, mark, result.slError);
+  const closed = await marketCloseFromProtective(
+    position,
+    mark,
+    'protective_failed_market_close',
+    result.slError ?? 'sl_placement_failed'
+  );
   return closed ? 'closed' : 'partial';
 }
 
@@ -417,10 +628,13 @@ export async function emergencyMarketCloseUnhedged(
     account?: { current_balance?: number };
   },
   closePrice: number,
-  reason?: string
+  eventReason?: string,
+  closeReason:
+    | 'protective_sl_breached_market'
+    | 'protective_tp_reached_market'
+    | 'protective_failed_market_close' = 'protective_failed_market_close'
 ): Promise<boolean> {
-  const mark =
-    closePrice > 0 ? closePrice : position.entry_price;
+  const mark = closePrice > 0 ? closePrice : position.entry_price;
 
   const closeResult = await closePositionOnBinanceMarket({
     symbol: position.symbol,
@@ -433,7 +647,8 @@ export async function emergencyMarketCloseUnhedged(
       `[ProtectiveOrder] Emergency close failed for ${position.position_id}: ${closeResult.reason}`
     );
     await recordTestnetTradeEvent(position.position_id, 'protective_failed', {
-      reason: reason ?? 'sl_placement_failed',
+      reason: eventReason ?? 'sl_placement_failed',
+      close_reason: closeReason,
       close_error: closeResult.reason,
       timestamp: new Date().toISOString(),
     });
@@ -449,13 +664,14 @@ export async function emergencyMarketCloseUnhedged(
     await closeLocalPosition(
       { ...full, account: full.account },
       mark,
-      'protective_failed_market_close',
+      closeReason,
       { verified_binance_zero: true }
     );
   }
 
   await recordTestnetTradeEvent(position.position_id, 'protective_failed', {
-    reason: reason ?? 'sl_placement_failed',
+    reason: eventReason ?? 'sl_placement_failed',
+    close_reason: closeReason,
     action: 'market_close',
     close_price: mark,
     timestamp: new Date().toISOString(),

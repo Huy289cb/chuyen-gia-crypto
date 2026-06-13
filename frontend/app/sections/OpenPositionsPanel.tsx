@@ -8,6 +8,7 @@ import { Target, Clock } from 'lucide-react';
 import { cn, formatPositionSize, formatPrice } from '@/lib/utils';
 import { useAccountData } from '../hooks/useAccountData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface OpenPositionsPanelProps {
   className?: string;
@@ -37,7 +38,7 @@ export function OpenPositionsPanel({ className }: OpenPositionsPanelProps) {
           subtitle="Error loading data"
           icon={<Target className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -73,7 +74,7 @@ export function OpenPositionsPanel({ className }: OpenPositionsPanelProps) {
         {positions.map((position) => (
           <div
             key={position.id}
-            className="p-3 bg-surface-1/50 rounded-lg space-y-2"
+            className="panel-stat space-y-2"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

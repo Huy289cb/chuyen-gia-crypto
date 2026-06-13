@@ -9,6 +9,7 @@ import { ShoppingBag, Clock } from 'lucide-react';
 import { cn, formatPositionSize, formatPrice, formatVietnamTime } from '@/lib/utils';
 import { useAccountData } from '../hooks/useAccountData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface ActiveOrdersPanelProps {
   className?: string;
@@ -38,7 +39,7 @@ export function ActiveOrdersPanel({ className }: ActiveOrdersPanelProps) {
           subtitle="Error loading data"
           icon={<ShoppingBag className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -74,7 +75,7 @@ export function ActiveOrdersPanel({ className }: ActiveOrdersPanelProps) {
         {orders.map((order) => (
           <div
             key={order.id}
-            className="p-3 bg-surface-1/50 rounded-lg space-y-2"
+            className="panel-stat space-y-2"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

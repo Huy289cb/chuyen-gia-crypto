@@ -4,6 +4,7 @@
 
 import { prisma } from '../lib/prisma';
 import { getAccount } from './binance/account';
+import { isBinanceDemoMetadataUnavailableError } from './binance-account-health.service';
 
 export interface BinanceBalanceSnapshot {
   walletBalance: number;
@@ -30,9 +31,23 @@ export async function fetchBinanceBalanceSnapshot(): Promise<BinanceBalanceSnaps
 
 /**
  * Write Binance wallet/equity into testnet_accounts for one account row.
+ * On demo-fapi, balance/account often return -1109 — returns null and keeps local ledger.
  */
-export async function syncTestnetAccountFromBinance(accountId: number): Promise<BinanceBalanceSnapshot> {
-  const snap = await fetchBinanceBalanceSnapshot();
+export async function syncTestnetAccountFromBinance(
+  accountId: number
+): Promise<BinanceBalanceSnapshot | null> {
+  let snap: BinanceBalanceSnapshot;
+  try {
+    snap = await fetchBinanceBalanceSnapshot();
+  } catch (error: unknown) {
+    if (isBinanceDemoMetadataUnavailableError(error)) {
+      console.warn(
+        `[BinanceBalanceSync] account=${accountId} demo metadata unavailable (-1109); using local ledger`
+      );
+      return null;
+    }
+    throw error;
+  }
 
   await prisma.testnetAccount.update({
     where: { id: accountId },
@@ -70,7 +85,9 @@ export async function resolveTestnetAccountBalances(
   if (syncFromBinance && process.env.BINANCE_ENABLED === 'true') {
     try {
       const snap = await syncTestnetAccountFromBinance(accountId);
-      return { account_balance: snap.walletBalance, account_equity: snap.equity };
+      if (snap) {
+        return { account_balance: snap.walletBalance, account_equity: snap.equity };
+      }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.warn(`[BinanceBalanceSync] resolveTestnetAccountBalances sync failed: ${msg}`);

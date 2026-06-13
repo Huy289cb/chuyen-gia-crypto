@@ -34,7 +34,8 @@ export function isBinanceInvalidAccountError(error: unknown): boolean {
 
 /**
  * -1109 on balance/account/positionRisk is a known Binance Demo quirk — not proof the wallet is inactive.
- * Trading endpoints (order, openOrders, listenKey) remain authoritative for tradability.
+ * Trading endpoints (order, openOrders, userTrades) remain authoritative for tradability.
+ * listenKey also returns -1109 on demo — rely on reconciliation polling instead of WS.
  */
 export function isBinanceDemoMetadataUnavailableError(error: unknown): boolean {
   if (!isBinanceInvalidAccountError(error)) {

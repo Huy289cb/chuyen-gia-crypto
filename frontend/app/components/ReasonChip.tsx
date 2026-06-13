@@ -18,14 +18,17 @@ export function ReasonChip({ label, count, variant = 'default', className }: Rea
   };
 
   return (
-    <div className={cn(
-      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border',
-      variants[variant],
-      className
-    )}>
+    <div
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border',
+        'transition-colors duration-200',
+        variants[variant],
+        className
+      )}
+    >
       <span>{label}</span>
       {count !== undefined && count > 0 && (
-        <span className="bg-bg-primary/50 px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+        <span className="bg-bg-primary/50 px-1.5 py-0.5 rounded text-[10px] font-semibold tabular-nums">
           {count}
         </span>
       )}

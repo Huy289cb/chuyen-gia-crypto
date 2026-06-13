@@ -258,6 +258,18 @@ router.get('/sync/:accountId', async (req: Request, res: Response) => {
 
     const { syncTestnetAccountFromBinance } = await import('../services/binance-balance-sync.service');
     const snap = await syncTestnetAccountFromBinance(accountId);
+    if (!snap) {
+      return res.status(503).json({
+        success: false,
+        error:
+          'Binance balance/account unavailable on demo (-1109). Local ledger unchanged; use DB balance.',
+        data: {
+          balance: account.current_balance,
+          equity: account.equity,
+          unrealized_pnl: account.unrealized_pnl,
+        },
+      });
+    }
     const walletBalance = snap.walletBalance;
     const unrealizedPnl = snap.unrealizedPnl;
     const equity = snap.equity;

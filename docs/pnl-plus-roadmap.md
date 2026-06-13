@@ -77,7 +77,18 @@ Reconciliation đóng đúng hướng (không phantom) nhưng **giá đóng = ma
 | 1.5.4 | Dashboard `walletPnl`, `binanceRealizedPnl`, `dbPositionPnlSum` | ✅ |
 | 1.5.5 | Skip reflection khi fill chưa verified | ✅ |
 
-**Phụ thuộc:** Binance Demo `userTrades` + `income` API (đã dùng cho wallet).
+**Phụ thuộc:** Binance Demo `userTrades` hoạt động; `income` trả 200 nhưng **0 rows** trên demo (2026-06-10 probe). Metadata (`/fapi/v3/balance|account|positionRisk`, `listenKey`) **-1109 cố định** dù wallet đã kích hoạt — dùng local ledger + userTrades fallback.
+
+### P1.7 — Binance Demo -1109 (metadata vs trading) — **2026-06-10**
+
+| Endpoint | Demo | Ghi chú |
+|----------|------|---------|
+| `openOrders`, `openAlgoOrders`, `userTrades`, `order/test` | ✅ | Trading probe authoritative |
+| `/fapi/v2|v3/balance`, `account`, `positionRisk` | ❌ -1109 | v2 và v3 đều fail — không phải version bug |
+| `listenKey`, `positionSide/dual`, `income` rows | ❌ / rỗng | WS stream không khả dụng; wallet reconcile skip |
+| Code | ✅ | exposure→userTrades; balance sync→local ledger; account-health soft gate |
+
+**Chấp nhận trên demo:** Không wallet reconcile từ Binance; đo PnL qua `userTrades` + local delta. **Mainnet:** metadata endpoints hoạt động bình thường.
 
 ---
 

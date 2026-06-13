@@ -21,14 +21,14 @@ export function Button({
   ...props
 }: ButtonProps) {
   const variants: Record<string, string> = {
-    primary: 
-      'bg-accent-primary hover:bg-accent-secondary text-bg-primary font-medium',
-    secondary: 
-      'bg-surface-1 hover:bg-surface-2 text-foreground border border-border-default hover:border-border-strong',
-    ghost: 
-      'hover:bg-surface-1 text-foreground-secondary hover:text-foreground',
-    danger: 
-      'bg-danger-dim hover:bg-danger/25 text-danger border border-danger/20',
+    primary:
+      'bg-accent-primary hover:bg-accent-secondary text-bg-primary font-medium shadow-sm hover:shadow-md active:scale-[0.98]',
+    secondary:
+      'bg-surface-1 hover:bg-surface-2 text-foreground border border-border-default hover:border-border-strong active:scale-[0.98]',
+    ghost:
+      'hover:bg-surface-1 text-foreground-secondary hover:text-foreground active:scale-[0.98]',
+    danger:
+      'bg-danger-dim hover:bg-danger/25 text-danger border border-danger/20 active:scale-[0.98]',
   };
 
   const sizes: Record<string, string> = {
@@ -44,9 +44,9 @@ export function Button({
     <button
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-lg',
-        'transition-all duration-200',
-        'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
-        'disabled:opacity-50 disabled:cursor-not-allowed',
+        'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
+        'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
         variantClass,
         sizeClass,
         className

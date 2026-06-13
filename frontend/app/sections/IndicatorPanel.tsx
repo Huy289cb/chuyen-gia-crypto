@@ -6,6 +6,7 @@ import { Activity } from 'lucide-react';
 import { cn, formatPrice } from '@/lib/utils';
 import { useMarketData } from '../hooks/useMarketData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface IndicatorPanelProps {
   className?: string;
@@ -37,7 +38,7 @@ export function IndicatorPanel({ className, symbol = 'BTC' }: IndicatorPanelProp
           subtitle="Error loading data"
           icon={<Activity className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -97,7 +98,7 @@ export function IndicatorPanel({ className, symbol = 'BTC' }: IndicatorPanelProp
           return (
             <div
               key={indicator.name}
-              className="flex items-center justify-between p-3 bg-surface-1/50 rounded-lg"
+              className="panel-row flex items-center justify-between"
             >
               <span className="text-sm text-foreground-secondary">{indicator.name}</span>
               <div className="flex items-center gap-2">

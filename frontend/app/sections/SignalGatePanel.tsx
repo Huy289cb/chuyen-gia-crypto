@@ -8,6 +8,8 @@ import { Signal, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIntelligenceData } from '../hooks/useIntelligenceData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
+import { EmptyState } from '../components/EmptyState';
 
 interface SignalGatePanelProps {
   className?: string;
@@ -37,7 +39,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           subtitle="Error loading data"
           icon={<Signal className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -50,9 +52,12 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
           subtitle="No evaluations recorded yet"
           icon={<Signal className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-foreground-tertiary text-center">
-          Run the worker pipeline to populate trade decisions.
-        </div>
+        <EmptyState
+          icon={Signal}
+          title="No evaluations yet"
+          description="Run the worker pipeline to populate trade decisions."
+          size="sm"
+        />
       </Card>
     );
   }
@@ -76,7 +81,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
       />
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3 p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-row flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             {signalData.pass ? (
               <CheckCircle className="w-5 h-5 text-success" />
@@ -95,24 +100,24 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Grade</p>
             <p className="text-lg font-semibold text-accent-primary">{signalData.grade}</p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Confidence</p>
             <p className="text-lg font-semibold text-foreground">{confidencePct.toFixed(0)}%</p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Playbook</p>
             <p className="text-sm font-medium text-foreground">{signalData.playbook}</p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Regime</p>
             <p className="text-sm font-medium text-foreground">{signalData.regime}</p>
           </div>
           {signalData.timeframe ? (
-            <div className="p-3 bg-surface-1/50 rounded-lg col-span-2">
+            <div className="panel-stat col-span-2">
               <p className="text-xs text-foreground-tertiary mb-1">Source timeframe</p>
               <p className="text-sm font-medium text-foreground">{signalData.timeframe}</p>
             </div>
@@ -120,7 +125,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         </div>
 
         {(signalData.detailReason || signalData.setupReason) && !signalData.pass ? (
-          <details className="group rounded-lg border border-warning/20 bg-warning-dim/30">
+          <details className="panel-details group border-warning/20 bg-warning-dim/30">
             <summary className="cursor-pointer list-none px-3 py-2.5 text-xs font-medium text-foreground-secondary [&::-webkit-details-marker]:hidden">
               <span className="text-foreground-tertiary">
                 Bằng chứng lần quét ({signalData.timeframe || 'best'})
@@ -135,7 +140,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
         ) : null}
 
         {signalData.evaluations && signalData.evaluations.length > 0 ? (
-          <details className="group rounded-lg border border-border-default bg-surface-1/30">
+          <details className="panel-details group">
             <summary className="cursor-pointer list-none px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-foreground-tertiary [&::-webkit-details-marker]:hidden">
               Theo khung thời gian ({signalData.evaluations.length})
               <span className="ml-2 normal-case text-accent-primary group-open:hidden">— mở rộng</span>
@@ -144,7 +149,7 @@ export function SignalGatePanel({ className }: SignalGatePanelProps) {
               {signalData.evaluations.map((row) => (
                 <div
                   key={row.timeframe}
-                  className="p-3 bg-surface-1/50 rounded-lg text-sm"
+                  className="panel-stat text-sm"
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-medium text-foreground">{row.timeframe}</span>

@@ -8,6 +8,7 @@ import { formatPrice } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useIntelligenceData } from '../hooks/useIntelligenceData';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { PanelErrorState } from '../components/PanelErrorState';
 
 interface RiskEnginePanelProps {
   className?: string;
@@ -37,7 +38,7 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
           subtitle="Error loading data"
           icon={<ShieldAlert className="w-5 h-5" />}
         />
-        <div className="p-4 text-sm text-red-500">{error}</div>
+        <PanelErrorState message={error} />
       </Card>
     );
   }
@@ -92,13 +93,13 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
         </div>
 
         {isLocked && (riskData.lockReason || riskData.allowedReason) && (
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Lock Reason</p>
             <p className="text-sm text-foreground">{riskData.lockReason || riskData.allowedReason}</p>
           </div>
         )}
 
-        <div className="p-3 bg-surface-1/50 rounded-lg">
+        <div className="panel-stat">
           <p className="text-xs text-foreground-tertiary mb-1">Today&apos;s drawdown (realized vs day open)</p>
           <p className="text-sm font-mono text-foreground break-words leading-relaxed">
             {formatPrice(riskData.dailyLossCurrent ?? 0)} / {formatPrice(riskData.dailyLossCap)}
@@ -112,19 +113,19 @@ export function RiskEnginePanel({ className }: RiskEnginePanelProps) {
 
         {/* Risk Parameters */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Risk Per Trade</p>
             <p className="text-lg font-semibold text-foreground">{riskData.riskPerTrade.toFixed(2)}%</p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Daily Loss Cap</p>
             <p className="text-lg font-semibold text-foreground">{formatPrice(riskData.dailyLossCap)}</p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Max Consecutive Losses</p>
             <p className="text-lg font-semibold text-foreground">{riskData.maxConsecutiveLosses}</p>
           </div>
-          <div className="p-3 bg-surface-1/50 rounded-lg">
+          <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Current Streak</p>
             <p className={cn(
               'text-lg font-semibold',
