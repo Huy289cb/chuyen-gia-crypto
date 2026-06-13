@@ -26,6 +26,7 @@ import {
 
 interface DecisionFlowPanelProps {
   className?: string;
+  variant?: 'full' | 'compact';
 }
 
 const statusStyles: Record<
@@ -141,7 +142,7 @@ const quickLinks = [
   { href: '#open-positions', label: 'Open Positions', icon: Target },
 ] as const;
 
-export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
+export function DecisionFlowPanel({ className, variant = 'full' }: DecisionFlowPanelProps) {
   const flow = useDecisionFlow();
 
   if (flow.loading) {
@@ -186,6 +187,7 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
       />
 
       <div className="space-y-5">
+        {variant === 'full' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="panel-stat">
             <p className="text-xs text-foreground-tertiary mb-1">Current stage</p>
@@ -208,6 +210,7 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
             </p>
           </div>
         </div>
+        )}
 
         <div className="flex flex-wrap gap-3 text-xs">
           {flow.duplicateSignalHits > 0 && (
@@ -238,6 +241,28 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
           )}
         </div>
 
+        {variant === 'compact' ? (
+          <details className="panel-details group" open>
+            <summary className="panel-details-summary">
+              <span className="text-foreground-secondary font-medium">
+                {flow.stages.length} bước pipeline
+              </span>
+              <span className="ml-2 text-accent-primary group-open:hidden">— mở rộng</span>
+              <span className="ml-2 text-accent-primary hidden group-open:inline">— thu gọn</span>
+            </summary>
+            <div className="overflow-x-auto px-3 pb-3 -mx-0">
+              <ol className="flex flex-col lg:flex-row lg:items-start lg:gap-0 gap-0 lg:min-w-max">
+                {flow.stages.map((stage, index) => (
+                  <PipelineStep
+                    key={stage.id}
+                    stage={stage}
+                    isLast={index === flow.stages.length - 1}
+                  />
+                ))}
+              </ol>
+            </div>
+          </details>
+        ) : (
         <div className="overflow-x-auto -mx-1 px-1 pb-1 max-h-[min(28rem,70vh)] lg:max-h-none">
         <ol className="flex flex-col lg:flex-row lg:items-start lg:gap-0 gap-0 lg:min-w-max">
           {flow.stages.map((stage, index) => (
@@ -249,7 +274,9 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
           ))}
         </ol>
         </div>
+        )}
 
+        {variant === 'full' && (
         <div className="pt-3 border-t border-border-default">
           <p className="text-xs font-medium text-foreground-tertiary mb-2">Related panels</p>
           <div className="flex flex-wrap gap-2">
@@ -269,6 +296,7 @@ export function DecisionFlowPanel({ className }: DecisionFlowPanelProps) {
             ))}
           </div>
         </div>
+        )}
       </div>
     </Card>
   );

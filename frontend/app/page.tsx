@@ -4,6 +4,9 @@ import { Suspense, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
+import { DashboardCommandStrip } from './components/DashboardCommandStrip';
+import { DashboardSectionNav } from './components/DashboardSectionNav';
+import { DashboardZone } from './components/DashboardZone';
 import { SystemOverview } from './sections/SystemOverview';
 import { SchedulerStatusPanel } from './sections/SchedulerStatusPanel';
 import { CandleWarmupPanel } from './sections/CandleWarmupPanel';
@@ -68,65 +71,106 @@ function DashboardPage() {
         lastDashboardUpdate={lastDashboardUpdate}
       />
 
+      <DashboardSectionNav />
+
       <main
         id="main-content"
-        className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden animate-fade-in"
+        className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 overflow-x-hidden animate-fade-in space-y-10 sm:space-y-12"
       >
-        <div className="animate-slide-up">
-          <DecisionFlowPanel className="mb-6" />
-        </div>
-
-        {/* Primary workspace: account | market | execution */}
-        <section
-          aria-label="Trading workspace"
-          className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-6 items-start"
+        {/* 1. Tóm tắt — trả lời "hệ thống đang ở đâu?" trong 5 giây */}
+        <DashboardZone
+          id="overview"
+          title="Tóm tắt"
+          description="Trạng thái pipeline, tín hiệu, vị thế và PnL — xem trước khi đi sâu chi tiết."
         >
-          <aside className="xl:col-span-3 space-y-6 min-w-0 order-2 xl:order-1">
-            <TestnetBalancePanel />
+          <DashboardCommandStrip />
+          <div className="mt-4">
             <SystemOverview />
-          </aside>
+          </div>
+        </DashboardZone>
 
-          <div className="xl:col-span-6 space-y-6 min-w-0 order-1 xl:order-2">
-            <MarketChartPanel symbol="BTC" method="kim_nghia" />
-            <IndicatorPanel />
-            <div id="event-log">
+        {/* 2. Thị trường — bối cảnh giá trước khi quyết định */}
+        <DashboardZone
+          id="market"
+          title="Thị trường"
+          description="Biểu đồ BTC và chỉ báo Kim Nghia trên khung thời gian đang chọn."
+        >
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+            <div className="xl:col-span-8 min-w-0">
+              <MarketChartPanel symbol="BTC" method="kim_nghia" />
+            </div>
+            <div className="xl:col-span-4 min-w-0">
+              <IndicatorPanel />
+            </div>
+          </div>
+        </DashboardZone>
+
+        {/* 3. Thực thi — tiền, vị thế, lệnh */}
+        <DashboardZone
+          id="execution"
+          title="Thực thi"
+          description="Số dư testnet, vị thế đang mở, lệnh chờ và lịch sử giao dịch."
+        >
+          <div className="space-y-4">
+            <TestnetBalancePanel />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+              <div id="open-positions" className="min-w-0">
+                <OpenPositionsPanel />
+              </div>
+              <div className="min-w-0">
+                <ActiveOrdersPanel />
+              </div>
+              <div className="min-w-0 md:col-span-2 xl:col-span-1">
+                <TradeHistoryPanel />
+              </div>
+            </div>
+          </div>
+        </DashboardZone>
+
+        {/* 4. Pipeline — tại sao vào lệnh / không vào lệnh */}
+        <DashboardZone
+          id="pipeline"
+          title="Pipeline quyết định"
+          description="Luồng MarketScan → Signal Gate → Risk → LLM. Xem chi tiết khi tín hiệu bị chặn."
+        >
+          <div className="space-y-4">
+            <DecisionFlowPanel variant="full" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div id="signal-gate" className="min-w-0">
+                <SignalGatePanel />
+              </div>
+              <div id="risk-engine" className="min-w-0">
+                <RiskEnginePanel />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div id="llm-dispatch" className="min-w-0">
+                <LlmDispatchPanel />
+              </div>
+              <div className="min-w-0">
+                <NoTradeReasonsPanel />
+              </div>
+            </div>
+          </div>
+        </DashboardZone>
+
+        {/* 5. Hệ thống — vận hành & debug */}
+        <DashboardZone
+          id="system"
+          title="Hệ thống"
+          description="Scheduler, warmup nến, bộ nhớ AI và nhật ký sự kiện."
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <div className="space-y-4 min-w-0">
+              <SchedulerStatusPanel />
+              <CandleWarmupPanel />
+              <MemoryInsightsPanel />
+            </div>
+            <div id="event-log" className="min-w-0">
               <EventLogFeed refreshToken={eventLogRefreshToken} />
             </div>
           </div>
-
-          <aside className="xl:col-span-3 space-y-6 min-w-0 order-3">
-            <div id="open-positions">
-              <OpenPositionsPanel />
-            </div>
-            <ActiveOrdersPanel />
-            <TradeHistoryPanel />
-          </aside>
-        </section>
-
-        {/* Pipeline ops & intelligence — balanced two columns */}
-        <section
-          aria-label="Pipeline and intelligence"
-          className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
-        >
-          <div className="space-y-6 min-w-0">
-            <SchedulerStatusPanel />
-            <CandleWarmupPanel />
-            <div id="risk-engine">
-              <RiskEnginePanel />
-            </div>
-            <NoTradeReasonsPanel />
-            <MemoryInsightsPanel />
-          </div>
-
-          <div className="space-y-6 min-w-0">
-            <div id="signal-gate">
-              <SignalGatePanel />
-            </div>
-            <div id="llm-dispatch">
-              <LlmDispatchPanel />
-            </div>
-          </div>
-        </section>
+        </DashboardZone>
       </main>
 
       <Footer />
