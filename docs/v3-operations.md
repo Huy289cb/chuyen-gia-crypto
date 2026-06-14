@@ -86,3 +86,20 @@ POSITION_MONITOR_ALLOW_REDUCE=false
 POSITION_MONITOR_ALLOW_EXIT=false
 PHANTOM_REOPEN_ENABLED=false
 ```
+
+## Telegram AI runbook
+
+Plan chi tiết: [plan/telegram-ai-qa.md](./plan/telegram-ai-qa.md)
+
+| Triệu chứng | Kiểm tra | Hành động |
+|-------------|----------|-----------|
+| `/ai` không phản hồi | `TELEGRAM_AI_ENABLED`, `GROQ_API_KEY*` | Bật env, `pm2 reload --update-env` |
+| Rate limit liên tục | Log `[TelegramAI]` | Tăng `TELEGRAM_AI_RATE_LIMIT_*` hoặc đợi reset ICT midnight |
+| Job treo >60s | Log `timedOut=true` | `/ai cancel`, kiểm tra Groq quota |
+| Hallucination số liệu | Prompt version | Tăng `TELEGRAM_AI_SYSTEM_PROMPT_VERSION`, tune `ai-prompts.ts` |
+| `/fix` không tạo PR | `CURSOR_*` env, job `#` trong DB | `/fix status`, kiểm tra repo access + API key |
+| Worker OOM | `pm2 logs`, memory | Giữ `TELEGRAM_AI_ENABLED=false` nếu RAM thấp; 1 job/chat |
+
+**Cost monitor:** Groq dashboard (ops Q&A) + Cursor dashboard (cloud agent runs).
+
+**Security:** Read-only context — không gọi `executeV3Trade`. Secrets redacted trong context builder.

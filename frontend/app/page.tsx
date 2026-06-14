@@ -22,6 +22,7 @@ import { NoTradeReasonsPanel } from './sections/NoTradeReasonsPanel';
 import { RiskEnginePanel } from './sections/RiskEnginePanel';
 import { LlmDispatchPanel } from './sections/LlmDispatchPanel';
 import { MemoryInsightsPanel } from './sections/MemoryInsightsPanel';
+import { TelegramAiPanel } from './sections/TelegramAiPanel';
 import { EventLogFeed } from './sections/EventLogFeed';
 import { V3DashboardDataProvider, useV3Dashboard } from './contexts/V3DashboardDataContext';
 
@@ -165,6 +166,7 @@ function DashboardPage() {
               <SchedulerStatusPanel />
               <CandleWarmupPanel />
               <MemoryInsightsPanel />
+              <TelegramAiPanel />
             </div>
             <div id="event-log" className="min-w-0">
               <EventLogFeed refreshToken={eventLogRefreshToken} />

@@ -111,6 +111,44 @@ TELEGRAM_POLLING_ENABLED=true
 
 Commands: `/help`, `/lenh`, `/show`, `/pnl`, `/pipeline`, `/sukien`, `/baocao`, `/tat`, `/bat`.
 
+### Telegram AI Q&A (`/ai`)
+
+Plan: `docs/plan/telegram-ai-qa.md`
+
+```bash
+TELEGRAM_AI_ENABLED=true
+TELEGRAM_AI_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+TELEGRAM_AI_MAX_TOKENS=2048
+TELEGRAM_AI_RATE_LIMIT_PER_USER_HOUR=5
+TELEGRAM_AI_RATE_LIMIT_PER_CHAT_DAY=30
+TELEGRAM_AI_SYSTEM_PROMPT_VERSION=1
+# Production + AI enabled: bắt buộc whitelist user
+TELEGRAM_ALLOWED_USER_IDS=your_telegram_user_id
+```
+
+- Chạy trên **worker** (polling). Không block polling — job async in-memory, timeout 60s.
+- Lệnh: `/ai`, `/ai loi`, `/ai pipeline`, `/ai llm`, `/ai vi ...`, `/ai so sanh`, `/ai cancel`, `/logs` (admin).
+- Dashboard mirror: `GET/POST /api/dashboard/telegram-ai/*` khi AI enabled.
+
+Schema mới: `ai_sessions`, `ai_fix_jobs` — sau deploy:
+
+```bash
+cd backend && npx prisma db push
+```
+
+### Cursor Agent (`/fix`)
+
+```bash
+CURSOR_AGENT_ENABLED=true
+CURSOR_API_KEY=cursor_...
+CURSOR_AGENT_MODEL=composer-2.5
+CURSOR_AGENT_REPO_URL=https://github.com/org/chuyen-gia-crypto
+CURSOR_AGENT_BASE_BRANCH=develop
+```
+
+- Cloud agent tạo **draft PR** — không auto-merge, không auto-deploy.
+- Lệnh: `/fix <mô tả>`, `/fix status`, `/deploy?` (hướng dẫn merge + `deploy.sh`).
+
 ### Post-deploy: historical PnL (optional)
 
 When upgrading to merge-PnL / outcome recording, run once on VPS (worker can stay up):

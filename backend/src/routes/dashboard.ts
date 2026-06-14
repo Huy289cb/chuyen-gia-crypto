@@ -34,6 +34,9 @@ import {
   resolveMarkPrice,
 } from '../services/position-mark';
 import { getAccountBalanceSummary } from '../services/account-summary.service';
+import { isTelegramAiEnabled } from '../config/telegram-ai';
+import { runTelegramAiQuery } from '../services/telegram/telegram-ai.service';
+import type { AiContextScope } from '../services/telegram/ai-context.builder';
 const router = Router();
 
 function formatRelativeAgo(ts: Date | null): string {
@@ -1300,6 +1303,53 @@ router.get('/trades', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('[Dashboard] Error fetching trades:', error.message);
     res.status(500).json({ ok: false, error: 'Failed to fetch trades' });
+  }
+});
+
+const AI_SCOPES: AiContextScope[] = [
+  'today_run',
+  'errors',
+  'pipeline',
+  'llm',
+  'compare',
+  'freeform',
+];
+
+router.get('/telegram-ai/status', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      enabled: isTelegramAiEnabled(),
+      scopes: AI_SCOPES,
+    },
+  });
+});
+
+router.post('/telegram-ai/query', async (req: Request, res: Response): Promise<void> => {
+  if (!isTelegramAiEnabled()) {
+    res.status(403).json({ success: false, error: 'Telegram AI is disabled' });
+    return;
+  }
+
+  const scope = (req.body?.scope as AiContextScope) || 'today_run';
+  const question = typeof req.body?.question === 'string' ? req.body.question : undefined;
+
+  if (!AI_SCOPES.includes(scope)) {
+    res.status(400).json({ success: false, error: 'Invalid scope' });
+    return;
+  }
+
+  if (scope === 'freeform' && !question?.trim()) {
+    res.status(400).json({ success: false, error: 'question required for freeform scope' });
+    return;
+  }
+
+  try {
+    const result = await runTelegramAiQuery(scope, question?.trim());
+    res.json({ success: true, data: result });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ success: false, error: msg });
   }
 });
 

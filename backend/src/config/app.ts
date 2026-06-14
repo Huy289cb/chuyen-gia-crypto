@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { validateTelegramConfig } from './telegram';
+import { validateCursorAgentConfig, validateTelegramAiConfig } from './telegram-ai';
 
 /**
  * Application Configuration
@@ -100,6 +101,8 @@ export function validateAppConfig(): void {
   }
 
   validateTelegramConfig();
+  validateTelegramAiConfig();
+  validateCursorAgentConfig();
 }
 
 /**

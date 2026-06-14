@@ -518,3 +518,35 @@ model SchedulerHeartbeat {
 
   @@map("scheduler_heartbeats")
 }
+
+// ============================================
+// TELEGRAM AI Q&A
+// ============================================
+
+model AiSession {
+  id         Int      @id @default(autoincrement())
+  chat_id    String   @unique
+  user_id    String?
+  turns_json String   @db.Text
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("ai_sessions")
+}
+
+model AiFixJob {
+  id            Int      @id @default(autoincrement())
+  chat_id       String
+  user_id       String?
+  description   String   @db.Text
+  agent_id      String?
+  run_id        String?
+  pr_url        String?
+  status        String   @default("pending")
+  error_message String?  @db.Text
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([chat_id])
+  @@map("ai_fix_jobs")
+}

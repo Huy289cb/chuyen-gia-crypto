@@ -17,31 +17,47 @@ import {
   getOpenPositionLines,
   getPendingOrderLines,
 } from '../account-summary.service';
-import { getSystemHealthSnapshot, getLlmStatsTodayIct } from '../system-health.service';
+import {
+  getSystemHealthSnapshot,
+  getLlmStatsTodayIct,
+  getLastKimDecision,
+  formatRelativeAgo,
+} from '../system-health.service';
 import { prisma } from '../../lib/prisma';
-import { fmtUsd, escapeHtml } from './message-formatters';
+import { fmtUsd, escapeHtml, formatShowSummary, formatPipelineSummary, formatStatusSummary } from './message-formatters';
 import {
   isTelegramRealtimeMuted,
   setTelegramRealtimeMuted,
 } from './telegram-notify.service';
 import { buildDailyReportMessage } from './daily-report';
+import { handleAiCommand, handleDeployHelpCommand, handleLogsCommand } from './telegram-ai.service';
+import {
+  handleFixCommand,
+  handleFixStatusCommand,
+} from './cursor-agent.service';
 
 let polling = false;
 let offset = 0;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
-const HELP_TEXT = `Lệnh:
+const HELP_TEXT = `<b>Lệnh cơ bản</b>
+/show — tài khoản + cooldown
 /lenh — vị thế + lệnh chờ
-/show — tài khoản + pipeline + lỗi
-/pnl — PnL hôm nay / 7 ngày (ICT)
-/pipeline — schedulers + warmup
-/sukien — 10 sự kiện gần nhất
-/baocao — gửi báo cáo ngày ngay
-/help — trợ giúp
-/tat — tắt notify realtime
-/bat — bật notify realtime`;
+/pnl — PnL hôm nay / 7 ngày
+/pipeline — pipeline tóm tắt
+/baocao — báo cáo ngày
+/status — trạng thái hệ thống
+/sukien — sự kiện gần nhất
+/tat · /bat — tắt/bật notify
 
-async function handleCommand(chatId: string, text: string): Promise<void> {
+<b>AI</b> (Groq)
+/ai · /ai loi · /ai pipeline · /ai llm
+/ai vi &lt;câu hỏi&gt; · /ai so sanh · /ai cancel
+
+<b>Khác</b>
+/fix · /deploy? · /logs · /help`;
+
+async function handleCommand(chatId: string, text: string, userId?: string): Promise<void> {
   const cmd = text.trim().split(/\s+/)[0]?.toLowerCase() || '';
   const { symbol, methodId } = getDefaultTradingScope();
 
@@ -98,69 +114,91 @@ async function handleCommand(chatId: string, text: string): Promise<void> {
     }
 
     case '/pipeline': {
+      const [health, llm, lastDecision] = await Promise.all([
+        getSystemHealthSnapshot(),
+        getLlmStatsTodayIct(),
+        getLastKimDecision(),
+      ]);
+      const msg = formatPipelineSummary({
+        schedulers: health.schedulers,
+        warmupOk: health.warmup.isWarmedUp,
+        llmTotal: llm.total,
+        llmTrades: llm.trades,
+        lastDecision: lastDecision
+          ? {
+              decision: lastDecision.decision,
+              reason: lastDecision.reason,
+              ago: formatRelativeAgo(lastDecision.timestamp),
+            }
+          : undefined,
+      });
+      enqueueTelegramMessage(msg, chatId);
+      return;
+    }
+
+    case '/status':
+    case '/health': {
       const health = await getSystemHealthSnapshot();
-      const llm = await getLlmStatsTodayIct();
-      const lines = ['<b>Pipeline</b>'];
-      for (const s of health.schedulers) {
-        lines.push(`• ${s.name} [${s.status}] ${s.lastRun} cron=${s.cron}`);
-      }
-      lines.push(`Warmup: ${health.warmup.isWarmedUp ? 'OK' : 'CHƯA ĐỦ'}`);
-      for (const tf of health.warmup.timeframes) {
-        lines.push(`  ${tf.name}: ${tf.loaded}/${tf.required}`);
-      }
-      lines.push(`LLM hôm nay: ${llm.total} (trade ${llm.trades})`);
-      lines.push(`Worker: ${health.workerStatus} | DB: ${health.databaseStatus}`);
-      enqueueTelegramMessage(lines.join('\n'), chatId);
+      enqueueTelegramMessage(
+        formatStatusSummary({
+          workerStatus: health.workerStatus,
+          databaseStatus: health.databaseStatus,
+          safetyValidation: health.safetyValidation,
+          schedulers: health.schedulers,
+          warmupOk: health.warmup.isWarmedUp,
+          riskLocked: health.risk.isLocked,
+          lockReason: health.risk.lockReason,
+          binanceEnabled: health.binanceEnabled,
+          recentErrors: health.recentErrors,
+        }),
+        chatId
+      );
       return;
     }
 
     case '/show': {
-      const [b, health] = await Promise.all([
+      const [b, health, positions, pending] = await Promise.all([
         getAccountBalanceSummary(symbol, methodId, true),
         getSystemHealthSnapshot(),
+        getOpenPositionLines(symbol, methodId),
+        getPendingOrderLines(symbol, methodId),
       ]);
-      const lines = [
-        '<b>Tài khoản</b>',
-        `Equity ${fmtUsd(b.equity)} | Balance ${fmtUsd(b.totalBalance)}`,
-        `Wallet PnL ${fmtUsd(b.walletPnl)} | today ${fmtUsd(b.dailyPnL)} | 7d ${fmtUsd(b.weeklyPnL)}`,
-        `Exposure ${fmtUsd(b.exposureUsd)} / ${fmtUsd(b.maxExposureUsd)}`,
-        '',
-        '<b>Pipeline</b>',
-        ...health.schedulers.map((s) => `• ${s.name}: ${s.status} (${s.lastRun})`),
-        `Warmup: ${health.warmup.isWarmedUp ? 'OK' : 'THIẾU'}`,
-        `Safety: ${escapeHtml(health.safetyValidation)}`,
-        `Notify: ${isTelegramRealtimeMuted() ? 'TẮT' : 'BẬT'}`,
-      ];
-      if (health.recentErrors.length > 0) {
-        lines.push('', '<b>Log / lỗi</b>');
-        for (const e of health.recentErrors) {
-          lines.push(`• ${escapeHtml(e.event_type)}: ${escapeHtml(e.summary.slice(0, 100))}`);
-        }
-      } else {
-        lines.push('', '(không có lỗi gần đây)');
-      }
-      enqueueTelegramMessage(lines.join('\n'), chatId);
+      enqueueTelegramMessage(
+        formatShowSummary({
+          equity: b.equity,
+          totalBalance: b.totalBalance,
+          dailyPnL: b.dailyPnL,
+          openCount: positions.length,
+          pendingCount: pending.length,
+          riskLocked: health.risk.isLocked,
+          lockReason: health.risk.lockReason,
+          notifyMuted: isTelegramRealtimeMuted(),
+          topError: health.recentErrors[0],
+        }),
+        chatId
+      );
       return;
     }
 
     case '/sukien': {
       const [events, decisions] = await Promise.all([
-        prisma.testnetTradeEvent.findMany({ orderBy: { timestamp: 'desc' }, take: 8 }),
+        prisma.testnetTradeEvent.findMany({ orderBy: { timestamp: 'desc' }, take: 5 }),
         prisma.tradeDecision.findMany({
           where: { method_id: methodId },
           orderBy: { timestamp: 'desc' },
-          take: 5,
+          take: 3,
         }),
       ]);
       const lines = ['<b>Sự kiện gần đây</b>'];
       for (const e of events) {
-        lines.push(`• [${e.event_type}] ${e.timestamp.toISOString().slice(11, 19)} pos=${e.position_id.slice(0, 8)}`);
+        lines.push(`• [${escapeHtml(e.event_type)}] ${e.timestamp.toISOString().slice(11, 16)}`);
       }
       for (const d of decisions) {
         lines.push(
-          `• [decision ${d.decision}] ${d.timestamp.toISOString().slice(11, 19)} ${escapeHtml((d.reason || '').slice(0, 50))}`
+          `• [${escapeHtml(d.decision)}] ${d.timestamp.toISOString().slice(11, 16)} ${escapeHtml((d.reason || '').slice(0, 40))}`
         );
       }
+      if (events.length === 0 && decisions.length === 0) lines.push('(không có)');
       enqueueTelegramMessage(lines.join('\n'), chatId);
       return;
     }
@@ -171,7 +209,32 @@ async function handleCommand(chatId: string, text: string): Promise<void> {
       return;
     }
 
+    case '/ai': {
+      const args = text.replace(/^\/ai\s*/i, '').trim();
+      void handleAiCommand(chatId, userId, args);
+      return;
+    }
+
+    case '/fix': {
+      const fixArgs = text.replace(/^\/fix\s*/i, '').trim();
+      if (fixArgs.toLowerCase() === 'status') {
+        void handleFixStatusCommand(chatId);
+      } else {
+        void handleFixCommand(chatId, userId, fixArgs);
+      }
+      return;
+    }
+
+    case '/logs': {
+      void handleLogsCommand(chatId, userId);
+      return;
+    }
+
     default:
+      if (cmd.startsWith('/deploy')) {
+        handleDeployHelpCommand(chatId);
+        return;
+      }
       if (cmd.startsWith('/')) {
         enqueueTelegramMessage('Lệnh không hợp lệ. Gõ /help', chatId);
       }
@@ -193,7 +256,7 @@ function processUpdate(update: TelegramUpdate): void {
   const text = msg.text.trim();
   if (!text.startsWith('/')) return;
 
-  handleCommand(chatId, text).catch((err) => {
+  handleCommand(chatId, text, userId !== undefined ? String(userId) : undefined).catch((err) => {
     console.error('[TelegramBot] command error:', err);
     enqueueTelegramMessage('Lỗi xử lý lệnh. Thử lại sau.', chatId);
   });

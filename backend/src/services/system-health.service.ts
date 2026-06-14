@@ -15,7 +15,7 @@ import { getDayBoundsICT } from '../utils/ict-time';
 
 const POS_CRON = '*/1 * * * *';
 
-function formatRelativeAgo(ts: Date | null): string {
+export function formatRelativeAgo(ts: Date | null): string {
   if (!ts) return 'never';
   const ms = Date.now() - ts.getTime();
   if (ms < 45_000) return 'just now';
@@ -258,6 +258,19 @@ export async function getLlmStatsTodayIct(): Promise<{
   });
   const trades = decisions.filter((d) => d.decision === 'trade').length;
   return { total: decisions.length, trades, noTrades: decisions.length - trades };
+}
+
+export async function getLastKimDecision(): Promise<{
+  decision: string;
+  reason: string | null;
+  timestamp: Date;
+} | null> {
+  const row = await prisma.tradeDecision.findFirst({
+    where: { method_id: 'kim_nghia' },
+    orderBy: { timestamp: 'desc' },
+    select: { decision: true, reason: true, timestamp: true },
+  });
+  return row ?? null;
 }
 
 export async function getTopNoTradeReasonsIct(limit = 3): Promise<Array<{ reason: string; count: number }>> {

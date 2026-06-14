@@ -93,6 +93,115 @@ export function formatAlert(title: string, body: string): string {
   return `<b>${escapeHtml(title)}</b>\n${escapeHtml(body)}\n<i>${formatVietnamTime(new Date())}</i>`;
 }
 
+export function statusEmoji(ok: boolean): string {
+  return ok ? '🟢' : '🔴';
+}
+
+export function schedulerIcon(status: string): string {
+  if (status === 'running') return '🟢';
+  if (status === 'stale') return '🔴';
+  return '⚪';
+}
+
+export interface CompactSchedulerRow {
+  name: string;
+  status: string;
+  lastRun: string;
+}
+
+export interface CompactHealthInput {
+  workerStatus: string;
+  databaseStatus: string;
+  safetyValidation: string;
+  schedulers: CompactSchedulerRow[];
+  warmupOk: boolean;
+  riskLocked: boolean;
+  lockReason: string | null;
+  binanceEnabled: boolean;
+  recentErrors: Array<{ event_type: string; summary: string }>;
+}
+
+export function formatSchedulerCompact(s: CompactSchedulerRow): string {
+  return `${schedulerIcon(s.status)} ${escapeHtml(s.name)} ${escapeHtml(s.lastRun)}`;
+}
+
+export function formatStatusSummary(h: CompactHealthInput): string {
+  const workerOk = h.workerStatus === 'healthy';
+  const dbOk = h.databaseStatus === 'healthy';
+  const safetyOk = h.safetyValidation === 'passed';
+  const staleCount = h.schedulers.filter((s) => s.status === 'stale').length;
+  const lines = [
+    '<b>Trạng thái hệ thống</b>',
+    `${statusEmoji(workerOk)} Worker ${escapeHtml(h.workerStatus)}`,
+    `${statusEmoji(dbOk)} DB ${escapeHtml(h.databaseStatus)}`,
+    `${statusEmoji(safetyOk)} Safety ${safetyOk ? 'OK' : escapeHtml(h.safetyValidation.slice(0, 40))}`,
+    `${statusEmoji(h.warmupOk)} Warmup ${h.warmupOk ? 'OK' : 'THIẾU'}`,
+    `${statusEmoji(h.binanceEnabled)} Binance ${h.binanceEnabled ? 'ON' : 'OFF'}`,
+    `${statusEmoji(staleCount === 0)} Schedulers${staleCount > 0 ? ` (${staleCount} stale)` : ''}`,
+  ];
+  if (h.riskLocked) {
+    lines.push(`🔒 Cooldown: ${escapeHtml(h.lockReason || 'locked')}`);
+  }
+  if (h.recentErrors.length > 0) {
+    const e = h.recentErrors[0];
+    lines.push(`⚠️ ${escapeHtml(e.event_type)}: ${escapeHtml(e.summary.slice(0, 60))}`);
+  }
+  return lines.join('\n');
+}
+
+export interface ShowSummaryInput {
+  equity: number;
+  totalBalance: number;
+  dailyPnL: number;
+  openCount: number;
+  pendingCount: number;
+  riskLocked: boolean;
+  lockReason: string | null;
+  notifyMuted: boolean;
+  topError?: { event_type: string; summary: string };
+}
+
+export function formatShowSummary(s: ShowSummaryInput): string {
+  const lines = [
+    '<b>Tài khoản</b>',
+    `Equity ${fmtUsd(s.equity)} | Balance ${fmtUsd(s.totalBalance)}`,
+    `PnL hôm nay: ${fmtUsd(s.dailyPnL)}`,
+    `Vị thế: ${s.openCount} mở, ${s.pendingCount} chờ`,
+    s.riskLocked
+      ? `🔒 Cooldown: ${escapeHtml(s.lockReason || 'locked')}`
+      : '🟢 Không cooldown',
+    `Notify: ${s.notifyMuted ? 'TẮT' : 'BẬT'}`,
+  ];
+  if (s.topError) {
+    lines.push(`⚠️ ${escapeHtml(s.topError.event_type)}: ${escapeHtml(s.topError.summary.slice(0, 60))}`);
+  }
+  return lines.join('\n');
+}
+
+export interface PipelineSummaryInput {
+  schedulers: CompactSchedulerRow[];
+  warmupOk: boolean;
+  llmTotal: number;
+  llmTrades: number;
+  lastDecision?: { decision: string; reason: string | null; ago: string };
+}
+
+export function formatPipelineSummary(p: PipelineSummaryInput): string {
+  const lines = ['<b>Pipeline</b>'];
+  for (const s of p.schedulers) {
+    lines.push(formatSchedulerCompact(s));
+  }
+  lines.push(`${statusEmoji(p.warmupOk)} Warmup ${p.warmupOk ? 'OK' : 'THIẾU'}`);
+  lines.push(`LLM hôm nay: ${p.llmTotal} (${p.llmTrades} trade)`);
+  if (p.lastDecision) {
+    const reason = p.lastDecision.reason ? ` — ${escapeHtml(p.lastDecision.reason.slice(0, 50))}` : '';
+    lines.push(
+      `Quyết định cuối: ${escapeHtml(p.lastDecision.decision)} (${escapeHtml(p.lastDecision.ago)})${reason}`
+    );
+  }
+  return lines.join('\n');
+}
+
 export function mapTradeEventType(eventType: string): string | null {
   const map: Record<string, string> = {
     entry_order_filled: '🟢 Mở vị thế (fill)',

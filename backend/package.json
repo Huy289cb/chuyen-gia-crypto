@@ -29,6 +29,7 @@
     "prisma:seed": "tsx scripts/migrate-sqlite-to-postgres.ts"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.18",
     "@prisma/client": "^5.22.0",
     "axios": "^1.7.9",
     "cors": "^2.8.5",

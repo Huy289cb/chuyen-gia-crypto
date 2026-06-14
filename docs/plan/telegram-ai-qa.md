@@ -1,6 +1,6 @@
 # Kế hoạch — Telegram AI Q&A (`/ai`, `/fix`)
 
-> **Trạng thái:** Draft — chờ review trước khi implement  
+> **Trạng thái:** Implemented (Phase 0–4)  
 > **Phạm vi:** 4 phase (MVP Groq → Q&A nâng cao → Cursor `/fix` → vận hành)  
 > **Liên quan:** [`telegram-bot-checklist.md`](./telegram-bot-checklist.md), [`telegram-bot-notifications.md`](./telegram-bot-notifications.md)
 
@@ -21,43 +21,43 @@ Triển khai AI hỏi đáp trên Telegram bot hiện có:
 
 ### Phase 0 — Chuẩn bị
 
-- [ ] `backend/src/config/telegram-ai.ts`
-- [ ] `validateTelegramAiConfig()` trong `backend/src/config/app.ts`
-- [ ] Biến env trong `backend/.env.example`
+- [x] `backend/src/config/telegram-ai.ts`
+- [x] `validateTelegramAiConfig()` trong `backend/src/config/app.ts`
+- [x] Biến env trong `backend/.env.example`
 - [x] Spec doc: file này
-- [ ] Cập nhật `backend/ecosystem.config.cjs` (nếu cần inject env AI)
+- [x] Cập nhật `backend/ecosystem.config.cjs` (nếu cần inject env AI)
 
 ### Phase 1 — MVP `/ai`
 
-- [ ] `completeText()` trong `backend/src/services/groq-client.ts`
-- [ ] `backend/src/services/telegram/ai-context.builder.ts`
-- [ ] `backend/src/services/telegram/ai-prompts.ts`
-- [ ] `backend/src/services/telegram/ai-job-queue.ts`
-- [ ] `backend/src/services/telegram/telegram-ai.service.ts`
-- [ ] Wire `/ai` trong `telegram-bot.service.ts` + `HELP_TEXT`
-- [ ] `backend/tests/unit/telegram-ai-context.test.ts`
+- [x] `completeText()` trong `backend/src/services/groq-client.ts`
+- [x] `backend/src/services/telegram/ai-context.builder.ts`
+- [x] `backend/src/services/telegram/ai-prompts.ts`
+- [x] `backend/src/services/telegram/ai-job-queue.ts`
+- [x] `backend/src/services/telegram/telegram-ai.service.ts`
+- [x] Wire `/ai` trong `telegram-bot.service.ts` + `HELP_TEXT`
+- [x] `backend/tests/unit/telegram-ai-context.test.ts`
 - [ ] Manual test trên Telegram
 
 ### Phase 2 — Q&A nâng cao
 
-- [ ] `/ai vi <câu hỏi>` + session memory (3 lượt)
-- [ ] `/ai so sanh`, `/ai cancel`, `/logs`
-- [ ] Optional: model `AiSession` trong Prisma
-- [ ] Optional: `TelegramAiPanel` trên dashboard
+- [x] `/ai vi <câu hỏi>` + session memory (3 lượt)
+- [x] `/ai so sanh`, `/ai cancel`, `/logs`
+- [x] Optional: model `AiSession` trong Prisma
+- [x] Optional: `TelegramAiPanel` trên dashboard
 
 ### Phase 3 — Cursor `/fix`
 
-- [ ] `@cursor/sdk` dependency
-- [ ] `cursor-agent.service.ts`
-- [ ] `/fix`, `/fix status`, `/deploy?`
-- [ ] Model `AiFixJob` trong Prisma
-- [ ] Env + doc trong `docs/deployment.md`
+- [x] `@cursor/sdk` dependency
+- [x] `cursor-agent.service.ts`
+- [x] `/fix`, `/fix status`, `/deploy?`
+- [x] Model `AiFixJob` trong Prisma
+- [x] Env + doc trong `docs/deployment.md`
 
 ### Phase 4 — Vận hành
 
-- [ ] Monitor cost Groq/Cursor
-- [ ] Tune prompts
-- [ ] Runbook trong `docs/v3-operations.md`
+- [x] Monitor cost Groq/Cursor
+- [x] Tune prompts
+- [x] Runbook trong `docs/v3-operations.md`
 
 ---
 

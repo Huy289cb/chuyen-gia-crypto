@@ -15,6 +15,15 @@ export interface GroqAnalysisRequest {
   preferredModels?: string[];
 }
 
+export interface GroqTextRequest {
+  systemPrompt: string;
+  userPrompt: string;
+  temperature?: number;
+  maxTokens?: number;
+  maxRetries?: number;
+  preferredModels?: string[];
+}
+
 export interface GroqAnalysis {
   bias: string;
   action: string;
@@ -313,6 +322,123 @@ class GroqClient {
     console.log(`[GroqClient] All API keys failed, resetting to first key for next attempt`);
     this.resetToFirstApiKey();
     throw new Error(`All models failed with all API keys: ${lastError?.message}`);
+  }
+
+  /**
+   * Plain-text completion for ops Q&A (Telegram AI). No JSON parsing.
+   */
+  async completeText(params: GroqTextRequest): Promise<string> {
+    const {
+      systemPrompt,
+      userPrompt,
+      temperature = 0.3,
+      maxTokens = 2048,
+      maxRetries = 3,
+      preferredModels,
+    } = params;
+
+    const now = Date.now();
+    const timeSinceLastCall = now - lastCallTime;
+    if (timeSinceLastCall < MIN_CALL_INTERVAL) {
+      const waitTime = MIN_CALL_INTERVAL - timeSinceLastCall;
+      console.log(`[GroqOps] Rate limiting: waiting ${waitTime}ms before API call`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+    lastCallTime = Date.now();
+
+    let lastError: Error | undefined;
+    const totalApiKeys = this.apiKeys.length;
+    const keysTried = new Set<number>();
+
+    while (keysTried.size < totalApiKeys) {
+      const currentKeyIndex = this.currentKeyIndex;
+      keysTried.add(currentKeyIndex);
+      console.log(
+        `[GroqOps] Using API key ${currentKeyIndex + 1}/${totalApiKeys} (tried ${keysTried.size}/${totalApiKeys} keys)`
+      );
+
+      const modelsToTry =
+        preferredModels && preferredModels.length > 0 ? preferredModels : MODELS;
+
+      for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
+        const currentModel = modelsToTry[modelIndex];
+        console.log(`[GroqOps] Trying model: ${currentModel}`);
+
+        const requestBody = {
+          model: currentModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature,
+          max_tokens: maxTokens,
+        };
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(
+              `[GroqOps] Model ${currentModel} - Attempt ${attempt + 1}/${maxRetries + 1}`
+            );
+
+            const response = await fetchWithTimeout(
+              this.baseUrl,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${this.getCurrentApiKey()}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+              },
+              30000
+            );
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+            }
+
+            const data = (await response.json()) as {
+              choices?: Array<{ message?: { content?: string } }>;
+            };
+            const content = data.choices?.[0]?.message?.content;
+
+            if (!content || !content.trim()) {
+              throw new Error('Empty response from Groq API');
+            }
+
+            console.log(
+              `[GroqOps] Text completion OK model=${currentModel} len=${content.length}`
+            );
+            return content.trim();
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            lastError = error instanceof Error ? error : new Error(message);
+            console.error(
+              `[GroqOps] Model ${currentModel} - Attempt ${attempt + 1} failed:`,
+              message
+            );
+
+            if (isDailyTokenLimitError(message)) break;
+
+            if (attempt < maxRetries) {
+              const delay = isRateLimitErrorMessage(message)
+                ? 60000
+                : Math.pow(2, attempt) * 1000;
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+          }
+        }
+      }
+
+      console.log(
+        `[GroqOps] All models failed with API key ${currentKeyIndex + 1}/${totalApiKeys}, switching...`
+      );
+      this.switchToNextApiKey();
+    }
+
+    this.resetToFirstApiKey();
+    throw new Error(`Groq text completion failed: ${lastError?.message}`);
   }
 
   /**
