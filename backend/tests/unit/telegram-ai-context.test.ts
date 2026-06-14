@@ -4,22 +4,43 @@ import {
   redactSensitiveText,
   splitMessageForTelegram,
 } from '../../src/services/telegram/ai-context.builder';
+import {
+  getConversationalGreeting,
+  getSystemPrompt,
+  getUserPrompt,
+  isConversationalScope,
+} from '../../src/services/telegram/ai-prompts';
 
 describe('telegram-ai context helpers', () => {
   describe('parseAiCommandArgs', () => {
-    it('defaults to today_run', () => {
-      expect(parseAiCommandArgs('').scope).toBe('today_run');
-      expect(parseAiCommandArgs('hom nay').scope).toBe('today_run');
+    it('defaults to conversational freeform when empty', () => {
+      expect(parseAiCommandArgs('')).toEqual({ action: 'analyze', scope: 'freeform' });
     });
 
-    it('maps known scopes', () => {
+    it('maps report keywords exactly', () => {
+      expect(parseAiCommandArgs('hom nay').scope).toBe('today_run');
+      expect(parseAiCommandArgs('homnay').scope).toBe('today_run');
+      expect(parseAiCommandArgs('bao cao').scope).toBe('today_run');
+      expect(parseAiCommandArgs('baocao').scope).toBe('today_run');
       expect(parseAiCommandArgs('loi').scope).toBe('errors');
       expect(parseAiCommandArgs('pipeline').scope).toBe('pipeline');
       expect(parseAiCommandArgs('llm').scope).toBe('llm');
       expect(parseAiCommandArgs('so sanh').scope).toBe('compare');
     });
 
-    it('parses freeform vi question', () => {
+    it('treats free text as conversational question', () => {
+      const parsed = parseAiCommandArgs('tai sao khong co lenh hom nay?');
+      expect(parsed.scope).toBe('freeform');
+      expect(parsed.question).toBe('tai sao khong co lenh hom nay?');
+    });
+
+    it('does not treat partial report keywords as report mode', () => {
+      const parsed = parseAiCommandArgs('hom nay sao khong co lenh');
+      expect(parsed.scope).toBe('freeform');
+      expect(parsed.question).toContain('hom nay');
+    });
+
+    it('still supports legacy vi prefix', () => {
       const parsed = parseAiCommandArgs('vi tai sao khong co lenh hom nay?');
       expect(parsed.scope).toBe('freeform');
       expect(parsed.question).toContain('tai sao');
@@ -61,5 +82,31 @@ describe('telegram-ai context helpers', () => {
         expect(c.length).toBeLessThanOrEqual(100);
       }
     });
+  });
+});
+
+describe('telegram-ai prompts', () => {
+  it('identifies conversational scope', () => {
+    expect(isConversationalScope('freeform')).toBe(true);
+    expect(isConversationalScope('today_run')).toBe(false);
+  });
+
+  it('uses bro personality for freeform system prompt', () => {
+    const prompt = getSystemPrompt('freeform');
+    expect(prompt).toContain('bro');
+    expect(prompt).toContain('KHÔNG dump');
+  });
+
+  it('puts question before context in conversational user prompt', () => {
+    const prompt = getUserPrompt('freeform', '{"x":1}', 'tai sao khong vao lenh?');
+    const qIdx = prompt.indexOf('Câu hỏi:');
+    const ctxIdx = prompt.indexOf('Dữ liệu hệ thống');
+    expect(qIdx).toBeGreaterThanOrEqual(0);
+    expect(ctxIdx).toBeGreaterThan(qIdx);
+    expect(prompt).toContain('Trả lời như bro');
+  });
+
+  it('provides conversational greeting', () => {
+    expect(getConversationalGreeting()).toContain('/ai bao cao');
   });
 });

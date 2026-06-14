@@ -51,8 +51,9 @@ const HELP_TEXT = `<b>Lệnh cơ bản</b>
 /tat · /bat — tắt/bật notify
 
 <b>AI</b> (Groq)
-/ai · /ai loi · /ai pipeline · /ai llm
-/ai vi &lt;câu hỏi&gt; · /ai so sanh · /ai cancel
+/ai &lt;câu hỏi&gt; — chat với bro
+/ai bao cao · /ai hom nay — báo cáo đầy đủ
+/ai loi · /ai pipeline · /ai llm · /ai so sanh · /ai cancel
 
 <b>Khác</b>
 /fix · /deploy? · /logs · /help`;

@@ -16,7 +16,12 @@ import {
   splitMessageForTelegram,
   type AiContextScope,
 } from './ai-context.builder';
-import { getSystemPrompt, getUserPrompt } from './ai-prompts';
+import {
+  getConversationalGreeting,
+  getSystemPrompt,
+  getUserPrompt,
+  isConversationalScope,
+} from './ai-prompts';
 import {
   cancelAiJobForChat,
   enqueueAiJob,
@@ -26,7 +31,7 @@ import { enqueueTelegramMessage } from './telegram-client';
 import { escapeHtml } from './message-formatters';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
-const MAX_SESSION_TURNS = 3;
+const MAX_SESSION_TURNS = 5;
 
 interface SessionTurn {
   role: 'user' | 'assistant';
@@ -163,7 +168,8 @@ async function runAiAnalysis(
     return;
   }
 
-  const session = scope === 'freeform' ? await loadSession(chatId) : undefined;
+  const conversational = isConversationalScope(scope);
+  const session = conversational ? await loadSession(chatId) : undefined;
   const contextJson = contextToJson(bundle);
   const systemPrompt = getSystemPrompt(scope);
   const userPrompt = getUserPrompt(scope, contextJson, question, session?.turns);
@@ -171,8 +177,10 @@ async function runAiAnalysis(
   const answer = await groq.completeText({
     systemPrompt,
     userPrompt,
-    temperature: 0.3,
-    maxTokens: telegramAiConfig.maxTokens,
+    temperature: conversational ? 0.55 : 0.3,
+    maxTokens: conversational
+      ? Math.min(telegramAiConfig.maxTokens, 900)
+      : telegramAiConfig.maxTokens,
     preferredModels: [telegramAiConfig.model],
   });
 
@@ -183,7 +191,7 @@ async function runAiAnalysis(
 
   sendAiReply(chatId, answer);
 
-  if (scope === 'freeform' && question) {
+  if (conversational && question) {
     pushSessionTurn(chatId, userId, question, answer);
   }
 }
@@ -210,7 +218,7 @@ export async function handleAiCommand(
   }
 
   if (parsed.scope === 'freeform' && !parsed.question) {
-    enqueueTelegramMessage('Dùng: /ai vi <câu hỏi>', chatId);
+    enqueueTelegramMessage(getConversationalGreeting(), chatId);
     return;
   }
 
@@ -235,7 +243,10 @@ export async function handleAiCommand(
     return;
   }
 
-  enqueueTelegramMessage('🔍 Đang phân tích... (tối đa 60s)', chatId);
+  const waitMsg = isConversationalScope(parsed.scope)
+    ? '💬 Đang suy nghĩ...'
+    : '🔍 Đang phân tích... (tối đa 60s)';
+  enqueueTelegramMessage(waitMsg, chatId);
 }
 
 export async function runTelegramAiQuery(
@@ -252,11 +263,14 @@ export async function runTelegramAiQuery(
   const systemPrompt = getSystemPrompt(scope);
   const userPrompt = getUserPrompt(scope, contextJson, question);
 
+  const conversational = isConversationalScope(scope);
   const answer = await groq.completeText({
     systemPrompt,
     userPrompt,
-    temperature: 0.3,
-    maxTokens: telegramAiConfig.maxTokens,
+    temperature: conversational ? 0.55 : 0.3,
+    maxTokens: conversational
+      ? Math.min(telegramAiConfig.maxTokens, 900)
+      : telegramAiConfig.maxTokens,
     preferredModels: [telegramAiConfig.model],
   });
 

@@ -272,31 +272,42 @@ export interface ParsedAiCommand {
   question?: string;
 }
 
+const REPORT_KEYWORD_SCOPES: Record<string, AiContextScope> = {
+  'bao cao': 'today_run',
+  baocao: 'today_run',
+  'hom nay': 'today_run',
+  homnay: 'today_run',
+  loi: 'errors',
+  lỗi: 'errors',
+  pipeline: 'pipeline',
+  llm: 'llm',
+  'so sanh': 'compare',
+  'so-sanh': 'compare',
+};
+
 export function parseAiCommandArgs(args: string): ParsedAiCommand {
-  const trimmed = args.trim().toLowerCase();
-  if (!trimmed || trimmed === 'hom nay' || trimmed === 'homnay') {
-    return { action: 'analyze', scope: 'today_run' };
+  const trimmed = args.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (!trimmed) {
+    return { action: 'analyze', scope: 'freeform' };
   }
-  if (trimmed === 'cancel' || trimmed === 'huy') {
+
+  if (lower === 'cancel' || lower === 'huy') {
     return { action: 'cancel', scope: 'today_run' };
   }
-  if (trimmed === 'loi' || trimmed === 'lỗi') {
-    return { action: 'analyze', scope: 'errors' };
+
+  const reportScope = REPORT_KEYWORD_SCOPES[lower];
+  if (reportScope) {
+    return { action: 'analyze', scope: reportScope };
   }
-  if (trimmed === 'pipeline') {
-    return { action: 'analyze', scope: 'pipeline' };
-  }
-  if (trimmed === 'llm') {
-    return { action: 'analyze', scope: 'llm' };
-  }
-  if (trimmed === 'so sanh' || trimmed === 'so-sanh') {
-    return { action: 'analyze', scope: 'compare' };
-  }
-  if (trimmed.startsWith('vi ') || trimmed.startsWith('vi\t')) {
-    const question = args.trim().slice(3).trim();
+
+  if (lower.startsWith('vi ') || lower.startsWith('vi\t')) {
+    const question = trimmed.slice(3).trim();
     return { action: 'analyze', scope: 'freeform', question: question || undefined };
   }
-  return { action: 'analyze', scope: 'today_run' };
+
+  return { action: 'analyze', scope: 'freeform', question: trimmed };
 }
 
 export function splitMessageForTelegram(text: string, maxLen = 4096): string[] {

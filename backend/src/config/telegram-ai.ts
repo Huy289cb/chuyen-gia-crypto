@@ -35,7 +35,7 @@ export const telegramAiConfig: TelegramAiConfig = {
   rateLimitPerUserHour: parseIntEnv(process.env.TELEGRAM_AI_RATE_LIMIT_PER_USER_HOUR, 5),
   rateLimitPerChatDay: parseIntEnv(process.env.TELEGRAM_AI_RATE_LIMIT_PER_CHAT_DAY, 30),
   requireAllowedUserIds: isProductionEnv(),
-  systemPromptVersion: process.env.TELEGRAM_AI_SYSTEM_PROMPT_VERSION || '1',
+  systemPromptVersion: process.env.TELEGRAM_AI_SYSTEM_PROMPT_VERSION || '2',
 };
 
 export const cursorAgentConfig: CursorAgentConfig = {
