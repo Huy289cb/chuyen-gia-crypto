@@ -45,6 +45,21 @@ export function isBinanceDemoMetadataUnavailableError(error: unknown): boolean {
   return baseUrl.includes('demo-fapi.binance.com');
 }
 
+/**
+ * True when openOrders/getOrder probe failed transiently — do not mark pending rows as
+ * reconciliation_failed (demo -1109 on order endpoints after retries, rate limits, etc.).
+ */
+export function isBinanceOrderStateProbeUnavailable(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const withMeta = error as Error & { retriable?: boolean };
+  if (withMeta.retriable) {
+    return true;
+  }
+  return isBinanceInvalidAccountError(error);
+}
+
 /** User-facing message when trading probe fails with -1109. */
 export function formatBinanceInvalidAccountMessage(): string {
   const baseUrl = process.env.BINANCE_BASE_URL || config.BASE_URL;

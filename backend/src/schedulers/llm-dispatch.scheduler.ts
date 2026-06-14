@@ -13,7 +13,7 @@ import { getMethodConfig } from '../config/methods';
 import { executeV3Trade } from '../services/v3-trade-execution.service';
 import { memoryService } from '../services/memory.service';
 import {
-  getTestnetPendingOrders,
+  getBlockingTestnetPendingOrders,
   getTestnetPositions,
   recordPipelineEvent,
 } from '../repositories/testnet.repository';
@@ -89,12 +89,14 @@ async function runLLMDispatch() {
     const symbols = ['BTC'];
 
     for (const symbol of symbols) {
-      const [openPositions, pendingOrders] = await Promise.all([
+      const [openPositions, blockingPending] = await Promise.all([
         getTestnetPositions({ symbol, status: 'open' }),
-        getTestnetPendingOrders({ symbol, status: 'pending' }),
+        getBlockingTestnetPendingOrders({ symbol }),
       ]);
 
-      if (pendingOrders.length > 0) {
+      const pendingForLifecycle = blockingPending.filter((o) => o.status === 'pending');
+
+      if (pendingForLifecycle.length > 0) {
         const lifecycle = await runPendingOrderLifecycle(symbol);
         if (lifecycle.cancelled > 0) {
           console.log(
@@ -116,10 +118,14 @@ async function runLLMDispatch() {
         continue;
       }
 
-      const pendingAfterReview = await getTestnetPendingOrders({ symbol, status: 'pending' });
-      if (pendingAfterReview.length > 0) {
+      const blockingAfterReview = await getBlockingTestnetPendingOrders({ symbol });
+      if (blockingAfterReview.length > 0) {
+        const unresolved = blockingAfterReview.filter(
+          (o) => o.status === 'reconciliation_failed_not_on_binance'
+        ).length;
         console.log(
-          `[LLMDispatch] ${symbol}: skip new trade — pending=${pendingAfterReview.length} (lifecycle reviewed)`
+          `[LLMDispatch] ${symbol}: skip new trade — blocking pending=${blockingAfterReview.length}` +
+            (unresolved > 0 ? ` (${unresolved} unresolved reconcile)` : '')
         );
         continue;
       }

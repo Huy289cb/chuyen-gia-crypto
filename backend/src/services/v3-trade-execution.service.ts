@@ -13,8 +13,8 @@ import { hasBinanceExposureForSide } from './binance-exposure.service';
 import {
   createTestnetPendingOrder,
   getActiveTestnetPositions,
+  getBlockingTestnetPendingOrders,
   getOrCreateTestnetAccount,
-  getTestnetPendingOrders,
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
 import { computeExpectedRrFromPrices } from '../utils/trade-levels';
@@ -138,7 +138,7 @@ export async function executeV3Trade(
 
   const [openPositions, pendingOrders] = await Promise.all([
     getActiveTestnetPositions({ symbol, methodId }),
-    getTestnetPendingOrders({ symbol, status: 'pending', methodId }),
+    getBlockingTestnetPendingOrders({ symbol, methodId }),
   ]);
 
   const sameSideOpen = openPositions.filter(
@@ -155,9 +155,14 @@ export async function executeV3Trade(
     (o) => String(o.side).toLowerCase() === side
   );
   if (sameSidePending.length > 0) {
+    const blocking = sameSidePending[0];
+    const status = String(blocking.status ?? 'pending');
     return {
       success: false,
-      reason: `Same-side ${side} pending order already exists`,
+      reason:
+        status === 'reconciliation_failed_not_on_binance'
+          ? `Unresolved ${side} pending order ${blocking.order_id} (reconcile pending — Binance state unknown)`
+          : `Same-side ${side} pending order already exists`,
     };
   }
 

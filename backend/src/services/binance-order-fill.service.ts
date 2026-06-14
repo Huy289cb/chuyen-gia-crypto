@@ -14,6 +14,7 @@ import {
   placeProtectiveOrdersForPosition,
   resolveLevelsForFill,
 } from './protective-order.service';
+import { isBinanceOrderStateProbeUnavailable } from './binance-account-health.service';
 
 /** Binance ORDER_TRADE_UPDATE `o` payload (subset). */
 export interface BinanceOrderTradeUpdate {
@@ -258,7 +259,7 @@ export async function recoverPendingOrderFromBinance(
     binance_order_id?: string | null;
     status: string;
   }
-): Promise<'filled' | 'cancelled' | 'unchanged' | 'failed'> {
+): Promise<'filled' | 'cancelled' | 'unchanged' | 'failed' | 'api_unavailable'> {
   if (!localOrder.binance_order_id) {
     return 'failed';
   }
@@ -297,6 +298,12 @@ export async function recoverPendingOrderFromBinance(
     return 'unchanged';
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    if (isBinanceOrderStateProbeUnavailable(error)) {
+      console.warn(
+        `[BinanceOrderFill] recover ${localOrder.order_id} deferred (Binance probe unavailable): ${message}`
+      );
+      return 'api_unavailable';
+    }
     console.error(
       `[BinanceOrderFill] recover ${localOrder.order_id} failed:`,
       message

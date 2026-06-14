@@ -649,6 +649,32 @@ export async function getTestnetPendingOrders(filters: {
   });
 }
 
+/** Pending rows that should block new limit placement until resolved on Binance. */
+export const BLOCKING_PENDING_ORDER_STATUSES = [
+  'pending',
+  'partially_filled',
+  'reconciliation_failed_not_on_binance',
+] as const;
+
+export async function getBlockingTestnetPendingOrders(filters: {
+  symbol?: string;
+  accountId?: number;
+  methodId?: string;
+}): Promise<any[]> {
+  const where: any = {
+    status: { in: [...BLOCKING_PENDING_ORDER_STATUSES] },
+  };
+
+  if (filters.symbol) where.symbol = filters.symbol.toUpperCase();
+  if (filters.accountId) where.account_id = filters.accountId;
+  if (filters.methodId) where.method_id = filters.methodId;
+
+  return prisma.testnetPendingOrder.findMany({
+    where,
+    orderBy: { created_at: 'desc' },
+  });
+}
+
 /**
  * Find pending order by Binance order id (active or recoverable statuses).
  */

@@ -89,30 +89,72 @@ export async function performStartupReconciliation(): Promise<void> {
 async function reconcilePendingOrders(): Promise<void> {
   console.log('[BinanceReconciliation] Reconciling pending orders...');
 
-  const localPendingOrders = await getTestnetPendingOrders({ status: 'pending' });
-  
-  if (localPendingOrders.length === 0) {
+  const [localPendingOrders, localFailedOrders] = await Promise.all([
+    getTestnetPendingOrders({ status: 'pending' }),
+    getTestnetPendingOrders({ status: 'reconciliation_failed_not_on_binance' }),
+  ]);
+
+  if (localPendingOrders.length === 0 && localFailedOrders.length === 0) {
     console.log('[BinanceReconciliation] No local pending orders to reconcile');
     return;
   }
 
   const client = {} as any;
   const binanceOrders: any[] = [];
-  const symbols = [...new Set(localPendingOrders.map((o) => o.symbol))];
+  const symbols = [
+    ...new Set(
+      [...localPendingOrders, ...localFailedOrders].map((o) => String(o.symbol).toUpperCase())
+    ),
+  ];
+  const openOrdersOkBySymbol = new Map<string, boolean>();
+
   for (const sym of symbols) {
     try {
       const orders = await getOpenOrders(client, `${sym}USDT`);
       binanceOrders.push(...orders);
-    } catch (error: any) {
-      console.error(`[BinanceReconciliation] Failed to fetch open orders for ${sym}:`, error.message);
+      openOrdersOkBySymbol.set(sym, true);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      openOrdersOkBySymbol.set(sym, false);
+      console.warn(
+        `[BinanceReconciliation] openOrders unavailable for ${sym} (${message}) — ` +
+          'keeping local pending state unchanged this cycle'
+      );
     }
   }
 
-  // Create a map of Binance order IDs for quick lookup
   const binanceOrderIds = new Set(binanceOrders.map((o: any) => String(o.orderId)));
+
+  for (const failed of localFailedOrders) {
+    const sym = String(failed.symbol).toUpperCase();
+    if (!openOrdersOkBySymbol.get(sym)) {
+      continue;
+    }
+    if (failed.binance_order_id && binanceOrderIds.has(failed.binance_order_id)) {
+      await updateTestnetPendingOrder(failed.order_id, { status: 'pending' });
+      console.log(
+        `[BinanceReconciliation] Relinked ${failed.order_id} to pending (found on Binance openOrders)`
+      );
+      continue;
+    }
+    const outcome = await recoverPendingOrderFromBinance(failed);
+    if (outcome === 'api_unavailable') {
+      console.warn(
+        `[BinanceReconciliation] Deferred recovery for ${failed.order_id} (Binance probe unavailable)`
+      );
+    }
+  }
 
   // Check each local pending order
   for (const localOrder of localPendingOrders) {
+    const sym = String(localOrder.symbol).toUpperCase();
+    if (!openOrdersOkBySymbol.get(sym)) {
+      console.log(
+        `[BinanceReconciliation] Skip ${localOrder.order_id}: openOrders probe failed for ${sym}`
+      );
+      continue;
+    }
+
     if (!localOrder.binance_order_id) {
       // Local order without Binance ID - this shouldn't happen if BINANCE_ENABLED=true
       console.warn(`[BinanceReconciliation] Local order ${localOrder.order_id} has no binance_order_id, marking as failed`);
@@ -133,6 +175,10 @@ async function reconcilePendingOrders(): Promise<void> {
         console.log(`[BinanceReconciliation] Recovered filled order ${localOrder.order_id}`);
       } else if (outcome === 'cancelled') {
         console.log(`[BinanceReconciliation] Order ${localOrder.order_id} closed on Binance (${outcome})`);
+      } else if (outcome === 'api_unavailable') {
+        console.warn(
+          `[BinanceReconciliation] Keep ${localOrder.order_id} pending — Binance order probe unavailable`
+        );
       } else if (outcome === 'failed') {
         await updateTestnetPendingOrder(localOrder.order_id, {
           status: 'reconciliation_failed_not_on_binance',
@@ -144,7 +190,7 @@ async function reconcilePendingOrders(): Promise<void> {
       if (binanceOrder) {
         const binanceStatus = binanceOrder.status;
         console.log(`[BinanceReconciliation] Order ${localOrder.order_id} exists on Binance with status ${binanceStatus}`);
-        
+
         // If Binance shows FILLED but local shows pending, local state is stale
         if (binanceStatus === 'FILLED' && localOrder.status === 'pending') {
           console.warn(
@@ -160,8 +206,10 @@ async function reconcilePendingOrders(): Promise<void> {
   // This could happen if the order was placed but DB write failed
   for (const binanceOrder of binanceOrders) {
     const binanceOrderId = String(binanceOrder.orderId);
-    const existsLocally = localPendingOrders.some(o => o.binance_order_id === binanceOrderId);
-    
+    const existsLocally = [...localPendingOrders, ...localFailedOrders].some(
+      (o) => o.binance_order_id === binanceOrderId
+    );
+
     if (!existsLocally) {
       console.warn(`[BinanceReconciliation] Binance order ${binanceOrderId} not found in local DB - orphaned order`);
       // Could create a local record for this order, but that's complex
@@ -292,7 +340,13 @@ async function recoverMislabeledPendingOrders(): Promise<void> {
 
   for (const localOrder of stale) {
     const outcome = await recoverPendingOrderFromBinance(localOrder);
-    console.log(`[BinanceReconciliation] Recover ${localOrder.order_id}: ${outcome}`);
+    if (outcome === 'api_unavailable') {
+      console.warn(
+        `[BinanceReconciliation] Recover ${localOrder.order_id}: deferred (Binance probe unavailable)`
+      );
+    } else {
+      console.log(`[BinanceReconciliation] Recover ${localOrder.order_id}: ${outcome}`);
+    }
   }
 }
 
