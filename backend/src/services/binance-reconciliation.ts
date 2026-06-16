@@ -1,8 +1,14 @@
 /**
- * Binance Futures Startup Reconciliation Service
- * 
- * Syncs local database state with Binance state on backend startup
- * Handles server crashes, restarts, network failures, missed WebSocket events
+ * Binance reconciliation — keep local DB aligned with Binance (ONE_WAY).
+ *
+ * Rules (simple):
+ * 1. Fill → position is created by WebSocket only (real-time).
+ * 2. Reconciliation fixes pending status (cancel / mark executed_historical). Never opens old fills.
+ * 3. Open positions: at most one local row per symbol; align qty with Binance net.
+ * 4. Absent on Binance: bookkeeping PnL=0 only (wallet synced from Binance separately).
+ * 5. Never resurrect closed or mislabeled rows (prevents 62k ghost shorts).
+ * 6. Close open rows older than 6h when absent on Binance (stale ghosts).
+ * 7. Reconciliation uses positionRisk only — never userTrades net for open/reopen/close skip.
  */
 
 import { prisma } from '../lib/prisma';
@@ -19,14 +25,11 @@ import {
 } from './binance-order-fill.service';
 import {
   fetchActiveBinancePositions,
-  fetchBinancePositionRiskRows,
-  inferBinancePositionsFromFallback,
   isBinancePositionRiskUnavailable,
 } from './binance-exposure.service';
 import { getOpenOrders, getOpenAlgoOrders, cancelAlgoOrder } from './binanceClient';
 import { isPhantomReopenEnabled } from '../config/v3-entry-policy';
 import {
-  findBinancePositionForSide,
   type ParsedBinancePosition,
   type PositionSideLocal,
 } from '../utils/binance-position-match';
@@ -68,11 +71,11 @@ export async function performStartupReconciliation(): Promise<void> {
   console.log('[BinanceReconciliation] Running reconciliation cycle...');
 
   try {
+    // Pending: sync status only (cancel / mark executed). No backfill positions.
     await reconcilePendingOrders();
     await reconcileOrphanBinanceLimitOrders();
     await cleanupOrphanBinanceAlgoOrders('BTC');
-    await recoverMislabeledPendingOrders();
-    await reconcileExecutedOrdersMissingPositions();
+    // Positions: align open rows with Binance net exposure (ONE_WAY).
     await reconcilePositions();
     
     console.log('[BinanceReconciliation] Reconciliation cycle completed successfully');
@@ -250,7 +253,7 @@ async function reconcileOrphanBinanceLimitOrders(): Promise<void> {
   }
 }
 
-const RECONCILE_REOPEN_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+const STALE_OPEN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 function collectProtectedAlgoIds(
   positions: Array<{ binance_sl_order_id?: string | null; binance_tp_order_id?: string | null }>
@@ -325,32 +328,6 @@ export async function cleanupOrphanBinanceAlgoOrders(symbol = 'BTC'): Promise<nu
 }
 
 /**
- * Retry orders previously marked reconciliation_failed (e.g. filled while WS had NaN price).
- */
-async function recoverMislabeledPendingOrders(): Promise<void> {
-  const stale = await prisma.testnetPendingOrder.findMany({
-    where: { status: 'reconciliation_failed_not_on_binance' },
-    orderBy: { created_at: 'desc' },
-    take: 20,
-  });
-
-  if (stale.length === 0) return;
-
-  console.log(`[BinanceReconciliation] Recovering ${stale.length} mislabeled pending order(s)...`);
-
-  for (const localOrder of stale) {
-    const outcome = await recoverPendingOrderFromBinance(localOrder);
-    if (outcome === 'api_unavailable') {
-      console.warn(
-        `[BinanceReconciliation] Recover ${localOrder.order_id}: deferred (Binance probe unavailable)`
-      );
-    } else {
-      console.log(`[BinanceReconciliation] Recover ${localOrder.order_id}: ${outcome}`);
-    }
-  }
-}
-
-/**
  * DB was closed by paper candle SL/TP simulation while Binance position is still open.
  */
 async function reconcilePhantomLocalCloses(activeBinancePositions: ParsedBinancePosition[]): Promise<void> {
@@ -415,81 +392,7 @@ async function reconcilePhantomLocalCloses(activeBinancePositions: ParsedBinance
 }
 
 /**
- * Executed pending rows with no open / recoverable local position (missed WS fill).
- */
-async function reconcileExecutedOrdersMissingPositions(): Promise<void> {
-  const executed = await prisma.testnetPendingOrder.findMany({
-    where: { status: 'executed' },
-    orderBy: { executed_at: 'desc' },
-    take: 20,
-  });
-
-  for (const order of executed) {
-    if (!order.binance_order_id) continue;
-
-    const existing = await prisma.testnetPosition.findFirst({
-      where: { binance_order_id: order.binance_order_id },
-    });
-    if (existing) continue;
-
-    const openForSymbol = await prisma.testnetPosition.findFirst({
-      where: {
-        symbol: order.symbol,
-        side: order.side,
-        status: { in: ['open', 'reconciliation_failed_not_on_binance'] },
-      },
-    });
-    if (openForSymbol) continue;
-
-    const outcome = await recoverPendingOrderFromBinance(order);
-    if (outcome === 'filled') {
-      console.log(
-        `[BinanceReconciliation] Materialized position from executed pending ${order.order_id}`
-      );
-    }
-  }
-}
-
-/**
- * Re-open rows wrongly marked reconciliation_failed when Binance still has exposure.
- */
-async function recoverMislabeledLocalPositions(): Promise<void> {
-  const mislabeled = await prisma.testnetPosition.findMany({
-    where: { status: 'reconciliation_failed_not_on_binance' },
-    orderBy: { entry_time: 'desc' },
-  });
-
-  let riskRows: Awaited<ReturnType<typeof fetchBinancePositionRiskRows>> = [];
-  try {
-    riskRows = await fetchBinancePositionRiskRows();
-  } catch {
-    return;
-  }
-
-  for (const local of mislabeled) {
-    const side = String(local.side).toLowerCase() as PositionSideLocal;
-    const bp = findBinancePositionForSide(riskRows, local.symbol, side);
-
-    if (!bp) continue;
-
-    console.warn(
-      `[BinanceReconciliation] Reopening mislabeled position ${local.position_id} (${local.symbol} ${side})`
-    );
-
-    await updateTestnetPosition(local.position_id, {
-      status: 'open',
-      size_qty: bp.positionAmt,
-      size_usd: bp.positionAmt * (bp.entryPrice || local.entry_price),
-      current_price: bp.markPrice || local.entry_price,
-      unrealized_pnl: 0,
-    });
-
-    await ensureProtectiveOrdersForPosition(local);
-  }
-}
-
-/**
- * One canonical open row per symbol+side; merge duplicate mislabeled rows into the primary.
+ * One canonical open row per symbol+side; merge duplicate open rows into the primary.
  */
 async function consolidateLocalExposureWithBinance(
   activeBinance: ParsedBinancePosition[]
@@ -529,50 +432,121 @@ async function consolidateLocalExposureWithBinance(
       continue;
     }
 
-    const mislabeled = await prisma.testnetPosition.findMany({
-      where: {
-        symbol: bp.symbol,
-        side: bp.side,
-        OR: [
-          { status: 'reconciliation_failed_not_on_binance' },
-          {
-            status: 'closed',
-            close_reason: 'reconciliation_closed_not_on_binance',
-            close_time: { gte: new Date(Date.now() - RECONCILE_REOPEN_MAX_AGE_MS) },
-          },
-        ],
-      },
-      orderBy: { entry_time: 'desc' },
-    });
-
-    if (mislabeled.length === 0) {
-      console.warn(
-        `[BinanceReconciliation] Binance ${bp.symbol} ${bp.side} ${bp.positionAmt} with no local open row`
-      );
-      continue;
-    }
-
-    const [primary, ...dupes] = mislabeled;
-    await updateTestnetPosition(primary.position_id, {
-      status: 'open',
-      size_qty: bp.positionAmt,
-      size_usd: bp.positionAmt * (bp.entryPrice || primary.entry_price),
-      current_price: bp.markPrice || primary.entry_price,
-      unrealized_pnl: 0,
-      close_time: null,
-      close_price: null,
-      close_reason: null,
-    });
-
-    const { closeDuplicateForMerge } = await import('./position-close.service');
-    for (const dup of dupes) {
-      await closeDuplicateForMerge(dup.position_id, primary.position_id);
-    }
-
-    await ensureProtectiveOrdersForPosition(primary);
-    console.log(
-      `[BinanceReconciliation] Consolidated ${mislabeled.length} mislabeled row(s) → ${primary.position_id}`
+    console.warn(
+      `[BinanceReconciliation] Binance ${bp.symbol} ${bp.side} ${bp.positionAmt} with no local open row — ` +
+        'not reopening (WS/fill path only)'
     );
+  }
+}
+
+/**
+ * Close local row when Binance has no matching exposure (optional stale-ghost force).
+ */
+async function closeLocalIfAbsentOnBinance(
+  localPosition: {
+    position_id: string;
+    symbol: string;
+    side: string;
+    entry_price?: number;
+    size_qty?: number;
+    stop_loss?: number;
+    take_profit?: number;
+    binance_sl_order_id?: string | null;
+    binance_tp_order_id?: string | null;
+    account_id?: number;
+    account?: { current_balance?: number };
+  },
+  activeBinance: ParsedBinancePosition[],
+  opts?: { staleGhost?: boolean }
+): Promise<void> {
+  const side = String(localPosition.side).toLowerCase() as PositionSideLocal;
+  const bp = activeBinance.find((p) => p.symbol === localPosition.symbol && p.side === side);
+
+  if (bp) return;
+
+  if (isBinancePositionRiskUnavailable()) {
+    console.warn(
+      `[BinanceReconciliation] Local open ${localPosition.position_id} — positionRisk unavailable (-1109), skipping absent-on-Binance close`
+    );
+    await ensureProtectiveOrdersForPosition({
+      position_id: localPosition.position_id,
+      symbol: localPosition.symbol,
+      side: localPosition.side,
+      entry_price: localPosition.entry_price ?? 0,
+      size_qty: localPosition.size_qty ?? 0,
+      stop_loss: localPosition.stop_loss ?? 0,
+      take_profit: localPosition.take_profit ?? 0,
+      binance_sl_order_id: localPosition.binance_sl_order_id,
+      binance_tp_order_id: localPosition.binance_tp_order_id,
+      account_id: localPosition.account_id,
+      account: localPosition.account,
+    });
+    return;
+  }
+
+  const label = opts?.staleGhost ? 'stale ghost' : 'absent on Binance';
+  console.warn(
+    `[BinanceReconciliation] Local open ${localPosition.position_id} ${label} — evaluating close`
+  );
+
+  const { closeLocalPosition } = await import('./position-close.service');
+  const full = await prisma.testnetPosition.findUnique({
+    where: { position_id: localPosition.position_id },
+    include: { account: true },
+  });
+  if (!full || full.status !== 'open' || !full.account) return;
+
+  const closePrice = full.current_price > 0 ? full.current_price : full.entry_price;
+  const closeReason = opts?.staleGhost ? 'stale_ghost_open' : 'reconciliation_closed_not_on_binance';
+
+  console.warn(
+    `[BinanceReconciliation] Bookkeeping-close ${full.position_id} (${label}) — PnL=0, wallet from Binance`
+  );
+
+  await closeLocalPosition(
+    { ...full, account: { current_balance: full.account.current_balance } },
+    closePrice,
+    closeReason,
+    {
+      verified_binance_zero: true,
+      bookkeeping_close: true,
+      ...(opts?.staleGhost ? { stale_ghost: true } : {}),
+    }
+  );
+}
+
+async function forceCloseStaleGhost(local: {
+  position_id: string;
+}): Promise<void> {
+  const { closeLocalPosition } = await import('./position-close.service');
+  const full = await prisma.testnetPosition.findUnique({
+    where: { position_id: local.position_id },
+    include: { account: true },
+  });
+  if (!full || full.status !== 'open' || !full.account) return;
+
+  const closePrice = full.current_price > 0 ? full.current_price : full.entry_price;
+  console.warn(
+    `[BinanceReconciliation] Force-closing stale ghost ${full.position_id} ` +
+      `(entry ${full.entry_time?.toISOString()} @ ${full.entry_price})`
+  );
+
+  await closeLocalPosition(
+    { ...full, account: { current_balance: full.account.current_balance } },
+    closePrice,
+    'stale_ghost_open',
+    { stale_ghost: true, verified_binance_zero: true, bookkeeping_close: true }
+  );
+}
+
+async function closeStaleOpenPositions(_activeBinance: ParsedBinancePosition[]): Promise<void> {
+  const cutoff = new Date(Date.now() - STALE_OPEN_MAX_AGE_MS);
+  const staleOpens = await prisma.testnetPosition.findMany({
+    where: { status: 'open', entry_time: { lt: cutoff } },
+  });
+
+  for (const local of staleOpens) {
+    await forceCloseStaleGhost(local);
   }
 }
 
@@ -584,7 +558,9 @@ async function reconcilePositions(): Promise<void> {
 
   let activeBinance: ParsedBinancePosition[] = [];
   try {
-    activeBinance = await fetchActiveBinancePositions();
+    activeBinance = await fetchActiveBinancePositions(undefined, {
+      allowUserTradesFallback: false,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[BinanceReconciliation] Failed to fetch Binance positions:', message);
@@ -592,60 +568,17 @@ async function reconcilePositions(): Promise<void> {
   }
 
   await reconcilePhantomLocalCloses(activeBinance);
-  await recoverMislabeledLocalPositions();
   await consolidateLocalExposureWithBinance(activeBinance);
+  await closeStaleOpenPositions(activeBinance);
 
   const localOpen = await getTestnetPositions({ status: 'open' });
 
   for (const localPosition of localOpen) {
+    await closeLocalIfAbsentOnBinance(localPosition, activeBinance);
     const side = String(localPosition.side).toLowerCase() as PositionSideLocal;
     const bp = activeBinance.find((p) => p.symbol === localPosition.symbol && p.side === side);
 
     if (!bp) {
-      if (isBinancePositionRiskUnavailable()) {
-        console.warn(
-          `[BinanceReconciliation] Local open ${localPosition.position_id} — positionRisk unavailable (-1109), skipping absent-on-Binance close`
-        );
-        await ensureProtectiveOrdersForPosition(localPosition);
-        continue;
-      }
-
-      const fallback = await inferBinancePositionsFromFallback(localPosition.symbol);
-      const fallbackMatch = fallback.find(
-        (p) =>
-          p.symbol === localPosition.symbol.toUpperCase() &&
-          p.side === side &&
-          p.positionAmt >= 1e-8
-      );
-      if (fallbackMatch) {
-        console.warn(
-          `[BinanceReconciliation] Local open ${localPosition.position_id} found via userTrades fallback — skipping close`
-        );
-        await ensureProtectiveOrdersForPosition(localPosition);
-        continue;
-      }
-
-      console.warn(
-        `[BinanceReconciliation] Local open ${localPosition.position_id} absent on Binance — closing with PnL`
-      );
-      const { closeLocalPosition } = await import('./position-close.service');
-      const full = await prisma.testnetPosition.findUnique({
-        where: { position_id: localPosition.position_id },
-        include: { account: true },
-      });
-      if (full && full.status === 'open' && full.account) {
-        const closePrice =
-          full.current_price > 0 ? full.current_price : full.entry_price;
-        await closeLocalPosition(
-          {
-            ...full,
-            account: { current_balance: full.account.current_balance },
-          },
-          closePrice,
-          'reconciliation_closed_not_on_binance',
-          { verified_binance_zero: true }
-        );
-      }
       continue;
     }
 

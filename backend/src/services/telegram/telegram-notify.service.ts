@@ -62,10 +62,38 @@ export function notifyFromTradeEvent(
   eventData: Record<string, unknown> | null | undefined,
   positionId?: string
 ): void {
+  if (eventData?.reconciliation_backfill === true) {
+    return;
+  }
+
+  const d = eventData || {};
+
+  if (d.suppress_telegram === true) {
+    if (d.bookkeeping_close === true && eventType === 'position_closed') {
+      notifyTrade(
+        {
+          title: '⚪ Đóng sổ (reconciliation)',
+          symbol: d.symbol != null ? String(d.symbol) : undefined,
+          side: d.side != null ? String(d.side) : undefined,
+          entry: typeof d.entry_price === 'number' ? d.entry_price : undefined,
+          closePrice: typeof d.close_price === 'number' ? d.close_price : undefined,
+          reason: 'DB đóng sổ — PnL=0, kiểm tra Binance nếu vẫn thấy vị thế',
+          extra: { position_id: positionId },
+        },
+        `bookkeeping:${positionId}`
+      );
+    }
+    return;
+  }
+
+  if (eventType === 'protective_failed' && d.action === 'market_close') {
+    // position_closed event follows successful emergency close — avoid duplicate Telegram.
+    return;
+  }
+
   const title = mapTradeEventType(eventType);
   if (!title) return;
 
-  const d = eventData || {};
   const entry =
     typeof d.entry_price === 'number'
       ? d.entry_price

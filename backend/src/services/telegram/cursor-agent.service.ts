@@ -2,6 +2,7 @@ import { Agent, CursorAgentError } from '@cursor/sdk';
 import { prisma } from '../../lib/prisma';
 import { cursorAgentConfig, isCursorAgentEnabled } from '../../config/telegram-ai';
 import { buildAiContext, contextToJson } from './ai-context.builder';
+import { buildCloudAgentOptions } from './cursor-cloud-options';
 import { enqueueTelegramMessage } from './telegram-client';
 import { escapeHtml } from './message-formatters';
 
@@ -70,18 +71,10 @@ async function runFixJob(jobId: number, chatId: string, description: string): Pr
     console.log(`[CursorAgent] job=${jobId} starting cloud agent repo=${cursorAgentConfig.repoUrl}`);
 
     const result = await Agent.prompt(prompt, {
-      apiKey: cursorAgentConfig.apiKey,
-      model: { id: cursorAgentConfig.model },
-      cloud: {
-        repos: [
-          {
-            url: cursorAgentConfig.repoUrl,
-            startingRef: cursorAgentConfig.baseBranch,
-          },
-        ],
+      ...buildCloudAgentOptions({
+        model: cursorAgentConfig.model,
         autoCreatePR: true,
-        skipReviewerRequest: true,
-      },
+      }),
     });
 
     const prUrl =

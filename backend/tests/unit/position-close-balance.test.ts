@@ -111,4 +111,106 @@ describe('closeLocalPosition balance updates', () => {
     });
     expect(mockSyncTestnetAccountFromBinance).not.toHaveBeenCalled();
   });
+
+  it('bookkeeping close: zero PnL, no wallet/stats update, no trade outcome', async () => {
+    await closeLocalPosition(basePosition, 65942, 'reconciliation_closed_not_on_binance', {
+      verified_binance_zero: true,
+      bookkeeping_close: true,
+    });
+
+    expect(mockResolveClosePnlFromUserTrades).not.toHaveBeenCalled();
+    expect(mockPrismaUpdate).not.toHaveBeenCalled();
+    expect(mockRecordTradeOutcomeOnClose).not.toHaveBeenCalled();
+    expect(mockApplyConsecutiveLossCooldownIfNeeded).not.toHaveBeenCalled();
+    expect(mockUpdateTestnetPosition).toHaveBeenCalledWith(
+      'pos_test',
+      expect.objectContaining({ realized_pnl: 0 })
+    );
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.objectContaining({
+        realized_pnl: 0,
+        close_reason: 'reconciliation_bookkeeping',
+        suppress_telegram: true,
+        bookkeeping_close: true,
+      })
+    );
+  });
+
+  it('bookkeeping close twice does not double-charge account stats', async () => {
+    const posA = { ...basePosition, position_id: 'pos_a' };
+    const posB = { ...basePosition, position_id: 'pos_b' };
+
+    await closeLocalPosition(posA, 65942, 'reconciliation_closed_not_on_binance', {
+      verified_binance_zero: true,
+      bookkeeping_close: true,
+    });
+    await closeLocalPosition(posB, 65942, 'reconciliation_closed_not_on_binance', {
+      verified_binance_zero: true,
+      bookkeeping_close: true,
+    });
+
+    expect(mockPrismaUpdate).not.toHaveBeenCalled();
+    expect(mockRecordTradeOutcomeOnClose).not.toHaveBeenCalled();
+  });
+
+  it('proven Binance fill uses userTrades path instead of bookkeeping', async () => {
+    mockResolveClosePnlFromUserTrades.mockResolvedValue({
+      verified: true,
+      realizedPnl: -12.34,
+      closePrice: 66830,
+      source: 'user_trades',
+      tradeIds: [999],
+      closeQty: 0.01,
+    });
+
+    await closeLocalPosition(
+      { ...basePosition, binance_order_id: '15243540740' },
+      67185,
+      'reconciliation_sync_closed_on_binance',
+      { verified_binance_zero: true }
+    );
+
+    expect(mockResolveClosePnlFromUserTrades).toHaveBeenCalled();
+    expect(mockPrismaUpdate).toHaveBeenCalled();
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.objectContaining({
+        realized_pnl: -12.34,
+        close_reason: expect.not.stringContaining('bookkeeping'),
+      })
+    );
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.not.objectContaining({ suppress_telegram: true })
+    );
+  });
+
+  it('reconciliation_closed_not_on_binance with binance_order_id is not bookkeeping', async () => {
+    mockResolveClosePnlFromUserTrades.mockResolvedValue({
+      verified: true,
+      realizedPnl: 5.5,
+      closePrice: 67200,
+      source: 'user_trades',
+      tradeIds: [1],
+      closeQty: 0.01,
+    });
+
+    await closeLocalPosition(
+      { ...basePosition, binance_order_id: '15243540740' },
+      67185,
+      'reconciliation_closed_not_on_binance',
+      { verified_binance_zero: true }
+    );
+
+    expect(mockResolveClosePnlFromUserTrades).toHaveBeenCalled();
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.objectContaining({ realized_pnl: 5.5 })
+    );
+  });
 });

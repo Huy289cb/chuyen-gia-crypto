@@ -17,6 +17,7 @@ import {
   getTopNoTradeReasonsIct,
   type SystemHealthSnapshot,
 } from '../system-health.service';
+import { fetchBinanceNetPosition } from '../binance-exposure.service';
 
 export type AiContextScope =
   | 'today_run'
@@ -43,10 +44,35 @@ export interface AiContextBundle {
     weekStats?: { total: number; trades: number; noTrades: number };
     topNoTradeReasons: Array<{ reason: string; count: number }>;
   };
+  /** Live Binance net position — authoritative for "có exposure không" */
+  binanceExposure: BinanceExposureSnapshot;
   recentDecisions: TradeDecisionRow[];
   recentErrors: ErrorEventRow[];
   openPositions: OpenPositionLine[];
   pendingOrders: PendingOrderLine[];
+  recentClosedPositions: RecentClosedPositionRow[];
+  /** Plain-language rules for /ai — explain sync simply to operators */
+  operatorNotes: string[];
+}
+
+export interface BinanceExposureSnapshot {
+  available: boolean;
+  side: 'long' | 'short' | 'flat' | 'unknown';
+  netQty: number;
+  entryPrice?: number;
+  markPrice?: number;
+  note?: string;
+}
+
+export interface RecentClosedPositionRow {
+  position_id: string;
+  side: string;
+  entry_price: number;
+  close_price: number;
+  realized_pnl: number;
+  close_reason: string;
+  entry_time: string;
+  close_time: string;
 }
 
 export interface WeeklyTradeStats {
@@ -163,6 +189,74 @@ async function getLlmStatsWeekIct(): Promise<{ total: number; trades: number; no
   return { total: decisions.length, trades, noTrades: decisions.length - trades };
 }
 
+async function fetchRecentClosedPositions(
+  symbol: string,
+  methodId: string
+): Promise<RecentClosedPositionRow[]> {
+  const account = await prisma.testnetAccount.findFirst({
+    where: { symbol, method_id: methodId },
+    select: { id: true },
+  });
+  if (!account) return [];
+
+  const { dayStart } = getDayBoundsICT();
+  const rows = await prisma.testnetPosition.findMany({
+    where: {
+      account_id: account.id,
+      status: { in: ['closed', 'CLOSED'] },
+      close_time: { gte: dayStart },
+    },
+    orderBy: { close_time: 'desc' },
+    take: 12,
+    select: {
+      position_id: true,
+      side: true,
+      entry_price: true,
+      close_price: true,
+      realized_pnl: true,
+      close_reason: true,
+      entry_time: true,
+      close_time: true,
+    },
+  });
+
+  return rows.map((r) => ({
+    position_id: r.position_id,
+    side: r.side,
+    entry_price: r.entry_price,
+    close_price: r.close_price ?? 0,
+    realized_pnl: r.realized_pnl ?? 0,
+    close_reason: redactSensitiveText(String(r.close_reason ?? '')),
+    entry_time: r.entry_time.toISOString(),
+    close_time: (r.close_time ?? r.entry_time).toISOString(),
+  }));
+}
+
+async function fetchBinanceExposureSnapshot(symbol: string): Promise<BinanceExposureSnapshot> {
+  try {
+    const net = await fetchBinanceNetPosition(symbol);
+    if (!net || Math.abs(net.positionAmt) < 1e-8) {
+      return { available: true, side: 'flat', netQty: 0 };
+    }
+    const side = net.positionAmt > 0 ? 'long' : 'short';
+    return {
+      available: true,
+      side,
+      netQty: Math.abs(net.positionAmt),
+      entryPrice: net.entryPrice,
+      markPrice: net.markPrice,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      available: false,
+      side: 'unknown',
+      netQty: 0,
+      note: redactSensitiveText(msg.slice(0, 200)),
+    };
+  }
+}
+
 async function fetchRecentDecisions(methodId: string): Promise<TradeDecisionRow[]> {
   const { dayStart } = getDayBoundsICT();
   const rows = await prisma.tradeDecision.findMany({
@@ -206,6 +300,16 @@ async function fetchRecentErrorEvents(): Promise<ErrorEventRow[]> {
     }));
 }
 
+const OPERATOR_NOTES: string[] = [
+  'Số dư Telegram = ví Binance demo (nguồn đúng cho tiền thật trên sàn).',
+  'Bot local = sổ ghi chép — có thể lệch với sàn nếu sync trễ vài phút.',
+  'Lệnh khớp (fill) → bot mở vị thế qua WebSocket trong ~15 phút. Sau đó reconcile chỉ đóng sổ pending, KHÔNG mở lại lệnh cũ.',
+  'Một symbol chỉ có tối đa 1 vị thế mở trong sổ local (ONE_WAY).',
+  'openPositions + binanceExposure = trạng thái HIỆN TẠI. recentDecisions = lịch sử LLM, có thể đã hết hiệu lực.',
+  'Giá entry lạ (vd short 62k) trong recentClosedPositions thường là lệnh limit CŨ đã khớp ngày trước — không phải giá thị trường hôm nay.',
+  'Đóng sổ phantom (không có binance_order_id): PnL=0, không trừ ví. Lệnh có fill proof → sync PnL từ userTrades.',
+];
+
 export async function buildAiContext(scope: AiContextScope): Promise<AiContextBundle> {
   const { symbol, methodId } = getDefaultTradingScope();
   const includeCompare = scope === 'compare';
@@ -222,6 +326,8 @@ export async function buildAiContext(scope: AiContextScope): Promise<AiContextBu
     recentErrors,
     openPositions,
     pendingOrders,
+    binanceExposure,
+    recentClosedPositions,
   ] = await Promise.all([
     getAccountBalanceSummary(symbol, methodId, true),
     getTodayTradeStatsIct(symbol, methodId),
@@ -234,6 +340,8 @@ export async function buildAiContext(scope: AiContextScope): Promise<AiContextBu
     fetchRecentErrorEvents(),
     getOpenPositionLines(symbol, methodId),
     getPendingOrderLines(symbol, methodId),
+    fetchBinanceExposureSnapshot(symbol),
+    fetchRecentClosedPositions(symbol, methodId),
   ]);
 
   const bundle: AiContextBundle = {
@@ -257,6 +365,9 @@ export async function buildAiContext(scope: AiContextScope): Promise<AiContextBu
     recentErrors,
     openPositions,
     pendingOrders,
+    binanceExposure,
+    recentClosedPositions,
+    operatorNotes: OPERATOR_NOTES,
   };
 
   return sanitizeObject(bundle);

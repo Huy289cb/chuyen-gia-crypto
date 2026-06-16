@@ -8,6 +8,7 @@ import {
   ACCOUNT_BALANCE_TTL_MS,
 } from '../lib/read-cache';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
+import { isInternalCloseReason } from '../utils/bookkeeping-close';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
@@ -1282,7 +1283,9 @@ router.get('/trades', async (req: Request, res: Response) => {
       take: parseInt(limit as string, 10),
     });
 
-    const formattedTrades = positions.map((pos) => ({
+    const formattedTrades = positions
+      .filter((pos) => !isInternalCloseReason(pos.close_reason))
+      .map((pos) => ({
       id: pos.position_id,
       symbol: pos.symbol,
       side: pos.side,

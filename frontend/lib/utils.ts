@@ -34,6 +34,24 @@ export function formatPositionSize(quantity: number | null | undefined, decimals
 
 export function formatCloseReason(reason: string | null | undefined): string {
   if (!reason) return '—';
+  const labels: Record<string, string> = {
+    binance_tp: 'Chốt lời',
+    binance_sl: 'Cắt lỗ',
+    binance_market: 'Đóng thị trường',
+    take_profit: 'Chốt lời',
+    stop_loss: 'Cắt lỗ',
+    protective_failed_market_close: 'Đóng khẩn (SL/TP lỗi)',
+    protective_sl_breached_market: 'Cắt lỗ khẩn',
+    protective_tp_reached_market: 'Chốt lời khẩn',
+    manual_close: 'Đóng tay',
+    reconciliation_bookkeeping: 'Dọn sổ bot',
+    reconciliation_closed_not_on_binance: 'Dọn sổ bot',
+    stale_ghost_open: 'Dọn sổ bot',
+    reconciliation_fill: 'Dọn sổ bot',
+    reconciliation_sync_closed_on_binance: 'Dọn sổ bot',
+  };
+  if (labels[reason]) return labels[reason];
+  if (reason.startsWith('merged_into_')) return 'Gộp trùng';
   return reason
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))

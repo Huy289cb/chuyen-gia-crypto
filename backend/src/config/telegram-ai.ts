@@ -23,6 +23,15 @@ export interface CursorAgentConfig {
   baseBranch: string;
 }
 
+export interface CursorChatConfig {
+  enabled: boolean;
+  model: string;
+  adminOnly: boolean;
+  rateLimitPerUserHour: number;
+  sessionTtlMs: number;
+  jobTimeoutMs: number;
+}
+
 function parseIntEnv(value: string | undefined, fallback: number): number {
   const n = parseInt(value || String(fallback), 10);
   return Number.isFinite(n) ? n : fallback;
@@ -35,7 +44,7 @@ export const telegramAiConfig: TelegramAiConfig = {
   rateLimitPerUserHour: parseIntEnv(process.env.TELEGRAM_AI_RATE_LIMIT_PER_USER_HOUR, 5),
   rateLimitPerChatDay: parseIntEnv(process.env.TELEGRAM_AI_RATE_LIMIT_PER_CHAT_DAY, 30),
   requireAllowedUserIds: isProductionEnv(),
-  systemPromptVersion: process.env.TELEGRAM_AI_SYSTEM_PROMPT_VERSION || '2',
+  systemPromptVersion: process.env.TELEGRAM_AI_SYSTEM_PROMPT_VERSION || '3',
 };
 
 export const cursorAgentConfig: CursorAgentConfig = {
@@ -46,12 +55,31 @@ export const cursorAgentConfig: CursorAgentConfig = {
   baseBranch: process.env.CURSOR_AGENT_BASE_BRANCH || 'develop',
 };
 
+export const cursorChatConfig: CursorChatConfig = {
+  enabled: process.env.CURSOR_CHAT_ENABLED !== 'false',
+  model: process.env.CURSOR_CHAT_MODEL || process.env.CURSOR_AGENT_MODEL || 'composer-2.5',
+  adminOnly: process.env.CURSOR_CHAT_ADMIN_ONLY !== 'false',
+  rateLimitPerUserHour: parseIntEnv(process.env.CURSOR_CHAT_RATE_LIMIT_PER_USER_HOUR, 3),
+  sessionTtlMs: parseIntEnv(process.env.CURSOR_CHAT_SESSION_TTL_MS, 24 * 60 * 60 * 1000),
+  jobTimeoutMs: parseIntEnv(process.env.CURSOR_CHAT_JOB_TIMEOUT_MS, 300_000),
+};
+
 export function isTelegramAiEnabled(): boolean {
   return telegramAiConfig.enabled;
 }
 
 export function isCursorAgentEnabled(): boolean {
   return cursorAgentConfig.enabled && !!cursorAgentConfig.apiKey && !!cursorAgentConfig.repoUrl;
+}
+
+export function isCursorChatEnabled(): boolean {
+  return cursorChatConfig.enabled && isCursorAgentEnabled();
+}
+
+export function canUseCursorChat(userId: string | number | undefined): boolean {
+  if (!isCursorChatEnabled()) return false;
+  if (!cursorChatConfig.adminOnly) return true;
+  return isTelegramAdminUser(userId);
 }
 
 export function validateTelegramAiConfig(): void {

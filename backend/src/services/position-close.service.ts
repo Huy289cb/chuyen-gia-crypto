@@ -29,6 +29,10 @@ import { getPositionRisk } from './binanceClient';
 import { applyConsecutiveLossCooldownIfNeeded } from './account-risk-guard.service';
 import { resolveClosePnlFromUserTrades } from './binance-fill-pnl.service';
 import { resolveVerifiedCloseReason } from './close-reason-resolve.service';
+import { hasBinanceFillProof } from '../utils/binance-fill-proof';
+import { isBookkeepingCloseReason } from '../utils/bookkeeping-close';
+
+export { hasBinanceFillProof } from '../utils/binance-fill-proof';
 
 export function calculatePnl(side: string, entry: number, close: number, qty: number): number {
   const raw = (close - entry) * Math.abs(qty);
@@ -114,6 +118,12 @@ export async function closeLocalPosition(
     return 0;
   }
 
+  const isBookkeepingClose =
+    eventMeta?.bookkeeping_close === true ||
+    eventMeta?.stale_ghost === true ||
+    isBookkeepingCloseReason(closeReason) ||
+    (closeReason === 'reconciliation_closed_not_on_binance' && !hasBinanceFillProof(position));
+
   const needsBinanceProof =
     closeReason === 'stop_loss' || closeReason === 'take_profit';
   if (needsBinanceProof && process.env.BINANCE_ENABLED === 'true') {
@@ -129,24 +139,37 @@ export async function closeLocalPosition(
   }
 
   const qty = Math.abs(position.size_qty);
-  const fill = await resolveClosePnlFromUserTrades({
-    symbol: position.symbol ?? 'BTC',
-    side: position.side,
-    entryTime: position.entry_time ?? new Date(Date.now() - 3_600_000),
-    closeTime: new Date(),
-    entryOrderId: position.binance_order_id ?? null,
-    sizeQty: position.size_qty,
-    entryPrice: position.entry_price,
-    fallbackClosePrice: closePrice,
-  });
+  let finalClosePrice = closePrice;
+  let realizedPnl = 0;
+  let finalCloseReason = closeReason;
+  let fillVerified = false;
+  let fillSource: string | undefined;
 
-  const finalClosePrice = fill.verified ? fill.closePrice : closePrice;
-  const realizedPnl = fill.verified
-    ? fill.realizedPnl
-    : calculatePnl(position.side, position.entry_price, finalClosePrice, qty);
-  const finalCloseReason = fill.verified
-    ? resolveVerifiedCloseReason(closeReason, eventMeta, position)
-    : closeReason;
+  if (isBookkeepingClose) {
+    finalCloseReason = 'reconciliation_bookkeeping';
+    realizedPnl = 0;
+  } else {
+    const fill = await resolveClosePnlFromUserTrades({
+      symbol: position.symbol ?? 'BTC',
+      side: position.side,
+      entryTime: position.entry_time ?? new Date(Date.now() - 3_600_000),
+      closeTime: new Date(),
+      entryOrderId: position.binance_order_id ?? null,
+      sizeQty: position.size_qty,
+      entryPrice: position.entry_price,
+      fallbackClosePrice: closePrice,
+    });
+
+    finalClosePrice = fill.verified ? fill.closePrice : closePrice;
+    realizedPnl = fill.verified
+      ? fill.realizedPnl
+      : calculatePnl(position.side, position.entry_price, finalClosePrice, qty);
+    finalCloseReason = fill.verified
+      ? resolveVerifiedCloseReason(closeReason, eventMeta, position)
+      : closeReason;
+    fillVerified = fill.verified;
+    fillSource = fill.source;
+  }
 
   await closeTestnetPosition(position.position_id, finalClosePrice, finalCloseReason);
   await updateTestnetPosition(position.position_id, {
@@ -155,23 +178,25 @@ export async function closeLocalPosition(
     unrealized_pnl: 0,
   });
 
-  const isWin = realizedPnl > 0;
-  const localBalance = position.account.current_balance + realizedPnl;
-  await prisma.testnetAccount.update({
-    where: { id: position.account_id },
-    data: {
-      current_balance: localBalance,
-      equity: localBalance,
-      unrealized_pnl: 0,
-      realized_pnl: { increment: realizedPnl },
-      total_trades: { increment: 1 },
-      winning_trades: { increment: isWin ? 1 : 0 },
-      losing_trades: { increment: isWin ? 0 : 1 },
-      consecutive_losses: isWin ? 0 : { increment: 1 },
-      last_trade_time: new Date(),
-      updated_at: new Date(),
-    },
-  });
+  if (!isBookkeepingClose) {
+    const isWinForBalance = realizedPnl > 0;
+    const localBalance = position.account.current_balance + realizedPnl;
+    await prisma.testnetAccount.update({
+      where: { id: position.account_id },
+      data: {
+        current_balance: localBalance,
+        equity: localBalance,
+        unrealized_pnl: 0,
+        realized_pnl: { increment: realizedPnl },
+        total_trades: { increment: 1 },
+        winning_trades: { increment: isWinForBalance ? 1 : 0 },
+        losing_trades: { increment: isWinForBalance ? 0 : 1 },
+        consecutive_losses: isWinForBalance ? 0 : { increment: 1 },
+        last_trade_time: new Date(),
+        updated_at: new Date(),
+      },
+    });
+  }
 
   if (process.env.BINANCE_ENABLED === 'true') {
     try {
@@ -195,17 +220,23 @@ export async function closeLocalPosition(
     realized_pnl: realizedPnl,
     account_balance: balances.account_balance,
     account_equity: balances.account_equity,
-    fill_verified: fill.verified,
-    fill_source: fill.source,
-    fill_trade_ids: fill.tradeIds,
+    fill_verified: fillVerified,
+    fill_source: fillSource,
+    ...(isBookkeepingClose ? { suppress_telegram: true, bookkeeping_close: true } : {}),
     ...eventMeta,
   });
 
   console.log(
     `[PositionClose] Closed ${position.position_id} @ ${finalClosePrice.toFixed(2)} (${finalCloseReason}) ` +
-      `PnL=${realizedPnl.toFixed(2)} fill=${fill.source} verified=${fill.verified}`
+      `PnL=${realizedPnl.toFixed(2)}` +
+      (isBookkeepingClose ? ' [bookkeeping]' : ` fill=${fillSource ?? 'n/a'} verified=${fillVerified}`)
   );
 
+  if (isBookkeepingClose) {
+    return realizedPnl;
+  }
+
+  const isWin = realizedPnl > 0;
   const outcomeCtx: CloseOutcomeContext = {
     position_id: position.position_id,
     symbol: position.symbol ?? 'BTC',
@@ -222,10 +253,10 @@ export async function closeLocalPosition(
     close_reason: finalCloseReason,
     decision_id:
       typeof eventMeta?.decision_id === 'number' ? eventMeta.decision_id : undefined,
-    fill_verified: fill.verified,
+    fill_verified: fillVerified,
   };
   await recordTradeOutcomeOnClose(outcomeCtx, finalClosePrice, realizedPnl, {
-    skipReflection: !fill.verified,
+    skipReflection: !fillVerified,
   });
 
   if (!isWin) {

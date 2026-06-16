@@ -8,7 +8,7 @@ import {
   PIPELINE_EVENT_POSITION_ID,
   updateTestnetPosition,
 } from '../repositories/testnet.repository';
-import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
+import { isInternalCloseReason } from '../utils/bookkeeping-close';
 import {
   recordTradeOutcomeOnClose,
   type CloseOutcomeContext,
@@ -183,7 +183,9 @@ export async function recomputeTestnetAccountTradeStats(accountId: number): Prom
   let losses = 0;
   let totalRealized = 0;
 
-  for (const p of closed) {
+  const counted = closed.filter((p) => !isInternalCloseReason(p.close_reason));
+
+  for (const p of counted) {
     const pnl = Number(p.realized_pnl) || 0;
     totalRealized += pnl;
     if (pnl > 0.01) wins += 1;
@@ -193,16 +195,24 @@ export async function recomputeTestnetAccountTradeStats(accountId: number): Prom
   await prisma.testnetAccount.update({
     where: { id: accountId },
     data: {
-      total_trades: closed.length,
+      total_trades: counted.length,
       winning_trades: wins,
       losing_trades: losses,
-      realized_pnl: totalRealized,
       updated_at: new Date(),
     },
   });
 
   if (process.env.BINANCE_ENABLED === 'true') {
-    await syncTestnetAccountFromBinance(accountId);
+    const { reconcileTestnetWalletFromBinance } = await import('./wallet-reconcile.service');
+    await reconcileTestnetWalletFromBinance(accountId);
+  } else {
+    await prisma.testnetAccount.update({
+      where: { id: accountId },
+      data: {
+        realized_pnl: totalRealized,
+        updated_at: new Date(),
+      },
+    });
   }
 }
 

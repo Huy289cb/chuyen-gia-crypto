@@ -132,7 +132,15 @@ function parsedToRiskRow(position: ParsedBinancePosition): {
   };
 }
 
-export async function fetchBinancePositionRiskRows(symbol?: string): Promise<
+export type BinanceExposureFetchOpts = {
+  /** When false, return empty on demo -1109 instead of inferring from userTrades net. */
+  allowUserTradesFallback?: boolean;
+};
+
+export async function fetchBinancePositionRiskRows(
+  symbol?: string,
+  opts?: BinanceExposureFetchOpts
+): Promise<
   Array<{
     symbol?: string;
     positionAmt?: string | number;
@@ -144,6 +152,7 @@ export async function fetchBinancePositionRiskRows(symbol?: string): Promise<
   const symbolUsdt = symbol
     ? `${symbol.toUpperCase().replace(/USDT$/i, '')}USDT`
     : null;
+  const allowFallback = opts?.allowUserTradesFallback !== false;
   positionRiskUnavailable = false;
   try {
     const rows = await getPositionRisk(symbolUsdt);
@@ -151,6 +160,12 @@ export async function fetchBinancePositionRiskRows(symbol?: string): Promise<
   } catch (error: unknown) {
     if (isBinanceDemoMetadataUnavailableError(error)) {
       positionRiskUnavailable = true;
+      if (!allowFallback) {
+        console.warn(
+          '[BinanceExposure] positionRisk unavailable on demo (-1109); strict mode — no userTrades fallback'
+        );
+        return [];
+      }
       console.warn(
         '[BinanceExposure] positionRisk unavailable on demo (-1109); falling back to userTrades/openAlgoOrders'
       );
@@ -161,8 +176,11 @@ export async function fetchBinancePositionRiskRows(symbol?: string): Promise<
   }
 }
 
-export async function fetchActiveBinancePositions(symbol?: string): Promise<ParsedBinancePosition[]> {
-  const rows = await fetchBinancePositionRiskRows(symbol);
+export async function fetchActiveBinancePositions(
+  symbol?: string,
+  opts?: BinanceExposureFetchOpts
+): Promise<ParsedBinancePosition[]> {
+  const rows = await fetchBinancePositionRiskRows(symbol, opts);
   return listActiveBinancePositions(rows);
 }
 

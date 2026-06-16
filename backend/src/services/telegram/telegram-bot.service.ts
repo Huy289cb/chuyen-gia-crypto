@@ -35,6 +35,7 @@ import {
   handleFixCommand,
   handleFixStatusCommand,
 } from './cursor-agent.service';
+import { handleCursorCommand } from './cursor-chat.service';
 
 let polling = false;
 let offset = 0;
@@ -55,8 +56,13 @@ const HELP_TEXT = `<b>Lệnh cơ bản</b>
 /ai bao cao · /ai hom nay — báo cáo đầy đủ
 /ai loi · /ai pipeline · /ai llm · /ai so sanh · /ai cancel
 
+<b>Cursor</b> (đọc repo, admin)
+/cursor &lt;câu hỏi&gt; — hỏi gì cũng được
+/cursor new · /cursor status · /cursor cancel
+/fix &lt;mô tả&gt; — sửa code → PR
+
 <b>Khác</b>
-/fix · /deploy? · /logs · /help`;
+/deploy? · /logs · /help`;
 
 async function handleCommand(chatId: string, text: string, userId?: string): Promise<void> {
   const cmd = text.trim().split(/\s+/)[0]?.toLowerCase() || '';
@@ -226,6 +232,12 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
       return;
     }
 
+    case '/cursor': {
+      const cursorArgs = text.replace(/^\/cursor\s*/i, '').trim();
+      void handleCursorCommand(chatId, userId, cursorArgs);
+      return;
+    }
+
     case '/logs': {
       void handleLogsCommand(chatId, userId);
       return;
@@ -242,9 +254,17 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
   }
 }
 
+function extractCommandText(msg: NonNullable<TelegramUpdate['message']>): string | null {
+  const raw = msg.text?.trim() || msg.caption?.trim();
+  return raw || null;
+}
+
 function processUpdate(update: TelegramUpdate): void {
   const msg = update.message;
-  if (!msg?.text || !msg.chat) return;
+  if (!msg?.chat) return;
+
+  const text = extractCommandText(msg);
+  if (!text) return;
 
   const chatId = String(msg.chat.id);
   const userId = msg.from?.id;
@@ -254,7 +274,6 @@ function processUpdate(update: TelegramUpdate): void {
     return;
   }
 
-  const text = msg.text.trim();
   if (!text.startsWith('/')) return;
 
   handleCommand(chatId, text, userId !== undefined ? String(userId) : undefined).catch((err) => {

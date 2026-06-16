@@ -130,7 +130,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
       <div className="mt-4 pt-4 border-t border-border-default space-y-3">
         {typeof balanceData.walletPnl === 'number' && (
           <div className="panel-stat panel-stat-accent">
-            <p className="text-xs text-foreground-tertiary mb-1">Wallet PnL (Binance)</p>
+            <p className="text-xs text-foreground-tertiary mb-1">Lãi/lỗ ví (Binance)</p>
             <p
               className={cn(
                 'text-base font-mono font-semibold',
@@ -142,7 +142,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
             </p>
             {typeof balanceData.binanceRealizedPnl === 'number' && (
               <p className="text-xs text-foreground-tertiary mt-1">
-                Realized income: {formatPrice(balanceData.binanceRealizedPnl)}
+                Lãi/lỗ đã chốt (Binance): {formatPrice(balanceData.binanceRealizedPnl)}
                 {typeof balanceData.totalFees === 'number' && balanceData.totalFees > 0
                   ? ` · Fees ${formatPrice(balanceData.totalFees)}`
                   : ''}
@@ -154,8 +154,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
             {balanceData.dbPositionPnlTrusted === false &&
               typeof balanceData.dbPositionPnlGap === 'number' && (
                 <p className="text-xs text-amber-500/90 mt-1">
-                  DB position sum differs by {formatPrice(balanceData.dbPositionPnlGap)} — wallet is
-                  source of truth
+                  Sổ lệnh bot lệch {formatPrice(balanceData.dbPositionPnlGap)} — lấy số ví làm chuẩn
                 </p>
               )}
           </div>

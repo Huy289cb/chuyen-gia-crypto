@@ -117,6 +117,17 @@ export async function resolveClosePnlFromUserTrades(params: {
   }
 
   const closePrice = sumQty > 0 ? sumNotional / sumQty : params.fallbackClosePrice;
+  const targetQty = Math.abs(params.sizeQty);
+  const qtyTol = Math.max(targetQty * 0.05, 1e-6);
+  if (sumQty > 0 && targetQty > 0 && Math.abs(sumQty - targetQty) > qtyTol) {
+    console.warn(
+      `[BinanceFillPnl] Close qty ${sumQty.toFixed(6)} ≠ position ${targetQty.toFixed(6)} — skip verified PnL`
+    );
+    const qty = Math.abs(params.sizeQty);
+    fallback.realizedPnl = estimatePnl(params.side, params.entryPrice, params.fallbackClosePrice, qty);
+    return fallback;
+  }
+
   const hasBinancePnl = closeTrades.some((t) => Math.abs(t.realizedPnl) > 1e-12);
   const realizedPnl = hasBinancePnl
     ? sumPnl - sumCommission

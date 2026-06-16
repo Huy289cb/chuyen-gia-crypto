@@ -75,6 +75,17 @@ describe('binance-exposure', () => {
     expect(active[0].positionAmt).toBeCloseTo(0.01, 6);
   });
 
+  it('strict mode returns empty on demo -1109 without userTrades', async () => {
+    vi.mocked(getPositionRisk).mockRejectedValue(demo1109Error());
+
+    const active = await fetchActiveBinancePositions('BTC', {
+      allowUserTradesFallback: false,
+    });
+    expect(isBinancePositionRiskUnavailable()).toBe(true);
+    expect(active).toHaveLength(0);
+    expect(getUserTrades).not.toHaveBeenCalled();
+  });
+
   it('falls back to protective algo orders when userTrades net is flat', async () => {
     vi.mocked(getUserTrades).mockResolvedValue([
       { side: 'BUY', qty: 0.02, price: 99500, time: 1, orderId: 1 },

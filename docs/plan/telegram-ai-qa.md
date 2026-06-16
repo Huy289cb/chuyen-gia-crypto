@@ -53,6 +53,15 @@ Triển khai AI hỏi đáp trên Telegram bot hiện có:
 - [x] Model `AiFixJob` trong Prisma
 - [x] Env + doc trong `docs/deployment.md`
 
+### Phase 3b — Cursor `/cursor` (chat tự do)
+
+- [x] `cursor-chat.service.ts` — cloud agent, `autoCreatePR: false`
+- [x] `cursor-job-queue.ts` — timeout 5 phút, 1 job/chat
+- [x] Model `AiCursorSession` — resume agent ~24h
+- [x] `/cursor`, `/cursor new`, `/cursor status`, `/cursor cancel`
+- [x] Admin-only mặc định (`CURSOR_CHAT_ADMIN_ONLY=true`)
+- [x] Tests `cursor-chat.service.test.ts`
+
 ### Phase 4 — Vận hành
 
 - [x] Monitor cost Groq/Cursor
@@ -346,6 +355,32 @@ flowchart TD
 ```
 
 **Cần human approval:** merge, deploy, `BINANCE_*`, risk policy, schema migration.
+
+---
+
+## Phase 3b — Cursor `/cursor` (chat tự do)
+
+Cloud agent đọc **toàn bộ repo** — hỏi code, kiến trúc, debug, giải thích bất cứ gì. Khác `/ai` (Groq + DB) và `/fix` (tạo PR).
+
+| Lệnh | Hành vi |
+|------|---------|
+| `/cursor <câu hỏi>` | Chat tiếp (resume agent ~24h) |
+| `/cursor new` | Phiên mới |
+| `/cursor new <câu hỏi>` | Phiên mới + hỏi luôn |
+| `/cursor status` | Agent ID + TTL |
+| `/cursor cancel` | Hủy job đang chạy |
+
+| | `/ai` | `/cursor` | `/fix` |
+|--|-------|-----------|--------|
+| Engine | Groq | Cursor cloud | Cursor cloud |
+| Đọc repo | Không | Có | Có |
+| Tạo PR | Không | Không | Có |
+| Tốc độ | ~5s | 1–5 phút | 2–10+ phút |
+| Ai dùng | Allowed users | Admin (mặc định) | Admin |
+
+**Files:** `cursor-chat.service.ts`, `cursor-job-queue.ts`, `cursor-cloud-options.ts`, Prisma `AiCursorSession`.
+
+**Env:** `CURSOR_CHAT_ENABLED`, `CURSOR_CHAT_ADMIN_ONLY`, `CURSOR_CHAT_RATE_LIMIT_PER_USER_HOUR`, `CURSOR_CHAT_JOB_TIMEOUT_MS`.
 
 ---
 

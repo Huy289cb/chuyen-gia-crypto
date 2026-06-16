@@ -10,6 +10,7 @@ import {
   recordTestnetTradeEvent,
   updateTestnetPendingOrder,
 } from '../repositories/testnet.repository';
+import { prisma } from '../lib/prisma';
 import {
   placeProtectiveOrdersForPosition,
   resolveLevelsForFill,
@@ -56,6 +57,38 @@ export function resolveFillQty(order: BinanceOrderTradeUpdate, executedQty: numb
   return Number.isFinite(z) && z > 0 ? z : 0;
 }
 
+/** Reconciliation may only materialize a fill this recent (WS miss window). Older = mark executed, no position. */
+export const RECOVERY_FILL_MAX_AGE_MS = 15 * 60 * 1000;
+
+export interface MaterializeFillOptions {
+  suppressTelegram?: boolean;
+  reconciliationBackfill?: boolean;
+}
+
+async function markPendingExecutedWithoutPosition(
+  localOrder: { order_id: string },
+  avgPrice: number,
+  qty: number,
+  reason: string,
+  linkPositionId?: string
+): Promise<void> {
+  if (linkPositionId) {
+    await executeTestnetPendingOrder(localOrder.order_id, linkPositionId);
+  } else {
+    await updateTestnetPendingOrder(localOrder.order_id, {
+      status: 'executed_historical',
+      executed_at: new Date(),
+      executed_price: avgPrice,
+      executed_size_qty: qty,
+      close_reason: reason,
+    });
+  }
+  console.log(
+    `[BinanceOrderFill] Pending ${localOrder.order_id} closed in ledger only (${reason})` +
+      (linkPositionId ? ` linked=${linkPositionId}` : '')
+  );
+}
+
 /**
  * Create open position from a filled pending order and place SL/TP on Binance.
  */
@@ -77,7 +110,8 @@ export async function materializePositionFromPendingFill(
   },
   executedQty: number,
   avgPrice: number,
-  eventTime?: number
+  eventTime?: number,
+  options?: MaterializeFillOptions
 ): Promise<string | null> {
   if (localOrder.binance_order_id) {
     const existing = await findTestnetPositionByBinanceOrderId(localOrder.binance_order_id);
@@ -202,6 +236,8 @@ export async function materializePositionFromPendingFill(
     size_usd: sizeUsd,
     account_balance: balances.account_balance,
     account_equity: balances.account_equity,
+    ...(options?.suppressTelegram ? { suppress_telegram: true } : {}),
+    ...(options?.reconciliationBackfill ? { reconciliation_backfill: true } : {}),
     timestamp: new Date(eventTime ?? Date.now()).toISOString(),
     ...(linkedDecisionId != null ? { decision_id: linkedDecisionId } : {}),
   });
@@ -259,7 +295,7 @@ export async function recoverPendingOrderFromBinance(
     binance_order_id?: string | null;
     status: string;
   }
-): Promise<'filled' | 'cancelled' | 'unchanged' | 'failed' | 'api_unavailable'> {
+): Promise<'filled' | 'cancelled' | 'unchanged' | 'failed' | 'api_unavailable' | 'stale_skipped'> {
   if (!localOrder.binance_order_id) {
     return 'failed';
   }
@@ -279,7 +315,48 @@ export async function recoverPendingOrderFromBinance(
       if (!Number.isFinite(avg) || avg <= 0) {
         avg = localOrder.entry_price;
       }
-      const positionId = await materializePositionFromPendingFill(localOrder, qty, avg);
+
+      const fillAgeMs = remote.updateTime ? Date.now() - remote.updateTime : Number.POSITIVE_INFINITY;
+      const symbolBase = String(localOrder.symbol).toUpperCase();
+
+      // Reconciliation never opens positions for old fills — only WebSocket path does.
+      if (fillAgeMs > RECOVERY_FILL_MAX_AGE_MS) {
+        await markPendingExecutedWithoutPosition(localOrder, avg, qty, 'fill_too_old');
+        return 'stale_skipped';
+      }
+
+      const existingPos = localOrder.binance_order_id
+        ? await findTestnetPositionByBinanceOrderId(localOrder.binance_order_id)
+        : null;
+      if (existingPos) {
+        if (localOrder.status !== 'executed' && localOrder.status !== 'executed_historical') {
+          await executeTestnetPendingOrder(localOrder.order_id, existingPos.position_id);
+        }
+        return 'filled';
+      }
+
+      // ONE_WAY: at most one open local row per symbol.
+      const openForSymbol = await prisma.testnetPosition.findFirst({
+        where: { account_id: localOrder.account_id, symbol: symbolBase, status: 'open' },
+        select: { position_id: true },
+      });
+      if (openForSymbol) {
+        await markPendingExecutedWithoutPosition(
+          localOrder,
+          avg,
+          qty,
+          'open_position_exists',
+          openForSymbol.position_id
+        );
+        return 'stale_skipped';
+      }
+
+      const positionId = await materializePositionFromPendingFill(
+        localOrder,
+        qty,
+        avg,
+        remote.updateTime
+      );
       return positionId ? 'filled' : 'failed';
     }
 

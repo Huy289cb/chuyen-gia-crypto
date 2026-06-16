@@ -8,6 +8,8 @@ export interface TelegramUpdate {
   message?: {
     message_id: number;
     text?: string;
+    caption?: string;
+    photo?: Array<{ file_id: string }>;
     chat: { id: number; type: string };
     from?: { id: number; username?: string; first_name?: string };
   };
@@ -99,7 +101,8 @@ async function sendChunk(chatId: string, chunk: string): Promise<void> {
 
 export async function sendTelegramMessage(
   text: string,
-  chatId?: string
+  chatId?: string,
+  options?: { plainText?: boolean }
 ): Promise<boolean> {
   if (!isTelegramEnabled()) return false;
   if (!text?.trim()) {
@@ -107,6 +110,7 @@ export async function sendTelegramMessage(
     return false;
   }
 
+  const parseMode = options?.plainText ? undefined : ('HTML' as const);
   const targets = chatId ? [chatId] : telegramConfig.chatIds;
   let anyOk = false;
 
@@ -115,7 +119,11 @@ export async function sendTelegramMessage(
       await throttleSend();
       const chunks = splitMessage(text, 4000);
       for (const chunk of chunks) {
-        await sendChunk(id, chunk);
+        if (parseMode) {
+          await sendChunk(id, chunk);
+        } else {
+          await postSendMessage(id, chunk);
+        }
         if (chunks.length > 1) await throttleSend();
       }
       anyOk = true;
@@ -141,10 +149,14 @@ function splitMessage(text: string, maxLen: number): string[] {
   return parts;
 }
 
-export function enqueueTelegramMessage(text: string, chatId?: string): void {
+export function enqueueTelegramMessage(
+  text: string,
+  chatId?: string,
+  options?: { plainText?: boolean }
+): void {
   sendQueue = sendQueue
     .then(async () => {
-      await sendTelegramMessage(text, chatId);
+      await sendTelegramMessage(text, chatId, options);
     })
     .catch((e) => console.error('[Telegram] queue error:', formatTelegramApiError(e)));
 }

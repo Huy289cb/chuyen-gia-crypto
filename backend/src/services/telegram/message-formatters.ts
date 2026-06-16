@@ -144,7 +144,7 @@ export function formatStatusSummary(h: CompactHealthInput): string {
   }
   if (h.recentErrors.length > 0) {
     const e = h.recentErrors[0];
-    lines.push(`⚠️ ${escapeHtml(e.event_type)}: ${escapeHtml(e.summary.slice(0, 60))}`);
+    lines.push(`⚠️ ${escapeHtml(e.event_type)}: ${escapeHtml(formatEventSummary(e.event_type, e.summary, 120))}`);
   }
   return lines.join('\n');
 }
@@ -173,7 +173,9 @@ export function formatShowSummary(s: ShowSummaryInput): string {
     `Notify: ${s.notifyMuted ? 'TẮT' : 'BẬT'}`,
   ];
   if (s.topError) {
-    lines.push(`⚠️ ${escapeHtml(s.topError.event_type)}: ${escapeHtml(s.topError.summary.slice(0, 60))}`);
+    lines.push(
+      `⚠️ ${escapeHtml(s.topError.event_type)}: ${escapeHtml(formatEventSummary(s.topError.event_type, s.topError.summary, 120))}`
+    );
   }
   return lines.join('\n');
 }
@@ -200,6 +202,31 @@ export function formatPipelineSummary(p: PipelineSummaryInput): string {
     );
   }
   return lines.join('\n');
+}
+
+export function formatEventSummary(eventType: string, summary: string, maxLen = 120): string {
+  const raw = summary.trim();
+  if (!raw.startsWith('{')) {
+    return raw.length > maxLen ? `${raw.slice(0, maxLen)}…` : raw;
+  }
+  try {
+    const d = JSON.parse(raw) as Record<string, unknown>;
+    if (eventType === 'protective_failed') {
+      const reason = String(d.reason ?? d.close_reason ?? 'protective');
+      const price = typeof d.close_price === 'number' ? ` @ ${fmtPrice(d.close_price)}` : '';
+      const action = d.action === 'market_close' ? ' (đóng market)' : '';
+      const text = `${reason}${price}${action}`;
+      return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
+    }
+    const reason = d.reason ?? d.close_reason ?? d.message ?? d.close_error;
+    if (reason != null) {
+      const text = String(reason);
+      return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
+    }
+  } catch {
+    /* use raw slice below */
+  }
+  return raw.length > maxLen ? `${raw.slice(0, maxLen)}…` : raw;
 }
 
 export function mapTradeEventType(eventType: string): string | null {

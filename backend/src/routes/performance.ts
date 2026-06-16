@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { getOrCreateTestnetAccount } from '../repositories/testnet.repository';
+import { getAccountBalanceSummary } from '../services/account-summary.service';
+import { isInternalCloseReason } from '../utils/bookkeeping-close';
 
 const router = Router();
 
@@ -37,21 +39,27 @@ async function buildPerformanceMetrics(prismaClient: typeof prisma, account: any
     orderBy: { close_time: 'asc' },
   });
 
-  const winningTrades = closedPositions.filter((position: any) => (position.realized_pnl || 0) > 0).length;
-  const losingTrades = closedPositions.filter((position: any) => (position.realized_pnl || 0) < 0).length;
-  const realizedPnl = closedPositions.reduce((sum: number, position: any) => sum + (position.realized_pnl || 0), 0);
-  const grossProfit = closedPositions.reduce(
-    (sum: number, position: any) => sum + Math.max(position.realized_pnl || 0, 0),
+  const counted = closedPositions.filter((p) => !isInternalCloseReason(p.close_reason));
+  const winningTrades = counted.filter((position) => (position.realized_pnl || 0) > 0).length;
+  const losingTrades = counted.filter((position) => (position.realized_pnl || 0) < 0).length;
+  const balanceSummary = await getAccountBalanceSummary(account.symbol, account.method_id);
+  const realizedPnl =
+    process.env.BINANCE_ENABLED === 'true'
+      ? balanceSummary.walletPnl
+      : counted.reduce((sum, position) => sum + (position.realized_pnl || 0), 0);
+  const grossProfit = counted.reduce(
+    (sum, position) => sum + Math.max(position.realized_pnl || 0, 0),
     0
   );
-  const grossLoss = closedPositions.reduce(
-    (sum: number, position: any) => sum + Math.min(position.realized_pnl || 0, 0),
+  const grossLoss = counted.reduce(
+    (sum, position) => sum + Math.min(position.realized_pnl || 0, 0),
     0
   );
-  const avgRMultiple = closedPositions.length
-    ? closedPositions.reduce((sum: number, position: any) => sum + (position.r_multiple || 0), 0) / closedPositions.length
+  const avgRMultiple = counted.length
+    ? counted.reduce((sum, position) => sum + (Number((position as { r_multiple?: number }).r_multiple) || 0), 0) /
+      counted.length
     : 0;
-  const winRate = closedPositions.length ? (winningTrades / closedPositions.length) * 100 : 0;
+  const winRate = counted.length ? (winningTrades / counted.length) * 100 : 0;
   const profitFactor = grossLoss < 0 ? grossProfit / Math.abs(grossLoss) : grossProfit > 0 ? Infinity : 0;
   const totalReturnPercent = account.starting_balance
     ? ((account.equity - account.starting_balance) / account.starting_balance) * 100
@@ -62,7 +70,7 @@ async function buildPerformanceMetrics(prismaClient: typeof prisma, account: any
     starting_balance: account.starting_balance,
     current_equity: account.equity,
     total_return_percent: totalReturnPercent,
-    total_trades: closedPositions.length,
+    total_trades: counted.length,
     winning_trades: winningTrades,
     losing_trades: losingTrades,
     win_rate: winRate,
@@ -70,6 +78,7 @@ async function buildPerformanceMetrics(prismaClient: typeof prisma, account: any
     max_drawdown: account.max_drawdown || 0,
     avg_r_multiple: avgRMultiple,
     realized_pnl: realizedPnl,
+    pnl_source: process.env.BINANCE_ENABLED === 'true' ? 'wallet' : 'positions',
   };
 }
 
