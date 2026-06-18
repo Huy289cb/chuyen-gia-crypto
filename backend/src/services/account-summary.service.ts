@@ -2,6 +2,8 @@ import { prisma } from '../lib/prisma';
 import { getTestnetAccount, getTestnetPendingOrders, getTestnetPositions } from '../repositories/testnet.repository';
 import { getDayBoundsICT } from '../utils/ict-time';
 import { getRiskPolicy } from '../config/risk-policy';
+import { fetchActiveBinancePositions } from './binance-exposure.service';
+import { getOpenOrders, getOpenAlgoOrders } from './binance/trading';
 import { resolveMarkPrice, calculateUnrealizedPnl } from './position-mark';
 
 /** Max |wallet − Σ position PnL| before DB position stats are hidden in UI. */
@@ -249,6 +251,17 @@ export interface OpenPositionLine {
   mark: number;
   unrealizedPnl: number;
   sizeUsd: number;
+  sizeQty: number;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+}
+
+export interface PendingOrderLine {
+  orderId: string;
+  symbol: string;
+  side: string;
+  entry: number;
+  status: string;
 }
 
 export async function getOpenPositionLines(
@@ -274,17 +287,118 @@ export async function getOpenPositionLines(
       mark,
       unrealizedPnl: uPnL,
       sizeUsd: pos.size_usd || 0,
+      sizeQty: Math.abs(pos.size_qty || 0),
     });
   }
   return lines;
 }
 
-export interface PendingOrderLine {
-  orderId: string;
-  symbol: string;
-  side: string;
-  entry: number;
-  status: string;
+function pairUsdt(symbol: string): string {
+  return `${symbol.toUpperCase().replace(/USDT$/i, '')}USDT`;
+}
+
+/** Open positions from Binance positionRisk (source of truth). */
+export async function getBinanceOpenPositionLines(symbol?: string): Promise<OpenPositionLine[]> {
+  const active = await fetchActiveBinancePositions(symbol, { allowUserTradesFallback: false });
+  return active.map((p) => {
+    const mark = p.markPrice || p.entryPrice;
+    return {
+      positionId: `binance-${p.symbol}-${p.side}`,
+      symbol: p.symbol,
+      side: p.side,
+      entry: p.entryPrice,
+      mark,
+      unrealizedPnl: calculateUnrealizedPnl(p.side, p.entryPrice, mark, p.positionAmt),
+      sizeUsd: p.positionAmt * mark,
+      sizeQty: p.positionAmt,
+    };
+  });
+}
+
+/** Pending limit orders from Binance openOrders. */
+export async function getBinancePendingOrderLines(symbol?: string): Promise<PendingOrderLine[]> {
+  const orders = await getOpenOrders(symbol ? pairUsdt(symbol) : null);
+  return orders
+    .filter((o) => {
+      const t = String(o.type ?? '').toUpperCase();
+      const st = String(o.status ?? '').toUpperCase();
+      return t === 'LIMIT' && (st === 'NEW' || st === 'PARTIALLY_FILLED');
+    })
+    .map((o) => ({
+      orderId: String(o.orderId),
+      symbol: String(o.symbol ?? '').replace(/USDT$/i, ''),
+      side: String(o.side).toUpperCase() === 'BUY' ? 'long' : 'short',
+      entry: Number(o.price) || 0,
+      status: String(o.status ?? 'NEW'),
+    }));
+}
+
+/** Prefer Binance live data when BINANCE_ENABLED. */
+export async function getLiveOpenPositionLines(
+  symbol?: string,
+  methodId = 'kim_nghia'
+): Promise<OpenPositionLine[]> {
+  if (process.env.BINANCE_ENABLED === 'true') {
+    try {
+      return await getBinanceOpenPositionLines(symbol);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[AccountSummary] Binance open positions failed: ${msg}`);
+    }
+  }
+  return getOpenPositionLines(symbol, methodId);
+}
+
+export async function getLivePendingOrderLines(
+  symbol?: string,
+  methodId = 'kim_nghia'
+): Promise<PendingOrderLine[]> {
+  if (process.env.BINANCE_ENABLED === 'true') {
+    try {
+      return await getBinancePendingOrderLines(symbol);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[AccountSummary] Binance pending orders failed: ${msg}`);
+    }
+  }
+  return getPendingOrderLines(symbol, methodId);
+}
+
+function algoTriggerPrice(order: {
+  triggerPrice?: number | null;
+  stopPrice?: number | null;
+  price?: number | null;
+}): number {
+  return Number(order.triggerPrice ?? order.stopPrice ?? order.price ?? 0) || 0;
+}
+
+/** Attach SL/TP from Binance open algo orders (same source as sàn). */
+export async function enrichPositionsWithBinanceSlTp(
+  positions: OpenPositionLine[],
+  symbol = 'BTC'
+): Promise<OpenPositionLine[]> {
+  if (positions.length === 0) return positions;
+
+  try {
+    const algos = await getOpenAlgoOrders(pairUsdt(symbol));
+    let stopLoss: number | null = null;
+    let takeProfit: number | null = null;
+
+    for (const order of algos) {
+      const t = String(order.orderType ?? order.type ?? '').toUpperCase();
+      if (!t.includes('STOP') && !t.includes('TAKE_PROFIT')) continue;
+      const px = algoTriggerPrice(order);
+      if (px <= 0) continue;
+      if (t.includes('TAKE_PROFIT')) takeProfit = px;
+      else if (t.includes('STOP')) stopLoss = px;
+    }
+
+    return positions.map((p) => ({ ...p, stopLoss, takeProfit }));
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn(`[AccountSummary] Binance SL/TP fetch failed: ${msg}`);
+    return positions;
+  }
 }
 
 export async function getPendingOrderLines(

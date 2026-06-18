@@ -4,7 +4,6 @@
 
 import { prisma } from '../lib/prisma';
 import {
-  cancelTestnetPendingOrder,
   PIPELINE_EVENT_POSITION_ID,
   recordPipelineEvent,
 } from '../repositories/testnet.repository';
@@ -15,6 +14,16 @@ export type PendingCancelReason =
   | 'price_drift'
   | 'manual'
   | 'ai_review';
+
+const PENDING_ACTIVE_STATUSES = new Set(['pending', 'partially_filled']);
+
+export function isPendingOrderTerminal(status: string | null | undefined): boolean {
+  if (!status) return false;
+  if (PENDING_ACTIVE_STATUSES.has(status)) return false;
+  if (status === 'executed' || status === 'executed_historical') return true;
+  if (status === 'cancelled' || status.startsWith('cancelled_')) return true;
+  return status === 'expired' || status === 'rejected' || status === 'failed';
+}
 
 export async function resolveTimeframeForPendingOrder(
   orderId: string
@@ -43,9 +52,20 @@ export async function resolveTimeframeForPendingOrder(
 }
 
 export async function cancelPendingOnExchangeAndDb(
-  order: { order_id: string; symbol: string; binance_order_id?: string | null },
+  order: { order_id: string; symbol: string; binance_order_id?: string | null; status?: string },
   reason: PendingCancelReason
 ): Promise<void> {
+  const claimed = await prisma.testnetPendingOrder.updateMany({
+    where: {
+      order_id: order.order_id,
+      status: { in: [...PENDING_ACTIVE_STATUSES] },
+    },
+    data: { status: `cancelled_${reason}` },
+  });
+  if (claimed.count === 0) {
+    return;
+  }
+
   if (process.env.BINANCE_ENABLED === 'true' && order.binance_order_id) {
     try {
       const { initTestnetClient, cancelOrder } = await import('./binanceClient');
@@ -61,7 +81,6 @@ export async function cancelPendingOnExchangeAndDb(
     }
   }
 
-  await cancelTestnetPendingOrder(order.order_id, reason);
   hookPendingCancelled(order.symbol, order.order_id, reason);
 
   await recordPipelineEvent('pending_order_cancelled', {

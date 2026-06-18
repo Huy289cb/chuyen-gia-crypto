@@ -3,8 +3,10 @@ import { getDayBoundsICT, getIctDateString } from '../../utils/ict-time';
 import {
   getAccountBalanceSummary,
   getDefaultTradingScope,
-  getOpenPositionLines,
-  getPendingOrderLines,
+  getLiveOpenPositionLines,
+  getLivePendingOrderLines,
+  enrichPositionsWithBinanceSlTp,
+  getBinanceOpenPositionLines,
   getTodayTradeStatsIct,
   type AccountBalanceSummary,
   type OpenPositionLine,
@@ -17,8 +19,35 @@ import {
   getTopNoTradeReasonsIct,
   type SystemHealthSnapshot,
 } from '../system-health.service';
-import { fetchBinanceNetPosition } from '../binance-exposure.service';
+import { config as binanceConfig } from '../binance/config';
 
+export type BinanceExchangeMode = 'testnet' | 'mainnet';
+
+export interface BinanceExchangeEnv {
+  mode: BinanceExchangeMode;
+  baseUrl: string;
+  /** Where mark/last price for /lenh and openPositions comes from */
+  markPriceSource: string;
+  /** Plain note for /ai about demo vs mainnet price gaps */
+  pricingNote: string;
+}
+
+export function getBinanceExchangeEnv(): BinanceExchangeEnv {
+  const baseUrl = binanceConfig.BASE_URL || 'https://demo-fapi.binance.com';
+  const testnetFlag = process.env.BINANCE_TESTNET === 'true';
+  const isTestnet =
+    testnetFlag || baseUrl.includes('demo-fapi') || baseUrl.includes('testnet');
+  const mode: BinanceExchangeMode = isTestnet ? 'testnet' : 'mainnet';
+  const markPriceSource =
+    mode === 'testnet'
+      ? 'Binance USD-M demo (demo-fapi.binance.com): positionRisk markPrice + latest_price từ fapi klines'
+      : 'Binance USD-M mainnet (fapi.binance.com): positionRisk markPrice + latest_price từ fapi klines';
+  const pricingNote =
+    mode === 'testnet'
+      ? 'Bot đang chạy Binance USD-M DEMO (testnet), KHÔNG phải mainnet. Giá mark/entry trên demo có thể lệch vài trăm–~1k USD so với Binance thật do thanh khoản mỏng, limit cũ khớp muộn, hoặc mark demo cập nhật chậm. /lenh và openPositions lấy giá trực tiếp từ demo-fapi — đó là giá futures bot đang trade, không phải Binance spot, CoinGecko hay mainnet.'
+      : 'Bot đang chạy Binance USD-M mainnet. Mark price từ fapi positionRisk; latest_price từ fapi klines — không dùng Binance spot.';
+  return { mode, baseUrl, markPriceSource, pricingNote };
+}
 export type AiContextScope =
   | 'today_run'
   | 'errors'
@@ -34,6 +63,7 @@ export interface AiContextBundle {
     symbol: string;
     methodId: string;
     scope: AiContextScope;
+    binanceExchange: BinanceExchangeEnv;
   };
   account: AccountBalanceSummary;
   todayTrades: TodayTradeStats;
@@ -234,17 +264,17 @@ async function fetchRecentClosedPositions(
 
 async function fetchBinanceExposureSnapshot(symbol: string): Promise<BinanceExposureSnapshot> {
   try {
-    const net = await fetchBinanceNetPosition(symbol);
-    if (!net || Math.abs(net.positionAmt) < 1e-8) {
+    const lines = await getBinanceOpenPositionLines(symbol);
+    if (lines.length === 0) {
       return { available: true, side: 'flat', netQty: 0 };
     }
-    const side = net.positionAmt > 0 ? 'long' : 'short';
+    const p = lines[0];
     return {
       available: true,
-      side,
-      netQty: Math.abs(net.positionAmt),
-      entryPrice: net.entryPrice,
-      markPrice: net.markPrice,
+      side: p.side as 'long' | 'short',
+      netQty: p.sizeQty,
+      entryPrice: p.entry,
+      markPrice: p.mark,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -301,13 +331,17 @@ async function fetchRecentErrorEvents(): Promise<ErrorEventRow[]> {
 }
 
 const OPERATOR_NOTES: string[] = [
-  'Số dư Telegram = ví Binance demo (nguồn đúng cho tiền thật trên sàn).',
-  'Bot local = sổ ghi chép — có thể lệch với sàn nếu sync trễ vài phút.',
-  'Lệnh khớp (fill) → bot mở vị thế qua WebSocket trong ~15 phút. Sau đó reconcile chỉ đóng sổ pending, KHÔNG mở lại lệnh cũ.',
-  'Một symbol chỉ có tối đa 1 vị thế mở trong sổ local (ONE_WAY).',
-  'openPositions + binanceExposure = trạng thái HIỆN TẠI. recentDecisions = lịch sử LLM, có thể đã hết hiệu lực.',
-  'Giá entry lạ (vd short 62k) trong recentClosedPositions thường là lệnh limit CŨ đã khớp ngày trước — không phải giá thị trường hôm nay.',
-  'Đóng sổ phantom (không có binance_order_id): PnL=0, không trừ ví. Lệnh có fill proof → sync PnL từ userTrades.',
+  'Số dư Telegram = ví Binance demo/mainnet (nguồn đúng cho tiền thật trên sàn).',
+  'openPositions + pendingOrders = cùng nguồn với lệnh /lenh (lấy trực tiếp từ Binance API, không phải sổ bot).',
+  'meta.binanceExchange.mode = testnet hoặc mainnet (từ BINANCE_BASE_URL / BINANCE_TESTNET).',
+  'meta.binanceExchange.pricingNote = giải thích chênh lệch giá demo vs mainnet — đọc khi user hỏi giá lạ.',
+  'Mark/latest price = từ Binance USD-M Futures (demo-fapi hoặc fapi), không phải Binance spot hay CoinGecko.',
+  'Mỗi openPositions có stopLoss / takeProfit từ lệnh SL/TP algo đang treo trên sàn (nếu có).',
+  'binanceExposure tóm tắt vị thế net trên sàn — khớp openPositions khi có lệnh mở.',
+  'Sổ bot local có thể trống dù sàn còn lệnh — KHÔNG nói "không có lệnh" nếu openPositions hoặc binanceExposure có dữ liệu.',
+  'recentDecisions = lịch sử LLM — lý do cũ có thể không còn đúng.',
+  'User hỏi TP/SL: đọc stopLoss và takeProfit trong openPositions.',
+  'User hỏi chênh ~1k demo vs mainnet: nói rõ đang trade testnet, giá demo ≠ giá thật, không đổ lỗi "lệnh cũ 62k" nếu /lenh hiện giá ~64–65k.',
 ];
 
 export async function buildAiContext(scope: AiContextScope): Promise<AiContextBundle> {
@@ -324,7 +358,7 @@ export async function buildAiContext(scope: AiContextScope): Promise<AiContextBu
     topNoTradeReasons,
     recentDecisions,
     recentErrors,
-    openPositions,
+    rawOpenPositions,
     pendingOrders,
     binanceExposure,
     recentClosedPositions,
@@ -338,11 +372,13 @@ export async function buildAiContext(scope: AiContextScope): Promise<AiContextBu
     getTopNoTradeReasonsIct(5),
     fetchRecentDecisions(methodId),
     fetchRecentErrorEvents(),
-    getOpenPositionLines(symbol, methodId),
-    getPendingOrderLines(symbol, methodId),
+    getLiveOpenPositionLines(symbol, methodId),
+    getLivePendingOrderLines(symbol, methodId),
     fetchBinanceExposureSnapshot(symbol),
     fetchRecentClosedPositions(symbol, methodId),
   ]);
+
+  const openPositions = await enrichPositionsWithBinanceSlTp(rawOpenPositions, symbol);
 
   const bundle: AiContextBundle = {
     meta: {
@@ -351,6 +387,7 @@ export async function buildAiContext(scope: AiContextScope): Promise<AiContextBu
       symbol,
       methodId,
       scope,
+      binanceExchange: getBinanceExchangeEnv(),
     },
     account,
     todayTrades,

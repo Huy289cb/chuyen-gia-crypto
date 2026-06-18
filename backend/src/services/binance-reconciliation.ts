@@ -38,6 +38,7 @@ import {
   isBinanceAccountKnownUnhealthy,
   recordBinanceTradingAccessObserved,
 } from './binance-account-health.service';
+import { hasBinanceFillProof } from '../utils/binance-fill-proof';
 
 /**
  * Perform startup reconciliation between local DB and Binance
@@ -539,13 +540,29 @@ async function forceCloseStaleGhost(local: {
   );
 }
 
-async function closeStaleOpenPositions(_activeBinance: ParsedBinancePosition[]): Promise<void> {
+async function closeStaleOpenPositions(activeBinance: ParsedBinancePosition[]): Promise<void> {
   const cutoff = new Date(Date.now() - STALE_OPEN_MAX_AGE_MS);
   const staleOpens = await prisma.testnetPosition.findMany({
     where: { status: 'open', entry_time: { lt: cutoff } },
   });
 
   for (const local of staleOpens) {
+    const side = String(local.side).toLowerCase() as PositionSideLocal;
+    const bp = activeBinance.find((p) => p.symbol === local.symbol && p.side === side);
+    if (bp && bp.positionAmt >= 1e-8) {
+      console.log(
+        `[BinanceReconciliation] Skip stale ghost ${local.position_id} — still ${bp.positionAmt} on Binance`
+      );
+      continue;
+    }
+
+    if (hasBinanceFillProof(local) && isBinancePositionRiskUnavailable()) {
+      console.warn(
+        `[BinanceReconciliation] Skip stale ghost ${local.position_id} — fill proof + positionRisk unavailable`
+      );
+      continue;
+    }
+
     await forceCloseStaleGhost(local);
   }
 }

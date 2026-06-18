@@ -147,4 +147,49 @@ describe('binance-reconciliation hardening', () => {
       expect.objectContaining({ bookkeeping_close: true })
     );
   });
+
+  it('does not force-close stale open rows still on Binance', async () => {
+    const staleOnBinance = {
+      position_id: 'pos_stale_live',
+      symbol: 'BTC',
+      side: 'short',
+      status: 'open',
+      size_qty: 0.0115,
+      entry_price: 64882.6,
+      current_price: 64654.73,
+      entry_time: new Date('2026-06-17T19:36:04.000Z'),
+      binance_order_id: '15353149185',
+      account_id: 1,
+      account: { current_balance: 5000 },
+    };
+
+    vi.mocked(fetchActiveBinancePositions).mockResolvedValue([
+      {
+        symbol: 'BTC',
+        symbolUsdt: 'BTCUSDT',
+        side: 'short',
+        positionAmt: 0.0115,
+        entryPrice: 64882.6,
+        markPrice: 64654.73,
+        rawPositionSide: 'BOTH',
+      },
+    ]);
+    vi.mocked(prisma.testnetPosition.findMany).mockImplementation(async (args) => {
+      const where = (args as { where?: Record<string, unknown> }).where;
+      if (where?.status === 'open' && where?.entry_time) {
+        return [staleOnBinance];
+      }
+      return [];
+    });
+    vi.mocked(getTestnetPositions).mockResolvedValue([staleOnBinance] as never);
+
+    await performStartupReconciliation();
+
+    expect(closeLocalPosition).not.toHaveBeenCalledWith(
+      expect.objectContaining({ position_id: 'pos_stale_live' }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    );
+  });
 });

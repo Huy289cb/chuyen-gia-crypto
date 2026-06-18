@@ -14,8 +14,8 @@ import { enqueueTelegramMessage } from './telegram-client';
 import {
   getAccountBalanceSummary,
   getDefaultTradingScope,
-  getOpenPositionLines,
-  getPendingOrderLines,
+  getLiveOpenPositionLines,
+  getLivePendingOrderLines,
 } from '../account-summary.service';
 import {
   getSystemHealthSnapshot,
@@ -43,7 +43,7 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
 const HELP_TEXT = `<b>Lệnh cơ bản</b>
 /show — tài khoản + cooldown
-/lenh — vị thế + lệnh chờ
+/lenh — lệnh đang mở trên sàn
 /pnl — PnL hôm nay / 7 ngày
 /pipeline — pipeline tóm tắt
 /baocao — báo cáo ngày
@@ -101,20 +101,22 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
 
     case '/lenh': {
       const [positions, pending] = await Promise.all([
-        getOpenPositionLines(symbol, methodId),
-        getPendingOrderLines(symbol, methodId),
+        getLiveOpenPositionLines(symbol, methodId),
+        getLivePendingOrderLines(symbol, methodId),
       ]);
-      const lines = ['<b>Vị thế mở</b>'];
+      const lines = ['<b>Đang mở (Binance)</b>'];
       if (positions.length === 0) lines.push('(không có)');
       for (const p of positions) {
+        const sideLabel = p.side === 'long' ? 'LONG' : 'SHORT';
         lines.push(
-          `• ${escapeHtml(p.symbol)} ${escapeHtml(p.side)} entry=${p.entry} mark=${p.mark.toFixed(2)} uPnL=${fmtUsd(p.unrealizedPnl)}`
+          `• ${escapeHtml(p.symbol)} ${sideLabel} ${p.sizeQty.toFixed(4)} | ${p.entry.toFixed(0)} → ${p.mark.toFixed(0)} | ${fmtUsd(p.unrealizedPnl)}`
         );
       }
-      lines.push('', '<b>Lệnh chờ</b>');
+      lines.push('', '<b>Lệnh chờ (Binance)</b>');
       if (pending.length === 0) lines.push('(không có)');
       for (const o of pending) {
-        lines.push(`• ${escapeHtml(o.symbol)} ${escapeHtml(o.side)} @${o.entry}`);
+        const sideLabel = o.side === 'long' ? 'LONG' : 'SHORT';
+        lines.push(`• ${escapeHtml(o.symbol)} ${sideLabel} @ ${o.entry.toFixed(0)}`);
       }
       enqueueTelegramMessage(lines.join('\n'), chatId);
       return;
@@ -167,8 +169,8 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
       const [b, health, positions, pending] = await Promise.all([
         getAccountBalanceSummary(symbol, methodId, true),
         getSystemHealthSnapshot(),
-        getOpenPositionLines(symbol, methodId),
-        getPendingOrderLines(symbol, methodId),
+        getLiveOpenPositionLines(symbol, methodId),
+        getLivePendingOrderLines(symbol, methodId),
       ]);
       enqueueTelegramMessage(
         formatShowSummary({

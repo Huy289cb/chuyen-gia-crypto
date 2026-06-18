@@ -2,8 +2,42 @@ import { describe, it, expect } from 'vitest';
 import {
   recomputeSlTpFromFill,
   isOrderWouldTriggerImmediatelyError,
+  arePlannedLevelsValidForFill,
+  resolveLevelsForFill,
 } from '../../src/services/protective-order.service';
 import { parseV3ClientOrderId } from '../../src/services/binance-order-fill.service';
+
+describe('arePlannedLevelsValidForFill', () => {
+  it('accepts short fill between planned TP and SL (Jun 18 incident)', () => {
+    expect(
+      arePlannedLevelsValidForFill('short', 64882.6, 64945.19, 62896.41)
+    ).toBe(true);
+  });
+
+  it('rejects short when fill is above planned SL', () => {
+    expect(arePlannedLevelsValidForFill('short', 65000, 64945.19, 62896.41)).toBe(false);
+  });
+});
+
+describe('resolveLevelsForFill', () => {
+  it('preserves pending SL/TP when still valid for fill price', () => {
+    const levels = resolveLevelsForFill(
+      'short',
+      64882.6,
+      64432.93,
+      64945.19,
+      62896.41
+    );
+    expect(levels.stop_loss).toBe(64945.19);
+    expect(levels.take_profit).toBe(62896.41);
+  });
+
+  it('recomputes when planned levels invalid for fill', () => {
+    const levels = resolveLevelsForFill('short', 65000, 64432.93, 64945.19, 62896.41);
+    expect(levels.stop_loss).toBeGreaterThan(65000);
+    expect(levels.take_profit).toBeLessThan(65000);
+  });
+});
 
 describe('recomputeSlTpFromFill', () => {
   it('widens short SL when fill slips above planned entry (Jun 4 incident)', () => {

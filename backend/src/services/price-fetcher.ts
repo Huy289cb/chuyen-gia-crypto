@@ -1,35 +1,48 @@
 /**
  * Price Fetcher Service (TypeScript)
- * 
- * Primary source: Binance API (real-time, no rate limit issues)
+ *
+ * Primary source: Binance USD-M Futures (BINANCE_BASE_URL — demo-fapi or fapi)
  * Secondary source: Database OHLCV candles
- * Fallback: CoinGecko API (only if Binance fails)
  */
 
-const BINANCE_API = 'https://api.binance.com/api/v3';
+import { getKlines } from './binance/market';
+import { config as binanceConfig } from './binance/config';
 
-// Delay helper to avoid rate limiting
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+type FuturesKline = Awaited<ReturnType<typeof getKlines>>[number];
 
-// Fetch with timeout to prevent hanging in production
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error(`Request timeout after ${timeoutMs}ms`);
-    }
-    throw error;
-  }
+function toFuturesSymbol(coinOrSymbol: string): string {
+  const s = coinOrSymbol.toUpperCase();
+  return s.endsWith('USDT') ? s : `${s}USDT`;
+}
+
+/** Raw kline array shape returned by Binance REST (for legacy callers). */
+function klineToRawRow(k: FuturesKline): number[] {
+  return [
+    k.openTime,
+    k.open,
+    k.high,
+    k.low,
+    k.close,
+    k.volume,
+    k.closeTime,
+    k.quoteVolume,
+    k.trades,
+    k.takerBuyBaseVolume,
+    k.takerBuyQuoteVolume,
+  ];
+}
+
+function klineToCandle(k: FuturesKline): CandleData {
+  return {
+    price: k.close,
+    open: k.open,
+    high: k.high,
+    low: k.low,
+    volume: k.volume,
+    time: new Date(k.openTime).toISOString(),
+  };
 }
 
 export interface CandleData {
@@ -48,7 +61,7 @@ export interface PriceData {
 }
 
 /**
- * Fetch real-time 1-minute candle data from Binance for paper trading
+ * Fetch real-time 1-minute candle data from Binance USD-M Futures.
  */
 export async function fetchRealTimePrices(): Promise<PriceData> {
   const maxRetries = 3;
@@ -56,41 +69,26 @@ export async function fetchRealTimePrices(): Promise<PriceData> {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const btcRes = await fetchWithTimeout(`${BINANCE_API}/klines?symbol=BTCUSDT&interval=1m&limit=1`, {}, 10000);
-      const ethRes = await fetchWithTimeout(`${BINANCE_API}/klines?symbol=ETHUSDT&interval=1m&limit=1`, {}, 10000);
+      const [btcKlines, ethKlines] = await Promise.all([
+        getKlines('BTCUSDT', '1m', 1),
+        getKlines('ETHUSDT', '1m', 1),
+      ]);
 
-      if (!btcRes.ok || !ethRes.ok) {
-        throw new Error(`Binance klines error: BTC=${btcRes.status}, ETH=${ethRes.status}`);
+      if (btcKlines.length === 0 || ethKlines.length === 0) {
+        throw new Error('Binance futures klines returned empty');
       }
-
-      const btcKline = await btcRes.json() as any[][];
-      const ethKline = await ethRes.json() as any[][];
-
-      const btcData: CandleData = {
-        price: parseFloat(btcKline[0][4]),
-        open: parseFloat(btcKline[0][1]),
-        high: parseFloat(btcKline[0][2]),
-        low: parseFloat(btcKline[0][3]),
-        volume: parseFloat(btcKline[0][5]),
-        time: new Date(btcKline[0][0]).toISOString()
-      };
-
-      const ethData: CandleData = {
-        price: parseFloat(ethKline[0][4]),
-        open: parseFloat(ethKline[0][1]),
-        high: parseFloat(ethKline[0][2]),
-        low: parseFloat(ethKline[0][3]),
-        volume: parseFloat(ethKline[0][5]),
-        time: new Date(ethKline[0][0]).toISOString()
-      };
 
       return {
         timestamp: new Date().toISOString(),
-        btc: btcData,
-        eth: ethData
+        btc: klineToCandle(btcKlines[0]),
+        eth: klineToCandle(ethKlines[0]),
       };
-    } catch (error: any) {
-      console.error(`[PriceFetcher] 1-minute candle fetch failed (attempt ${attempt}/${maxRetries}):`, error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[PriceFetcher] Futures 1m candle fetch failed (attempt ${attempt}/${maxRetries}, base=${binanceConfig.BASE_URL}):`,
+        message
+      );
 
       if (attempt < maxRetries) {
         await delay(retryDelay);
@@ -118,7 +116,7 @@ export async function fetchPricesFromDb(coin: string = 'BTC'): Promise<CandleDat
       high: latestPrice.price,
       low: latestPrice.price,
       volume: latestPrice.volume_24h || 0,
-      time: latestPrice.updated_at.toISOString()
+      time: latestPrice.updated_at.toISOString(),
     };
   }
 
@@ -126,28 +124,27 @@ export async function fetchPricesFromDb(coin: string = 'BTC'): Promise<CandleDat
 }
 
 /**
- * Fetch historical OHLCV candles from Binance API
+ * Fetch historical OHLCV candles from Binance USD-M Futures.
  */
-export async function fetchHistoricalCandles(symbol: string, interval: string = '15m', limit: number = 100): Promise<any[]> {
+export async function fetchHistoricalCandles(
+  symbol: string,
+  interval: string = '15m',
+  limit: number = 100
+): Promise<number[][]> {
   const maxRetries = 3;
   const retryDelay = 1000;
+  const futuresSymbol = toFuturesSymbol(symbol);
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const response = await fetchWithTimeout(
-        `${BINANCE_API}/klines?symbol=${symbol}USDT&interval=${interval}&limit=${limit}`,
-        {},
-        10000
+      const klines = await getKlines(futuresSymbol, interval, limit);
+      return klines.map(klineToRawRow);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[PriceFetcher] Futures historical candles fetch failed (attempt ${attempt}/${maxRetries}):`,
+        message
       );
-
-      if (!response.ok) {
-        throw new Error(`Binance klines error: ${response.status}`);
-      }
-
-      const klines = await response.json() as any[][];
-      return klines;
-    } catch (error: any) {
-      console.error(`[PriceFetcher] Historical candles fetch failed (attempt ${attempt}/${maxRetries}):`, error.message);
 
       if (attempt < maxRetries) {
         await delay(retryDelay);
@@ -164,7 +161,7 @@ export async function fetchHistoricalCandles(symbol: string, interval: string = 
 const BINANCE_KLINES_MAX = 1000;
 
 /**
- * Fetch up to totalLimit historical klines from Binance (paginated backwards).
+ * Fetch up to totalLimit historical klines from Binance Futures (paginated backwards).
  * Returns ascending rows: [openTime, open, high, low, close, volume, ...].
  */
 export async function fetchHistoricalCandlesPaginated(
@@ -174,60 +171,53 @@ export async function fetchHistoricalCandlesPaginated(
 ): Promise<number[][]> {
   if (totalLimit <= 0) return [];
 
-  const coin = symbol.replace(/USDT$/i, '').toUpperCase();
+  const futuresSymbol = toFuturesSymbol(symbol);
   const byOpenTime = new Map<number, number[]>();
   let endTime: number | undefined = undefined;
   const pageDelayMs = 250;
 
   while (byOpenTime.size < totalLimit) {
     const pageSize = Math.min(BINANCE_KLINES_MAX, totalLimit - byOpenTime.size);
-    const params = new URLSearchParams({
-      symbol: `${coin}USDT`,
+    const klines = await getKlines(
+      futuresSymbol,
       interval,
-      limit: String(pageSize),
-    });
-    if (endTime != null) {
-      params.set('endTime', String(endTime));
-    }
-
-    const response = await fetchWithTimeout(
-      `${BINANCE_API}/klines?${params.toString()}`,
-      {},
-      15000
+      pageSize,
+      null,
+      endTime ?? null
     );
-    if (!response.ok) {
-      throw new Error(`Binance klines error: ${response.status}`);
-    }
 
-    const klines = (await response.json()) as number[][];
     if (klines.length === 0) break;
 
-    for (const row of klines) {
-      const openTime = row[0];
-      if (Number.isFinite(openTime)) {
-        byOpenTime.set(openTime, row);
-      }
+    for (const kline of klines) {
+      byOpenTime.set(kline.openTime, klineToRawRow(kline));
     }
 
-    const oldestOpen = klines[0][0];
+    const oldestOpen = klines[0].openTime;
     endTime = oldestOpen - 1;
 
     if (klines.length < pageSize) break;
     await delay(pageDelayMs);
   }
 
-  return Array.from(byOpenTime.values()).sort((a, b) => a[0] - b[0]).slice(-totalLimit);
+  return Array.from(byOpenTime.values())
+    .sort((a, b) => a[0] - b[0])
+    .slice(-totalLimit);
 }
 
 /**
- * Fetch prices with fallback chain: Binance -> Database -> CoinGecko
+ * Fetch prices with fallback chain: Binance Futures -> Database
  */
 export async function fetchPrices(coin: string = 'BTC'): Promise<CandleData> {
   try {
     const prices = await fetchRealTimePrices();
+    const key = coin.toUpperCase() as 'BTC' | 'ETH';
+    if (key === 'ETH' && prices.eth) {
+      return prices.eth;
+    }
     return prices.btc;
-  } catch (error: any) {
-    console.warn('[PriceFetcher] Binance fetch failed, trying database fallback:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[PriceFetcher] Binance futures fetch failed, trying database fallback:', message);
 
     const dbPrice = await fetchPricesFromDb(coin);
     if (dbPrice) {

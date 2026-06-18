@@ -103,7 +103,7 @@ describe('telegram-ai prompts', () => {
     const ctxIdx = prompt.indexOf('Dữ liệu hệ thống');
     expect(qIdx).toBeGreaterThanOrEqual(0);
     expect(ctxIdx).toBeGreaterThan(qIdx);
-    expect(prompt).toContain('Trả lời như bro');
+    expect(prompt).toContain('như bro');
   });
 
   it('provides conversational greeting', () => {

@@ -22,6 +22,7 @@ import {
   syncClosedPositionsFromAccountUpdate,
 } from './position-close.service';
 import { hookPendingCancelled } from './telegram/telegram-hooks';
+import { isPendingOrderTerminal } from './pending-order-actions';
 
 let ws: WebSocket | null = null;
 let listenKey: string | null = null;
@@ -155,7 +156,20 @@ async function handleOrderTradeUpdate(event: any): Promise<void> {
 
     case 'CANCELED':
       if (localOrder) {
-        await updateTestnetPendingOrder(localOrder.order_id, { status: 'cancelled' });
+        if (isPendingOrderTerminal(localOrder.status)) {
+          break;
+        }
+        const { prisma: db } = await import('../lib/prisma');
+        const claimed = await db.testnetPendingOrder.updateMany({
+          where: {
+            order_id: localOrder.order_id,
+            status: { in: ['pending', 'partially_filled'] },
+          },
+          data: { status: 'cancelled' },
+        });
+        if (claimed.count === 0) {
+          break;
+        }
         console.log(`[BinanceWebSocketSync] Local order cancelled: ${localOrder.order_id}`);
         hookPendingCancelled(localOrder.symbol, localOrder.order_id, 'binance_canceled');
       }

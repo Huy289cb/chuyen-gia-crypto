@@ -1,4 +1,5 @@
 import { Agent, CursorAgentError } from '@cursor/sdk';
+import type { Run, RunResult } from '@cursor/sdk';
 import { prisma } from '../../lib/prisma';
 import {
   canUseCursorChat,
@@ -112,6 +113,28 @@ function isStaleAgentError(err: unknown): boolean {
   return lower.includes('agent_not_found') || lower.includes('agent not found');
 }
 
+async function extractRunErrorText(run: Run, result: RunResult): Promise<string> {
+  if (result.result?.trim()) {
+    return result.result.trim();
+  }
+  if (run.result?.trim()) {
+    return run.result.trim();
+  }
+  if (run.supports('conversation')) {
+    try {
+      const turns = await run.conversation();
+      for (let i = turns.length - 1; i >= 0; i -= 1) {
+        const turn = turns[i] as { text?: string };
+        const text = turn?.text?.trim();
+        if (text) return text;
+      }
+    } catch {
+      /* optional */
+    }
+  }
+  return `Cursor run failed (status=${result.status})`;
+}
+
 async function acquireAgent(
   chatId: string,
   _userId: string | undefined,
@@ -169,7 +192,7 @@ async function runCursorChat(
     const prompt = buildChatPrompt(question, isNew, opsContext);
     console.log(`[CursorChat] chat=${chatId} agent=${agentId} new=${isNew} q=${question.slice(0, 80)}`);
 
-    const run = await agent.send(prompt, { mode: 'agent' });
+    const run = await agent.send(prompt, { mode: 'plan' });
 
     if (isCursorJobCancelled(chatId)) {
       if (run.supports('cancel')) {
@@ -186,8 +209,11 @@ async function runCursorChat(
       return;
     }
 
-    if (result.status === 'error') {
-      const errText = (result.result ?? 'Cursor run failed').slice(0, 500);
+    if (result.status === 'error' || result.status === 'cancelled') {
+      const errText = (await extractRunErrorText(run, result)).slice(0, 500);
+      console.error(
+        `[CursorChat] chat=${chatId} run failed status=${result.status} id=${result.id} durationMs=${result.durationMs ?? 'n/a'}`
+      );
       enqueueTelegramMessage(`❌ Cursor lỗi:\n${escapeHtml(errText)}`, chatId);
       return;
     }

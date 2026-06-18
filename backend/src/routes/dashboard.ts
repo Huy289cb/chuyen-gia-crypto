@@ -29,12 +29,8 @@ import {
   getSchedulerLastRun,
 } from '../utils/scheduler-heartbeat';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
-import {
-  calculatePnlPercent,
-  calculateUnrealizedPnl,
-  resolveMarkPrice,
-} from '../services/position-mark';
-import { getAccountBalanceSummary } from '../services/account-summary.service';
+import { calculatePnlPercent } from '../services/position-mark';
+import { getAccountBalanceSummary, getLiveOpenPositionLines, getLivePendingOrderLines } from '../services/account-summary.service';
 import { isTelegramAiEnabled } from '../config/telegram-ai';
 import { runTelegramAiQuery } from '../services/telegram/telegram-ai.service';
 import type { AiContextScope } from '../services/telegram/ai-context.builder';
@@ -1152,61 +1148,28 @@ router.get('/balance', async (req: Request, res: Response) => {
 router.get('/positions', async (req: Request, res: Response) => {
   try {
     const { symbol, method } = req.query;
+    const sym = symbol ? String(symbol).toUpperCase() : undefined;
+    const methodId = method ? String(method) : 'kim_nghia';
 
-    const positions = await prisma.testnetPosition.findMany({
-      where: {
-        status: { in: ['open', 'OPEN'] },
-        ...(symbol ? { symbol: String(symbol).toUpperCase() } : {}),
-        ...(method
-          ? {
-              account: {
-                method_id: String(method),
-              },
-            }
-          : {}),
-      },
-      orderBy: { entry_time: 'desc' },
+    const positions = await getLiveOpenPositionLines(sym, methodId);
+
+    const formattedPositions = positions.map((pos) => {
+      const pnlPercentage = calculatePnlPercent(pos.side, pos.entry, pos.mark);
+      return {
+        id: pos.positionId,
+        symbol: pos.symbol,
+        side: pos.side,
+        size: pos.sizeQty,
+        entryPrice: pos.entry,
+        markPrice: pos.mark,
+        unrealizedPnL: pos.unrealizedPnl,
+        pnlPercentage: pnlPercentage.toFixed(2),
+        stopLoss: 0,
+        takeProfit: 0,
+        timeInPosition: '—',
+        source: 'binance',
+      };
     });
-
-    const markBySymbol = new Map<string, number>();
-    const uniqueSymbols = [...new Set(positions.map((p) => p.symbol))];
-    await Promise.all(
-      uniqueSymbols.map(async (sym) => {
-        const fallback =
-          positions.find((p) => p.symbol === sym)?.current_price ||
-          positions.find((p) => p.symbol === sym)?.entry_price ||
-          0;
-        markBySymbol.set(sym, await resolveMarkPrice(sym, fallback));
-      })
-    );
-
-    const formattedPositions = await Promise.all(
-      positions.map(async (pos) => {
-        const entryPrice = pos.entry_price || 0;
-        const sizeQty = pos.size_qty || 0;
-        const storedMark = pos.current_price || entryPrice;
-        const markPrice = markBySymbol.get(pos.symbol) ?? storedMark;
-        const unrealizedPnL = calculateUnrealizedPnl(pos.side, entryPrice, markPrice, sizeQty);
-        const pnlPercentage = calculatePnlPercent(pos.side, entryPrice, markPrice);
-        const timeInPosition = pos.entry_time
-          ? `${Math.floor((Date.now() - new Date(pos.entry_time).getTime()) / 60000)}m`
-          : '0m';
-
-        return {
-          id: pos.position_id,
-          symbol: pos.symbol,
-          side: pos.side,
-          size: sizeQty,
-          entryPrice,
-          markPrice,
-          unrealizedPnL,
-          pnlPercentage: pnlPercentage.toFixed(2),
-          stopLoss: pos.stop_loss || 0,
-          takeProfit: pos.take_profit || 0,
-          timeInPosition,
-        };
-      })
-    );
 
     res.json({
       ok: true,
@@ -1224,27 +1187,23 @@ router.get('/positions', async (req: Request, res: Response) => {
  */
 router.get('/orders', async (req: Request, res: Response) => {
   try {
-    const { symbol, method, status } = req.query;
+    const { symbol, method } = req.query;
+    const sym = symbol ? String(symbol).toUpperCase() : undefined;
+    const methodId = method ? String(method) : 'kim_nghia';
 
-    const orders = await prisma.testnetPendingOrder.findMany({
-      where: {
-        ...(symbol ? { symbol: String(symbol).toUpperCase() } : {}),
-        ...(method ? { method_id: String(method) } : {}),
-        ...(status ? { status: String(status) } : { status: { in: ['pending', 'PENDING'] } }),
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    const orders = await getLivePendingOrderLines(sym, methodId);
 
     const formattedOrders = orders.map((order) => ({
-      id: order.order_id.toString(),
+      id: order.orderId,
       symbol: order.symbol,
       side: order.side,
       type: 'LIMIT',
       status: order.status,
-      price: order.entry_price || 0,
-      quantity: order.size_qty || 0,
+      price: order.entry,
+      quantity: 0,
       reduceOnly: false,
-      createdAt: order.created_at?.toISOString() || new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      source: 'binance',
     }));
 
     res.json({

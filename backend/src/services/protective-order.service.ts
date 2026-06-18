@@ -680,7 +680,22 @@ export async function emergencyMarketCloseUnhedged(
   return true;
 }
 
-/** Levels for a new fill before DB insert. */
+/** Planned SL/TP still valid relative to actual fill (long: SL < fill < TP; short: TP < fill < SL). */
+export function arePlannedLevelsValidForFill(
+  side: 'long' | 'short',
+  fillPrice: number,
+  plannedSl: number,
+  plannedTp: number
+): boolean {
+  if (!Number.isFinite(fillPrice) || fillPrice <= 0) return false;
+  if (!Number.isFinite(plannedSl) || !Number.isFinite(plannedTp)) return false;
+  if (side === 'short') {
+    return plannedTp < fillPrice && fillPrice < plannedSl;
+  }
+  return plannedSl < fillPrice && fillPrice < plannedTp;
+}
+
+/** Levels for a new fill before DB insert — preserve pending SL/TP when still valid for fill. */
 export function resolveLevelsForFill(
   side: string,
   fillPrice: number,
@@ -690,6 +705,9 @@ export function resolveLevelsForFill(
   markPrice?: number
 ): SlTpLevels {
   const s = side.toLowerCase() === 'short' ? 'short' : 'long';
+  if (arePlannedLevelsValidForFill(s, fillPrice, plannedSl, plannedTp)) {
+    return { stop_loss: plannedSl, take_profit: plannedTp };
+  }
   return recomputeSlTpFromFill({
     side: s,
     fillPrice,

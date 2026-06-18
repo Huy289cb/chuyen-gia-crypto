@@ -2,8 +2,8 @@ import { getIctDateString } from '../../utils/ict-time';
 import {
   getAccountBalanceSummary,
   getDefaultTradingScope,
-  getOpenPositionLines,
-  getPendingOrderLines,
+  getLiveOpenPositionLines,
+  getLivePendingOrderLines,
   getTodayTradeStatsIct,
 } from '../account-summary.service';
 import {
@@ -22,8 +22,8 @@ export async function buildDailyReportMessage(): Promise<string> {
   const [balance, todayStats, positions, pending, health, llm] = await Promise.all([
     getAccountBalanceSummary(symbol, methodId, true),
     getTodayTradeStatsIct(symbol, methodId),
-    getOpenPositionLines(symbol, methodId),
-    getPendingOrderLines(symbol, methodId),
+    getLiveOpenPositionLines(symbol, methodId),
+    getLivePendingOrderLines(symbol, methodId),
     getSystemHealthSnapshot(),
     getLlmStatsTodayIct(),
   ]);
