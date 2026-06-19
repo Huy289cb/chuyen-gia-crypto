@@ -92,6 +92,11 @@ main() {
   rm -rf dist
   npm run build
 
+  if [[ "${DEPLOY_SMOKE_CURSOR:-0}" == "1" ]]; then
+    log "Cursor smoke test (live API, ${CURSOR_SMOKE_ITERATIONS:-1} iteration(s))..."
+    CURSOR_SMOKE_ITERATIONS="${CURSOR_SMOKE_ITERATIONS:-1}" npm run smoke:cursor || die "Cursor smoke test failed"
+  fi
+
   log "PM2 start (re-read backend/.env; reload does not refresh env_file)..."
   if pm2 describe crypto-api >/dev/null 2>&1; then
     pm2 delete ecosystem.config.cjs || true

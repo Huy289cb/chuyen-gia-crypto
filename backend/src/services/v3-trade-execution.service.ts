@@ -6,10 +6,14 @@
 import type { GroqAnalysis } from './groq-client';
 import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
-import { resolveMaxTotalExposureUsd } from '../config/v3-entry-policy';
+import { isV3ScaleInEnabled } from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import { checkBinanceAccountTradable } from './binance-account-health.service';
-import { hasBinanceExposureForSide } from './binance-exposure.service';
+import {
+  assertScaleInSideAllowed,
+  getSymbolExposureSnapshot,
+  oppositeLocalSide,
+} from './v3-entry-eligibility.service';
 import {
   createTestnetPendingOrder,
   getActiveTestnetPositions,
@@ -123,17 +127,9 @@ export async function executeV3Trade(
 
   const balance = Number(account.current_balance ?? account.equity ?? 10000);
 
-  try {
-    const onExchange = await hasBinanceExposureForSide(symbol, side);
-    if (onExchange) {
-      return {
-        success: false,
-        reason: `Binance already has ${side} exposure for ${symbol} (scaling-in disabled)`,
-      };
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[V3TradeExecution] Binance exposure check failed: ${message}`);
+  const sideBlockReason = await assertScaleInSideAllowed(symbol, side);
+  if (sideBlockReason) {
+    return { success: false, reason: sideBlockReason };
   }
 
   const [openPositions, pendingOrders] = await Promise.all([
@@ -141,49 +137,78 @@ export async function executeV3Trade(
     getBlockingTestnetPendingOrders({ symbol, methodId }),
   ]);
 
-  const sameSideOpen = openPositions.filter(
-    (p) => String(p.side).toLowerCase() === side
-  );
-  if (sameSideOpen.length > 0) {
-    return {
-      success: false,
-      reason: `Same-side ${side} position already open (scaling-in disabled)`,
-    };
+  const scaleIn = isV3ScaleInEnabled();
+  const opposite = oppositeLocalSide(side);
+
+  if (scaleIn) {
+    const oppositeOpen = openPositions.filter(
+      (p) => String(p.side).toLowerCase() === opposite
+    );
+    if (oppositeOpen.length > 0) {
+      return {
+        success: false,
+        reason: `Opposite ${opposite} position open — cannot open ${side}`,
+      };
+    }
+
+    const oppositePending = pendingOrders.filter(
+      (o) => String(o.side).toLowerCase() === opposite
+    );
+    if (oppositePending.length > 0) {
+      return {
+        success: false,
+        reason: `Opposite ${opposite} pending order exists`,
+      };
+    }
+
+    const unresolved = pendingOrders.filter(
+      (o) => o.status === 'reconciliation_failed_not_on_binance'
+    );
+    if (unresolved.length > 0) {
+      const blocking = unresolved[0];
+      return {
+        success: false,
+        reason: `Unresolved ${side} pending order ${blocking.order_id} (reconcile pending — Binance state unknown)`,
+      };
+    }
+  } else {
+    const sameSideOpen = openPositions.filter(
+      (p) => String(p.side).toLowerCase() === side
+    );
+    if (sameSideOpen.length > 0) {
+      return {
+        success: false,
+        reason: `Same-side ${side} position already open (scaling-in disabled)`,
+      };
+    }
+
+    const sameSidePending = pendingOrders.filter(
+      (o) => String(o.side).toLowerCase() === side
+    );
+    if (sameSidePending.length > 0) {
+      const blocking = sameSidePending[0];
+      const status = String(blocking.status ?? 'pending');
+      return {
+        success: false,
+        reason:
+          status === 'reconciliation_failed_not_on_binance'
+            ? `Unresolved ${side} pending order ${blocking.order_id} (reconcile pending — Binance state unknown)`
+            : `Same-side ${side} pending order already exists`,
+      };
+    }
+
+    const maxPerSymbol = riskPolicy.maxPositionsPerSymbol;
+    if (openPositions.length >= maxPerSymbol || pendingOrders.length >= maxPerSymbol) {
+      return {
+        success: false,
+        reason: `Max positions/orders per symbol (${maxPerSymbol}) reached`,
+      };
+    }
   }
 
-  const sameSidePending = pendingOrders.filter(
-    (o) => String(o.side).toLowerCase() === side
-  );
-  if (sameSidePending.length > 0) {
-    const blocking = sameSidePending[0];
-    const status = String(blocking.status ?? 'pending');
-    return {
-      success: false,
-      reason:
-        status === 'reconciliation_failed_not_on_binance'
-          ? `Unresolved ${side} pending order ${blocking.order_id} (reconcile pending — Binance state unknown)`
-          : `Same-side ${side} pending order already exists`,
-    };
-  }
-
-  const maxPerSymbol = riskPolicy.maxPositionsPerSymbol;
-  if (openPositions.length >= maxPerSymbol || pendingOrders.length >= maxPerSymbol) {
-    return {
-      success: false,
-      reason: `Max positions/orders per symbol (${maxPerSymbol}) reached`,
-    };
-  }
-
-  const openVolume = openPositions.reduce(
-    (sum, p) => sum + Math.abs(Number(p.size_usd) || 0),
-    0
-  );
-  const pendingVolume = pendingOrders.reduce(
-    (sum, o) => sum + Math.abs(Number(o.size_usd) || 0),
-    0
-  );
-  const totalExposure = openVolume + pendingVolume;
-  const maxExposure = resolveMaxTotalExposureUsd(balance, riskPolicy.maxTotalExposureUsd);
+  const exposure = await getSymbolExposureSnapshot(symbol, methodId);
+  const totalExposure = exposure.totalUsd;
+  const maxExposure = exposure.maxExposureUsd;
 
   if (totalExposure >= maxExposure) {
     return {
@@ -192,7 +217,7 @@ export async function executeV3Trade(
     };
   }
 
-  const remainingCapacity = maxExposure - totalExposure;
+  const remainingCapacity = exposure.remainingUsd;
   const riskUsd = Math.max(1, balance * (riskPolicy.riskPerTradePercent / 100));
   const computedSizeUsd = riskUsd / slDistancePct;
   const sizeUsd = Math.min(computedSizeUsd, remainingCapacity);

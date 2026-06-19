@@ -1,5 +1,6 @@
 import { Agent, CursorAgentError } from '@cursor/sdk';
 import type { Run, RunResult } from '@cursor/sdk';
+import type { SDKMessage } from '@cursor/sdk';
 import { prisma } from '../../lib/prisma';
 import {
   canUseCursorChat,
@@ -113,6 +114,44 @@ function isStaleAgentError(err: unknown): boolean {
   return lower.includes('agent_not_found') || lower.includes('agent not found');
 }
 
+function isRetryableCursorError(err: unknown): boolean {
+  return err instanceof CursorAgentError && err.isRetryable;
+}
+
+function textFromSdkMessage(event: SDKMessage): string {
+  if (event.type === 'assistant') {
+    return event.message.content
+      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+      .map((b) => b.text)
+      .join('')
+      .trim();
+  }
+  if (event.type === 'tool_call' && event.status === 'error') {
+    const detail =
+      typeof event.result === 'string'
+        ? event.result
+        : event.result != null
+          ? JSON.stringify(event.result)
+          : '';
+    return `Tool ${event.name} failed: ${detail}`.trim();
+  }
+  return '';
+}
+
+async function collectStreamText(run: Run): Promise<string> {
+  if (!run.supports('stream')) return '';
+  const parts: string[] = [];
+  try {
+    for await (const event of run.stream()) {
+      const text = textFromSdkMessage(event);
+      if (text) parts.push(text);
+    }
+  } catch {
+    /* optional */
+  }
+  return parts.join('\n').trim();
+}
+
 async function extractRunErrorText(run: Run, result: RunResult): Promise<string> {
   if (result.result?.trim()) {
     return result.result.trim();
@@ -120,11 +159,15 @@ async function extractRunErrorText(run: Run, result: RunResult): Promise<string>
   if (run.result?.trim()) {
     return run.result.trim();
   }
+
+  const streamText = await collectStreamText(run);
+  if (streamText) return streamText;
+
   if (run.supports('conversation')) {
     try {
       const turns = await run.conversation();
       for (let i = turns.length - 1; i >= 0; i -= 1) {
-        const turn = turns[i] as { text?: string };
+        const turn = turns[i] as { text?: string; type?: string };
         const text = turn?.text?.trim();
         if (text) return text;
       }
@@ -132,7 +175,11 @@ async function extractRunErrorText(run: Run, result: RunResult): Promise<string>
       /* optional */
     }
   }
-  return `Cursor run failed (status=${result.status})`;
+
+  return (
+    `Cursor Cloud lỗi tạm thời (status=${result.status}, run=${result.id}). ` +
+    'Thử lại: /cursor new rồi hỏi lại, hoặc đợi 1–2 phút.'
+  );
 }
 
 async function acquireAgent(
@@ -212,8 +259,14 @@ async function runCursorChat(
     if (result.status === 'error' || result.status === 'cancelled') {
       const errText = (await extractRunErrorText(run, result)).slice(0, 500);
       console.error(
-        `[CursorChat] chat=${chatId} run failed status=${result.status} id=${result.id} durationMs=${result.durationMs ?? 'n/a'}`
+        `[CursorChat] chat=${chatId} run failed status=${result.status} id=${result.id} durationMs=${result.durationMs ?? 'n/a'} err=${errText.slice(0, 200)}`
       );
+      if (!isRetry && result.status === 'error') {
+        await clearCursorSession(chatId);
+        console.warn(`[CursorChat] chat=${chatId} retrying after cloud run error`);
+        await runCursorChat(chatId, userId, question, true, true);
+        return;
+      }
       enqueueTelegramMessage(`❌ Cursor lỗi:\n${escapeHtml(errText)}`, chatId);
       return;
     }
@@ -223,9 +276,14 @@ async function runCursorChat(
     const answer = (result.result ?? '').trim() || '(Không có nội dung trả lời)';
     sendCursorReply(chatId, answer);
   } catch (err: unknown) {
-    if (!isRetry && isStaleAgentError(err)) {
+    if (
+      !isRetry &&
+      (isStaleAgentError(err) || isRetryableCursorError(err))
+    ) {
       await clearCursorSession(chatId);
-      console.warn(`[CursorChat] chat=${chatId} stale agent, retrying with new session`);
+      console.warn(
+        `[CursorChat] chat=${chatId} retrying after ${isStaleAgentError(err) ? 'stale agent' : 'retryable startup error'}`
+      );
       await runCursorChat(chatId, userId, question, true, true);
       return;
     }

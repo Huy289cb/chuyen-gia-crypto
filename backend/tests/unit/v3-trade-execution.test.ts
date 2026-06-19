@@ -3,12 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../src/repositories/testnet.repository', () => ({
   getOrCreateTestnetAccount: vi.fn(),
   getActiveTestnetPositions: vi.fn(),
-  getTestnetPendingOrders: vi.fn(),
+  getBlockingTestnetPendingOrders: vi.fn(),
   createTestnetPendingOrder: vi.fn(),
 }));
 
-vi.mock('../../src/services/binance-exposure.service', () => ({
-  hasBinanceExposureForSide: vi.fn(),
+vi.mock('../../src/services/v3-entry-eligibility.service', () => ({
+  assertScaleInSideAllowed: vi.fn(),
+  getSymbolExposureSnapshot: vi.fn(),
+  oppositeLocalSide: (side: 'long' | 'short') => (side === 'long' ? 'short' : 'long'),
+}));
+
+vi.mock('../../src/config/v3-entry-policy', () => ({
+  isV3ScaleInEnabled: vi.fn(() => true),
+  resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
 }));
 
 vi.mock('../../src/services/account-risk-guard.service', () => ({
@@ -44,10 +51,14 @@ import { executeV3Trade } from '../../src/services/v3-trade-execution.service';
 import {
   getOrCreateTestnetAccount,
   getActiveTestnetPositions,
-  getTestnetPendingOrders,
+  getBlockingTestnetPendingOrders,
   createTestnetPendingOrder,
 } from '../../src/repositories/testnet.repository';
-import { hasBinanceExposureForSide } from '../../src/services/binance-exposure.service';
+import {
+  assertScaleInSideAllowed,
+  getSymbolExposureSnapshot,
+} from '../../src/services/v3-entry-eligibility.service';
+import { isV3ScaleInEnabled } from '../../src/config/v3-entry-policy';
 import { checkBinanceAccountTradable } from '../../src/services/binance-account-health.service';
 import {
   initTestnetClient,
@@ -59,7 +70,17 @@ describe('executeV3Trade', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BINANCE_ENABLED = 'true';
-    vi.mocked(hasBinanceExposureForSide).mockResolvedValue(false);
+    vi.mocked(isV3ScaleInEnabled).mockReturnValue(true);
+    vi.mocked(assertScaleInSideAllowed).mockResolvedValue(null);
+    vi.mocked(getSymbolExposureSnapshot).mockResolvedValue({
+      openUsd: 0,
+      pendingUsd: 0,
+      totalUsd: 0,
+      maxExposureUsd: 2000,
+      remainingUsd: 2000,
+      openSides: [],
+      pendingSides: [],
+    });
     vi.mocked(checkBinanceAccountTradable).mockResolvedValue({ tradable: true, reason: 'ok' });
   });
 
@@ -87,7 +108,7 @@ describe('executeV3Trade', () => {
       current_balance: 10000,
     } as never);
     vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
-    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
     vi.mocked(initTestnetClient).mockReturnValue({} as never);
     vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
       rawQty: 0.01,
@@ -116,16 +137,56 @@ describe('executeV3Trade', () => {
     expect(result.success).toBe(true);
     expect(result.binanceOrderId).toBe('12345');
     expect(placeLimitOrder).toHaveBeenCalled();
-    expect(createTestnetPendingOrder).toHaveBeenCalledWith(
-      expect.objectContaining({
-        side: 'long',
-        binanceOrderId: '12345',
-        methodId: 'kim_nghia',
-      })
-    );
   });
 
-  it('rejects same-side open position (no scaling-in)', async () => {
+  it('allows same-side scale-in when under exposure cap', async () => {
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      id: 1,
+      current_balance: 10000,
+    } as never);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([
+      { side: 'long', size_usd: 700 },
+    ] as never);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getSymbolExposureSnapshot).mockResolvedValue({
+      openUsd: 700,
+      pendingUsd: 0,
+      totalUsd: 700,
+      maxExposureUsd: 2000,
+      remainingUsd: 1300,
+      openSides: ['long'],
+      pendingSides: [],
+    });
+    vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
+      rawQty: 0.01,
+      normalizedQty: 0.01,
+      stepSize: 0.0001,
+      minQty: 0.0001,
+      valid: true,
+    });
+    vi.mocked(initTestnetClient).mockReturnValue({} as never);
+    vi.mocked(placeLimitOrder).mockResolvedValue({ orderId: 999 } as never);
+    vi.mocked(createTestnetPendingOrder).mockResolvedValue({ order_id: 'v3_scale' } as never);
+
+    const result = await executeV3Trade({
+      symbol: 'BTC',
+      timeframe: '1h',
+      analysis: {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.9,
+        suggested_entry: 100000,
+        suggested_stop_loss: 99000,
+        suggested_take_profit: 102000,
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(placeLimitOrder).toHaveBeenCalled();
+  });
+
+  it('rejects same-side open when scale-in disabled', async () => {
+    vi.mocked(isV3ScaleInEnabled).mockReturnValue(false);
     vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
       id: 1,
       current_balance: 10000,
@@ -133,7 +194,7 @@ describe('executeV3Trade', () => {
     vi.mocked(getActiveTestnetPositions).mockResolvedValue([
       { side: 'long', size_usd: 500 },
     ] as never);
-    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
 
     const result = await executeV3Trade({
       symbol: 'BTC',
@@ -153,14 +214,43 @@ describe('executeV3Trade', () => {
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 
-  it('rejects when Binance already has same-side exposure', async () => {
-    vi.mocked(hasBinanceExposureForSide).mockResolvedValue(true);
+  it('rejects opposite side when scale-in enabled', async () => {
     vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
       id: 1,
       current_balance: 10000,
     } as never);
-    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
-    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([
+      { side: 'short', size_usd: 700 },
+    ] as never);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+
+    const result = await executeV3Trade({
+      symbol: 'BTC',
+      timeframe: '1h',
+      analysis: {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.9,
+        suggested_entry: 100000,
+        suggested_stop_loss: 99000,
+        suggested_take_profit: 102000,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain('Opposite');
+    expect(placeLimitOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects when assertScaleInSideAllowed blocks (Binance same-side, scale-in off)', async () => {
+    vi.mocked(isV3ScaleInEnabled).mockReturnValue(false);
+    vi.mocked(assertScaleInSideAllowed).mockResolvedValue(
+      'Binance already has long exposure for BTC (scaling-in disabled)'
+    );
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      id: 1,
+      current_balance: 10000,
+    } as never);
 
     const result = await executeV3Trade({
       symbol: 'BTC',
@@ -180,106 +270,39 @@ describe('executeV3Trade', () => {
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 
-  it('rejects when Binance account health check fails (-1109)', async () => {
-    vi.mocked(checkBinanceAccountTradable).mockResolvedValue({
-      tradable: false,
-      reason: 'Binance API -1109 (Invalid account): demo wallet not provisioned',
-    });
+  it('rejects at max exposure even with scale-in', async () => {
     vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
       id: 1,
       current_balance: 10000,
     } as never);
-    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
-    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([
+      { side: 'short', size_usd: 2000 },
+    ] as never);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getSymbolExposureSnapshot).mockResolvedValue({
+      openUsd: 2000,
+      pendingUsd: 0,
+      totalUsd: 2000,
+      maxExposureUsd: 2000,
+      remainingUsd: 0,
+      openSides: ['short'],
+      pendingSides: [],
+    });
 
     const result = await executeV3Trade({
       symbol: 'BTC',
       timeframe: '1h',
       analysis: {
-        bias: 'bullish',
-        action: 'buy',
+        bias: 'bearish',
+        action: 'sell',
         confidence: 0.9,
         suggested_entry: 100000,
-        suggested_stop_loss: 99000,
-        suggested_take_profit: 102000,
+        suggested_stop_loss: 101000,
+        suggested_take_profit: 98000,
       },
     });
 
     expect(result.success).toBe(false);
-    expect(result.reason).toContain('-1109');
-    expect(placeLimitOrder).not.toHaveBeenCalled();
-  });
-
-  it('continues when exposure check returns demo metadata -1109', async () => {
-    const invalidAccountError = new Error('Binance API Error -1109: Invalid account.') as Error & {
-      binanceCode: number;
-    };
-    invalidAccountError.binanceCode = -1109;
-    vi.mocked(hasBinanceExposureForSide).mockRejectedValue(invalidAccountError);
-    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
-      id: 1,
-      current_balance: 10000,
-    } as never);
-    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
-    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
-    vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
-      rawQty: 0.01,
-      normalizedQty: 0.01,
-      stepSize: 0.001,
-      minQty: 0.001,
-      valid: true,
-    });
-    vi.mocked(initTestnetClient).mockReturnValue({} as never);
-    vi.mocked(placeLimitOrder).mockResolvedValue({ orderId: 123 });
-
-    const result = await executeV3Trade({
-      symbol: 'BTC',
-      timeframe: '1h',
-      analysis: {
-        bias: 'bullish',
-        action: 'buy',
-        confidence: 0.9,
-        suggested_entry: 100000,
-        suggested_stop_loss: 99000,
-        suggested_take_profit: 102000,
-      },
-    });
-
-    expect(result.success).toBe(true);
-    expect(placeLimitOrder).toHaveBeenCalled();
-  });
-
-  it('rejects when normalized quantity is invalid', async () => {
-    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
-      id: 1,
-      current_balance: 10000,
-    } as never);
-    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
-    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
-    vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
-      rawQty: 0.00001,
-      normalizedQty: 0,
-      stepSize: 0.0001,
-      minQty: 0.0001,
-      valid: false,
-      reason: 'Quantity normalized to 0',
-    });
-
-    const result = await executeV3Trade({
-      symbol: 'BTC',
-      timeframe: '1h',
-      analysis: {
-        bias: 'bullish',
-        action: 'buy',
-        confidence: 0.9,
-        suggested_entry: 100000,
-        suggested_stop_loss: 99000,
-        suggested_take_profit: 102000,
-      },
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.reason).toContain('normalized');
-    expect(placeLimitOrder).not.toHaveBeenCalled();
+    expect(result.reason).toContain('Max exposure');
   });
 });

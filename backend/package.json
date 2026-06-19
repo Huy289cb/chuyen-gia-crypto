@@ -22,6 +22,7 @@
     "v3:backfill-ohlcv": "tsx scripts/v3-backfill-ohlcv.ts",
     "test": "vitest",
     "test:run": "vitest run",
+    "smoke:cursor": "tsx scripts/smoke-cursor-chat.ts",
     "test:coverage": "vitest run --coverage",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

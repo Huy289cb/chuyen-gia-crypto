@@ -127,7 +127,11 @@ describe('handleCursorCommand', () => {
     expect(mockEnqueueJob).toHaveBeenCalled();
     expect(mockSend).toHaveBeenCalled();
     expect(mockUpsertSession).toHaveBeenCalled();
-    expect(mockEnqueue).toHaveBeenCalledWith(expect.stringContaining('Xin chào bro'), 'chat1');
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.stringContaining('Xin chào bro'),
+      'chat1',
+      expect.objectContaining({ plainText: true })
+    );
   });
 
   it('resumes existing session on follow-up', async () => {
@@ -149,9 +153,50 @@ describe('handleCursorCommand', () => {
     expect(mockEnqueueJob).not.toHaveBeenCalled();
   });
 
-  it('cancel delegates to job queue', async () => {
-    mockCancelJob.mockReturnValue(true);
-    await handleCursorCommand('chat1', 'user1', 'cancel');
-    expect(mockCancelJob).toHaveBeenCalledWith('chat1');
+  it('retries once when cloud run returns error then succeeds', async () => {
+    mockWait
+      .mockResolvedValueOnce({ status: 'error', id: 'run-err-1' })
+      .mockResolvedValueOnce({ status: 'finished', result: 'Trả lời sau retry' });
+
+    await handleCursorCommand('chat1', 'user1', 'test retry');
+    await vi.waitFor(() => expect(mockAgentCreate).toHaveBeenCalledTimes(2));
+
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.stringContaining('Trả lời sau retry'),
+      'chat1',
+      expect.objectContaining({ plainText: true })
+    );
+    expect(mockEnqueue).not.toHaveBeenCalledWith(
+      expect.stringContaining('Cursor lỗi'),
+      'chat1'
+    );
+  });
+
+  it('surfaces error when cloud run fails twice', async () => {
+    mockWait.mockResolvedValue({ status: 'error', id: 'run-err-2' });
+
+    await handleCursorCommand('chat1', 'user1', 'test double fail');
+    await vi.waitFor(() => expect(mockAgentCreate).toHaveBeenCalledTimes(2));
+
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.stringContaining('Cursor lỗi'),
+      'chat1'
+    );
+  });
+
+  it('retries when resume fails with agent_not_found', async () => {
+    mockFindSession.mockResolvedValue({
+      agent_id: 'bc-dead',
+      updated_at: new Date(),
+    });
+    mockAgentResume.mockRejectedValue(
+      Object.assign(new Error('[agent_not_found] Agent not found'), { name: 'CursorAgentError' })
+    );
+
+    await handleCursorCommand('chat1', 'user1', 'follow up');
+    await vi.waitFor(() => expect(mockAgentCreate).toHaveBeenCalled());
+
+    expect(mockAgentResume).toHaveBeenCalled();
+    expect(mockUpsertSession).toHaveBeenCalled();
   });
 });

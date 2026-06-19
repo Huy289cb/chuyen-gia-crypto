@@ -22,6 +22,8 @@ import { compareSignalGateForEntry } from '../utils/signal-gate-ranking';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
 import { runPendingOrderLifecycle } from '../services/pending-order-lifecycle.service';
 import { runPendingOrderReview } from '../services/pending-order-review.service';
+import { canRunLlmDispatchForSymbol } from '../services/v3-entry-eligibility.service';
+import { isV3ScaleInEnabled } from '../config/v3-entry-policy';
 
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -111,23 +113,15 @@ async function runLLMDispatch() {
         }
       }
 
-      if (openPositions.length > 0) {
-        console.log(
-          `[LLMDispatch] ${symbol}: skip new trade — open=${openPositions.length}`
-        );
+      const eligibility = await canRunLlmDispatchForSymbol(symbol);
+      if (!eligibility.allowed) {
+        console.log(`[LLMDispatch] ${symbol}: skip new trade — ${eligibility.reason}`);
         continue;
       }
-
-      const blockingAfterReview = await getBlockingTestnetPendingOrders({ symbol });
-      if (blockingAfterReview.length > 0) {
-        const unresolved = blockingAfterReview.filter(
-          (o) => o.status === 'reconciliation_failed_not_on_binance'
-        ).length;
+      if (openPositions.length > 0 && isV3ScaleInEnabled()) {
         console.log(
-          `[LLMDispatch] ${symbol}: skip new trade — blocking pending=${blockingAfterReview.length}` +
-            (unresolved > 0 ? ` (${unresolved} unresolved reconcile)` : '')
+          `[LLMDispatch] ${symbol}: scale-in allowed — ${eligibility.reason} open=${openPositions.length}`
         );
-        continue;
       }
 
       const picked = pickBestScanResult(symbol);
