@@ -15,7 +15,13 @@ vi.mock('../../src/services/v3-entry-eligibility.service', () => ({
 
 vi.mock('../../src/config/v3-entry-policy', () => ({
   isV3ScaleInEnabled: vi.fn(() => true),
+  isV3OppositeFlipEnabled: vi.fn(() => false),
+  getBinanceMinOrderNotionalUsd: vi.fn(() => 50),
   resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
+}));
+
+vi.mock('../../src/services/opposite-flip.service', () => ({
+  tryOppositeFlipBeforeEntry: vi.fn().mockResolvedValue({ flipped: false, reason: 'no opposite exposure' }),
 }));
 
 vi.mock('../../src/services/account-risk-guard.service', () => ({
@@ -304,5 +310,42 @@ describe('executeV3Trade', () => {
 
     expect(result.success).toBe(false);
     expect(result.reason).toContain('Max exposure');
+  });
+
+  it('rejects scale-in when headroom below Binance min notional', async () => {
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      id: 1,
+      current_balance: 5000,
+    } as never);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([
+      { side: 'long', size_usd: 736 },
+    ] as never);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getSymbolExposureSnapshot).mockResolvedValue({
+      openUsd: 736,
+      pendingUsd: 0,
+      totalUsd: 736,
+      maxExposureUsd: 750,
+      remainingUsd: 14,
+      openSides: ['long'],
+      pendingSides: [],
+    });
+
+    const result = await executeV3Trade({
+      symbol: 'BTC',
+      timeframe: '1h',
+      analysis: {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.9,
+        suggested_entry: 64500,
+        suggested_stop_loss: 63950,
+        suggested_take_profit: 65700,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain('below Binance min order');
+    expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 });

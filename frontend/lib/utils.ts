@@ -48,7 +48,8 @@ export function formatCloseReason(reason: string | null | undefined): string {
     reconciliation_closed_not_on_binance: 'Dọn sổ bot',
     stale_ghost_open: 'Dọn sổ bot',
     reconciliation_fill: 'Dọn sổ bot',
-    reconciliation_sync_closed_on_binance: 'Dọn sổ bot',
+    llm_opposite_flip: 'Đảo chiều (LLM)',
+    binance_fills: 'Đóng trên Binance',
   };
   if (labels[reason]) return labels[reason];
   if (reason.startsWith('merged_into_')) return 'Gộp trùng';

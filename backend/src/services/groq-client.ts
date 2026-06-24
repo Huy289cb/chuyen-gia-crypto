@@ -3,8 +3,9 @@
  * Handles API calls with retry logic and error handling
  */
 
+import { getGroqModelChain } from '../config/groq-models';
+
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'openai/gpt-oss-120b'];
 
 export interface GroqAnalysisRequest {
   systemPrompt: string;
@@ -236,7 +237,7 @@ class GroqClient {
       console.log(`[GroqClient] Using API key ${currentKeyIndex + 1}/${totalApiKeys} (tried ${keysTried.size}/${totalApiKeys} keys)`);
 
       const modelsToTry =
-        preferredModels && preferredModels.length > 0 ? preferredModels : MODELS;
+        preferredModels && preferredModels.length > 0 ? preferredModels : getGroqModelChain();
 
       // Inner loop: Try each model with current API key
       for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
@@ -314,7 +315,8 @@ class GroqClient {
       }
 
       // All models failed with current key, switch to next key
-      console.log(`[GroqClient] All ${MODELS.length} models failed with API key ${currentKeyIndex + 1}/${totalApiKeys}, switching to next key...`);
+      const chain = getGroqModelChain();
+      console.log(`[GroqClient] All ${chain.length} models failed with API key ${currentKeyIndex + 1}/${totalApiKeys}, switching to next key...`);
       this.switchToNextApiKey();
     }
 
@@ -358,7 +360,7 @@ class GroqClient {
       );
 
       const modelsToTry =
-        preferredModels && preferredModels.length > 0 ? preferredModels : MODELS;
+        preferredModels && preferredModels.length > 0 ? preferredModels : getGroqModelChain();
 
       for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
         const currentModel = modelsToTry[modelIndex];

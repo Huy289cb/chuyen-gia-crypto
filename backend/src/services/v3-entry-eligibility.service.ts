@@ -3,7 +3,7 @@
  */
 
 import { getRiskPolicy } from '../config/risk-policy';
-import { isV3ScaleInEnabled, resolveMaxTotalExposureUsd } from '../config/v3-entry-policy';
+import { isV3ScaleInEnabled, resolveMaxTotalExposureUsd, getBinanceMinOrderNotionalUsd } from '../config/v3-entry-policy';
 import { hasBinanceExposureForSide } from './binance-exposure.service';
 import {
   getActiveTestnetPositions,
@@ -128,6 +128,14 @@ export async function canRunLlmDispatchForSymbol(
     return {
       allowed: false,
       reason: `no remaining exposure room (${exposure.totalUsd.toFixed(0)}/${exposure.maxExposureUsd.toFixed(0)} USD)`,
+    };
+  }
+
+  const minNotional = getBinanceMinOrderNotionalUsd();
+  if (exposure.openUsd > 0 && exposure.remainingUsd < minNotional) {
+    return {
+      allowed: false,
+      reason: `scale-in headroom $${exposure.remainingUsd.toFixed(0)} below Binance min order $${minNotional}`,
     };
   }
 

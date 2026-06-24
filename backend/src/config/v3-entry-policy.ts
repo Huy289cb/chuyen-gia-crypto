@@ -84,6 +84,22 @@ export function isV3ScaleInEnabled(): boolean {
   return process.env.V3_SCALE_IN_ENABLED !== 'false';
 }
 
+/** Evaluate Groq flip when new entry opposes open Binance exposure (default: enabled). */
+export function isV3OppositeFlipEnabled(): boolean {
+  return process.env.V3_OPPOSITE_FLIP_ENABLED !== 'false';
+}
+
+export function getV3OppositeFlipMinConfidence(): number {
+  const v = parseFloat(process.env.V3_OPPOSITE_FLIP_MIN_CONFIDENCE || '0.85');
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.85;
+}
+
+/** Binance futures min order notional (error -4164). */
+export function getBinanceMinOrderNotionalUsd(): number {
+  const v = parseFloat(process.env.BINANCE_MIN_ORDER_NOTIONAL_USD || '50');
+  return Number.isFinite(v) && v > 0 ? v : 50;
+}
+
 /** When set (e.g. `1h`), LTF pass must align with HTF trend regime before trade. */
 export function getV3RequireHtfTrend(): string | null {
   const raw = process.env.V3_REQUIRE_HTF_TREND?.trim();

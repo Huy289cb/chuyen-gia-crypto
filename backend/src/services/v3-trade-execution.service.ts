@@ -6,9 +6,10 @@
 import type { GroqAnalysis } from './groq-client';
 import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
-import { isV3ScaleInEnabled } from '../config/v3-entry-policy';
+import { isV3OppositeFlipEnabled, isV3ScaleInEnabled, getBinanceMinOrderNotionalUsd } from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import { checkBinanceAccountTradable } from './binance-account-health.service';
+import { tryOppositeFlipBeforeEntry } from './opposite-flip.service';
 import {
   assertScaleInSideAllowed,
   getSymbolExposureSnapshot,
@@ -127,6 +128,19 @@ export async function executeV3Trade(
 
   const balance = Number(account.current_balance ?? account.equity ?? 10000);
 
+  if (isV3OppositeFlipEnabled()) {
+    const flip = await tryOppositeFlipBeforeEntry({
+      symbol,
+      methodId,
+      newSide: side,
+      analysis,
+      timeframe,
+    });
+    if (flip.reason !== 'no opposite exposure' && !flip.flipped) {
+      return { success: false, reason: flip.reason };
+    }
+  }
+
   const sideBlockReason = await assertScaleInSideAllowed(symbol, side);
   if (sideBlockReason) {
     return { success: false, reason: sideBlockReason };
@@ -144,7 +158,7 @@ export async function executeV3Trade(
     const oppositeOpen = openPositions.filter(
       (p) => String(p.side).toLowerCase() === opposite
     );
-    if (oppositeOpen.length > 0) {
+    if (oppositeOpen.length > 0 && !isV3OppositeFlipEnabled()) {
       return {
         success: false,
         reason: `Opposite ${opposite} position open — cannot open ${side}`,
@@ -218,11 +232,19 @@ export async function executeV3Trade(
   }
 
   const remainingCapacity = exposure.remainingUsd;
+  const minNotional = getBinanceMinOrderNotionalUsd();
   const riskUsd = Math.max(1, balance * (riskPolicy.riskPerTradePercent / 100));
   const computedSizeUsd = riskUsd / slDistancePct;
   const sizeUsd = Math.min(computedSizeUsd, remainingCapacity);
   if (sizeUsd <= 0) {
     return { success: false, reason: 'Computed position size <= 0' };
+  }
+  if (sizeUsd < minNotional) {
+    const headroomMsg =
+      exposure.openUsd > 0
+        ? `Scale-in headroom $${remainingCapacity.toFixed(0)} below Binance min order $${minNotional}`
+        : `Order notional $${sizeUsd.toFixed(0)} below Binance minimum $${minNotional}`;
+    return { success: false, reason: headroomMsg };
   }
 
   const sizeQty = sizeUsd / entry;
@@ -238,6 +260,13 @@ export async function executeV3Trade(
   const normalizedSizeQty = qtyCheck.normalizedQty;
   if (normalizedSizeQty <= 0) {
     return { success: false, reason: 'Normalized quantity is zero — order blocked' };
+  }
+  const orderNotional = normalizedSizeQty * entry;
+  if (orderNotional < minNotional) {
+    return {
+      success: false,
+      reason: `Order notional $${orderNotional.toFixed(0)} below Binance minimum $${minNotional} after qty normalization`,
+    };
   }
 
   const expectedRr =

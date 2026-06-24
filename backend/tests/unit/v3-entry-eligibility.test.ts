@@ -9,6 +9,7 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
 vi.mock('../../src/config/v3-entry-policy', () => ({
   isV3ScaleInEnabled: vi.fn(() => true),
   resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
+  getBinanceMinOrderNotionalUsd: vi.fn(() => 50),
 }));
 
 import {
@@ -19,7 +20,7 @@ import {
   getActiveTestnetPositions,
   getBlockingTestnetPendingOrders,
 } from '../../src/repositories/testnet.repository';
-import { isV3ScaleInEnabled } from '../../src/config/v3-entry-policy';
+import { isV3ScaleInEnabled, resolveMaxTotalExposureUsd } from '../../src/config/v3-entry-policy';
 
 describe('canRunLlmDispatchForSymbol', () => {
   beforeEach(() => {
@@ -74,5 +75,20 @@ describe('canRunLlmDispatchForSymbol', () => {
     const result = await canRunLlmDispatchForSymbol('BTC');
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('mixed long+short');
+  });
+
+  it('blocks scale-in when headroom below Binance min notional', async () => {
+    vi.mocked(resolveMaxTotalExposureUsd).mockReturnValue(750);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([
+      { side: 'long', size_usd: 736 },
+    ] as never);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      current_balance: 5000,
+    } as never);
+
+    const result = await canRunLlmDispatchForSymbol('BTC');
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('below Binance min order');
   });
 });

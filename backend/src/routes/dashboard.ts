@@ -9,6 +9,7 @@ import {
 } from '../lib/read-cache';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 import { isInternalCloseReason } from '../utils/bookkeeping-close';
+import { fetchBinanceClosedTradeRounds } from '../services/binance-trade-history.service';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { METHODS } from '../config/methods';
@@ -31,6 +32,7 @@ import {
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import { calculatePnlPercent } from '../services/position-mark';
 import { getAccountBalanceSummary, getLiveOpenPositionLines, getLivePendingOrderLines } from '../services/account-summary.service';
+import { getGroqPrimaryModel } from '../config/groq-models';
 import { isTelegramAiEnabled } from '../config/telegram-ai';
 import { runTelegramAiQuery } from '../services/telegram/telegram-ai.service';
 import type { AiContextScope } from '../services/telegram/ai-context.builder';
@@ -777,10 +779,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
       select: { raw_answer: true },
     });
 
-    const modelName =
-      process.env.GROQ_MODEL_PRIMARY ||
-      process.env.GROQ_MODEL ||
-      'meta-llama/llama-4-scout-17b-16e-instruct';
+    const modelName = getGroqPrimaryModel();
     const promptVersion = process.env.PROMPT_VERSION || 'v3';
 
     let responseStatus = 'none';
@@ -1223,6 +1222,19 @@ router.get('/orders', async (req: Request, res: Response) => {
 router.get('/trades', async (req: Request, res: Response) => {
   try {
     const { limit = 20, symbol, method } = req.query;
+    const take = parseInt(limit as string, 10);
+    const sym = symbol ? String(symbol).toUpperCase() : undefined;
+
+    if (process.env.BINANCE_ENABLED === 'true' && sym) {
+      try {
+        const rounds = await fetchBinanceClosedTradeRounds(sym, take);
+        res.json({ ok: true, data: rounds });
+        return;
+      } catch (binanceErr: unknown) {
+        const msg = binanceErr instanceof Error ? binanceErr.message : String(binanceErr);
+        console.warn(`[Dashboard] Binance trades for ${sym} failed, using DB: ${msg}`);
+      }
+    }
 
     const positions = await prisma.testnetPosition.findMany({
       where: {
@@ -1239,7 +1251,7 @@ router.get('/trades', async (req: Request, res: Response) => {
           : {}),
       },
       orderBy: { close_time: 'desc' },
-      take: parseInt(limit as string, 10),
+      take,
     });
 
     const formattedTrades = positions

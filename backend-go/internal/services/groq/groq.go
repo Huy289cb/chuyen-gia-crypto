@@ -28,11 +28,11 @@ const (
 
 var (
 	models = []string{
-		"meta-llama/llama-4-scout-17b-16e-instruct",
+		"openai/gpt-oss-120b",
 		"llama-3.3-70b-versatile",
 		"llama-3.1-8b-instant",
+		"qwen/qwen3.6-27b",
 		"qwen/qwen3-32b",
-		"openai/gpt-oss-120b",
 	}
 	lastCallTime time.Time
 	callMutex    sync.Mutex

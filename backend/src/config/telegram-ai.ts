@@ -1,4 +1,5 @@
 import { telegramConfig } from './telegram';
+import { getGroqTelegramAiModel } from './groq-models';
 
 function isProductionEnv(): boolean {
   return process.env.NODE_ENV === 'production';
@@ -39,7 +40,7 @@ function parseIntEnv(value: string | undefined, fallback: number): number {
 
 export const telegramAiConfig: TelegramAiConfig = {
   enabled: process.env.TELEGRAM_AI_ENABLED === 'true',
-  model: process.env.TELEGRAM_AI_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct',
+  model: getGroqTelegramAiModel(),
   maxTokens: parseIntEnv(process.env.TELEGRAM_AI_MAX_TOKENS, 2048),
   rateLimitPerUserHour: parseIntEnv(process.env.TELEGRAM_AI_RATE_LIMIT_PER_USER_HOUR, 5),
   rateLimitPerChatDay: parseIntEnv(process.env.TELEGRAM_AI_RATE_LIMIT_PER_CHAT_DAY, 30),

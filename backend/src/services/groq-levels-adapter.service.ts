@@ -16,8 +16,7 @@ import {
 } from '../utils/trade-levels';
 import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
-
-const DEFAULT_ADAPTER_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+import { getGroqLevelsAdapterModel } from '../config/groq-models';
 
 export function isGroqLevelsAdapterConfigured(): boolean {
   return (
@@ -26,11 +25,7 @@ export function isGroqLevelsAdapterConfigured(): boolean {
 }
 
 function adapterModelId(): string {
-  return (
-    process.env.GROQ_MODEL_LEVELS_ADAPTER?.trim() ||
-    process.env.GROQ_MODEL_PRIMARY?.trim() ||
-    DEFAULT_ADAPTER_MODEL
-  );
+  return getGroqLevelsAdapterModel();
 }
 
 function validateAndMergeRepairedLevels(input: {
