@@ -116,7 +116,7 @@ export async function executeV3Trade(
 
   const account = await getOrCreateTestnetAccount(symbol, methodId, 10000);
 
-  const accountGuard = await assertTestnetAccountCanOpenTrade(account.id);
+  const accountGuard = await assertTestnetAccountCanOpenTrade(account.id, symbol);
   if (!accountGuard.allowed) {
     return { success: false, reason: accountGuard.reason };
   }

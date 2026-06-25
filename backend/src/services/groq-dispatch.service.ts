@@ -291,7 +291,7 @@ export class GroqDispatchService {
     if (this.config.enableRiskCheck && analysis.action !== 'hold') {
       const account = await getOrCreateTestnetAccount(symbol, method_id, 10000);
 
-      const accountGuard = await assertTestnetAccountCanOpenTrade(account.id);
+      const accountGuard = await assertTestnetAccountCanOpenTrade(account.id, symbol);
       if (!accountGuard.allowed) {
         if (this.config.enableMemory) {
           await memoryService.storeDecision({
