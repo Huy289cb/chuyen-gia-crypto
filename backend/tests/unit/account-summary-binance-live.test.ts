@@ -31,6 +31,8 @@ describe('account-summary Binance live', () => {
         positionAmt: 0.0112,
         entryPrice: 66638,
         markPrice: 65750,
+        unRealizedProfit: 9.87,
+        notional: -736.4,
         rawPositionSide: 'BOTH',
       },
     ]);
@@ -39,7 +41,8 @@ describe('account-summary Binance live', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0].side).toBe('short');
     expect(lines[0].sizeQty).toBe(0.0112);
-    expect(lines[0].unrealizedPnl).toBeGreaterThan(0);
+    expect(lines[0].sizeUsd).toBeCloseTo(736.4, 0);
+    expect(lines[0].unrealizedPnl).toBeCloseTo(9.87, 2);
     expect(fetchActiveBinancePositions).toHaveBeenCalledWith('BTC', {
       allowUserTradesFallback: false,
     });

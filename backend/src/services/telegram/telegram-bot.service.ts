@@ -16,6 +16,7 @@ import {
   getDefaultTradingScope,
   getLiveOpenPositionLines,
   getLivePendingOrderLines,
+  getTodayTradeStatsIct,
 } from '../account-summary.service';
 import {
   getSystemHealthSnapshot,
@@ -24,7 +25,7 @@ import {
   formatRelativeAgo,
 } from '../system-health.service';
 import { prisma } from '../../lib/prisma';
-import { fmtUsd, escapeHtml, formatShowSummary, formatPipelineSummary, formatStatusSummary } from './message-formatters';
+import { fmtUsd, escapeHtml, formatShowSummary, formatPipelineSummary, formatStatusSummary, formatOpenPositionForLenh } from './message-formatters';
 import {
   isTelegramRealtimeMuted,
   setTelegramRealtimeMuted,
@@ -85,7 +86,7 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
       return;
 
     case '/pnl': {
-      const b = await getAccountBalanceSummary(symbol, methodId, true);
+      const b = await getAccountBalanceSummary(symbol, methodId, true, true);
       const gapNote = b.dbPositionPnlTrusted
         ? ''
         : `\n⚠️ DB positions ${fmtUsd(b.dbPositionPnlSum)} (gap ${fmtUsd(b.dbPositionPnlGap)})`;
@@ -107,10 +108,7 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
       const lines = ['<b>Đang mở (Binance)</b>'];
       if (positions.length === 0) lines.push('(không có)');
       for (const p of positions) {
-        const sideLabel = p.side === 'long' ? 'LONG' : 'SHORT';
-        lines.push(
-          `• ${escapeHtml(p.symbol)} ${sideLabel} ${p.sizeQty.toFixed(4)} | ${p.entry.toFixed(0)} → ${p.mark.toFixed(0)} | ${fmtUsd(p.unrealizedPnl)}`
-        );
+        lines.push(formatOpenPositionForLenh(p));
       }
       lines.push('', '<b>Lệnh chờ (Binance)</b>');
       if (pending.length === 0) lines.push('(không có)');
@@ -166,12 +164,15 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
     }
 
     case '/show': {
-      const [b, health, positions, pending] = await Promise.all([
-        getAccountBalanceSummary(symbol, methodId, true),
+      const [b, health, positions, pending, todayStats] = await Promise.all([
+        getAccountBalanceSummary(symbol, methodId, true, true),
         getSystemHealthSnapshot(),
         getLiveOpenPositionLines(symbol, methodId),
         getLivePendingOrderLines(symbol, methodId),
+        getTodayTradeStatsIct(symbol, methodId),
       ]);
+      const showTradeStats =
+        todayStats.source === 'binance' || todayStats.fromDbPositions;
       enqueueTelegramMessage(
         formatShowSummary({
           equity: b.equity,
@@ -179,6 +180,10 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
           dailyPnL: b.dailyPnL,
           openCount: positions.length,
           pendingCount: pending.length,
+          closedCount: showTradeStats ? todayStats.closedCount : undefined,
+          wins: showTradeStats ? todayStats.wins : undefined,
+          losses: showTradeStats ? todayStats.losses : undefined,
+          tradeStatsSource: showTradeStats ? todayStats.source : undefined,
           riskLocked: health.risk.isLocked,
           lockReason: health.risk.lockReason,
           notifyMuted: isTelegramRealtimeMuted(),

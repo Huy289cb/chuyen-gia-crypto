@@ -5,6 +5,9 @@ import { getRiskPolicy } from '../config/risk-policy';
 import { fetchActiveBinancePositions } from './binance-exposure.service';
 import { getOpenOrders, getOpenAlgoOrders } from './binance/trading';
 import { resolveMarkPrice, calculateUnrealizedPnl } from './position-mark';
+import { fetchBinanceIncomeSummary } from './binance-income.service';
+import { fetchBinanceClosedTradeRounds } from './binance-trade-history.service';
+import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
 
 /** Max |wallet − Σ position PnL| before DB position stats are hidden in UI. */
 export const PNL_DB_GAP_TRUST_USD = 5;
@@ -46,14 +49,17 @@ export interface TodayTradeStats {
   losses: number;
   totalRealizedPnl: number;
   totalFees: number;
-  /** False when wallet vs DB closed-PnL gap exceeds trust threshold. */
+  /** False when wallet vs DB closed-PnL gap exceeds trust threshold (DB path only). */
   fromDbPositions: boolean;
+  /** Where closed-trade stats were loaded from. */
+  source: 'db' | 'binance';
 }
 
 export async function getAccountBalanceSummary(
   symbol: string,
   methodId: string,
-  useIct = true
+  useIct = true,
+  refreshFromBinance = false
 ): Promise<AccountBalanceSummary> {
   const empty: AccountBalanceSummary = {
     isInitialized: false,
@@ -82,6 +88,19 @@ export async function getAccountBalanceSummary(
 
   const account = await getTestnetAccount(symbol, methodId);
   if (!account) return empty;
+
+  const binanceEnabled = process.env.BINANCE_ENABLED === 'true';
+  let liveAccount = account;
+  if (binanceEnabled && refreshFromBinance) {
+    try {
+      await syncTestnetAccountFromBinance(account.id);
+      const refreshed = await getTestnetAccount(symbol, methodId);
+      if (refreshed) liveAccount = refreshed;
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[AccountSummary] Binance balance refresh failed: ${msg}`);
+    }
+  }
 
   const dayStart = useIct
     ? getDayBoundsICT().dayStart
@@ -145,27 +164,51 @@ export async function getAccountBalanceSummary(
       getTestnetPendingOrders({ symbol, status: 'pending', methodId }),
     ]);
 
-  const openUnrealized = unrealizedOpenAgg._sum.unrealized_pnl ?? 0;
+  const openUnrealizedDb = unrealizedOpenAgg._sum.unrealized_pnl ?? 0;
   const realizedToday = realizedTodayAgg._sum.realized_pnl ?? 0;
   const realizedWeek = realizedWeekAgg._sum.realized_pnl ?? 0;
-  const startDayEquity = baselineDay?.equity ?? account.equity ?? 0;
-  const startWeekEquity = baselineWeek?.equity ?? account.equity ?? 0;
-  const equity = account.equity ?? account.current_balance ?? 0;
+  const startDayEquity = baselineDay?.equity ?? liveAccount.equity ?? 0;
+  const startWeekEquity = baselineWeek?.equity ?? liveAccount.equity ?? 0;
+  const equity = liveAccount.equity ?? liveAccount.current_balance ?? 0;
 
-  const dailyPnL =
-    realizedToday !== 0 || openUnrealized !== 0 ? realizedToday + openUnrealized : equity - startDayEquity;
-  const weeklyPnL =
-    realizedWeek !== 0 || openUnrealized !== 0 ? realizedWeek + openUnrealized : equity - startWeekEquity;
+  let openUnrealized = openUnrealizedDb;
+  if (binanceEnabled) {
+    try {
+      const liveLines = await getBinanceOpenPositionLines(symbol);
+      if (liveLines.length > 0) {
+        openUnrealized = liveLines.reduce((s, p) => s + p.unrealizedPnl, 0);
+      } else {
+        openUnrealized = liveAccount.unrealized_pnl ?? 0;
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[AccountSummary] Binance open unrealized failed: ${msg}`);
+      openUnrealized = liveAccount.unrealized_pnl ?? openUnrealizedDb;
+    }
+  }
+
+  const dbPositionPnlSum = dbClosedSum._sum.realized_pnl ?? 0;
+  const startingBalance = liveAccount.starting_balance || 0;
+  const totalBalance = liveAccount.current_balance || 0;
+  const walletPnl = totalBalance - startingBalance;
+  const dbPositionPnlGap = walletPnl - dbPositionPnlSum;
+  const dbPositionPnlTrusted = Math.abs(dbPositionPnlGap) <= PNL_DB_GAP_TRUST_USD;
+
+  let dailyPnL: number;
+  let weeklyPnL: number;
+  if (binanceEnabled || !dbPositionPnlTrusted) {
+    dailyPnL = equity - startDayEquity;
+    weeklyPnL = equity - startWeekEquity;
+  } else {
+    dailyPnL =
+      realizedToday !== 0 || openUnrealized !== 0 ? realizedToday + openUnrealized : equity - startDayEquity;
+    weeklyPnL =
+      realizedWeek !== 0 || openUnrealized !== 0 ? realizedWeek + openUnrealized : equity - startWeekEquity;
+  }
 
   const usedMargin = marginAgg._sum.risk_usd || 0;
   const openVol = openPositions.reduce((s, p) => s + Math.abs(Number(p.size_usd) || 0), 0);
   const pendingVol = pendingOrders.reduce((s, o) => s + Math.abs(Number(o.size_usd) || 0), 0);
-  const startingBalance = account.starting_balance || 0;
-  const totalBalance = account.current_balance || 0;
-  const walletPnl = totalBalance - startingBalance;
-  const dbPositionPnlSum = dbClosedSum._sum.realized_pnl ?? 0;
-  const dbPositionPnlGap = walletPnl - dbPositionPnlSum;
-  const dbPositionPnlTrusted = Math.abs(dbPositionPnlGap) <= PNL_DB_GAP_TRUST_USD;
 
   return {
     isInitialized: true,
@@ -182,13 +225,13 @@ export async function getAccountBalanceSummary(
     exposureUsd: openVol + pendingVol,
     maxExposureUsd: getRiskPolicy().maxTotalExposureUsd,
     walletPnl,
-    binanceRealizedPnl: account.realized_pnl ?? 0,
+    binanceRealizedPnl: liveAccount.realized_pnl ?? 0,
     dbPositionPnlSum,
     dbPositionPnlGap,
     dbPositionPnlTrusted,
     pnlSource: 'wallet',
-    totalFees: account.accumulated_trading_fees ?? 0,
-    fundingFees: account.accumulated_funding_fee ?? 0,
+    totalFees: liveAccount.accumulated_trading_fees ?? 0,
+    fundingFees: liveAccount.accumulated_funding_fee ?? 0,
     startingBalance,
   };
 }
@@ -206,10 +249,21 @@ export async function getTodayTradeStatsIct(
       totalRealizedPnl: 0,
       totalFees: 0,
       fromDbPositions: false,
+      source: 'db',
     };
   }
 
   const { dayStart } = getDayBoundsICT();
+
+  if (process.env.BINANCE_ENABLED === 'true') {
+    try {
+      return await getTodayTradeStatsFromBinance(symbol, dayStart);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[AccountSummary] Binance today trade stats failed: ${msg}`);
+    }
+  }
+
   const closed = await prisma.testnetPosition.findMany({
     where: {
       account_id: account.id,
@@ -240,6 +294,35 @@ export async function getTodayTradeStatsIct(
     totalRealizedPnl,
     totalFees,
     fromDbPositions: balance.dbPositionPnlTrusted,
+    source: 'db',
+  };
+}
+
+async function getTodayTradeStatsFromBinance(
+  symbol: string,
+  dayStart: Date
+): Promise<TodayTradeStats> {
+  const [income, rounds] = await Promise.all([
+    fetchBinanceIncomeSummary({ startTime: dayStart.getTime(), symbol }),
+    fetchBinanceClosedTradeRounds(symbol, 100),
+  ]);
+
+  const todayRounds = rounds.filter((r) => new Date(r.closedAt) >= dayStart);
+  let wins = 0;
+  let losses = 0;
+  for (const r of todayRounds) {
+    if (r.realizedPnL > 0) wins++;
+    else if (r.realizedPnL < 0) losses++;
+  }
+
+  return {
+    closedCount: todayRounds.length,
+    wins,
+    losses,
+    totalRealizedPnl: income.netTradingPnl,
+    totalFees: Math.abs(income.commission),
+    fromDbPositions: false,
+    source: 'binance',
   };
 }
 
@@ -302,14 +385,21 @@ export async function getBinanceOpenPositionLines(symbol?: string): Promise<Open
   const active = await fetchActiveBinancePositions(symbol, { allowUserTradesFallback: false });
   return active.map((p) => {
     const mark = p.markPrice || p.entryPrice;
+    const unrealizedPnl =
+      p.unRealizedProfit ??
+      calculateUnrealizedPnl(p.side, p.entryPrice, mark, p.positionAmt);
+    const sizeUsd =
+      p.notional != null && Math.abs(p.notional) > 0
+        ? Math.abs(p.notional)
+        : p.positionAmt * mark;
     return {
       positionId: `binance-${p.symbol}-${p.side}`,
       symbol: p.symbol,
       side: p.side,
       entry: p.entryPrice,
       mark,
-      unrealizedPnl: calculateUnrealizedPnl(p.side, p.entryPrice, mark, p.positionAmt),
-      sizeUsd: p.positionAmt * mark,
+      unrealizedPnl,
+      sizeUsd,
       sizeQty: p.positionAmt,
     };
   });
@@ -338,9 +428,11 @@ export async function getLiveOpenPositionLines(
   symbol?: string,
   methodId = 'kim_nghia'
 ): Promise<OpenPositionLine[]> {
+  const scopeSymbol = symbol ?? getDefaultTradingScope().symbol;
   if (process.env.BINANCE_ENABLED === 'true') {
     try {
-      return await getBinanceOpenPositionLines(symbol);
+      const lines = await getBinanceOpenPositionLines(symbol);
+      return enrichPositionsWithBinanceSlTp(lines, scopeSymbol);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.warn(`[AccountSummary] Binance open positions failed: ${msg}`);

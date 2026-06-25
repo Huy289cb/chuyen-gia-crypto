@@ -155,6 +155,10 @@ export interface ShowSummaryInput {
   dailyPnL: number;
   openCount: number;
   pendingCount: number;
+  closedCount?: number;
+  wins?: number;
+  losses?: number;
+  tradeStatsSource?: 'db' | 'binance';
   riskLocked: boolean;
   lockReason: string | null;
   notifyMuted: boolean;
@@ -166,12 +170,20 @@ export function formatShowSummary(s: ShowSummaryInput): string {
     '<b>Tài khoản</b>',
     `Equity ${fmtUsd(s.equity)} | Balance ${fmtUsd(s.totalBalance)}`,
     `PnL hôm nay: ${fmtUsd(s.dailyPnL)}`,
+  ];
+  const showTradeDetail =
+    s.tradeStatsSource === 'binance' ||
+    (s.tradeStatsSource === 'db' && s.closedCount != null && s.wins != null && s.losses != null);
+  if (showTradeDetail && s.closedCount != null && s.wins != null && s.losses != null) {
+    lines.push(`Giao dịch hôm nay: ${s.closedCount} (W${s.wins}/L${s.losses})`);
+  }
+  lines.push(
     `Vị thế: ${s.openCount} mở, ${s.pendingCount} chờ`,
     s.riskLocked
       ? `🔒 Cooldown: ${escapeHtml(s.lockReason || 'locked')}`
       : '🟢 Không cooldown',
-    `Notify: ${s.notifyMuted ? 'TẮT' : 'BẬT'}`,
-  ];
+    `Notify: ${s.notifyMuted ? 'TẮT' : 'BẬT'}`
+  );
   if (s.topError) {
     lines.push(
       `⚠️ ${escapeHtml(s.topError.event_type)}: ${escapeHtml(formatEventSummary(s.topError.event_type, s.topError.summary, 120))}`
@@ -202,6 +214,27 @@ export function formatPipelineSummary(p: PipelineSummaryInput): string {
     );
   }
   return lines.join('\n');
+}
+
+export function formatOpenPositionForLenh(p: {
+  symbol: string;
+  side: string;
+  sizeUsd: number;
+  entry: number;
+  mark: number;
+  unrealizedPnl: number;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+}): string {
+  const sideLabel = p.side === 'long' ? 'LONG' : 'SHORT';
+  const tpSl: string[] = [];
+  if (p.takeProfit != null && p.takeProfit > 0) tpSl.push(`TP ${fmtPrice(p.takeProfit)}`);
+  if (p.stopLoss != null && p.stopLoss > 0) tpSl.push(`SL ${fmtPrice(p.stopLoss)}`);
+  const levels = tpSl.length > 0 ? ` | ${tpSl.join(' ')}` : '';
+  return (
+    `• ${escapeHtml(p.symbol)} <b>${sideLabel}</b> ${fmtUsd(p.sizeUsd)} | ` +
+    `${fmtPrice(p.entry)} → ${fmtPrice(p.mark)}${levels} | PnL ${fmtUsd(p.unrealizedPnl)}`
+  );
 }
 
 export function formatEventSummary(eventType: string, summary: string, maxLen = 120): string {

@@ -11,6 +11,10 @@ export interface ParsedBinancePosition {
   positionAmt: number;
   entryPrice: number;
   markPrice: number;
+  /** From Binance positionRisk unRealizedProfit when available. */
+  unRealizedProfit?: number;
+  /** Signed notional USDT from Binance when available. */
+  notional?: number;
   rawPositionSide: string;
 }
 
@@ -26,6 +30,8 @@ export function parseBinancePositionRisk(row: {
   positionAmt?: string | number;
   entryPrice?: string | number;
   markPrice?: string | number;
+  unRealizedProfit?: string | number;
+  notional?: string | number;
   positionSide?: string;
 }): ParsedBinancePosition | null {
   const symbolUsdt = String(row.symbol ?? '').toUpperCase();
@@ -37,6 +43,8 @@ export function parseBinancePositionRisk(row: {
 
   const entryPrice = parseFloat(String(row.entryPrice ?? '0'));
   const markPrice = parseFloat(String(row.markPrice ?? '0'));
+  const unRealizedProfit = parseFloat(String(row.unRealizedProfit ?? 'NaN'));
+  const notional = parseFloat(String(row.notional ?? 'NaN'));
 
   return {
     symbol: symbolUsdt.replace(/USDT$/i, ''),
@@ -45,6 +53,8 @@ export function parseBinancePositionRisk(row: {
     positionAmt: Math.abs(positionAmt),
     entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
     markPrice: Number.isFinite(markPrice) ? markPrice : 0,
+    unRealizedProfit: Number.isFinite(unRealizedProfit) ? unRealizedProfit : undefined,
+    notional: Number.isFinite(notional) ? notional : undefined,
     rawPositionSide: String(row.positionSide ?? 'BOTH').toUpperCase(),
   };
 }

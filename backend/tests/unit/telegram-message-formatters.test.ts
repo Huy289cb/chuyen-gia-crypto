@@ -8,6 +8,7 @@ import {
   formatPipelineSummary,
   formatStatusSummary,
   formatSchedulerCompact,
+  formatOpenPositionForLenh,
   statusEmoji,
   schedulerIcon,
 } from '../../src/services/telegram/message-formatters';
@@ -78,6 +79,42 @@ describe('telegram message-formatters', () => {
     expect(msg).toContain('PnL hôm nay');
     expect(msg).toContain('1 mở');
     expect(msg).not.toContain('Pipeline');
+  });
+
+  it('formatShowSummary includes Binance trade stats', () => {
+    const msg = formatShowSummary({
+      equity: 5000,
+      totalBalance: 4800,
+      dailyPnL: 25.5,
+      openCount: 1,
+      pendingCount: 0,
+      closedCount: 3,
+      wins: 2,
+      losses: 1,
+      tradeStatsSource: 'binance',
+      riskLocked: false,
+      lockReason: null,
+      notifyMuted: false,
+    });
+    expect(msg).toContain('Giao dịch hôm nay: 3 (W2/L1)');
+  });
+
+  it('formatOpenPositionForLenh shows side volume TP SL PnL', () => {
+    const msg = formatOpenPositionForLenh({
+      symbol: 'BTC',
+      side: 'short',
+      sizeUsd: 748,
+      entry: 66000,
+      mark: 65500,
+      stopLoss: 68000,
+      takeProfit: 64000,
+      unrealizedPnl: 5.6,
+    });
+    expect(msg).toContain('SHORT');
+    expect(msg).toContain('$748.00');
+    expect(msg).toContain('TP');
+    expect(msg).toContain('SL');
+    expect(msg).toContain('PnL');
   });
 
   it('formatPipelineSummary shows schedulers and last decision', () => {

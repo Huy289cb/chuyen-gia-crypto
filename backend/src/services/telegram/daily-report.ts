@@ -20,7 +20,7 @@ import { enqueueTelegramMessage } from './telegram-client';
 export async function buildDailyReportMessage(): Promise<string> {
   const { symbol, methodId } = getDefaultTradingScope();
   const [balance, todayStats, positions, pending, health, llm] = await Promise.all([
-    getAccountBalanceSummary(symbol, methodId, true),
+    getAccountBalanceSummary(symbol, methodId, true, true),
     getTodayTradeStatsIct(symbol, methodId),
     getLiveOpenPositionLines(symbol, methodId),
     getLivePendingOrderLines(symbol, methodId),
@@ -36,7 +36,7 @@ export async function buildDailyReportMessage(): Promise<string> {
     `${escapeHtml(symbol)} · Equity ${fmtUsd(balance.equity)} · Balance ${fmtUsd(balance.totalBalance)}`,
     '',
     `<b>PnL</b> Hôm nay ${fmtUsd(balance.dailyPnL)} | 7 ngày ${fmtUsd(balance.weeklyPnL)} | Unrealized ${fmtUsd(balance.openUnrealized)}`,
-    todayStats.fromDbPositions
+    todayStats.source === 'binance' || todayStats.fromDbPositions
       ? `<b>Giao dịch</b> Đóng ${todayStats.closedCount} (W${todayStats.wins}/L${todayStats.losses}) · Realized ${fmtUsd(todayStats.totalRealizedPnl)}`
       : `<b>Giao dịch</b> Đóng ${todayStats.closedCount}`,
     `<b>Đang mở</b> ${positions.length} vị thế, ${pending.length} lệnh chờ`,
