@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   GROQ_MODEL_PRIMARY_DEFAULT,
   GROQ_MODEL_FALLBACKS_DEFAULT,
+  GROQ_MODEL_LEVELS_ADAPTER_DEFAULT,
+  GROQ_MODEL_SCOUT,
   getGroqPrimaryModel,
   getGroqModelChain,
   getGroqLevelsAdapterModel,
@@ -24,11 +26,11 @@ describe('groq-models', () => {
     process.env = { ...envBackup };
   });
 
-  it('defaults primary to gpt-oss-120b (not deprecated scout)', () => {
+  it('defaults primary to Scout while still available on Groq', () => {
     expect(getGroqPrimaryModel()).toBe(GROQ_MODEL_PRIMARY_DEFAULT);
-    expect(getGroqPrimaryModel()).toBe('openai/gpt-oss-120b');
-    expect(getGroqModelChain()[0]).toBe('openai/gpt-oss-120b');
-    expect(getGroqModelChain()).not.toContain('meta-llama/llama-4-scout-17b-16e-instruct');
+    expect(getGroqPrimaryModel()).toBe(GROQ_MODEL_SCOUT);
+    expect(getGroqModelChain()[0]).toBe(GROQ_MODEL_SCOUT);
+    expect(getGroqModelChain()).not.toContain('openai/gpt-oss-120b');
   });
 
   it('respects GROQ_MODEL_PRIMARY and dedupes fallbacks', () => {
@@ -45,8 +47,8 @@ describe('groq-models', () => {
     expect(chain.slice(1)).toEqual([...GROQ_MODEL_FALLBACKS_DEFAULT]);
   });
 
-  it('resolves adapter and telegram models from env or primary', () => {
-    expect(getGroqLevelsAdapterModel()).toBe(GROQ_MODEL_PRIMARY_DEFAULT);
+  it('resolves adapter and telegram models from env or defaults', () => {
+    expect(getGroqLevelsAdapterModel()).toBe(GROQ_MODEL_LEVELS_ADAPTER_DEFAULT);
     expect(getGroqTelegramAiModel()).toBe(GROQ_MODEL_PRIMARY_DEFAULT);
 
     process.env.GROQ_MODEL_LEVELS_ADAPTER = 'llama-3.1-8b-instant';

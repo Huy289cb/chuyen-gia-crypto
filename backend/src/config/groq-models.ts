@@ -3,15 +3,32 @@
  * @see https://console.groq.com/docs/models
  */
 
-/** Default primary after Scout deprecation. */
-export const GROQ_MODEL_PRIMARY_DEFAULT = 'openai/gpt-oss-120b';
+/** Best dispatch JSON reliability in production so far; switch before 2026-07-17. */
+export const GROQ_MODEL_SCOUT = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-/** Fallback chain when primary fails (JSON reliability + rate limits). */
+/** Default dispatch primary while Scout is still available. */
+export const GROQ_MODEL_PRIMARY_DEFAULT = GROQ_MODEL_SCOUT;
+
+/** Post-Scout primary candidate (set via env after deprecation). */
+export const GROQ_MODEL_POST_SCOUT_PRIMARY = 'llama-3.3-70b-versatile';
+
+/** Fallback chain when primary fails (JSON reliability + rate limits). No gpt-oss here — empty body on long dispatch prompts. */
 export const GROQ_MODEL_FALLBACKS_DEFAULT = [
   'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-  'qwen/qwen3.6-27b',
   'qwen/qwen3-32b',
+  'qwen/qwen3.6-27b',
+  'llama-3.1-8b-instant',
+] as const;
+
+/** Default for short SL/TP repair JSON (gpt-oss works on small prompts). */
+export const GROQ_MODEL_LEVELS_ADAPTER_DEFAULT = 'openai/gpt-oss-120b';
+
+/** Models to compare in scripts/benchmark-groq-dispatch-models.ts */
+export const GROQ_DISPATCH_BENCHMARK_MODELS = [
+  GROQ_MODEL_SCOUT,
+  GROQ_MODEL_POST_SCOUT_PRIMARY,
+  'qwen/qwen3-32b',
+  'qwen/qwen3.6-27b',
 ] as const;
 
 export function getGroqPrimaryModel(): string {
@@ -41,7 +58,10 @@ export function getGroqModelChain(): string[] {
 }
 
 export function getGroqLevelsAdapterModel(): string {
-  return process.env.GROQ_MODEL_LEVELS_ADAPTER?.trim() || getGroqPrimaryModel();
+  return (
+    process.env.GROQ_MODEL_LEVELS_ADAPTER?.trim() ||
+    GROQ_MODEL_LEVELS_ADAPTER_DEFAULT
+  );
 }
 
 export function getGroqTelegramAiModel(): string {
