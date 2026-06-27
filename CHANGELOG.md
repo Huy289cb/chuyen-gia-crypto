@@ -2,6 +2,28 @@
 
 All notable changes to the project will be documented in this file.
 
+## [26/06/2026] - LLM multi-provider dispatch + production fixes
+
+### LLM dispatch fallback chain
+
+- **Order:** Groq Scout → Cerebras `gpt-oss-120b` (`json_object`) → OpenRouter Scout paid → Groq fallbacks (70B, Qwen, 8B)
+- **New:** `cerebras-client.ts`, `openrouter-client.ts`, `config/cerebras-models.ts`, `config/openrouter-models.ts`
+- **Refactor:** `groq-client.ts` — `analyzeDispatchChain()`, `tryGroqModels()`
+- **Docs:** [docs/llm-dispatch-providers.md](./docs/llm-dispatch-providers.md)
+- **Tests:** `tests/unit/cerebras-client.test.ts`, `tests/unit/openrouter-client.test.ts`
+
+### Production fixes (PnL, history, risk)
+
+- **Telegram PnL** (`/lenh`, `/show`, `/baocao`): wallet-first từ Binance equity; W/L từ income rounds
+- **Dashboard trade history:** fetch Binance `userTrades` without `startTime` on demo API; per-fill `realizedPnl` aggregation
+- **Phantom rounds:** dust filter + rewrite `aggregateUserTradesToRounds`
+- **Cooldown:** `getBinanceLossStreak()` when DB `consecutive_losses` frozen on bookkeeping closes
+
+### Files
+
+- `backend/src/services/groq-client.ts`, `account-summary.service.ts`, `binance-trade-history.service.ts`, `account-risk-guard.service.ts`
+- `docs/v3-operations.md`, `docs/architecture.md`, `docs/deployment.md`, `docs/setup.md`
+
 ## [10/05/2026] - v2.9.1 - Download Money Rebrand
 
 ### Brand Update

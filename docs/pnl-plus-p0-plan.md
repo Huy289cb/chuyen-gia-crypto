@@ -99,6 +99,7 @@ POSITION_MONITOR_MIN_MINUTES=30
 |------|----------------|
 | Max positions/symbol | `MAX_POSITIONS_PER_SYMBOL=1` |
 | Consecutive loss cooldown | `MAX_CONSECUTIVE_LOSSES=2` → set `cooldown_until` on close (`account-risk-guard` + `testnet.repository`) |
+| Binance loss streak (2026-06) | `getBinanceLossStreak()` từ `binance-trade-history.service.ts` — dùng khi DB streak đóng băng do `reconciliation_bookkeeping` PnL=0 |
 | Cooldown hours | `CONSECUTIVE_LOSS_COOLDOWN_HOURS=4` |
 | Exposure cap | `MAX_EXPOSURE_PCT_OF_EQUITY=0.15` (15% of wallet, replaces flat $2000 cap when set) |
 | Account guard | `assertTestnetAccountCanOpenTrade` in Groq + V3 execution |
@@ -130,7 +131,9 @@ MAX_EXPOSURE_PCT_OF_EQUITY=0.15
 | `backend/src/config/position-monitor-policy.ts` | EXIT default false |
 | `backend/src/config/risk-policy.ts` | `maxExposurePercentOfEquity` |
 | `backend/src/services/signal-gate.service.ts` | Allowed regimes from env |
-| `backend/src/services/account-risk-guard.service.ts` | Cooldown + consecutive loss guard |
+| `backend/src/services/account-risk-guard.service.ts` | Cooldown + consecutive loss guard + Binance streak |
+| `backend/src/services/binance-trade-history.service.ts` | Closed rounds, loss streak, dashboard/Telegram history |
+| `backend/src/services/account-summary.service.ts` | Wallet-first PnL, Telegram `/lenh` `/baocao` |
 | `backend/src/services/groq-dispatch.service.ts` | Trend-only, account guard, regime in decisions |
 | `backend/src/services/v3-trade-execution.service.ts` | Exposure %, account guard |
 | `backend/src/services/position-close.service.ts` | Verified close, merge PnL, cooldown |

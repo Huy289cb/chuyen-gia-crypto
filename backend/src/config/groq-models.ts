@@ -50,11 +50,16 @@ export function parseGroqFallbackModels(): string[] {
     .filter(Boolean);
 }
 
+/** Groq fallbacks only (excludes primary Scout). */
+export function getGroqDispatchFallbackModels(): string[] {
+  const primary = getGroqPrimaryModel();
+  return parseGroqFallbackModels().filter((m) => m !== primary);
+}
+
 /** Primary first, then fallbacks (deduped). */
 export function getGroqModelChain(): string[] {
   const primary = getGroqPrimaryModel();
-  const rest = parseGroqFallbackModels().filter((m) => m !== primary);
-  return [primary, ...rest];
+  return [primary, ...getGroqDispatchFallbackModels()];
 }
 
 export function getGroqLevelsAdapterModel(): string {

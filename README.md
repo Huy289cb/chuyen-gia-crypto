@@ -81,11 +81,9 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
 - Không còn lỗi 429 rate limit (Binance: 1200 req/min vs CoinGecko: ~10-50 req/min)
 - **1-minute Candle Data**: Sử dụng nến 1 phút (OHLC) để detect chính xác SL/TP (v2.2.0)
-- **Groq AI Models**: 
-  - Primary: meta-llama/llama-4-scout-17b-16e-instruct (30,000 TPM, most reliable)
-  - Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
-  - Fallback: qwen/qwen3-32b, openai/gpt-oss-120b
-  - JSON parsing: cleanJSONResponse function handles malformed JSON from models
+- **LLM dispatch (V3 trading)** — xem `docs/llm-dispatch-providers.md`:
+  - Groq Scout → Cerebras gpt-oss-120b → OpenRouter Scout → Groq fallbacks (70B, Qwen, 8B)
+  - Telegram `/ai` và levels adapter: Groq only
 
 ### Testing (New - v2.2.0)
 - **Vitest Framework**: Unit và integration tests với Vitest

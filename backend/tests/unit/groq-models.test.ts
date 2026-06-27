@@ -6,6 +6,7 @@ import {
   GROQ_MODEL_SCOUT,
   getGroqPrimaryModel,
   getGroqModelChain,
+  getGroqDispatchFallbackModels,
   getGroqLevelsAdapterModel,
   getGroqTelegramAiModel,
   getGroqAuxiliaryModelChain,
@@ -45,6 +46,7 @@ describe('groq-models', () => {
   it('uses default fallback list when env unset', () => {
     const chain = getGroqModelChain();
     expect(chain.slice(1)).toEqual([...GROQ_MODEL_FALLBACKS_DEFAULT]);
+    expect(getGroqDispatchFallbackModels()).toEqual([...GROQ_MODEL_FALLBACKS_DEFAULT]);
   });
 
   it('resolves adapter and telegram models from env or defaults', () => {

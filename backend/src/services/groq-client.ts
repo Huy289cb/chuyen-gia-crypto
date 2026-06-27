@@ -3,7 +3,13 @@
  * Handles API calls with retry logic and error handling
  */
 
-import { getGroqModelChain } from '../config/groq-models';
+import {
+  getGroqDispatchFallbackModels,
+  getGroqModelChain,
+  getGroqPrimaryModel,
+} from '../config/groq-models';
+import { isCerebrasDispatchFallbackEnabled } from '../config/cerebras-models';
+import { isOpenRouterDispatchFallbackEnabled } from '../config/openrouter-models';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -211,6 +217,181 @@ class GroqClient {
   }
 
   /**
+   * Try a subset of Groq models across all API keys. Returns null when every key/model fails.
+   */
+  private async tryGroqModels(
+    modelsToTry: string[],
+    params: {
+      systemPrompt: string;
+      userPrompt: string;
+      temperature: number;
+      maxRetries: number;
+    }
+  ): Promise<GroqAnalysis | null> {
+    if (modelsToTry.length === 0) return null;
+
+    const { systemPrompt, userPrompt, temperature, maxRetries } = params;
+    let lastError: Error | undefined;
+    const totalApiKeys = this.apiKeys.length;
+    const keysTried = new Set<number>();
+
+    this.resetToFirstApiKey();
+
+    while (keysTried.size < totalApiKeys) {
+      const currentKeyIndex = this.currentKeyIndex;
+      keysTried.add(currentKeyIndex);
+      console.log(
+        `[GroqClient] Using API key ${currentKeyIndex + 1}/${totalApiKeys} (tried ${keysTried.size}/${totalApiKeys} keys)`
+      );
+
+      for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
+        const currentModel = modelsToTry[modelIndex];
+        console.log(`[GroqClient] Trying model: ${currentModel}`);
+
+        const requestBody = {
+          model: currentModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature,
+          max_tokens: 1024,
+        };
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(
+              `[GroqClient] Model ${currentModel} - Attempt ${attempt + 1}/${maxRetries + 1}`
+            );
+
+            const response = await fetchWithTimeout(
+              this.baseUrl,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${this.getCurrentApiKey()}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+              },
+              30000
+            );
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+            }
+
+            const data = (await response.json()) as {
+              choices?: Array<{ message?: { content?: string } }>;
+            };
+            const content = data.choices?.[0]?.message?.content;
+
+            if (!content) {
+              throw new Error('Empty response from Groq API');
+            }
+
+            const parsed = cleanJSONResponse(content);
+            if (parsed === null) {
+              console.error('[GroqClient] Failed to clean JSON from response');
+              console.log('[GroqClient] Raw content:', content.substring(0, 200));
+              throw new Error('Invalid JSON in response after cleaning');
+            }
+
+            console.log(
+              `[GroqClient] Successfully parsed response from model ${currentModel} with API key ${currentKeyIndex + 1}`
+            );
+            return parsed;
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            lastError = error instanceof Error ? error : new Error(message);
+            console.error(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1} failed:`, message);
+
+            if (isDailyTokenLimitError(message)) {
+              console.warn(
+                `[GroqClient] Daily token limit hit for model ${currentModel}, skipping remaining retries for this model`
+              );
+              break;
+            }
+
+            if (attempt < maxRetries) {
+              const delay = isRateLimitErrorMessage(message)
+                ? 60000
+                : Math.pow(2, attempt) * 1000;
+              console.log(`[GroqClient] Retrying in ${delay}ms...`);
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+          }
+        }
+      }
+
+      console.log(
+        `[GroqClient] All ${modelsToTry.length} model(s) failed with API key ${currentKeyIndex + 1}/${totalApiKeys}, switching to next key...`
+      );
+      this.switchToNextApiKey();
+    }
+
+    this.resetToFirstApiKey();
+    if (lastError) {
+      console.error(`[GroqClient] Groq model batch failed: ${lastError.message}`);
+    }
+    return null;
+  }
+
+  /**
+   * Dispatch fallback order:
+   * 1. Groq primary (Scout)
+   * 2. Cerebras gpt-oss-120b + json_object
+   * 3. OpenRouter Scout + json_object
+   * 4+ Other Groq fallbacks
+   */
+  private async analyzeDispatchChain(params: GroqAnalysisRequest): Promise<GroqAnalysis> {
+    const { systemPrompt, userPrompt, temperature = 0.2, maxRetries = 5 } = params;
+    const groqParams = { systemPrompt, userPrompt, temperature, maxRetries };
+    let lastError: Error | undefined;
+
+    const primary = getGroqPrimaryModel();
+    console.log(`[GroqClient] Dispatch step 1: Groq primary ${primary}`);
+    const primaryResult = await this.tryGroqModels([primary], groqParams);
+    if (primaryResult) return primaryResult;
+
+    if (isCerebrasDispatchFallbackEnabled()) {
+      try {
+        console.log('[GroqClient] Dispatch step 2: Cerebras gpt-oss fallback');
+        const { analyzeViaCerebras } = await import('./cerebras-client');
+        return await analyzeViaCerebras({ systemPrompt, userPrompt, temperature });
+      } catch (cerebrasErr: unknown) {
+        const msg = cerebrasErr instanceof Error ? cerebrasErr.message : String(cerebrasErr);
+        console.error(`[GroqClient] Cerebras dispatch fallback failed: ${msg}`);
+        lastError = cerebrasErr instanceof Error ? cerebrasErr : new Error(msg);
+      }
+    }
+
+    if (isOpenRouterDispatchFallbackEnabled()) {
+      try {
+        console.log('[GroqClient] Dispatch step 3: OpenRouter Scout fallback');
+        const { analyzeViaOpenRouter } = await import('./openrouter-client');
+        return await analyzeViaOpenRouter({ systemPrompt, userPrompt, temperature });
+      } catch (openRouterErr: unknown) {
+        const msg = openRouterErr instanceof Error ? openRouterErr.message : String(openRouterErr);
+        console.error(`[GroqClient] OpenRouter dispatch fallback failed: ${msg}`);
+        lastError = openRouterErr instanceof Error ? openRouterErr : new Error(msg);
+      }
+    }
+
+    const groqFallbacks = getGroqDispatchFallbackModels();
+    if (groqFallbacks.length > 0) {
+      console.log(
+        `[GroqClient] Dispatch step 4+: Groq fallbacks (${groqFallbacks.join(', ')})`
+      );
+      const fallbackResult = await this.tryGroqModels(groqFallbacks, groqParams);
+      if (fallbackResult) return fallbackResult;
+    }
+
+    throw new Error(`All dispatch providers failed: ${lastError?.message ?? 'unknown error'}`);
+  }
+
+  /**
    * Send chat completion request to Groq API
    */
   async analyze(params: GroqAnalysisRequest): Promise<GroqAnalysis> {
@@ -226,104 +407,19 @@ class GroqClient {
     }
     lastCallTime = Date.now();
 
-    let lastError: Error | undefined;
-    const totalApiKeys = this.apiKeys.length;
-    let keysTried = new Set<number>();
-
-    // Try current key first, then try other keys if current fails
-    while (keysTried.size < totalApiKeys) {
-      const currentKeyIndex = this.currentKeyIndex;
-      keysTried.add(currentKeyIndex);
-      console.log(`[GroqClient] Using API key ${currentKeyIndex + 1}/${totalApiKeys} (tried ${keysTried.size}/${totalApiKeys} keys)`);
-
-      const modelsToTry =
-        preferredModels && preferredModels.length > 0 ? preferredModels : getGroqModelChain();
-
-      // Inner loop: Try each model with current API key
-      for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
-        const currentModel = modelsToTry[modelIndex];
-        console.log(`[GroqClient] Trying model: ${currentModel}`);
-
-        const requestBody = {
-          model: currentModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature,
-          max_tokens: 1024
-        };
-
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          try {
-            console.log(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1}/${maxRetries + 1}`);
-
-            const response = await fetchWithTimeout(this.baseUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${this.getCurrentApiKey()}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(requestBody)
-            }, 30000);
-
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new Error(`Groq API error: ${response.status} - ${errorText}`);
-            }
-
-            const data = await response.json() as any;
-            const content = data.choices[0]?.message?.content;
-
-            if (!content) {
-              throw new Error('Empty response from Groq API');
-            }
-
-            const parsed = cleanJSONResponse(content);
-            if (parsed === null) {
-              console.error('[GroqClient] Failed to clean JSON from response');
-              console.log('[GroqClient] Raw content:', content.substring(0, 200));
-              throw new Error('Invalid JSON in response after cleaning');
-            }
-
-            console.log(`[GroqClient] Successfully parsed response from model ${currentModel} with API key ${currentKeyIndex + 1}`);
-            // Keep current key index for next call (don't reset)
-            return parsed;
-
-          } catch (error: any) {
-            lastError = error;
-            console.error(`[GroqClient] Model ${currentModel} - Attempt ${attempt + 1} failed:`, error.message);
-
-            if (isDailyTokenLimitError(error.message)) {
-              console.warn(`[GroqClient] Daily token limit hit for model ${currentModel}, skipping remaining retries for this model`);
-              break;
-            }
-
-            if (attempt < maxRetries) {
-              let delay: number;
-              if (isRateLimitErrorMessage(error.message)) {
-                delay = 60000;
-                console.log(`[GroqClient] Rate limit detected, waiting ${delay}ms (1 minute) before retry...`);
-              } else {
-                delay = Math.pow(2, attempt) * 1000;
-                console.log(`[GroqClient] Retrying in ${delay}ms...`);
-              }
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          }
-        }
-      }
-
-      // All models failed with current key, switch to next key
-      const chain = getGroqModelChain();
-      console.log(`[GroqClient] All ${chain.length} models failed with API key ${currentKeyIndex + 1}/${totalApiKeys}, switching to next key...`);
-      this.switchToNextApiKey();
+    if (!preferredModels || preferredModels.length === 0) {
+      return this.analyzeDispatchChain(params);
     }
 
-    // All keys failed, reset to first key for next attempt
-    console.log(`[GroqClient] All API keys failed, resetting to first key for next attempt`);
-    this.resetToFirstApiKey();
-    throw new Error(`All models failed with all API keys: ${lastError?.message}`);
+    const result = await this.tryGroqModels(preferredModels, {
+      systemPrompt,
+      userPrompt,
+      temperature,
+      maxRetries,
+    });
+    if (result) return result;
+
+    throw new Error(`All models failed with all API keys for preferredModels`);
   }
 
   /**

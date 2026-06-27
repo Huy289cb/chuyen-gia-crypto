@@ -192,7 +192,7 @@ Mở rộng `groq-client.ts`:
 - Thêm `GroqTextRequest` + method `completeText()` trả về `string` (không qua `cleanJSONResponse`)
 - Dùng `max_tokens` từ `TELEGRAM_AI_MAX_TOKENS`
 - `temperature: 0.3`, `preferredModels: [TELEGRAM_AI_MODEL]`
-- Log prefix `[GroqOps]` — tách khỏi trading dispatch
+- Log prefix `[GroqOps]` — tách khỏi trading dispatch (dispatch dùng multi-provider chain — xem [llm-dispatch-providers.md](../llm-dispatch-providers.md))
 
 ### 1.2 Context builder
 

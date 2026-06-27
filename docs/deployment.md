@@ -161,4 +161,21 @@ npm run testnet:backfill-pnl
 
 Details: [pnl-backfill.md](./pnl-backfill.md). Pending limit lifecycle env: [pending-order-lifecycle.md](./pending-order-lifecycle.md).
 
+### LLM dispatch providers (V3 trading)
+
+Thứ tự: **Groq Scout → Cerebras gpt-oss → OpenRouter Scout → Groq fallbacks**. Chi tiết: [llm-dispatch-providers.md](./llm-dispatch-providers.md).
+
+```bash
+GROQ_MODEL_PRIMARY=meta-llama/llama-4-scout-17b-16e-instruct
+GROQ_API_KEY_1=...
+GROQ_API_KEY_2=...
+CEREBRAS_API_KEY=...
+OPENROUTER_API_KEY=...
+# Tắt từng bước nếu cần:
+# CEREBRAS_DISPATCH_FALLBACK_ENABLED=false
+# OPENROUTER_DISPATCH_FALLBACK_ENABLED=false
+```
+
+Smoke sau deploy: `cd backend && npm run smoke:llm-providers`
+
 See also: `docs/v3-operations.md`, `docs/setup.md`, `docs/binance-testnet-integration.md`.

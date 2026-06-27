@@ -7,6 +7,8 @@
 
 **Phạm vi:** Cả 5a và 5b dùng chung `GROQ_LEVELS_ADAPTER_ENABLED=true` và `GROQ_API_KEY_2` (không thêm env tách Phase 2).
 
+**Lưu ý:** Levels adapter **không** nằm trong multi-provider dispatch chain (Cerebras/OpenRouter). Chain dispatch chính: [llm-dispatch-providers.md](./llm-dispatch-providers.md).
+
 **Nguyên tắc PnL+:** Chỉ gọi API phụ khi gate tương ứng fail; model phụ dùng `preferredModels` (1 model) + `maxRetries` thấp. Một lần `dispatch` có thể gọi key2 **tối đa hai lần** (fail 5a rồi sửa SL; sau đó nếu vẫn fail 5b thì sửa TP) — mỗi lần chỉ khi gate đó fail.
 
 ---

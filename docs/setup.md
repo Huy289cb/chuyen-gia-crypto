@@ -99,10 +99,20 @@ PREDICTION_VALIDATION_CRON=0 * * * *
 DAILY_MAINTENANCE_CRON=0 3 * * *
 SNAPSHOT_CRON=*/5 * * * *
 
-# Groq API
+# Groq API (primary + fallbacks step 4+)
 GROQ_API_KEY=gsk_your_groq_api_key_here
 GROQ_API_KEY_1=
 GROQ_API_KEY_2=
+GROQ_MODEL_PRIMARY=meta-llama/llama-4-scout-17b-16e-instruct
+# GROQ_MODEL_FALLBACKS=llama-3.3-70b-versatile,qwen/qwen3-32b,qwen/qwen3.6-27b,llama-3.1-8b-instant
+
+# Cerebras (dispatch fallback step 2)
+# CEREBRAS_API_KEY=csk_...
+# CEREBRAS_DISPATCH_MODEL=gpt-oss-120b
+
+# OpenRouter (dispatch fallback step 3 — paid Scout)
+# OPENROUTER_API_KEY=sk-or-v1-...
+# OPENROUTER_DISPATCH_MODEL=meta-llama/llama-4-scout
 
 # CORS
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
@@ -118,6 +128,8 @@ BINANCE_API_SECRET=
 2. Sign up for free account
 3. Create API key
 4. Copy key to .env file
+
+**LLM dispatch providers (optional fallbacks):** Cerebras và OpenRouter chỉ dùng khi Groq Scout fail. Chi tiết thứ tự và env: [llm-dispatch-providers.md](./llm-dispatch-providers.md).
 
 ## Running Locally
 

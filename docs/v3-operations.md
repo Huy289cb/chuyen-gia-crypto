@@ -9,7 +9,7 @@ Operational behavior for Big Update v3 (BTC-only, Kim Nghia, Binance Futures tes
 ```
 MarketScan (*/5) → Signal Gate cache (5m/15m/1h parallel)
        ↓
-LLMDispatch (1,6,11,…56 * * * *) → best PASS timeframe → HTF 1h trend guard → Groq → executeV3Trade
+LLMDispatch (1,6,11,…56 * * * *) → best PASS timeframe → HTF 1h trend guard → LLM dispatch chain → executeV3Trade
        ↓
 Binance limit order + pending → WS fill → open position + SL/TP on Binance
        ↓
@@ -41,6 +41,7 @@ Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/schedul
 |------|--------|
 | Timeframes | `config/v3-schedulers.ts` — `getV3SignalGateTimeframes()` |
 | HTF guard | `V3_REQUIRE_HTF_TREND=1h` in `groq-dispatch.service.ts` |
+| LLM dispatch chain | `groq-client.ts` — Scout → Cerebras → OpenRouter → Groq fallbacks — [llm-dispatch-providers.md](./llm-dispatch-providers.md) |
 | Signal gate env | `signal-gate.service.ts` ← `MIN_SIGNAL_GRADE`, `MIN_SIGNAL_CONFIDENCE` |
 | Best-of ranking | `utils/signal-gate-ranking.ts` — `V3_TF_PRIORITY` |
 | R:R from prices | `utils/trade-levels.ts` |
@@ -51,6 +52,30 @@ Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/schedul
 | Pending limits | [pending-order-lifecycle.md](./pending-order-lifecycle.md) |
 | WS sync | `binance-websocket-sync.ts` |
 | P0 policy | [pnl-plus-p0-plan.md](./pnl-plus-p0-plan.md) |
+| Telegram PnL / trade history | `account-summary.service.ts`, `binance-trade-history.service.ts` — wallet-first, Binance rounds |
+| Risk cooldown (Binance streak) | `account-risk-guard.service.ts` — `getBinanceLossStreak()` khi DB bookkeeping PnL=0 |
+
+### Production fixes (2026-06)
+
+| Area | Fix |
+|------|-----|
+| Telegram `/lenh`, `/show`, `/baocao` | PnL từ Binance equity delta + income rounds; không mix DB phantom sau bookkeeping close |
+| Dashboard trade history | `fetchBinanceClosedTradeRounds` — demo API không filter `startTime`; aggregate theo fill `realizedPnl` |
+| Phantom rounds | Dust filter + per-fill PnL; bỏ net-position drift (0.0001 BTC, PnL=0) |
+| Consecutive loss cooldown | Streak từ Binance closed rounds khi close reason `reconciliation_bookkeeping` |
+| LLM fallback | Scout → Cerebras gpt-oss → OpenRouter Scout → Groq 70B/Qwen — xem [llm-dispatch-providers.md](./llm-dispatch-providers.md) |
+
+## LLM dispatch runbook
+
+| Triệu chứng | Kiểm tra | Hành động |
+|-------------|----------|-----------|
+| Dispatch fail toàn bộ | Log `All dispatch providers failed` | Kiểm tra quota Groq; `CEREBRAS_API_KEY`, `OPENROUTER_API_KEY` |
+| Scout empty body trên Groq | Log model `openai/gpt-oss-120b` | Chỉ dùng cho levels adapter; dispatch primary vẫn Scout |
+| Cerebras trả hold/zeros | Thiếu `json_object` | Đã bật trong `cerebras-client.ts` |
+| OpenRouter 402 | Credits hết | Nạp credit hoặc `OPENROUTER_DISPATCH_FALLBACK_ENABLED=false` |
+| OpenRouter 429 free | Model `:free` | Dùng paid Scout `meta-llama/llama-4-scout` |
+
+**Benchmark:** `cd backend && npm run smoke:llm-providers`
 
 ### Maintenance (PnL measurement)
 

@@ -185,18 +185,21 @@ The system is designed to support multiple trading methods running in parallel. 
   - Prediction Validation: Hourly (`0 * * * *`)
   - Account Snapshots: Every 5 minutes (`*/5 * * * *`)
   - Daily Maintenance: 3 AM daily (`0 3 * * *`)
-- **Groq AI Models**:
-  - Primary: meta-llama/llama-4-scout-17b-16e-instruct (most reliable)
-  - Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
-  - Fallback: qwen/qwen3-32b, openai/gpt-oss-120b
-  - JSON Parsing: cleanJSONResponse function handles malformed JSON
+- **LLM dispatch (trading)** — xem [llm-dispatch-providers.md](./llm-dispatch-providers.md):
+  - Step 1: Groq `meta-llama/llama-4-scout-17b-16e-instruct` (primary)
+  - Step 2: Cerebras `gpt-oss-120b` + `json_object`
+  - Step 3: OpenRouter `meta-llama/llama-4-scout` (paid) + `json_object`
+  - Step 4+: Groq fallbacks: `llama-3.3-70b-versatile`, `qwen/qwen3-32b`, `qwen/qwen3.6-27b`, `llama-3.1-8b-instant`
+  - Levels adapter (riêng): `openai/gpt-oss-120b` on `GROQ_API_KEY_2`
+  - JSON Parsing: `cleanJSONResponse()` handles malformed JSON
 - **CORS**: Whitelist-based configuration via ALLOWED_ORIGINS
 
-### Multi-Method Analysis Engine (Groq API)
-- **Models**: 
-  - Primary: meta-llama/llama-4-scout-17b-16e-instruct (most reliable)
-  - Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
-  - Fallback: qwen/qwen3-32b, openai/gpt-oss-120b
+### Multi-Method Analysis Engine (LLM dispatch)
+- **Provider chain** (dispatch only): Groq Scout → Cerebras gpt-oss → OpenRouter Scout → Groq fallbacks — [llm-dispatch-providers.md](./llm-dispatch-providers.md)
+- **Groq models**:
+  - Primary: `meta-llama/llama-4-scout-17b-16e-instruct`
+  - Fallbacks: `llama-3.3-70b-versatile`, `qwen/qwen3-32b`, `qwen/qwen3.6-27b`, `llama-3.1-8b-instant`
+  - Not in dispatch chain: `openai/gpt-oss-120b` on Groq (empty body on long prompts; levels adapter only)
 - **Input**: Current price + multi-timeframe price history + OHLC candle data (for Kim Nghia method)
 - **Output**: Structured JSON (all text in Vietnamese):
   
@@ -296,7 +299,7 @@ The system is designed to support multiple trading methods running in parallel. 
 Worker schedulers (see `docs/v3-operations.md`):
 
 1. **MarketScan** (`*/5`) — fetch 15m/1h/4h in parallel, run Signal Gate (no Groq)
-2. **LLMDispatch** (`2,17,32,47`) — pick **one** best PASS timeframe, Groq, `executeV3Trade`
+2. **LLMDispatch** — pick **one** best PASS timeframe, LLM dispatch chain, `executeV3Trade`
 3. **PositionMonitor** (`*/1`) — mark price, REDUCE 50% or EXIT on Binance when triggered
 
 Execution: Binance Futures testnet limit entry → pending order → TTL/drift/LLM review → WS fill → open position + SL/TP. Sync: `binance-order-fill.service.ts`, `position-close.service.ts`, `pending-order-lifecycle.md`. Historical PnL: `npm run testnet:backfill-pnl` ([pnl-backfill.md](./pnl-backfill.md)).
