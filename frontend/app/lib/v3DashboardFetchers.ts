@@ -47,6 +47,8 @@ export interface AccountData {
     binanceRealizedPnl?: number;
     dbPositionPnlSum?: number;
     dbPositionPnlGap?: number;
+    positionTradingPnlGap?: number;
+    walletIncomeGap?: number;
     dbPositionPnlTrusted?: boolean;
     pnlSource?: 'wallet';
     totalFees?: number;

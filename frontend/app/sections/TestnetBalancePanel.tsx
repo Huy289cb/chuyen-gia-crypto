@@ -57,7 +57,10 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
     );
   }
 
-  const balanceData = data.balance;
+  const balanceData = {
+    ...data.balance,
+    dbPositionPnlGap: data.balance.positionTradingPnlGap ?? data.balance.dbPositionPnlGap,
+  };
   const unrealizedPnL = balanceData.equity - balanceData.totalBalance;
   const unrealizedFootnote =
     Math.abs(unrealizedPnL) >= 0.01
@@ -152,7 +155,8 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
               </p>
             )}
             {balanceData.dbPositionPnlTrusted === false &&
-              typeof balanceData.dbPositionPnlGap === 'number' && (
+              (typeof balanceData.positionTradingPnlGap === 'number' ||
+                typeof balanceData.dbPositionPnlGap === 'number') && (
                 <p className="text-xs text-amber-500/90 mt-1">
                   Sổ lệnh bot lệch {formatPrice(balanceData.dbPositionPnlGap)} — lấy số ví làm chuẩn
                 </p>

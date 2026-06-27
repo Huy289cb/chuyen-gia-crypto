@@ -14,14 +14,21 @@ import { V3_LLM_DISPATCH_CRON, V3_MARKET_SCAN_CRON } from '../config/v3-schedule
 import { startPositionMonitorScheduler } from '../schedulers/position-monitor.scheduler';
 import { startPendingOrderScheduler } from '../schedulers/pending-order.scheduler';
 import { syncAllTestnetAccountsFromBinance } from './binance-balance-sync.service';
+import { auditProtectiveCoverageForSymbols } from './protective-exposure-audit.service';
 
 let priceSyncInterval: NodeJS.Timeout | null = null;
+let protectiveAuditInterval: NodeJS.Timeout | null = null;
 const cronTasks: ScheduledTask[] = [];
 let priceSyncJobRunning = false;
 
 const priceHistoryIntervalMs = parseInt(process.env.PRICE_HISTORY_INTERVAL_MS || '300000', 10);
 const lastPriceHistoryAt = new Map<string, number>();
 const lastTickerPrice = new Map<string, number>();
+
+function protectiveAuditIntervalMs(): number {
+  const raw = parseInt(process.env.PROTECTIVE_EXPOSURE_AUDIT_INTERVAL_MS || '60000', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60000;
+}
 
 async function runPriceSyncJob() {
   if (priceSyncJobRunning) {
@@ -177,6 +184,15 @@ export async function startWorkerScheduler(): Promise<void> {
     void syncAllTestnetAccountsFromBinance();
   }
 
+  if (process.env.BINANCE_ENABLED === 'true' && process.env.PROTECTIVE_EXPOSURE_AUDIT_ENABLED !== 'false') {
+    const intervalMs = protectiveAuditIntervalMs();
+    protectiveAuditInterval = setInterval(() => {
+      void auditProtectiveCoverageForSymbols(workerConfig.syncSymbols);
+    }, intervalMs);
+    void auditProtectiveCoverageForSymbols(workerConfig.syncSymbols);
+    console.log(`[WorkerScheduler] Protective exposure audit started interval=${intervalMs}ms`);
+  }
+
   console.log(
     `[WorkerScheduler] Started. symbols=${workerConfig.syncSymbols.join(',')} timeframe=${workerConfig.ohlcvTimeframe} testnetSync=${workerConfig.enableTestnetSync} priceInterval=${appConfig.priceUpdateIntervalMs}ms validationCron="${appConfig.predictionValidationCron}" snapshotCron="${appConfig.snapshotCron}" maintenanceCron="${appConfig.dailyMaintenanceCron}" analysisCron="${appConfig.analysisCronSchedule}"`
   );
@@ -186,6 +202,11 @@ export function stopWorkerScheduler(): void {
   if (priceSyncInterval) {
     clearInterval(priceSyncInterval);
     priceSyncInterval = null;
+  }
+
+  if (protectiveAuditInterval) {
+    clearInterval(protectiveAuditInterval);
+    protectiveAuditInterval = null;
   }
 
   for (const task of cronTasks) {

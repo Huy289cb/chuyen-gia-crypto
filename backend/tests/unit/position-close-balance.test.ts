@@ -179,6 +179,8 @@ describe('closeLocalPosition balance updates', () => {
       'position_closed',
       expect.objectContaining({
         realized_pnl: -12.34,
+        binance_fill_ids: [999],
+        close_qty: 0.01,
         close_reason: expect.not.stringContaining('bookkeeping'),
       })
     );
@@ -210,7 +212,11 @@ describe('closeLocalPosition balance updates', () => {
     expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
       'pos_test',
       'position_closed',
-      expect.objectContaining({ realized_pnl: 5.5 })
+      expect.objectContaining({
+        realized_pnl: 5.5,
+        binance_fill_ids: [1],
+        close_qty: 0.01,
+      })
     );
   });
 });

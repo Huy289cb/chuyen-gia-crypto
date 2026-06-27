@@ -92,6 +92,36 @@ describe('account-summary PnL (Binance)', () => {
     expect(summary.dbPositionPnlTrusted).toBe(false);
   });
 
+  it('trusts DB position PnL using fee-aware Binance realized gap', async () => {
+    vi.mocked(getTestnetAccount).mockResolvedValue({
+      id: 1,
+      symbol: 'BTC',
+      method_id: 'kim_nghia',
+      starting_balance: 5000,
+      current_balance: 4966,
+      equity: 4966,
+      unrealized_pnl: 0,
+      realized_pnl: -21,
+      accumulated_trading_fees: 13,
+      accumulated_funding_fee: 0,
+    } as never);
+    vi.mocked(prisma.testnetPosition.aggregate).mockImplementation(async (args) => {
+      const where = (args as { where?: Record<string, unknown> }).where;
+      if (where?.position_id) {
+        return { _sum: { realized_pnl: -23 } } as never;
+      }
+      return { _sum: { realized_pnl: 0, unrealized_pnl: 0, risk_usd: 0 } } as never;
+    });
+    vi.mocked(fetchActiveBinancePositions).mockResolvedValue([]);
+
+    const summary = await getAccountBalanceSummary('BTC', 'kim_nghia', true, false);
+
+    expect(summary.dbPositionPnlGap).toBeCloseTo(-11, 2);
+    expect(summary.positionTradingPnlGap).toBeCloseTo(2, 2);
+    expect(summary.walletIncomeGap).toBeCloseTo(0, 2);
+    expect(summary.dbPositionPnlTrusted).toBe(true);
+  });
+
   it('loads today trade stats from Binance income + rounds', async () => {
     const dayStart = new Date();
     dayStart.setUTCHours(0, 0, 0, 0);

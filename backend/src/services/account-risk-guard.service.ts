@@ -9,6 +9,7 @@ import {
   shouldEnterTestnetCooldown,
 } from '../repositories/testnet.repository';
 import { getBinanceLossStreak } from './binance-trade-history.service';
+import { getProtectiveExposureEntryBlock } from './protective-exposure-state';
 
 export interface AccountTradeGuardResult {
   allowed: boolean;
@@ -29,6 +30,14 @@ export async function assertTestnetAccountCanOpenTrade(
 
   const policy = getRiskPolicy();
   const now = new Date();
+  const protectiveBlock = getProtectiveExposureEntryBlock();
+  if (protectiveBlock) {
+    return {
+      allowed: false,
+      reason: `Protective exposure audit blocked entries: ${protectiveBlock.reason}`,
+    };
+  }
+
   if (account.cooldown_until && account.cooldown_until > now) {
     return {
       allowed: false,

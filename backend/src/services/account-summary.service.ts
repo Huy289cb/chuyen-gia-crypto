@@ -34,6 +34,8 @@ export interface AccountBalanceSummary {
   dbPositionPnlSum: number;
   /** walletPnl − dbPositionPnlSum (0 when aligned). */
   dbPositionPnlGap: number;
+  positionTradingPnlGap: number;
+  walletIncomeGap: number;
   /** True when gap is small enough to show per-position / DB win stats. */
   dbPositionPnlTrusted: boolean;
   /** Primary PnL label for UI: always wallet (Binance-aligned). */
@@ -79,6 +81,8 @@ export async function getAccountBalanceSummary(
     binanceRealizedPnl: 0,
     dbPositionPnlSum: 0,
     dbPositionPnlGap: 0,
+    positionTradingPnlGap: 0,
+    walletIncomeGap: 0,
     dbPositionPnlTrusted: true,
     pnlSource: 'wallet',
     totalFees: 0,
@@ -192,7 +196,17 @@ export async function getAccountBalanceSummary(
   const totalBalance = liveAccount.current_balance || 0;
   const walletPnl = totalBalance - startingBalance;
   const dbPositionPnlGap = walletPnl - dbPositionPnlSum;
-  const dbPositionPnlTrusted = Math.abs(dbPositionPnlGap) <= PNL_DB_GAP_TRUST_USD;
+  const binanceRealizedPnl = liveAccount.realized_pnl ?? 0;
+  const totalFees = liveAccount.accumulated_trading_fees ?? 0;
+  const fundingFees = liveAccount.accumulated_funding_fee ?? 0;
+  const positionTradingPnlGap = binanceRealizedPnl - dbPositionPnlSum;
+  const approximateNetTradingPnl = binanceRealizedPnl - totalFees - fundingFees;
+  const walletIncomeGap = walletPnl - approximateNetTradingPnl;
+  const trustGap =
+    Math.abs(binanceRealizedPnl) > 0.01 || Math.abs(dbPositionPnlSum) > 0.01
+      ? positionTradingPnlGap
+      : dbPositionPnlGap;
+  const dbPositionPnlTrusted = Math.abs(trustGap) <= PNL_DB_GAP_TRUST_USD;
 
   let dailyPnL: number;
   let weeklyPnL: number;
@@ -225,13 +239,15 @@ export async function getAccountBalanceSummary(
     exposureUsd: openVol + pendingVol,
     maxExposureUsd: getRiskPolicy().maxTotalExposureUsd,
     walletPnl,
-    binanceRealizedPnl: liveAccount.realized_pnl ?? 0,
+    binanceRealizedPnl,
     dbPositionPnlSum,
     dbPositionPnlGap,
+    positionTradingPnlGap,
+    walletIncomeGap,
     dbPositionPnlTrusted,
     pnlSource: 'wallet',
-    totalFees: liveAccount.accumulated_trading_fees ?? 0,
-    fundingFees: liveAccount.accumulated_funding_fee ?? 0,
+    totalFees,
+    fundingFees,
     startingBalance,
   };
 }

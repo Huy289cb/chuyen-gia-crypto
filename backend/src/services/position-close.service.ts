@@ -121,8 +121,9 @@ export async function closeLocalPosition(
   const isBookkeepingClose =
     eventMeta?.bookkeeping_close === true ||
     eventMeta?.stale_ghost === true ||
-    isBookkeepingCloseReason(closeReason) ||
-    (closeReason === 'reconciliation_closed_not_on_binance' && !hasBinanceFillProof(position));
+    (closeReason === 'reconciliation_closed_not_on_binance'
+      ? !hasBinanceFillProof(position)
+      : isBookkeepingCloseReason(closeReason));
 
   const needsBinanceProof =
     closeReason === 'stop_loss' || closeReason === 'take_profit';
@@ -144,6 +145,8 @@ export async function closeLocalPosition(
   let finalCloseReason = closeReason;
   let fillVerified = false;
   let fillSource: string | undefined;
+  let fillTradeIds: number[] = [];
+  let fillCloseQty = qty;
 
   if (isBookkeepingClose) {
     finalCloseReason = 'reconciliation_bookkeeping';
@@ -169,6 +172,8 @@ export async function closeLocalPosition(
       : closeReason;
     fillVerified = fill.verified;
     fillSource = fill.source;
+    fillTradeIds = fill.tradeIds;
+    fillCloseQty = fill.closeQty || qty;
   }
 
   await closeTestnetPosition(position.position_id, finalClosePrice, finalCloseReason);
@@ -222,6 +227,8 @@ export async function closeLocalPosition(
     account_equity: balances.account_equity,
     fill_verified: fillVerified,
     fill_source: fillSource,
+    binance_fill_ids: fillVerified && !isBookkeepingClose ? fillTradeIds : [],
+    close_qty: fillVerified && !isBookkeepingClose ? fillCloseQty : qty,
     ...(isBookkeepingClose ? { suppress_telegram: true, bookkeeping_close: true } : {}),
     ...eventMeta,
   });
