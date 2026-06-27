@@ -23,6 +23,8 @@ export type ProtectiveAction =
   | 'close_at_market_profit'
   | 'recompute_and_place';
 
+export type ProtectivePlacementOutcome = 'ok' | 'partial' | 'closed' | 'skipped';
+
 const PROTECTIVE_RETRY_COOLDOWN_MS = 2 * 60_000;
 const PROTECTIVE_MARK_MOVE_THRESHOLD = 0.005;
 
@@ -381,7 +383,7 @@ export async function placeProtectiveOrdersForPosition(position: {
   binance_sl_order_id?: string | null;
   binance_tp_order_id?: string | null;
   account?: { current_balance?: number };
-}): Promise<'ok' | 'partial' | 'closed' | 'skipped'> {
+}): Promise<ProtectivePlacementOutcome> {
   const reconciled = await reconcileStaleProtectiveOrderIds(position);
   position = {
     ...position,
@@ -499,8 +501,8 @@ export async function placeProtectiveOrdersForPosition(position: {
     return closed ? 'closed' : 'partial';
   }
 
-  const skipSl = Boolean(position.binance_sl_order_id);
-  const skipTp = Boolean(position.binance_tp_order_id);
+  const hadSl = Boolean(position.binance_sl_order_id);
+  const hadTp = Boolean(position.binance_tp_order_id);
   const skipTpInvalid = mark > 0 && tpInvalidForMark(side, levels.take_profit, mark);
 
   let result = await placeSlTpOnBinance(
@@ -509,12 +511,14 @@ export async function placeProtectiveOrdersForPosition(position: {
     position.side,
     qty,
     levels,
-    { skipSl, skipTp: skipTp || skipTpInvalid }
+    { skipSl: hadSl, skipTp: hadTp || skipTpInvalid }
   );
+  let placedSlId = result.slId;
+  let placedTpId = result.tpId;
 
   if (
     !result.slId &&
-    !skipSl &&
+    !hadSl &&
     result.slError &&
     isOrderWouldTriggerImmediatelyError(result.slError) &&
     mark > 0
@@ -551,10 +555,13 @@ export async function placeProtectiveOrdersForPosition(position: {
       retryLevels,
       {
         skipTp:
-          Boolean(position.binance_tp_order_id) ||
+          hadTp ||
+          Boolean(placedTpId) ||
           tpInvalidForMark(side, retryLevels.take_profit, mark),
       }
     );
+    placedSlId = placedSlId ?? result.slId;
+    placedTpId = placedTpId ?? result.tpId;
     Object.assign(levels, retryLevels);
 
     if (
@@ -573,34 +580,51 @@ export async function placeProtectiveOrdersForPosition(position: {
     }
   }
 
-  if (result.slId) {
+  const slProtected = hadSl || Boolean(placedSlId);
+  const tpProtected = hadTp || Boolean(placedTpId);
+
+  if (slProtected) {
     clearProtectiveRetryState(position.position_id);
-    if (
-      !result.tpId &&
-      !skipTp &&
-      result.tpError &&
-      isOrderWouldTriggerImmediatelyError(result.tpError) &&
-      mark > 0
-    ) {
-      if (isPastTakeProfit(side, levels.take_profit, mark)) {
-        const closed = await marketCloseFromProtective(
-          position,
-          mark,
-          'protective_tp_reached_market',
-          'tp_-2021_past_tp'
+    if (!tpProtected) {
+      if (
+        !hadTp &&
+        result.tpError &&
+        isOrderWouldTriggerImmediatelyError(result.tpError) &&
+        mark > 0
+      ) {
+        if (isPastTakeProfit(side, levels.take_profit, mark)) {
+          const closed = await marketCloseFromProtective(
+            position,
+            mark,
+            'protective_tp_reached_market',
+            'tp_-2021_past_tp'
+          );
+          return closed ? 'closed' : 'partial';
+        }
+        console.warn(
+          `[ProtectiveOrder] TP -2021 for ${position.position_id} — SL ok, skipping invalid TP (mark=${mark})`
         );
-        return closed ? 'closed' : 'partial';
+      } else {
+        const reason = skipTpInvalid
+          ? `tp_invalid_for_mark mark=${mark}`
+          : result.tpError ?? 'tp_missing_after_placement';
+        console.warn(
+          `[ProtectiveOrder] TP missing for ${position.position_id} while SL is protected: ${reason}`
+        );
       }
-      console.warn(
-        `[ProtectiveOrder] TP -2021 for ${position.position_id} — SL ok, skipping invalid TP (mark=${mark})`
+      notifyProtectiveAction(
+        position,
+        'Protective partial',
+        `SL active but TP missing (${result.tpError ?? (skipTpInvalid ? 'tp_invalid_for_mark' : 'unknown')})`
       );
       return 'partial';
     }
     console.log(
-      `[ProtectiveOrder] SL placed for ${position.position_id}: sl=${levels.stop_loss} id=${result.slId}` +
-        (result.tpId ? ` tp=${levels.take_profit} id=${result.tpId}` : ' (TP pending/failed)')
+      `[ProtectiveOrder] SL/TP protected for ${position.position_id}: ` +
+        `sl=${levels.stop_loss} id=${placedSlId ?? position.binance_sl_order_id} ` +
+        `tp=${levels.take_profit} id=${placedTpId ?? position.binance_tp_order_id}`
     );
-    return result.tpId ? 'ok' : 'partial';
+    return 'ok';
   }
 
   recordProtectiveFailure(position.position_id, mark);

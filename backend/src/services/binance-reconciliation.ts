@@ -2,8 +2,8 @@
  * Binance reconciliation — keep local DB aligned with Binance (ONE_WAY).
  *
  * Rules (simple):
- * 1. Fill → position is created by WebSocket only (real-time).
- * 2. Reconciliation fixes pending status (cancel / mark executed_historical). Never opens old fills.
+ * 1. Real-time fills are created by WebSocket; reconciliation can recover live unprotected exposure.
+ * 2. Reconciliation fixes pending status and only materializes old fills when Binance still has live exposure.
  * 3. Open positions: at most one local row per symbol; align qty with Binance net.
  * 4. Absent on Binance: bookkeeping PnL=0 only (wallet synced from Binance separately).
  * 5. Never resurrect closed or mislabeled rows (prevents 62k ghost shorts).

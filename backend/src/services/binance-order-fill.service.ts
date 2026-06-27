@@ -13,9 +13,11 @@ import {
 import { prisma } from '../lib/prisma';
 import {
   placeProtectiveOrdersForPosition,
+  type ProtectivePlacementOutcome,
   resolveLevelsForFill,
 } from './protective-order.service';
 import { isBinanceOrderStateProbeUnavailable } from './binance-account-health.service';
+import type { ParsedBinancePosition } from '../utils/binance-position-match';
 
 /** Binance ORDER_TRADE_UPDATE `o` payload (subset). */
 export interface BinanceOrderTradeUpdate {
@@ -89,6 +91,46 @@ async function markPendingExecutedWithoutPosition(
   );
 }
 
+async function recordIncompleteProtectiveOutcome(
+  positionId: string,
+  outcome: ProtectivePlacementOutcome,
+  context: string
+): Promise<void> {
+  if (outcome !== 'partial') return;
+  await recordTestnetTradeEvent(positionId, 'protective_order_incomplete', {
+    outcome,
+    context,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+async function findStrictActiveBinanceExposure(
+  symbol: string,
+  side: string
+): Promise<ParsedBinancePosition | null> {
+  try {
+    const { fetchActiveBinancePositions } = await import('./binance-exposure.service');
+    const active = await fetchActiveBinancePositions(symbol, {
+      allowUserTradesFallback: false,
+    });
+    const base = String(symbol).toUpperCase().replace(/USDT$/i, '');
+    const localSide = String(side).toLowerCase() === 'short' ? 'short' : 'long';
+    return (
+      active.find(
+        (p) =>
+          p.symbol === base &&
+          p.side === localSide &&
+          Number.isFinite(p.positionAmt) &&
+          p.positionAmt > 1e-8
+      ) ?? null
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[BinanceOrderFill] Active exposure probe failed for ${symbol}: ${message}`);
+    return null;
+  }
+}
+
 /**
  * Create open position from a filled pending order and place SL/TP on Binance.
  */
@@ -124,7 +166,12 @@ export async function materializePositionFromPendingFill(
         where: { position_id: existing.position_id },
       });
       if (full) {
-        await placeProtectiveOrdersForPosition(full);
+        const outcome = await placeProtectiveOrdersForPosition(full);
+        await recordIncompleteProtectiveOutcome(
+          existing.position_id,
+          outcome,
+          'existing_position_fill_link'
+        );
       }
       return existing.position_id;
     }
@@ -245,7 +292,8 @@ export async function materializePositionFromPendingFill(
   const { prisma: db } = await import('../lib/prisma');
   const created = await db.testnetPosition.findUnique({ where: { position_id: positionId } });
   if (created) {
-    await placeProtectiveOrdersForPosition(created);
+    const outcome = await placeProtectiveOrdersForPosition(created);
+    await recordIncompleteProtectiveOutcome(positionId, outcome, 'new_position_fill');
   }
 
   console.log(
@@ -269,11 +317,17 @@ export async function ensureProtectiveOrdersForPosition(position: {
   binance_sl_order_id?: string | null;
   binance_tp_order_id?: string | null;
   account?: { current_balance?: number };
-}): Promise<void> {
-  await placeProtectiveOrdersForPosition({
+}): Promise<ProtectivePlacementOutcome> {
+  const outcome = await placeProtectiveOrdersForPosition({
     ...position,
     entry_price: position.entry_price ?? 0,
   });
+  await recordIncompleteProtectiveOutcome(
+    position.position_id,
+    outcome,
+    'reconciliation_ensure'
+  );
+  return outcome;
 }
 
 /**
@@ -319,12 +373,7 @@ export async function recoverPendingOrderFromBinance(
       const fillAgeMs = remote.updateTime ? Date.now() - remote.updateTime : Number.POSITIVE_INFINITY;
       const symbolBase = String(localOrder.symbol).toUpperCase();
 
-      // Reconciliation never opens positions for old fills — only WebSocket path does.
-      if (fillAgeMs > RECOVERY_FILL_MAX_AGE_MS) {
-        await markPendingExecutedWithoutPosition(localOrder, avg, qty, 'fill_too_old');
-        return 'stale_skipped';
-      }
-
+      // Prefer existing local rows first; stale fills may still need protective recovery.
       const existingPos = localOrder.binance_order_id
         ? await findTestnetPositionByBinanceOrderId(localOrder.binance_order_id)
         : null;
@@ -332,13 +381,18 @@ export async function recoverPendingOrderFromBinance(
         if (localOrder.status !== 'executed' && localOrder.status !== 'executed_historical') {
           await executeTestnetPendingOrder(localOrder.order_id, existingPos.position_id);
         }
+        const full = await prisma.testnetPosition.findUnique({
+          where: { position_id: existingPos.position_id },
+        });
+        if (full) {
+          await ensureProtectiveOrdersForPosition(full);
+        }
         return 'filled';
       }
 
       // ONE_WAY: at most one open local row per symbol.
       const openForSymbol = await prisma.testnetPosition.findFirst({
         where: { account_id: localOrder.account_id, symbol: symbolBase, status: 'open' },
-        select: { position_id: true },
       });
       if (openForSymbol) {
         await markPendingExecutedWithoutPosition(
@@ -348,7 +402,39 @@ export async function recoverPendingOrderFromBinance(
           'open_position_exists',
           openForSymbol.position_id
         );
+        await ensureProtectiveOrdersForPosition(openForSymbol);
         return 'stale_skipped';
+      }
+
+      if (fillAgeMs > RECOVERY_FILL_MAX_AGE_MS) {
+        const activeExposure = await findStrictActiveBinanceExposure(localOrder.symbol, localOrder.side);
+        if (!activeExposure) {
+          await markPendingExecutedWithoutPosition(localOrder, avg, qty, 'fill_too_old');
+          return 'stale_skipped';
+        }
+
+        const recoveredQty = activeExposure.positionAmt > 0 ? activeExposure.positionAmt : qty;
+        const recoveredAvg =
+          activeExposure.entryPrice > 0
+            ? activeExposure.entryPrice
+            : avg > 0
+              ? avg
+              : localOrder.entry_price;
+        console.warn(
+          `[BinanceOrderFill] Old fill ${localOrder.order_id} still active on Binance; ` +
+            `materializing for protective recovery qty=${recoveredQty} entry=${recoveredAvg}`
+        );
+        const positionId = await materializePositionFromPendingFill(
+          {
+            ...localOrder,
+            entry_price: recoveredAvg,
+          },
+          recoveredQty,
+          recoveredAvg,
+          remote.updateTime,
+          { reconciliationBackfill: true }
+        );
+        return positionId ? 'filled' : 'failed';
       }
 
       const positionId = await materializePositionFromPendingFill(

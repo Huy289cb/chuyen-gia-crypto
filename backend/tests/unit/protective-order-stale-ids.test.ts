@@ -43,6 +43,7 @@ import {
   placeStopLossOrder,
   placeTakeProfitOrder,
 } from '../../src/services/binanceClient';
+import { closePositionOnBinanceMarket } from '../../src/services/position-close.service';
 import {
   extractOpenAlgoOrderIds,
   reconcileStaleProtectiveOrderIds,
@@ -173,5 +174,49 @@ describe('placeProtectiveOrdersForPosition stale ids', () => {
     expect(outcome).toBe('skipped');
     expect(placeStopLossOrder).not.toHaveBeenCalled();
     expect(placeTakeProfitOrder).not.toHaveBeenCalled();
+  });
+
+  it('places missing TP when SL already exists and returns ok', async () => {
+    vi.mocked(getOpenAlgoOrders).mockResolvedValue([{ algoId: 'live_sl' }]);
+    vi.mocked(placeTakeProfitOrder).mockResolvedValue({ orderId: 'new_tp' });
+
+    const outcome = await placeProtectiveOrdersForPosition({
+      position_id: 'pos_missing_tp',
+      symbol: 'BTC',
+      side: 'long',
+      entry_price: 63000,
+      size_qty: 0.01,
+      stop_loss: 62500,
+      take_profit: 64000,
+      binance_sl_order_id: 'live_sl',
+      binance_tp_order_id: null,
+    });
+
+    expect(outcome).toBe('ok');
+    expect(placeStopLossOrder).not.toHaveBeenCalled();
+    expect(placeTakeProfitOrder).toHaveBeenCalled();
+    expect(closePositionOnBinanceMarket).not.toHaveBeenCalled();
+  });
+
+  it('places missing SL when TP already exists and returns ok', async () => {
+    vi.mocked(getOpenAlgoOrders).mockResolvedValue([{ algoId: 'live_tp' }]);
+    vi.mocked(placeStopLossOrder).mockResolvedValue({ orderId: 'new_sl' });
+
+    const outcome = await placeProtectiveOrdersForPosition({
+      position_id: 'pos_missing_sl',
+      symbol: 'BTC',
+      side: 'long',
+      entry_price: 63000,
+      size_qty: 0.01,
+      stop_loss: 62500,
+      take_profit: 64000,
+      binance_sl_order_id: null,
+      binance_tp_order_id: 'live_tp',
+    });
+
+    expect(outcome).toBe('ok');
+    expect(placeStopLossOrder).toHaveBeenCalled();
+    expect(placeTakeProfitOrder).not.toHaveBeenCalled();
+    expect(closePositionOnBinanceMarket).not.toHaveBeenCalled();
   });
 });

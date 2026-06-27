@@ -7,6 +7,7 @@ const mockFindByBinanceId = vi.hoisted(() => vi.fn());
 const mockRecordEvent = vi.hoisted(() => vi.fn());
 const mockFindFirstPosition = vi.hoisted(() => vi.fn());
 const mockFindUniquePosition = vi.hoisted(() => vi.fn());
+const mockFetchActiveBinancePositions = vi.hoisted(() => vi.fn());
 const getOrder = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/repositories/testnet.repository', () => ({
@@ -43,6 +44,7 @@ vi.mock('../../src/services/binance-balance-sync.service', () => ({
 
 vi.mock('../../src/services/binance-exposure.service', () => ({
   fetchBinanceNetPosition: vi.fn().mockResolvedValue(null),
+  fetchActiveBinancePositions: mockFetchActiveBinancePositions,
 }));
 
 vi.mock('../../src/services/binance/trading', () => ({
@@ -81,6 +83,7 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
     mockCreatePosition.mockResolvedValue(undefined);
     mockExecutePending.mockResolvedValue(undefined);
     mockUpdatePending.mockResolvedValue(undefined);
+    mockFetchActiveBinancePositions.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -136,6 +139,44 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
     });
     expect(mockCreatePosition).not.toHaveBeenCalled();
     expect(mockExecutePending).not.toHaveBeenCalled();
+  });
+
+  it('old FILLED with active Binance exposure materializes position for protective recovery', async () => {
+    const fillTime = now - RECOVERY_FILL_MAX_AGE_MS - 1000;
+    getOrder.mockResolvedValue({
+      status: 'FILLED',
+      executedQty: 0.0115,
+      cummulativeQuoteQty: 0.0115 * 64530,
+      price: 64530,
+      updateTime: fillTime,
+    });
+    mockFetchActiveBinancePositions.mockResolvedValue([
+      {
+        symbol: 'BTC',
+        symbolUsdt: 'BTCUSDT',
+        side: 'long',
+        positionAmt: 0.0115,
+        entryPrice: 64530,
+        markPrice: 64540,
+        rawPositionSide: 'BOTH',
+      },
+    ]);
+
+    const outcome = await recoverPendingOrderFromBinance(baseOrder);
+
+    expect(outcome).toBe('filled');
+    expect(mockCreatePosition).toHaveBeenCalledOnce();
+    expect(mockCreatePosition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryPrice: 64530,
+        sizeQty: 0.0115,
+      })
+    );
+    expect(mockExecutePending).toHaveBeenCalledWith('v3_test', expect.stringMatching(/^pos_/));
+    expect(mockUpdatePending).not.toHaveBeenCalledWith(
+      'v3_test',
+      expect.objectContaining({ status: 'executed_historical' })
+    );
   });
 
   it('stale_skipped: FILLED without updateTime treated as infinitely old', async () => {
