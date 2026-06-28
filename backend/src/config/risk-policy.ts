@@ -3,6 +3,11 @@
  * Defines risk limits and parameters for the trading system
  */
 
+import {
+  getEffectiveMaxExposureUsd,
+  getEffectiveRiskPerTradePercent,
+} from './mainnet-safety';
+
 export interface RiskPolicyConfig {
   // Risk per trade
   riskPerTradePercent: number; // e.g., 0.5% - 1% of account balance
@@ -66,8 +71,15 @@ export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
  * Get risk policy from environment or use defaults
  */
 export function getRiskPolicy(): RiskPolicyConfig {
+  const configuredRiskPercent = parseFloat(process.env.RISK_PER_TRADE_PERCENT || '0.5');
+  const configuredMaxExposureUsd = parseFloat(
+    process.env.MAX_TOTAL_EXPOSURE_USD ||
+      process.env.MAX_PENDING_VOLUME_USD ||
+      '2000'
+  );
+
   return {
-    riskPerTradePercent: parseFloat(process.env.RISK_PER_TRADE_PERCENT || '0.5'),
+    riskPerTradePercent: getEffectiveRiskPerTradePercent(configuredRiskPercent),
     dailyLossLimitPercent: parseFloat(process.env.DAILY_LOSS_LIMIT_PERCENT || '2.0'),
     maxConsecutiveLosses: parseInt(process.env.MAX_CONSECUTIVE_LOSSES || '3'),
     consecutiveLossCooldownHours: parseFloat(process.env.CONSECUTIVE_LOSS_COOLDOWN_HOURS || '4'),
@@ -80,11 +92,7 @@ export function getRiskPolicy(): RiskPolicyConfig {
     minSignalConfidence: parseFloat(process.env.MIN_SIGNAL_CONFIDENCE || '0.75'),
     maxPositionsPerSymbol: parseInt(process.env.MAX_POSITIONS_PER_SYMBOL || '1', 10),
     maxTotalPositions: parseInt(process.env.MAX_TOTAL_POSITIONS || '2', 10),
-    maxTotalExposureUsd: parseFloat(
-      process.env.MAX_TOTAL_EXPOSURE_USD ||
-        process.env.MAX_PENDING_VOLUME_USD ||
-        '2000'
-    ),
+    maxTotalExposureUsd: getEffectiveMaxExposureUsd(configuredMaxExposureUsd),
     maxExposurePercentOfEquity: (() => {
       const v = process.env.MAX_EXPOSURE_PCT_OF_EQUITY?.trim();
       if (!v) return null;

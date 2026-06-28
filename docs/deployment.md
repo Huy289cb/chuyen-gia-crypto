@@ -179,3 +179,9 @@ OPENROUTER_API_KEY=...
 Smoke sau deploy: `cd backend && npm run smoke:llm-providers`
 
 See also: `docs/v3-operations.md`, `docs/setup.md`, `docs/binance-testnet-integration.md`.
+
+### Mainnet rollout
+
+Before using real Binance Futures keys, follow [mainnet-readiness.md](./mainnet-readiness.md).
+Mainnet starts in read-only/shadow mode by default; live order mutations require
+`MAINNET_LIVE_TRADING_ENABLED=true` and `MAINNET_TRADING_ACK=I_UNDERSTAND_REAL_MONEY`.

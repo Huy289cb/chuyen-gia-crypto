@@ -8,6 +8,7 @@
 import axios from 'axios';
 import { sign } from './signer';
 import { config } from './config';
+import { assertBinanceMutationAllowed } from '../../config/mainnet-safety';
 
 // Retry configuration
 const MAX_RETRIES = 3;
@@ -66,6 +67,8 @@ function createBinanceApiError(code: number, msg: string, path: string): Binance
  * @returns {Promise<object>} Response data
  */
 export async function request(method: string, path: string, params: any = {}, signed: boolean = false): Promise<any> {
+  assertBinanceMutationAllowed(method, path);
+
   const timestamp = Date.now();
 
   let queryParams = new URLSearchParams({

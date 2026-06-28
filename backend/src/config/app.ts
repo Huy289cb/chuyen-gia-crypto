@@ -149,6 +149,13 @@ export function validateSafetyRequirements(): void {
     }
   }
 
+  try {
+    const { validateMainnetSafetyRequirements } = require('./mainnet-safety');
+    errors.push(...validateMainnetSafetyRequirements());
+  } catch (error) {
+    console.warn('[SafetyValidation] Could not validate mainnet safety configuration:', error);
+  }
+
   if (errors.length > 0) {
     throw new Error(`Safety validation failed: ${errors.join(', ')}`);
   }
