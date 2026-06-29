@@ -70,14 +70,16 @@ export function notifyFromTradeEvent(
 
   if (d.suppress_telegram === true) {
     if (d.bookkeeping_close === true && eventType === 'position_closed') {
+      const isStaleGhost = d.stale_ghost === true;
+      const reason = isStaleGhost
+        ? 'Dọn vị thế treo trong hệ thống (không còn trên Binance). Không ảnh hưởng số dư, bạn không cần làm gì.'
+        : 'Vị thế đã đóng trên Binance trước đó (SL/TP hoặc đóng tay). Bot tự đồng bộ lại sổ — lãi/lỗ đã phản ánh trong số dư, bạn không cần làm gì.';
       notifyTrade(
         {
-          title: '⚪ Đóng sổ (reconciliation)',
+          title: '⚪ Đồng bộ vị thế',
           symbol: d.symbol != null ? String(d.symbol) : undefined,
           side: d.side != null ? String(d.side) : undefined,
-          entry: typeof d.entry_price === 'number' ? d.entry_price : undefined,
-          closePrice: typeof d.close_price === 'number' ? d.close_price : undefined,
-          reason: 'DB đóng sổ — PnL=0, kiểm tra Binance nếu vẫn thấy vị thế',
+          reason,
           extra: { position_id: positionId },
         },
         `bookkeeping:${positionId}`
