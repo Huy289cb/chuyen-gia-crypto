@@ -85,7 +85,10 @@ function handleMessage(data: string): void {
     const message = JSON.parse(data);
 
     if (message.e === 'ORDER_TRADE_UPDATE') {
-      void handleOrderTradeUpdate(message);
+      void handleOrderTradeUpdate(message).catch((error: unknown) => {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('[BinanceWebSocketSync] ORDER_TRADE_UPDATE handler failed:', msg);
+      });
     } else if (message.e === 'ACCOUNT_UPDATE') {
       handleAccountUpdate(message);
     } else {
@@ -207,8 +210,10 @@ async function handlePartialFill(
 
   await updateTestnetPendingOrder(localOrder.order_id, {
     status: 'partially_filled',
-    executed_quantity: executedQty,
-    average_price: price,
+    executed_size_qty: executedQty,
+    executed_size_usd: executedQty * price,
+    executed_price: price,
+    executed_at: new Date(eventTime),
   });
 
   await recordTestnetTradeEvent(localOrder.order_id, 'partial_fill', {
