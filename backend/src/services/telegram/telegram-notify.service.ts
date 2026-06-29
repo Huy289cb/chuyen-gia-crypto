@@ -68,6 +68,11 @@ export function notifyFromTradeEvent(
 
   const d = eventData || {};
 
+  // Partial fills are internal progress — user only needs the final open notification.
+  if (eventType === 'partial_fill') {
+    return;
+  }
+
   // Bookkeeping / reconciliation closes (PnL=0, no wallet change) are pure
   // internal DB sync — nothing the user needs to act on, so stay silent.
   if (d.suppress_telegram === true) {

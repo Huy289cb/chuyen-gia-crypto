@@ -67,6 +67,27 @@ export interface MaterializeFillOptions {
   reconciliationBackfill?: boolean;
 }
 
+/** Skip duplicate "Mở vị thế" when WS already notified before a recovery pass. */
+export async function hasEntryFillBeenNotified(orderId: string): Promise<boolean> {
+  const { prisma: db } = await import('../lib/prisma');
+  const recent = await db.testnetTradeEvent.findMany({
+    where: { event_type: 'entry_order_filled' },
+    orderBy: { timestamp: 'desc' },
+    take: 80,
+    select: { event_data: true },
+  });
+  for (const ev of recent) {
+    if (!ev.event_data) continue;
+    try {
+      const data = JSON.parse(ev.event_data) as { order_id?: string };
+      if (data.order_id === orderId) return true;
+    } catch {
+      /* skip malformed */
+    }
+  }
+  return false;
+}
+
 async function markPendingExecutedWithoutPosition(
   localOrder: { order_id: string },
   avgPrice: number,
@@ -269,6 +290,12 @@ export async function materializePositionFromPendingFill(
   const { resolveTestnetAccountBalances } = await import('./binance-balance-sync.service');
   const balances = await resolveTestnetAccountBalances(localOrder.account_id);
 
+  const entryAlreadyNotified = await hasEntryFillBeenNotified(localOrder.order_id);
+  const skipEntryTelegram =
+    options?.suppressTelegram === true ||
+    options?.reconciliationBackfill === true ||
+    entryAlreadyNotified;
+
   await recordTestnetTradeEvent(positionId, 'entry_order_filled', {
     order_id: localOrder.order_id,
     binance_order_id: localOrder.binance_order_id,
@@ -283,7 +310,7 @@ export async function materializePositionFromPendingFill(
     size_usd: sizeUsd,
     account_balance: balances.account_balance,
     account_equity: balances.account_equity,
-    ...(options?.suppressTelegram ? { suppress_telegram: true } : {}),
+    ...(skipEntryTelegram ? { suppress_telegram: true } : {}),
     ...(options?.reconciliationBackfill ? { reconciliation_backfill: true } : {}),
     timestamp: new Date(eventTime ?? Date.now()).toISOString(),
     ...(linkedDecisionId != null ? { decision_id: linkedDecisionId } : {}),

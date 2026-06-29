@@ -219,6 +219,7 @@ async function handlePartialFill(
   await recordTestnetTradeEvent(localOrder.order_id, 'partial_fill', {
     executed_qty: executedQty,
     avg_price: price,
+    suppress_telegram: true,
     timestamp: new Date(eventTime).toISOString(),
   });
 }
@@ -281,7 +282,10 @@ async function handleAlgoOrderFilled(
 function handleAccountUpdate(event: any): void {
   const { E: eventTime, a: account } = event;
   console.log(`[BinanceWebSocketSync] ACCOUNT_UPDATE at ${new Date(eventTime).toISOString()}`);
-  void syncClosedPositionsFromAccountUpdate(account?.P ?? []);
+  void syncClosedPositionsFromAccountUpdate(account?.P ?? []).catch((error: unknown) => {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[BinanceWebSocketSync] ACCOUNT_UPDATE handler failed:', msg);
+  });
 }
 
 function startKeepAlive(): void {
