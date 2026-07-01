@@ -39,7 +39,6 @@ import {
   isBinanceAccountKnownUnhealthy,
   recordBinanceTradingAccessObserved,
 } from './binance-account-health.service';
-import { hasBinanceFillProof } from '../utils/binance-fill-proof';
 
 /**
  * Perform startup reconciliation between local DB and Binance
