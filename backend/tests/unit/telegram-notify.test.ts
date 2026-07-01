@@ -65,4 +65,20 @@ describe('notifyFromTradeEvent', () => {
     expect(body).toContain('Mở vị thế');
     expect(body).toContain('BTC');
   });
+
+  it('notifies real position_closed with PnL', () => {
+    notifyFromTradeEvent('position_closed', {
+      symbol: 'BTC',
+      side: 'short',
+      entry_price: 58649.5,
+      close_price: 58826.9,
+      realized_pnl: -6.03,
+      close_reason: 'binance_sl',
+      account_balance: 4994,
+    });
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+    const body = mockEnqueue.mock.calls[0][0] as string;
+    expect(body).toContain('Đóng vị thế');
+    expect(body).toContain('binance_sl');
+  });
 });

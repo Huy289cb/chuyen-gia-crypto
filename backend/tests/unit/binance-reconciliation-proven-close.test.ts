@@ -85,14 +85,20 @@ describe('binance-reconciliation absent-on-Binance close', () => {
     vi.mocked(prisma.testnetPosition.findUnique).mockResolvedValue(openProvenPosition as never);
   });
 
-  it('bookkeeping-closes proven position absent on Binance (PnL=0, no userTrades)', async () => {
+  it('proven-fill close via reconciliation (no bookkeeping flag)', async () => {
     await performStartupReconciliation();
 
     expect(closeLocalPosition).toHaveBeenCalledWith(
       expect.objectContaining({ position_id: 'pos_proven', binance_order_id: '15243540740' }),
       67185.6,
       'reconciliation_closed_not_on_binance',
-      expect.objectContaining({ bookkeeping_close: true })
+      expect.objectContaining({ verified_binance_zero: true })
+    );
+    expect(closeLocalPosition).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.not.objectContaining({ bookkeeping_close: true })
     );
   });
 });

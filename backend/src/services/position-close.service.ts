@@ -118,11 +118,12 @@ export async function closeLocalPosition(
     return 0;
   }
 
+  const hasFillProof = hasBinanceFillProof(position);
   const isBookkeepingClose =
-    eventMeta?.bookkeeping_close === true ||
-    eventMeta?.stale_ghost === true ||
+    (eventMeta?.bookkeeping_close === true && !hasFillProof) ||
+    (eventMeta?.stale_ghost === true && !hasFillProof) ||
     (closeReason === 'reconciliation_closed_not_on_binance'
-      ? !hasBinanceFillProof(position)
+      ? !hasFillProof
       : isBookkeepingCloseReason(closeReason));
 
   const needsBinanceProof =

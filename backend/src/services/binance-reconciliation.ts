@@ -5,7 +5,7 @@
  * 1. Real-time fills are created by WebSocket; reconciliation can recover live unprotected exposure.
  * 2. Reconciliation fixes pending status and only materializes old fills when Binance still has live exposure.
  * 3. Open positions: at most one local row per symbol; align qty with Binance net.
- * 4. Absent on Binance: bookkeeping PnL=0 only (wallet synced from Binance separately).
+ * 4. Absent on Binance: bookkeeping PnL=0 for phantom rows; proven fills resolve PnL + notify.
  * 5. Never resurrect closed or mislabeled rows (prevents 62k ghost shorts).
  * 6. Close open rows older than 6h when absent on Binance (stale ghosts).
  * 7. Reconciliation uses positionRisk only — never userTrades net for open/reopen/close skip.
@@ -29,6 +29,7 @@ import {
 } from './binance-exposure.service';
 import { getOpenOrders, getOpenAlgoOrders, cancelAlgoOrder } from './binanceClient';
 import { isPhantomReopenEnabled } from '../config/v3-entry-policy';
+import { hasBinanceFillProof } from '../utils/binance-fill-proof';
 import {
   type ParsedBinancePosition,
   type PositionSideLocal,
@@ -499,9 +500,11 @@ async function closeLocalIfAbsentOnBinance(
 
   const closePrice = full.current_price > 0 ? full.current_price : full.entry_price;
   const closeReason = opts?.staleGhost ? 'stale_ghost_open' : 'reconciliation_closed_not_on_binance';
+  const provenFill = hasBinanceFillProof(full);
 
   console.warn(
-    `[BinanceReconciliation] Bookkeeping-close ${full.position_id} (${label}) — PnL=0, wallet from Binance`
+    `[BinanceReconciliation] Closing ${full.position_id} (${label}) — ` +
+      (provenFill ? 'proven fill, resolve PnL from Binance' : 'bookkeeping PnL=0, wallet from Binance')
   );
 
   await closeLocalPosition(
@@ -510,7 +513,7 @@ async function closeLocalIfAbsentOnBinance(
     closeReason,
     {
       verified_binance_zero: true,
-      bookkeeping_close: true,
+      ...(!provenFill ? { bookkeeping_close: true } : {}),
       ...(opts?.staleGhost ? { stale_ghost: true } : {}),
     }
   );
@@ -527,16 +530,22 @@ async function forceCloseStaleGhost(local: {
   if (!full || full.status !== 'open' || !full.account) return;
 
   const closePrice = full.current_price > 0 ? full.current_price : full.entry_price;
+  const provenFill = hasBinanceFillProof(full);
   console.warn(
     `[BinanceReconciliation] Force-closing stale ghost ${full.position_id} ` +
-      `(entry ${full.entry_time?.toISOString()} @ ${full.entry_price})`
+      `(entry ${full.entry_time?.toISOString()} @ ${full.entry_price})` +
+      (provenFill ? ' — proven fill, resolve PnL' : ' — bookkeeping')
   );
 
   await closeLocalPosition(
     { ...full, account: { current_balance: full.account.current_balance } },
     closePrice,
     'stale_ghost_open',
-    { stale_ghost: true, verified_binance_zero: true, bookkeeping_close: true }
+    {
+      stale_ghost: true,
+      verified_binance_zero: true,
+      ...(!provenFill ? { bookkeeping_close: true } : {}),
+    }
   );
 }
 

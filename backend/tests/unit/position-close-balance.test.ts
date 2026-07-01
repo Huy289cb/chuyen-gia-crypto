@@ -218,5 +218,43 @@ describe('closeLocalPosition balance updates', () => {
         close_qty: 0.01,
       })
     );
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.not.objectContaining({ suppress_telegram: true })
+    );
+  });
+
+  it('bookkeeping_close meta ignored when position has Binance fill proof', async () => {
+    mockResolveClosePnlFromUserTrades.mockResolvedValue({
+      verified: true,
+      realizedPnl: -6.03,
+      closePrice: 58826.9,
+      source: 'user_trades',
+      tradeIds: [42],
+      closeQty: 0.034,
+    });
+
+    await closeLocalPosition(
+      { ...basePosition, binance_order_id: '17994752947' },
+      58826.9,
+      'reconciliation_closed_not_on_binance',
+      { verified_binance_zero: true, bookkeeping_close: true }
+    );
+
+    expect(mockResolveClosePnlFromUserTrades).toHaveBeenCalled();
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.objectContaining({
+        realized_pnl: -6.03,
+        binance_fill_ids: [42],
+      })
+    );
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.not.objectContaining({ suppress_telegram: true })
+    );
   });
 });
