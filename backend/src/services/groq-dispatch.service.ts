@@ -17,6 +17,8 @@ import {
 } from '../utils/trade-levels';
 import { getRiskPolicy } from '../config/risk-policy';
 import {
+  evaluateHtfTrendRequirement,
+  getV3HtfTrendAlt,
   getV3RequireHtfTrend,
   isRangeEntryBlocked,
   isRegimeAllowedForEntry,
@@ -395,8 +397,24 @@ export class GroqDispatchService {
       const htfRegime = htfScan?.signalResult
         ? resolveGateRegimeFromSignal(htfScan.signalResult)
         : 'unknown';
-      if (htfRegime !== 'trend') {
-        const reason = `HTF ${htfTf} regime ${htfRegime} !== trend (V3_REQUIRE_HTF_TREND)`;
+      const altTf = getV3HtfTrendAlt();
+      let altRegime: string | undefined;
+      if (altTf) {
+        const altScan = getScanResult(symbol, altTf);
+        altRegime = altScan?.signalResult
+          ? resolveGateRegimeFromSignal(altScan.signalResult)
+          : 'unknown';
+      }
+      const htfCheck = evaluateHtfTrendRequirement({
+        entryTimeframe: timeframe,
+        primaryTf: htfTf,
+        primaryRegime: htfRegime,
+        altTf,
+        altRegime,
+      });
+      if (!htfCheck.pass) {
+        const reason =
+          htfCheck.reason ?? `HTF ${htfTf} regime ${htfRegime} !== trend (V3_REQUIRE_HTF_TREND)`;
         if (this.config.enableMemory) {
           await memoryService.storeDecision({
             symbol,

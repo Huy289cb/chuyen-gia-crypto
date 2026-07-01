@@ -109,6 +109,80 @@ export function getV3RequireHtfTrend(): string | null {
   return raw;
 }
 
+/**
+ * Alternate TF for OR trend check when primary HTF is not trend (e.g. `15m` when primary is `1h`).
+ * Used with V3_HTF_FLEX_LTF_ONLY for 5m/15m entries only.
+ */
+export function getV3HtfTrendAlt(): string | null {
+  const raw = process.env.V3_HTF_TREND_ALT?.trim();
+  if (!raw || raw === 'false' || raw === 'off') {
+    return null;
+  }
+  return raw;
+}
+
+/** When true (default), HTF flex OR-guard applies only to 5m/15m entries — 1h still needs primary HTF trend. */
+export function isV3HtfFlexLtfOnly(): boolean {
+  return process.env.V3_HTF_FLEX_LTF_ONLY !== 'false';
+}
+
+export interface HtfTrendCheckResult {
+  pass: boolean;
+  reason?: string;
+  primaryRegime?: string;
+  altRegime?: string;
+}
+
+const HTF_FLEX_ENTRY_TFS = new Set(['5m', '15m']);
+
+/**
+ * Primary HTF must be trend; optionally allow alt TF trend for LTF entries (5m/15m).
+ */
+export function evaluateHtfTrendRequirement(input: {
+  entryTimeframe: string;
+  primaryTf: string;
+  primaryRegime: string | null | undefined;
+  altTf?: string | null;
+  altRegime?: string | null | undefined;
+}): HtfTrendCheckResult {
+  const { entryTimeframe, primaryTf, primaryRegime, altTf, altRegime } = input;
+  const primary = primaryRegime ?? 'unknown';
+
+  if (primary === 'trend') {
+    return { pass: true, primaryRegime: primary, altRegime: altRegime ?? undefined };
+  }
+
+  const alt = altRegime ?? 'unknown';
+  const altEnabled = Boolean(altTf);
+  const ltfEntry = HTF_FLEX_ENTRY_TFS.has(entryTimeframe);
+  const flexApplies = altEnabled && alt === 'trend' && (!isV3HtfFlexLtfOnly() || ltfEntry);
+
+  if (flexApplies && altTf) {
+    return {
+      pass: true,
+      primaryRegime: primary,
+      altRegime: alt,
+      reason: `HTF ${primaryTf} ${primary} but ${altTf} trend (V3_HTF_TREND_ALT)`,
+    };
+  }
+
+  if (altEnabled && alt === 'trend' && isV3HtfFlexLtfOnly() && !ltfEntry) {
+    return {
+      pass: false,
+      primaryRegime: primary,
+      altRegime: alt,
+      reason: `HTF ${primaryTf} regime ${primary} !== trend (${entryTimeframe} entry requires primary HTF trend)`,
+    };
+  }
+
+  return {
+    pass: false,
+    primaryRegime: primary,
+    altRegime: altEnabled ? alt : undefined,
+    reason: `HTF ${primaryTf} regime ${primary} !== trend (V3_REQUIRE_HTF_TREND)`,
+  };
+}
+
 /** HTF used to align LTF regime for gate pass (default: same as V3_REQUIRE_HTF_TREND or 1h). */
 export function getV3LtfAlignRegimeHtf(): string | null {
   const raw = process.env.V3_LTF_ALIGN_REGIME_HTF?.trim();
