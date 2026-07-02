@@ -185,22 +185,40 @@ export async function closeLocalPosition(
   });
 
   if (!isBookkeepingClose) {
-    const isWinForBalance = realizedPnl > 0;
-    const localBalance = position.account.current_balance + realizedPnl;
+    const isWin = realizedPnl > 0;
+    const isLoss = realizedPnl < 0;
+    const accountUpdate: {
+      current_balance?: number;
+      equity?: number;
+      unrealized_pnl: number;
+      realized_pnl?: { increment: number };
+      total_trades?: { increment: number };
+      winning_trades?: { increment: number };
+      losing_trades?: { increment: number };
+      consecutive_losses?: number | { increment: number };
+      last_trade_time: Date;
+      updated_at: Date;
+    } = {
+      unrealized_pnl: 0,
+      last_trade_time: new Date(),
+      updated_at: new Date(),
+    };
+
+    // Breakeven (PnL=0) is not a win or loss for streak/cooldown — only real PnL moves stats.
+    if (isWin || isLoss) {
+      const localBalance = position.account.current_balance + realizedPnl;
+      accountUpdate.current_balance = localBalance;
+      accountUpdate.equity = localBalance;
+      accountUpdate.realized_pnl = { increment: realizedPnl };
+      accountUpdate.total_trades = { increment: 1 };
+      accountUpdate.winning_trades = { increment: isWin ? 1 : 0 };
+      accountUpdate.losing_trades = { increment: isLoss ? 1 : 0 };
+      accountUpdate.consecutive_losses = isWin ? 0 : { increment: 1 };
+    }
+
     await prisma.testnetAccount.update({
       where: { id: position.account_id },
-      data: {
-        current_balance: localBalance,
-        equity: localBalance,
-        unrealized_pnl: 0,
-        realized_pnl: { increment: realizedPnl },
-        total_trades: { increment: 1 },
-        winning_trades: { increment: isWinForBalance ? 1 : 0 },
-        losing_trades: { increment: isWinForBalance ? 0 : 1 },
-        consecutive_losses: isWinForBalance ? 0 : { increment: 1 },
-        last_trade_time: new Date(),
-        updated_at: new Date(),
-      },
+      data: accountUpdate,
     });
   }
 
@@ -244,7 +262,7 @@ export async function closeLocalPosition(
     return realizedPnl;
   }
 
-  const isWin = realizedPnl > 0;
+  const isLoss = realizedPnl < 0;
   const outcomeCtx: CloseOutcomeContext = {
     position_id: position.position_id,
     symbol: position.symbol ?? 'BTC',
@@ -267,8 +285,11 @@ export async function closeLocalPosition(
     skipReflection: !fillVerified,
   });
 
-  if (!isWin) {
-    await applyConsecutiveLossCooldownIfNeeded(position.account_id);
+  if (isLoss) {
+    await applyConsecutiveLossCooldownIfNeeded(
+      position.account_id,
+      position.symbol ?? 'BTC'
+    );
   }
 
   return realizedPnl;

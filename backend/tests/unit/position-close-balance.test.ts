@@ -138,6 +138,37 @@ describe('closeLocalPosition balance updates', () => {
     );
   });
 
+  it('breakeven close does not increment consecutive losses or trade stats', async () => {
+    mockResolveClosePnlFromUserTrades.mockResolvedValue({
+      verified: true,
+      realizedPnl: 0,
+      closePrice: 60000,
+      source: 'user_trades',
+      tradeIds: [1],
+      closeQty: 0.01,
+    });
+
+    await closeLocalPosition(basePosition, 60000, 'take_profit', {
+      binance_order_id: '123',
+    });
+
+    expect(mockPrismaUpdate).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({
+        unrealized_pnl: 0,
+      }),
+    });
+    expect(mockPrismaUpdate).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.not.objectContaining({
+        consecutive_losses: expect.anything(),
+        total_trades: expect.anything(),
+      }),
+    });
+    expect(mockApplyConsecutiveLossCooldownIfNeeded).not.toHaveBeenCalled();
+    expect(mockRecordTradeOutcomeOnClose).toHaveBeenCalled();
+  });
+
   it('bookkeeping close twice does not double-charge account stats', async () => {
     const posA = { ...basePosition, position_id: 'pos_a' };
     const posB = { ...basePosition, position_id: 'pos_b' };

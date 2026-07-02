@@ -1,19 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindUniqueAccount = vi.hoisted(() => vi.fn());
+const mockUpdateAccount = vi.hoisted(() => vi.fn());
 const mockGetBinanceLossStreak = vi.hoisted(() => vi.fn());
+const mockSetTestnetAccountCooldown = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {
     testnetAccount: {
       findUnique: mockFindUniqueAccount,
+      update: mockUpdateAccount,
     },
   },
 }));
 
 vi.mock('../../src/repositories/testnet.repository', () => ({
-  setTestnetAccountCooldown: vi.fn(),
-  shouldEnterTestnetCooldown: vi.fn(),
+  setTestnetAccountCooldown: mockSetTestnetAccountCooldown,
 }));
 
 vi.mock('../../src/services/binance-trade-history.service', () => ({
@@ -64,5 +66,21 @@ describe('account risk guard', () => {
 
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('Binance loss streak 2');
+  });
+
+  it('clears expired cooldown_until before allowing entries', async () => {
+    mockFindUniqueAccount.mockResolvedValue({
+      id: 1,
+      cooldown_until: new Date(Date.now() - 60_000),
+      consecutive_losses: 2,
+    });
+
+    const result = await assertTestnetAccountCanOpenTrade(1, 'BTC');
+
+    expect(result.allowed).toBe(true);
+    expect(mockUpdateAccount).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { cooldown_until: null },
+    });
   });
 });
