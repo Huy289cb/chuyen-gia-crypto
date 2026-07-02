@@ -9,7 +9,7 @@ import WebSocket from 'ws';
 import { startListenKey, keepAliveListenKey, closeListenKey } from './binance/stream';
 import {
   updateTestnetPendingOrder,
-  recordTestnetTradeEvent,
+  recordPipelineEvent,
 } from '../repositories/testnet.repository';
 import {
   findLocalOrderForBinanceEvent,
@@ -100,7 +100,7 @@ function handleMessage(data: string): void {
   }
 }
 
-async function handleOrderTradeUpdate(event: any): Promise<void> {
+export async function handleOrderTradeUpdate(event: any): Promise<void> {
   const { o: order, E: eventTime } = event;
   const binanceOrderId = String(order.i);
   const orderStatus = order.X;
@@ -216,7 +216,10 @@ async function handlePartialFill(
     executed_at: new Date(eventTime),
   });
 
-  await recordTestnetTradeEvent(localOrder.order_id, 'partial_fill', {
+  await recordPipelineEvent('partial_fill', {
+    order_id: localOrder.order_id,
+    binance_order_id: localOrder.binance_order_id ?? null,
+    symbol: localOrder.symbol,
     executed_qty: executedQty,
     avg_price: price,
     suppress_telegram: true,
@@ -268,9 +271,10 @@ async function handleAlgoOrderFilled(
   );
 
   if (!closed) {
-    await recordTestnetTradeEvent('unknown', 'algo_order_filled', {
+    await recordPipelineEvent('algo_order_filled', {
       binance_order_id: binanceOrderId,
       order_type: orderType,
+      symbol,
       executed_qty: executedQty,
       avg_price: avgPrice,
       position_closed: false,

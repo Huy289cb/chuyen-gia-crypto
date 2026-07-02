@@ -165,7 +165,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
         )}
         <div className="grid grid-cols-2 gap-3">
           <div className="panel-stat">
-            <p className="text-xs text-foreground-tertiary mb-1">Daily PnL (UTC)</p>
+            <p className="text-xs text-foreground-tertiary mb-1">Daily PnL (ICT)</p>
             <p
               className={cn(
                 'text-sm font-mono font-semibold',
