@@ -20,6 +20,7 @@
     "testnet:reconcile-position-pnl": "tsx scripts/reconcile-position-pnl.ts",
     "v3:reset-5m": "tsx scripts/v3-reset-for-5m.ts",
     "v3:backfill-ohlcv": "tsx scripts/v3-backfill-ohlcv.ts",
+    "backtest:historical": "tsx scripts/run-historical-testbed.ts",
     "benchmark:cerebras": "tsx scripts/benchmark-cerebras-dispatch-models.ts",
     "benchmark:openrouter": "tsx scripts/benchmark-openrouter-dispatch-models.ts",
     "smoke:llm-providers": "tsx scripts/smoke-llm-providers.ts",
