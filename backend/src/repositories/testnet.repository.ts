@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { getRiskPolicy } from '../config/risk-policy';
+import { getRiskPolicy, resolveLossCooldownUntil } from '../config/risk-policy';
 
 /**
  * Testnet Repository
@@ -255,25 +255,23 @@ export async function shouldEnterTestnetCooldown(accountId: number): Promise<{
   }
 
   const consecutiveLosses = account.consecutive_losses || 0;
-  const threshold = getRiskPolicy().maxConsecutiveLosses;
-  const cooldownHours = parseFloat(process.env.CONSECUTIVE_LOSS_COOLDOWN_HOURS || '4');
+  const policy = getRiskPolicy();
 
-  if (consecutiveLosses >= threshold) {
-    const cooldownUntil = new Date();
-    cooldownUntil.setHours(cooldownUntil.getHours() + (Number.isFinite(cooldownHours) ? cooldownHours : 4));
+  if (consecutiveLosses >= policy.lossCooldownTier2MinStreak) {
+    const cooldownUntil = resolveLossCooldownUntil(consecutiveLosses, new Date());
 
     return {
       shouldCooldown: true,
-      cooldownUntil: cooldownUntil.toISOString(),
+      cooldownUntil: cooldownUntil?.toISOString(),
       consecutiveLosses,
-      reason: `${consecutiveLosses} consecutive losses, entering ${cooldownHours}h cooldown`,
+      reason: `${consecutiveLosses} consecutive losses, tiered cooldown until ${cooldownUntil?.toISOString()}`,
     };
   }
 
   return {
     shouldCooldown: false,
     consecutiveLosses,
-    reason: `${consecutiveLosses} consecutive losses, below threshold of ${threshold}`,
+    reason: `${consecutiveLosses} consecutive losses, below tier2 threshold ${policy.lossCooldownTier2MinStreak}`,
   };
 }
 

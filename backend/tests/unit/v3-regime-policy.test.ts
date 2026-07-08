@@ -10,11 +10,14 @@ describe('v3-regime-policy', () => {
     expect(getRegimeTrendMinPct('1h')).toBeLessThan(0.15);
   });
 
-  it('breakout grade B bypasses regime for gate', () => {
+  it('only breakout grade A bypasses regime for gate', () => {
     process.env.V3_BREAKOUT_REGIME_BYPASS = 'true';
     expect(
-      shouldBypassRegimeForBreakout('15m', 'breakout_volume', 'B')
+      shouldBypassRegimeForBreakout('15m', 'breakout_volume', 'A')
     ).toBe(true);
+    expect(
+      shouldBypassRegimeForBreakout('15m', 'breakout_volume', 'B')
+    ).toBe(false);
     expect(
       shouldBypassRegimeForBreakout('15m', 'liquidity_sweep_reclaim', 'A')
     ).toBe(false);

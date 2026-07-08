@@ -13,12 +13,16 @@ vi.mock('../../src/services/v3-entry-eligibility.service', () => ({
   oppositeLocalSide: (side: 'long' | 'short') => (side === 'long' ? 'short' : 'long'),
 }));
 
-vi.mock('../../src/config/v3-entry-policy', () => ({
-  isV3ScaleInEnabled: vi.fn(() => true),
-  isV3OppositeFlipEnabled: vi.fn(() => false),
-  getBinanceMinOrderNotionalUsd: vi.fn(() => 50),
-  resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
-}));
+vi.mock('../../src/config/v3-entry-policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/config/v3-entry-policy')>();
+  return {
+    ...actual,
+    isV3ScaleInEnabled: vi.fn(() => true),
+    isV3OppositeFlipEnabled: vi.fn(() => false),
+    getBinanceMinOrderNotionalUsd: vi.fn(() => 200),
+    resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
+  };
+});
 
 vi.mock('../../src/services/opposite-flip.service', () => ({
   tryOppositeFlipBeforeEntry: vi.fn().mockResolvedValue({ flipped: false, reason: 'no opposite exposure' }),

@@ -7,12 +7,17 @@ import { getRiskPolicy } from '../config/risk-policy';
 import { getV3EntryTfPriorityRank, getV3SignalGateTimeframes } from '../config/v3-schedulers';
 import {
   evaluateHtfTrendRequirement,
+  evaluate5mEntryGuards,
+  evaluateSetupGradePlaybookFilter,
   getSignalGateAllowedRegimes,
   getV3HtfTrendAlt,
   getV3LtfAlignRegimeHtf,
   getV3RequireHtfTrend,
   isRangeEntryBlocked,
 } from '../config/v3-entry-policy';
+import { resolveTestbedVariant } from '../config/testbed-variants';
+import { buildAllBreakdowns, formatBreakdownSection } from './breakdown';
+import { BacktestCooldownState } from './cooldown-simulator';
 import { compareSignalGateForEntry } from '../utils/signal-gate-ranking';
 import { computePolicyCompliantStopAndTarget } from '../utils/trade-levels';
 import { computeRegimeEvidence, type MarketRegime } from '../analyzers/market-regime.analyzer';
@@ -62,7 +67,8 @@ export async function runHistoricalTestbed(
   options: BacktestRunOptions = {}
 ): Promise<BacktestRunResult> {
   const symbol = (options.symbol ?? 'BTC').toUpperCase();
-  const weeks = options.weeks ?? 3;
+  const weeks = options.days ? options.days / 7 : (options.weeks ?? 3);
+  const variant = resolveTestbedVariant(options.variant);
   const policy = getRiskPolicy();
   const minSlPct = options.minSlPct ?? policy.minSlDistancePercent;
   const minRr = options.minRr ?? 2;
@@ -71,12 +77,17 @@ export async function runHistoricalTestbed(
   const timeframes = [...getV3SignalGateTimeframes()];
   const entryRank = getV3EntryTfPriorityRank();
 
+  const endDate = options.endDate ?? new Date();
+  const startDate =
+    options.startDate ??
+    new Date(endDate.getTime() - (options.days ?? weeks * 7) * 24 * 60 * 60_000);
+
   const loaded = await loadBacktestCandles({
     symbol,
     weeks,
     timeframes,
-    startDate: options.startDate,
-    endDate: options.endDate,
+    startDate,
+    endDate,
     extraWarmupBars5m: options.warmupBars5m ?? 150,
   });
 
@@ -85,8 +96,8 @@ export async function runHistoricalTestbed(
   const walkBars = candles5m.filter((c) => c.timestamp >= periodStartTs);
 
   const gate = new SignalGateService({
-    minGrade: policy.minSignalGrade,
-    minConfidence: policy.minSignalConfidence,
+    minGrade: variant.minGrade ?? policy.minSignalGrade,
+    minConfidence: variant.minConfidence ?? policy.minSignalConfidence,
     allowedRegimes: getSignalGateAllowedRegimes(),
     enableDuplicateFilter: false,
   });
@@ -100,9 +111,13 @@ export async function runHistoricalTestbed(
     no_direction: 0,
     open_position: 0,
     duplicate_signal: 0,
+    entry_5m_guard: 0,
+    grade_playbook: 0,
+    cooldown: 0,
   };
 
   const tradedSignals = new Set<string>();
+  const cooldown = variant.enableCooldown ? new BacktestCooldownState() : null;
 
   const trades: BacktestTrade[] = [];
   let signalsPassed = 0;
@@ -116,6 +131,16 @@ export async function runHistoricalTestbed(
     return computeRegimeEvidence(slice, { regimeBars: w.regimeBars, timeframe: tf }).regime;
   };
 
+  const getHtfState = (tf: string, ts: number) => {
+    const slice = candlesUpTo(loaded.byTf[tf] ?? [], ts);
+    if (slice.length < 50) {
+      return { regime: null as string | null, trendDirection: null as 'bullish' | 'bearish' | null };
+    }
+    const w = getSignalGateWindows(tf);
+    const ev = computeRegimeEvidence(slice, { regimeBars: w.regimeBars, timeframe: tf });
+    return { regime: ev.regime, trendDirection: ev.trendDirection };
+  };
+
   for (let barIdx = 0; barIdx < walkBars.length; barIdx++) {
     const bar = walkBars[barIdx];
     const ts = bar.timestamp;
@@ -124,16 +149,15 @@ export async function runHistoricalTestbed(
       if (barIdx > open.entryBarIndex) {
         const hit = checkBarForExit(open, bar);
         if (hit) {
-          trades.push({
-            id: ++tradeId,
-            ...closePositionAt(
-              open,
-              ts,
-              hit.closePrice,
-              hit.closeReason,
-              barIdx - open.entryBarIndex
-            ),
-          });
+          const closed = closePositionAt(
+            open,
+            ts,
+            hit.closePrice,
+            hit.closeReason,
+            barIdx - open.entryBarIndex
+          );
+          trades.push({ id: ++tradeId, ...closed });
+          cooldown?.onTradeClose(closed.pnlUsd, ts);
           open = null;
         } else {
           blocks.open_position += 1;
@@ -147,6 +171,13 @@ export async function runHistoricalTestbed(
 
     const htfRegime1h = getHtfRegime(htfTf, ts);
     const htfRegimeAlt = altTf ? getHtfRegime(altTf, ts) : undefined;
+    const state1h = getHtfState('1h', ts);
+    const state15m = getHtfState('15m', ts);
+
+    if (cooldown?.isBlocked(ts)) {
+      blocks.cooldown += 1;
+      continue;
+    }
 
     const evaluations: Array<{ timeframe: string; result: Awaited<ReturnType<SignalGateService['evaluate']>>; candles: typeof walkBars }> = [];
 
@@ -208,6 +239,32 @@ export async function runHistoricalTestbed(
       continue;
     }
 
+    const gradeFilter = evaluateSetupGradePlaybookFilter({
+      grade: pick.result.setupResult.grade,
+      confidence: pick.result.setupResult.confidence,
+      playbookKey: pick.result.setupResult.playbookKey,
+      minGrade: variant.minGrade,
+      gradeBMinConfidence: variant.gradeBMinConfidence,
+      gradeBAllowedPlaybooks: variant.gradeBAllowedPlaybooks,
+    });
+    if (!gradeFilter.pass) {
+      blocks.grade_playbook += 1;
+      continue;
+    }
+
+    const fiveMGuard = evaluate5mEntryGuards({
+      entryTimeframe: pick.timeframe,
+      side,
+      tf1h: state1h,
+      tf15m: state15m,
+      block5mWhen1hRange: variant.block5mWhen1hRange,
+      require5mHtfConfirm: variant.require5mHtfConfirm,
+    });
+    if (!fiveMGuard.pass) {
+      blocks.entry_5m_guard += 1;
+      continue;
+    }
+
     const action = side === 'long' ? 'buy' : 'sell';
     const entry = bar.close;
     const levels = computePolicyCompliantStopAndTarget({
@@ -242,7 +299,10 @@ export async function runHistoricalTestbed(
 
   if (open) {
     const closed = simulatePositionExit(open, walkBars, open.entryBarIndex + 1);
-    if (closed) trades.push({ id: ++tradeId, ...closed });
+    if (closed) {
+      trades.push({ id: ++tradeId, ...closed });
+      cooldown?.onTradeClose(closed.pnlUsd, closed.closeTime);
+    }
   }
 
   const wins = trades.filter((t) => t.pnlUsd > 0).length;
@@ -256,7 +316,7 @@ export async function runHistoricalTestbed(
     period: {
       start: loaded.period.start.toISOString(),
       end: loaded.period.end.toISOString(),
-      weeks,
+      weeks: options.days ? options.days / 7 : weeks,
     },
     config: {
       minSlPct,
@@ -268,6 +328,7 @@ export async function runHistoricalTestbed(
         .sort((a, b) => a[1] - b[1])
         .map(([tf]) => tf),
     },
+    variant,
     summary: {
       steps: walkBars.length,
       signalsPassed,
@@ -288,6 +349,7 @@ export async function runHistoricalTestbed(
     },
     blocks,
     slBuckets: buildSlBuckets(trades),
+    breakdown: buildAllBreakdowns(trades),
     trades,
   };
 }
@@ -306,9 +368,11 @@ export async function runHistoricalTestbedSlSweep(
 
 export function formatTestbedReport(result: BacktestRunResult): string {
   const s = result.summary;
+  const variantLine = result.variant ? `Variant: ${result.variant.id} — ${result.variant.label}` : '';
   const lines = [
     `=== Historical Testbed: ${result.symbol} ===`,
-    `Period: ${result.period.start.slice(0, 10)} → ${result.period.end.slice(0, 10)} (~${result.period.weeks}w)`,
+    variantLine,
+    `Period: ${result.period.start.slice(0, 10)} → ${result.period.end.slice(0, 10)} (~${result.period.weeks.toFixed(1)}w)`,
     `Config: minSL=${(result.config.minSlPct * 100).toFixed(2)}% RR>=${result.config.minRr} notional=$${result.config.notionalUsd}`,
     `TFs: ${result.config.timeframes.join(', ')} | entry priority: ${result.config.entryTfPriority.join(' → ')}`,
     '',
@@ -323,6 +387,9 @@ export function formatTestbedReport(result: BacktestRunResult): string {
     `  signal_gate: ${result.blocks.signal_gate}`,
     `  regime: ${result.blocks.regime}`,
     `  htf: ${result.blocks.htf}`,
+    `  entry_5m_guard: ${result.blocks.entry_5m_guard}`,
+    `  grade_playbook: ${result.blocks.grade_playbook}`,
+    `  cooldown: ${result.blocks.cooldown}`,
     `  no_direction: ${result.blocks.no_direction}`,
     `  duplicate_signal: ${result.blocks.duplicate_signal}`,
     `  skipped_open_position: ${result.blocks.open_position}`,
@@ -332,6 +399,23 @@ export function formatTestbedReport(result: BacktestRunResult): string {
       (b) => `  ${b.bucket}: n=${b.n} W/L=${b.wins}/${b.losses} net=$${b.netPnl.toFixed(2)}`
     ),
   ];
+
+  if (result.breakdown) {
+    lines.push(
+      '',
+      ...formatBreakdownSection('By timeframe', result.breakdown.byTimeframe),
+      '',
+      ...formatBreakdownSection('By playbook', result.breakdown.byPlaybook),
+      '',
+      ...formatBreakdownSection('By grade', result.breakdown.byGrade),
+      '',
+      ...formatBreakdownSection('By side', result.breakdown.bySide),
+      '',
+      ...formatBreakdownSection('By day (UTC)', result.breakdown.byDay),
+      '',
+      ...formatBreakdownSection('By week (UTC)', result.breakdown.byWeek)
+    );
+  }
 
   if (result.trades.length > 0) {
     lines.push('', 'Trades:');

@@ -3,6 +3,7 @@
  */
 
 import type { SignalGateConfig } from '../services/signal-gate.service';
+import { getRiskPolicy } from './risk-policy';
 
 export type MarketRegime = 'trend' | 'range' | 'chop';
 
@@ -94,10 +95,20 @@ export function getV3OppositeFlipMinConfidence(): number {
   return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.85;
 }
 
-/** Binance futures min order notional (error -4164). */
+/** Min position notional USD (floor for sizing; default $200). */
 export function getBinanceMinOrderNotionalUsd(): number {
-  const v = parseFloat(process.env.BINANCE_MIN_ORDER_NOTIONAL_USD || '50');
-  return Number.isFinite(v) && v > 0 ? v : 50;
+  const v = parseFloat(process.env.BINANCE_MIN_ORDER_NOTIONAL_USD || '200');
+  return Number.isFinite(v) && v > 0 ? v : 200;
+}
+
+/** Risk-based size floored at min notional, capped by exposure headroom. */
+export function resolveTargetPositionNotionalUsd(input: {
+  computedUsd: number;
+  minNotionalUsd: number;
+  remainingCapacityUsd: number;
+}): number {
+  const { computedUsd, minNotionalUsd, remainingCapacityUsd } = input;
+  return Math.min(Math.max(computedUsd, minNotionalUsd), remainingCapacityUsd);
 }
 
 /** When set (e.g. `1h`), LTF pass must align with HTF trend regime before trade. */
@@ -210,4 +221,144 @@ export function canAlignLtfRegimeFromHtf(timeframe: string, htfRegime: string | 
     return false;
   }
   return htfRegime === 'trend';
+}
+
+/** Block 5m entries when primary HTF (1h) is range/chop. */
+export function isV3Block5mWhen1hRange(): boolean {
+  return process.env.V3_BLOCK_5M_WHEN_1H_RANGE === 'true';
+}
+
+/** 5m must align with 15m or 1h trend direction (not just generic HTF trend pass). */
+export function isV3Require5mHtfConfirm(): boolean {
+  return process.env.V3_REQUIRE_5M_HTF_CONFIRM === 'true';
+}
+
+export type TrendDirection = 'bullish' | 'bearish';
+
+export interface HtfConfirmTfState {
+  regime: string | null | undefined;
+  trendDirection: TrendDirection | null | undefined;
+}
+
+export interface FiveMEntryGuardResult {
+  pass: boolean;
+  reason?: string;
+}
+
+function sideToTrendDirection(side: 'long' | 'short'): TrendDirection {
+  return side === 'long' ? 'bullish' : 'bearish';
+}
+
+function tfConfirmsSide(state: HtfConfirmTfState, side: 'long' | 'short'): boolean {
+  if (state.regime !== 'trend') return false;
+  const want = sideToTrendDirection(side);
+  return state.trendDirection === want;
+}
+
+/**
+ * 5m entry guards: optional block when 1h range; require 15m or 1h trend + same direction.
+ * Used by testbed variants and runtime when env flags set.
+ */
+export function evaluate5mEntryGuards(input: {
+  entryTimeframe: string;
+  side: 'long' | 'short';
+  tf1h: HtfConfirmTfState;
+  tf15m: HtfConfirmTfState;
+  block5mWhen1hRange?: boolean;
+  require5mHtfConfirm?: boolean;
+}): FiveMEntryGuardResult {
+  const {
+    entryTimeframe,
+    side,
+    tf1h,
+    tf15m,
+    block5mWhen1hRange = isV3Block5mWhen1hRange(),
+    require5mHtfConfirm = isV3Require5mHtfConfirm(),
+  } = input;
+
+  if (entryTimeframe !== '5m') {
+    return { pass: true };
+  }
+
+  if (block5mWhen1hRange && (tf1h.regime === 'range' || tf1h.regime === 'chop')) {
+    return {
+      pass: false,
+      reason: `5m blocked: 1h regime ${tf1h.regime ?? 'unknown'} (V3_BLOCK_5M_WHEN_1H_RANGE)`,
+    };
+  }
+
+  if (!require5mHtfConfirm) {
+    return { pass: true };
+  }
+
+  const ok15 = tfConfirmsSide(tf15m, side);
+  const ok1h = tfConfirmsSide(tf1h, side);
+  if (ok15 || ok1h) {
+    const via = ok15 && ok1h ? '15m+1h' : ok15 ? '15m' : '1h';
+    return { pass: true, reason: `5m confirmed by ${via} ${sideToTrendDirection(side)} trend` };
+  }
+
+  return {
+    pass: false,
+    reason:
+      `5m needs 15m or 1h trend aligned ${side} ` +
+      `(15m=${tf15m.regime}/${tf15m.trendDirection ?? 'null'}, ` +
+      `1h=${tf1h.regime}/${tf1h.trendDirection ?? 'null'})`,
+  };
+}
+
+export interface GradePlaybookFilterResult {
+  pass: boolean;
+  reason?: string;
+}
+
+/** Grade/playbook filter for weak setups (env or testbed override). */
+export function evaluateSetupGradePlaybookFilter(input: {
+  grade: string;
+  confidence: number;
+  playbookKey: string | null;
+  minGrade?: 'A' | 'B';
+  gradeBMinConfidence?: number;
+  gradeBAllowedPlaybooks?: string[];
+}): GradePlaybookFilterResult {
+  const policy = getRiskPolicy();
+  const minGrade = input.minGrade ?? policy.minSignalGrade;
+  const gradeOrder = { A: 0, B: 1, C: 2, D: 3 };
+  const g = (input.grade || 'D') as keyof typeof gradeOrder;
+  const min = gradeOrder[minGrade] ?? 0;
+  if ((gradeOrder[g] ?? 3) > min) {
+    return { pass: false, reason: `grade ${input.grade} below min ${minGrade}` };
+  }
+
+  const bMinConf = input.gradeBMinConfidence ?? parseOptionalFloat(process.env.V3_GRADE_B_MIN_CONFIDENCE);
+  const bPlaybooks = input.gradeBAllowedPlaybooks ?? parsePlaybookList(process.env.V3_GRADE_B_ALLOWED_PLAYBOOKS);
+
+  if (input.grade === 'B') {
+    if (bMinConf != null && input.confidence < bMinConf) {
+      return {
+        pass: false,
+        reason: `grade B confidence ${input.confidence.toFixed(2)} < ${bMinConf}`,
+      };
+    }
+    if (bPlaybooks && bPlaybooks.length > 0) {
+      const pk = input.playbookKey ?? '';
+      if (!bPlaybooks.includes(pk)) {
+        return { pass: false, reason: `grade B playbook ${pk || 'unknown'} not in allowlist` };
+      }
+    }
+  }
+
+  return { pass: true };
+}
+
+function parseOptionalFloat(raw: string | undefined): number | null {
+  if (!raw?.trim()) return null;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parsePlaybookList(raw: string | undefined): string[] | null {
+  if (!raw?.trim()) return null;
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : null;
 }

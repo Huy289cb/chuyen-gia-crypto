@@ -6,7 +6,12 @@
 import type { GroqAnalysis } from './groq-client';
 import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
-import { isV3OppositeFlipEnabled, isV3ScaleInEnabled, getBinanceMinOrderNotionalUsd } from '../config/v3-entry-policy';
+import {
+  isV3OppositeFlipEnabled,
+  isV3ScaleInEnabled,
+  getBinanceMinOrderNotionalUsd,
+  resolveTargetPositionNotionalUsd,
+} from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import { checkBinanceAccountTradable } from './binance-account-health.service';
 import { tryOppositeFlipBeforeEntry } from './opposite-flip.service';
@@ -235,7 +240,11 @@ export async function executeV3Trade(
   const minNotional = getBinanceMinOrderNotionalUsd();
   const riskUsd = Math.max(1, balance * (riskPolicy.riskPerTradePercent / 100));
   const computedSizeUsd = riskUsd / slDistancePct;
-  const sizeUsd = Math.min(computedSizeUsd, remainingCapacity);
+  const sizeUsd = resolveTargetPositionNotionalUsd({
+    computedUsd: computedSizeUsd,
+    minNotionalUsd: minNotional,
+    remainingCapacityUsd: remainingCapacity,
+  });
   if (sizeUsd <= 0) {
     return { success: false, reason: 'Computed position size <= 0' };
   }

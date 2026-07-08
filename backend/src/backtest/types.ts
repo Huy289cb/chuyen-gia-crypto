@@ -1,4 +1,6 @@
 import type { SignalGateOutput } from '../services/signal-gate.service';
+import type { BacktestBreakdown } from './breakdown';
+import type { TestbedVariant } from '../config/testbed-variants';
 
 export interface BacktestCandle {
   open: number;
@@ -36,6 +38,9 @@ export interface BacktestBlockStats {
   no_direction: number;
   open_position: number;
   duplicate_signal: number;
+  entry_5m_guard: number;
+  grade_playbook: number;
+  cooldown: number;
 }
 
 export interface BacktestRunOptions {
@@ -49,6 +54,10 @@ export interface BacktestRunOptions {
   notionalUsd?: number;
   feePctPerSide?: number;
   warmupBars5m?: number;
+  /** Named variant preset (see config/testbed-variants.ts). */
+  variant?: string;
+  /** Explicit days window (overrides weeks when set). ~30 for one month. */
+  days?: number;
 }
 
 export interface BacktestRunResult {
@@ -78,6 +87,8 @@ export interface BacktestRunResult {
   };
   blocks: BacktestBlockStats;
   slBuckets: Array<{ bucket: string; n: number; wins: number; losses: number; netPnl: number }>;
+  breakdown?: BacktestBreakdown;
+  variant?: TestbedVariant;
   trades: BacktestTrade[];
   /** Last gate evaluation snapshot per TF at end of run (debug). */
   lastGateByTf?: Record<string, SignalGateOutput>;

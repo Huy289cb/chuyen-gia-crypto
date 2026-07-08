@@ -34,6 +34,11 @@ export function estimateBarsForWeeks(timeframe: string, weeks: number): number {
   return Math.ceil((weeks * 7 * 24 * 60 * 60_000) / ms) + 200;
 }
 
+function estimateBarsForRange(timeframe: string, fromMs: number, toMs: number, extraBars = 200): number {
+  const ms = TF_MS[timeframe] ?? TF_MS['5m'];
+  return Math.ceil((toMs - fromMs) / ms) + extraBars;
+}
+
 export interface LoadedBacktestCandles {
   byTf: Record<string, BacktestCandle[]>;
   period: { start: Date; end: Date };
@@ -57,14 +62,11 @@ export async function loadBacktestCandles(input: {
   const byTf: Record<string, BacktestCandle[]> = {};
 
   for (const tf of input.timeframes) {
-    const limit = Math.min(
-      5000,
-      estimateBarsForWeeks(tf, Math.max(input.weeks, 1) + 1)
-    );
-    const raw = await fetchHistoricalCandlesPaginated(input.symbol, tf, limit);
-    const all = raw.map(rawRowToCandle).filter((c) => c.timestamp > 0);
     const warmupMs = (input.extraWarmupBars5m ?? 150) * TF_MS['5m'];
     const fromTs = start.getTime() - warmupMs;
+    const limit = estimateBarsForRange(tf, fromTs, end.getTime());
+    const raw = await fetchHistoricalCandlesPaginated(input.symbol, tf, limit);
+    const all = raw.map(rawRowToCandle).filter((c) => c.timestamp > 0);
     byTf[tf] = all.filter((c) => c.timestamp >= fromTs && c.timestamp <= end.getTime());
   }
 

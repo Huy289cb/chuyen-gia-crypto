@@ -18,6 +18,8 @@ import {
 import { getRiskPolicy } from '../config/risk-policy';
 import {
   evaluateHtfTrendRequirement,
+  evaluate5mEntryGuards,
+  evaluateSetupGradePlaybookFilter,
   getV3HtfTrendAlt,
   getV3RequireHtfTrend,
   isRangeEntryBlocked,
@@ -435,6 +437,69 @@ export class GroqDispatchService {
           analysis,
           memory_context: memoryContext,
         };
+      }
+    }
+
+    if (llmConfirms) {
+      const gradeFilter = evaluateSetupGradePlaybookFilter({
+        grade: gateGrade,
+        confidence: gateConfidence,
+        playbookKey: gatePlaybook === 'unknown' ? null : gatePlaybook,
+      });
+      if (!gradeFilter.pass) {
+        const reason = gradeFilter.reason ?? 'grade/playbook filter blocked entry';
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: gatePlaybook,
+            grade: gateGrade,
+            confidence: gateConfidence,
+            regime: gateRegime,
+            decision: 'no_trade',
+            reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+      }
+    }
+
+    if (llmConfirms && timeframe === '5m') {
+      const scanState = (tf: string) => {
+        const scan = getScanResult(symbol, tf);
+        const regime = scan?.signalResult
+          ? resolveGateRegimeFromSignal(scan.signalResult)
+          : 'unknown';
+        const trendDirection =
+          scan?.signalResult?.setupResult.evidence.regime.trendDirection ?? null;
+        return { regime, trendDirection };
+      };
+      const side = analysis.action === 'buy' ? 'long' : 'short';
+      const fiveMGuard = evaluate5mEntryGuards({
+        entryTimeframe: timeframe,
+        side,
+        tf1h: scanState('1h'),
+        tf15m: scanState('15m'),
+      });
+      if (!fiveMGuard.pass) {
+        const reason = fiveMGuard.reason ?? '5m entry guard blocked';
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: gatePlaybook,
+            grade: gateGrade,
+            confidence: gateConfidence,
+            regime: gateRegime,
+            decision: 'no_trade',
+            reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
       }
     }
 

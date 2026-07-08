@@ -18,7 +18,7 @@ Historical candles (5m / 15m / 1h)
 |-----|-----|
 | LLM confirm/veto | Expensive; use live testnet for that layer |
 | Limit order partial fill / TTL | Assumes fill at signal bar close |
-| Cooldown / exposure cap | Can be added in v2 |
+| Cooldown / exposure cap | Testbed variant `cooldown` simulates tiered loss-streak pause |
 | Funding fees | Optional flat fee per side only |
 
 Use this to compare **SL distance**, **TF priority**, and **gate pass rate** before changing production config.
@@ -31,14 +31,24 @@ cd backend
 # Default: 3 weeks BTC, current .env policy
 npm run backtest:historical
 
-# 4 weeks
-npm run backtest:historical -- --weeks=4
+# 30 days (~4.3w) with breakdown by TF/playbook/grade/side/day/week
+npm run backtest:historical -- --days=30
+
+# Compare rule variants on same window
+npm run backtest:historical -- --days=30 --variant=grade-a-only
+npm run backtest:historical -- --days=30 --variant=block-5m-range
+npm run backtest:historical -- --days=30 --variant=require-15m-confirm
+npm run backtest:historical -- --days=30 --variant=cooldown
+npm run backtest:historical -- --days=30 --variant=combo
+
+# Anti-overfit sweep: multiple windows × variants
+npm run backtest:historical -- --sweep-weeks=2,3,4,6 --sweep-variants=baseline,grade-a-only,cooldown,combo
 
 # Compare min SL 0.40% vs 0.50% vs 0.60%
 npm run backtest:historical -- --weeks=3 --sl-sweep=0.004,0.005,0.006
 
 # JSON output for scripts
-npm run backtest:historical -- --weeks=3 --json > /tmp/testbed.json
+npm run backtest:historical -- --days=30 --json > /tmp/testbed.json
 ```
 
 Requires network access to Binance Futures API (same as `v3:backfill-ohlcv`).
@@ -47,8 +57,9 @@ Requires network access to Binance Futures API (same as `v3:backfill-ohlcv`).
 
 - **Gate pass cycles** — how often signal gate passes (before HTF/regime block)
 - **Entries / W-L / net PnL** — after simulation
-- **Blocks** — `signal_gate`, `regime`, `htf`, `no_direction`, `open_position`
+- **Blocks** — `signal_gate`, `regime`, `htf`, `entry_5m_guard`, `grade_playbook`, `cooldown`, `no_direction`, `open_position`
 - **SL buckets** — PnL grouped by SL distance (`0.40-0.50%`, etc.)
+- **Breakdown** — net PnL / W-L by timeframe, playbookKey, grade, side, UTC day, UTC week
 
 ## Example use: test SL hypothesis
 

@@ -18,6 +18,7 @@ export interface TelegramUpdate {
 let sendQueue: Promise<void> = Promise.resolve();
 let lastSendAt = 0;
 const MIN_SEND_INTERVAL_MS = 1000;
+const QUEUE_MAX_ATTEMPTS = 5;
 
 function botUrl(method: string): string {
   return `${API_BASE}/bot${telegramConfig.botToken}/${method}`;
@@ -156,7 +157,20 @@ export function enqueueTelegramMessage(
 ): void {
   sendQueue = sendQueue
     .then(async () => {
-      await sendTelegramMessage(text, chatId, options);
+      for (let attempt = 1; attempt <= QUEUE_MAX_ATTEMPTS; attempt++) {
+        const sent = await sendTelegramMessage(text, chatId, options);
+        if (sent) return;
+
+        const delayMs = Math.min(60_000, 2_000 * 2 ** (attempt - 1));
+        if (attempt === QUEUE_MAX_ATTEMPTS) {
+          console.error(`[Telegram] queued send abandoned after ${QUEUE_MAX_ATTEMPTS} attempts`);
+          return;
+        }
+        console.warn(
+          `[Telegram] queued send failed attempt ${attempt}/${QUEUE_MAX_ATTEMPTS}; retry in ${delayMs}ms`
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
     })
     .catch((e) => console.error('[Telegram] queue error:', formatTelegramApiError(e)));
 }

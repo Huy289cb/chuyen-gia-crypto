@@ -30,7 +30,7 @@ export function getRegimeStrongTrendMinPct(): number {
 }
 
 /**
- * Breakout with grade B+ counts as directional impulse — bypass range-only block on 15m/1h.
+ * Grade-A breakout counts as directional impulse — bypass range-only block on 15m/1h.
  * Keeps sweep setups requiring trend alignment unless HTF align applies.
  */
 export function isBreakoutRegimeBypassEnabled(): boolean {
@@ -57,7 +57,7 @@ export function shouldBypassRegimeForBreakout(
   if (playbookKey !== 'breakout_volume') {
     return false;
   }
-  return grade === 'A' || grade === 'B';
+  return grade === 'A';
 }
 
 export function regimeForGatePass(input: {

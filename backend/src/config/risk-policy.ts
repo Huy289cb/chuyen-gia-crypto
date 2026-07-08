@@ -17,7 +17,15 @@ export interface RiskPolicyConfig {
   
   // Consecutive losses
   maxConsecutiveLosses: number; // After X losses → reduce size or stop
-  consecutiveLossCooldownHours: number; // Hours to wait after hitting max consecutive losses
+  consecutiveLossCooldownHours: number; // Legacy flat cooldown (fallback when tiers unset)
+  /** After this many consecutive losses, pause entries (tier 2). */
+  lossCooldownTier2MinStreak: number;
+  lossCooldownTier2Hours: number;
+  /** After this many consecutive losses, longer pause (tier 3). */
+  lossCooldownTier3MinStreak: number;
+  lossCooldownTier3Hours: number;
+  /** Tier 3 also waits until end of UTC day when true (uses max(12h, EOD)). */
+  lossCooldownTier3UntilUtcDay: boolean;
   
   // Execution cost filters
   maxSpreadPercent: number; // Maximum allowed spread as percentage of price
@@ -52,7 +60,12 @@ export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
   riskPerTradePercent: 0.5, // 0.5% per trade
   dailyLossLimitPercent: 2.0, // Stop after 2% daily loss
   maxConsecutiveLosses: 3, // Stop after 3 consecutive losses
-  consecutiveLossCooldownHours: 4, // Wait 4 hours after 3 losses
+  consecutiveLossCooldownHours: 4, // Legacy flat cooldown
+  lossCooldownTier2MinStreak: 2,
+  lossCooldownTier2Hours: 6,
+  lossCooldownTier3MinStreak: 3,
+  lossCooldownTier3Hours: 12,
+  lossCooldownTier3UntilUtcDay: true,
   maxSpreadPercent: 0.05, // 0.05% max spread
   maxSlippagePercent: 0.1, // 0.1% max slippage
   maxFeePercent: 0.1, // 0.1% max fee
@@ -83,6 +96,11 @@ export function getRiskPolicy(): RiskPolicyConfig {
     dailyLossLimitPercent: parseFloat(process.env.DAILY_LOSS_LIMIT_PERCENT || '2.0'),
     maxConsecutiveLosses: parseInt(process.env.MAX_CONSECUTIVE_LOSSES || '3'),
     consecutiveLossCooldownHours: parseFloat(process.env.CONSECUTIVE_LOSS_COOLDOWN_HOURS || '4'),
+    lossCooldownTier2MinStreak: parseInt(process.env.LOSS_COOLDOWN_TIER2_MIN_STREAK || '2', 10),
+    lossCooldownTier2Hours: parseFloat(process.env.LOSS_COOLDOWN_TIER2_HOURS || '6'),
+    lossCooldownTier3MinStreak: parseInt(process.env.LOSS_COOLDOWN_TIER3_MIN_STREAK || '3', 10),
+    lossCooldownTier3Hours: parseFloat(process.env.LOSS_COOLDOWN_TIER3_HOURS || '12'),
+    lossCooldownTier3UntilUtcDay: process.env.LOSS_COOLDOWN_TIER3_UNTIL_UTC_DAY !== 'false',
     maxSpreadPercent: parseFloat(process.env.MAX_SPREAD_PERCENT || '0.05'),
     maxSlippagePercent: parseFloat(process.env.MAX_SLIPPAGE_PERCENT || '0.1'),
     maxFeePercent: parseFloat(process.env.MAX_FEE_PERCENT || '0.1'),
@@ -101,4 +119,36 @@ export function getRiskPolicy(): RiskPolicyConfig {
     })(),
     minSlDistancePercent: parseFloat(process.env.MIN_SL_DISTANCE_PERCENT || '0.004'),
   };
+}
+
+function endOfUtcDay(from: Date): Date {
+  const e = new Date(from);
+  e.setUTCHours(23, 59, 59, 999);
+  return e;
+}
+
+/**
+ * Tiered cooldown after consecutive losses:
+ * - streak >= tier2: lastLoss + tier2 hours
+ * - streak >= tier3: max(lastLoss + tier3 hours, end of UTC day) when untilUtcDay enabled
+ */
+export function resolveLossCooldownUntil(
+  consecutiveLosses: number,
+  fromTime: Date = new Date()
+): Date | null {
+  const policy = getRiskPolicy();
+  if (consecutiveLosses < policy.lossCooldownTier2MinStreak) {
+    return null;
+  }
+
+  if (consecutiveLosses < policy.lossCooldownTier3MinStreak) {
+    return new Date(fromTime.getTime() + policy.lossCooldownTier2Hours * 3_600_000);
+  }
+
+  const plusHours = new Date(fromTime.getTime() + policy.lossCooldownTier3Hours * 3_600_000);
+  if (!policy.lossCooldownTier3UntilUtcDay) {
+    return plusHours;
+  }
+  const eod = endOfUtcDay(fromTime);
+  return plusHours.getTime() > eod.getTime() ? plusHours : eod;
 }

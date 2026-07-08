@@ -3,7 +3,7 @@
  */
 
 import { prisma } from '../lib/prisma';
-import { getRiskPolicy } from '../config/risk-policy';
+import { getRiskPolicy, resolveLossCooldownUntil } from '../config/risk-policy';
 import { setTestnetAccountCooldown } from '../repositories/testnet.repository';
 import { getBinanceLossStreak } from './binance-trade-history.service';
 import { getProtectiveExposureEntryBlock } from './protective-exposure-state';
@@ -79,14 +79,13 @@ export async function assertTestnetAccountCanOpenTrade(
 
   if (process.env.BINANCE_ENABLED === 'true' && symbol) {
     const streak = await resolveLossStreak(accountId, symbol);
-    if (streak.consecutiveLosses >= policy.maxConsecutiveLosses && streak.lastLossTime > 0) {
-      const cooldownMs = policy.consecutiveLossCooldownHours * 3_600_000;
-      const elapsed = Date.now() - streak.lastLossTime;
-      if (elapsed < cooldownMs) {
-        const remainingH = (cooldownMs - elapsed) / 3_600_000;
+    if (streak.consecutiveLosses >= policy.lossCooldownTier2MinStreak && streak.lastLossTime > 0) {
+      const until = resolveLossCooldownUntil(streak.consecutiveLosses, new Date(streak.lastLossTime));
+      if (until && Date.now() < until.getTime()) {
+        const remainingH = (until.getTime() - Date.now()) / 3_600_000;
         return {
           allowed: false,
-          reason: `Binance loss streak ${streak.consecutiveLosses} ≥ ${policy.maxConsecutiveLosses} — cooldown ${remainingH.toFixed(1)}h remaining`,
+          reason: `Binance loss streak ${streak.consecutiveLosses} — cooldown ${remainingH.toFixed(1)}h remaining (until ${until.toISOString()})`,
         };
       }
     }
@@ -103,16 +102,17 @@ export async function applyConsecutiveLossCooldownIfNeeded(
   const policy = getRiskPolicy();
   const streak = await resolveLossStreak(accountId, symbol);
 
-  if (streak.consecutiveLosses < policy.maxConsecutiveLosses) {
+  if (streak.consecutiveLosses < policy.lossCooldownTier2MinStreak) {
     return;
   }
 
-  const cooldownHours = policy.consecutiveLossCooldownHours;
-  const cooldownUntil = new Date();
-  cooldownUntil.setHours(cooldownUntil.getHours() + cooldownHours);
+  const cooldownUntil = resolveLossCooldownUntil(streak.consecutiveLosses, new Date());
+  if (!cooldownUntil) {
+    return;
+  }
 
   await setTestnetAccountCooldown(accountId, cooldownUntil);
   console.log(
-    `[AccountRiskGuard] ${streak.consecutiveLosses} consecutive losses, entering ${cooldownHours}h cooldown`
+    `[AccountRiskGuard] ${streak.consecutiveLosses} consecutive losses, entering cooldown until ${cooldownUntil.toISOString()}`
   );
 }

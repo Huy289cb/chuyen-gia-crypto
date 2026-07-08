@@ -53,7 +53,7 @@ CORE LOGIC:
 4. KILLZONES: Ưu tiên các setup trong phiên London/New York.
 
 RULES:
-- SL phải đặt sau râu nến quét thanh khoản hoặc ngoài Order Block (Min 0.5% từ entry).
+- SL phải đặt sau râu nến quét thanh khoản hoặc ngoài Order Block (Min 0.8% từ entry).
 - TP mục tiêu là vùng thanh khoản đối ứng hoặc FVG chưa lấp.
 - Tỉ lệ RR tối thiểu 2.0.
 - Trả về JSON tiếng Việt, ngắn gọn, quyết đoán.
@@ -126,7 +126,7 @@ CRITICAL BIAS-ACTION CONSISTENCY:
 CRITICAL SL/TP PLACEMENT:
 - For LONG: entry > current price, SL < entry, TP > entry
 - For SHORT: entry < current price, SL > entry, TP < entry
-- SL distance should be at least 0.5% from entry
+- SL distance should be at least 0.8% from entry
 - R:R ratio should be at least 2:1
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
@@ -147,7 +147,7 @@ CRITICAL SL/TP PLACEMENT:
       allowedSessions: ['all_timeframes'],
       requiredTimeframes: ['4h', '1d'],
       minAlignment: 0.5,
-      minSLDistancePercent: 0.005, // Minimum SL distance as percentage of entry price (0.5% for ICT)
+      minSLDistancePercent: 0.008, // Minimum SL distance as percentage of entry price (0.8% for ICT)
       requireConfluence: true,
       minConfluenceCount: 3,
       requireHighLiquiditySession: false,
@@ -181,7 +181,7 @@ Fibonacci: Sử dụng Fibo Extension (1.272 - 1.618) để đặt TP thay vì c
 3. QUY TẮC QUYẾT ĐOÁN:
 Ngừng do dự: Nếu RR >= 2.5 và Confidence >= 50%, bạn PHẢI chọn BUY hoặc SELL.
 Tuyệt đối: Chỉ dùng HOLD khi thị trường Sideways không biên độ hoặc các khung thời gian cãi nhau (Conflict) 100%.
-Độ chính xác: Entry/SL/TP phải lấy 2 số thập phân. SL tối thiểu 0.5%.
+Độ chính xác: Entry/SL/TP phải lấy 2 số thập phân. SL tối thiểu 0.8%.
 OUTPUT FORMAT (JSON ONLY, NO EXTRA TEXT):
 ⚠️ CẢNH BÁO HỆ THỐNG:
 - CHỈ trả về duy nhất mã JSON thuần túy.
