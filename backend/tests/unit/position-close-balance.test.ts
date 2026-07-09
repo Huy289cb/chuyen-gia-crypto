@@ -288,4 +288,37 @@ describe('closeLocalPosition balance updates', () => {
       expect.not.objectContaining({ suppress_telegram: true })
     );
   });
+
+  it('stale_ghost_open with binance_order_id resolves PnL and notifies', async () => {
+    mockResolveClosePnlFromUserTrades.mockResolvedValue({
+      verified: true,
+      realizedPnl: 47.12,
+      closePrice: 61731.5,
+      source: 'user_trades',
+      tradeIds: [1000000129080769],
+      closeQty: 0.0318,
+    });
+
+    await closeLocalPosition(
+      { ...basePosition, binance_order_id: '19981195977', binance_tp_order_id: '1000000129080769' },
+      61731.5,
+      'stale_ghost_open',
+      { stale_ghost: true, verified_binance_zero: true }
+    );
+
+    expect(mockResolveClosePnlFromUserTrades).toHaveBeenCalled();
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.objectContaining({
+        realized_pnl: 47.12,
+        fill_verified: true,
+      })
+    );
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
+      'pos_test',
+      'position_closed',
+      expect.not.objectContaining({ suppress_telegram: true })
+    );
+  });
 });

@@ -27,7 +27,7 @@ import {
   getOrCreateTestnetAccount,
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
-import { computeExpectedRrFromPrices } from '../utils/trade-levels';
+import { checkMinSlDistance, computeExpectedRrFromPrices } from '../utils/trade-levels';
 import { initTestnetClient, normalizeQuantityForSymbol, placeLimitOrder } from './binanceClient';
 import { hookPendingOrderPlaced } from './telegram/telegram-hooks';
 
@@ -111,13 +111,14 @@ export async function executeV3Trade(
       ? riskPolicy.minSlDistancePercent
       : auto.minSLDistancePercent;
 
-  const slDistancePct = Math.abs(entry - stopLoss) / entry;
-  if (slDistancePct < minSlDistancePercent) {
+  const slCheck = checkMinSlDistance(entry, stopLoss, minSlDistancePercent);
+  if (!slCheck.ok) {
     return {
       success: false,
-      reason: `SL distance ${(slDistancePct * 100).toFixed(2)}% below min ${(minSlDistancePercent * 100).toFixed(2)}%`,
+      reason: `SL distance ${(slCheck.distancePct * 100).toFixed(2)}% below min ${(slCheck.minPct * 100).toFixed(2)}%`,
     };
   }
+  const slDistancePct = slCheck.distancePct;
 
   const account = await getOrCreateTestnetAccount(symbol, methodId, 10000);
 

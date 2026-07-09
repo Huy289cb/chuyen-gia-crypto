@@ -120,11 +120,11 @@ export async function closeLocalPosition(
 
   const hasFillProof = hasBinanceFillProof(position);
   const isBookkeepingClose =
-    (eventMeta?.bookkeeping_close === true && !hasFillProof) ||
-    (eventMeta?.stale_ghost === true && !hasFillProof) ||
-    (closeReason === 'reconciliation_closed_not_on_binance'
-      ? !hasFillProof
-      : isBookkeepingCloseReason(closeReason));
+    !hasFillProof &&
+    (eventMeta?.bookkeeping_close === true ||
+      eventMeta?.stale_ghost === true ||
+      closeReason === 'reconciliation_closed_not_on_binance' ||
+      isBookkeepingCloseReason(closeReason));
 
   const needsBinanceProof =
     closeReason === 'stop_loss' || closeReason === 'take_profit';

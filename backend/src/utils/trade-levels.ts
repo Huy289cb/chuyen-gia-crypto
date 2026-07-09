@@ -70,7 +70,7 @@ export function computePolicyCompliantStopAndTarget(input: {
   if (!Number.isFinite(entry) || entry <= 0 || minSlPct <= 0 || minRr <= 0) return null;
 
   if (action === 'buy') {
-    const stopLoss = Math.round(entry * (1 - minSlPct) * 100) / 100;
+    const stopLoss = Math.floor(entry * (1 - minSlPct) * 100) / 100;
     const risk = entry - stopLoss;
     if (risk <= 0) return null;
     const takeProfit = Math.round((entry + risk * minRr) * 100) / 100;
@@ -78,7 +78,7 @@ export function computePolicyCompliantStopAndTarget(input: {
     return { stopLoss, takeProfit };
   }
 
-  const stopLoss = Math.round(entry * (1 + minSlPct) * 100) / 100;
+  const stopLoss = Math.ceil(entry * (1 + minSlPct) * 100) / 100;
   const risk = stopLoss - entry;
   if (risk <= 0) return null;
   const takeProfit = Math.round((entry - risk * minRr) * 100) / 100;
@@ -104,6 +104,9 @@ export function computeMinTakeProfitForRr(input: {
   return tp < entry ? tp : null;
 }
 
+/** Cent-rounded prices + IEEE float can sit ~1 ULP below policy min (e.g. 0.80% → 0.799999…). */
+export const MIN_SL_DISTANCE_EPS_RATIO = 1e-6;
+
 export function checkMinSlDistance(
   entry: number,
   stopLoss: number,
@@ -111,7 +114,7 @@ export function checkMinSlDistance(
 ): { ok: boolean; distancePct: number; minPct: number } {
   const distancePct = Math.abs(entry - stopLoss) / entry;
   return {
-    ok: distancePct + 1e-9 >= minPct,
+    ok: distancePct >= minPct - MIN_SL_DISTANCE_EPS_RATIO,
     distancePct,
     minPct,
   };
