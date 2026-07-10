@@ -60,52 +60,76 @@ DEPLOY_BRANCH=main ~/deploy.sh
 
 Use a separate database from the current VPS. Do not share Postgres between develop/testnet and mainnet.
 
-## Mainnet Env
+## Mainnet Env Template
 
-Core:
+**File sẵn:** `backend/.env.mainnet.example` — copy sang VPS mới:
+
+```bash
+cp backend/.env.mainnet.example backend/.env
+# Chỉ sửa các dòng [ĐIỀN] bên dưới
+```
+
+### Chỉ cần điền thêm (các phần còn lại giữ nguyên như develop)
+
+| Biến | Ghi chú |
+| --- | --- |
+| `OPENROUTER_API_KEY` | Key OpenRouter thật (~10u) |
+| `GROQ_API_KEY_2` | Levels adapter (có thể copy key2 từ develop) |
+| `GROQ_API_KEY_1` | Optional fallback khi OR fail |
+| `CEREBRAS_API_KEY` | Optional |
+| `BINANCE_API_KEY` / `BINANCE_API_SECRET` | Mainnet Futures, **no withdraw** |
+| `TELEGRAM_BOT_TOKEN` | Bot mới từ @BotFather |
+| `TELEGRAM_CHAT_IDS` | Group/channel mới |
+| `TELEGRAM_ALLOWED_USER_IDS` | User id Telegram của bạn |
+
+### Khác develop (đã set sẵn trong template)
 
 ```env
-NODE_ENV=production
-DATABASE_URL="postgresql://crypto:...@127.0.0.1:5432/chuyen_gia?schema=public"
-DIRECT_URL="postgresql://crypto:...@127.0.0.1:5432/chuyen_gia?schema=public"
-
-BINANCE_ENABLED=true
-BINANCE_BASE_URL=https://fapi.binance.com
-BINANCE_API_KEY=...
-BINANCE_API_SECRET=...
-BINANCE_SYMBOL=BTCUSDT
-BINANCE_LEVERAGE=5
-
 LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_DISPATCH_MODEL=meta-llama/llama-4-scout
-OPENROUTER_DISPATCH_FALLBACK_ENABLED=true
+BINANCE_BASE_URL=https://fapi.binance.com
+MAINNET_LIVE_TRADING_ENABLED=false          # Phase A shadow
+MAINNET_MAX_TOTAL_EXPOSURE_USD=2000
+MAINNET_MAX_LEVERAGE=50
+MAINNET_MAX_RISK_PER_TRADE_PERCENT=1
 ```
 
-P0 policy copied from `develop`:
+### Sizing: wallet 40-50 USDT, notional $200–$2000 (giống develop)
 
 ```env
-V3_ENTRY_TF_PRIORITY=15m,1h,5m
-V3_REQUIRE_5M_HTF_CONFIRM=true
-MIN_SIGNAL_GRADE=A
-MIN_SL_DISTANCE_PERCENT=0.008
-V3_MIN_LLM_CONFIRM_CONFIDENCE=0.75
-```
-
-Tiny-live sizing for a 40-50 USDT account:
-
-```env
-BINANCE_MIN_ORDER_NOTIONAL_USD=100
-MAX_TOTAL_EXPOSURE_USD=100
-MAINNET_MAX_TOTAL_EXPOSURE_USD=100
-MAINNET_MAX_LEVERAGE=5
-MAINNET_MAX_RISK_PER_TRADE_PERCENT=0.25
-RISK_PER_TRADE_PERCENT=0.25
+BINANCE_MIN_ORDER_NOTIONAL_USD=200
+MAX_TOTAL_EXPOSURE_USD=2000
 MAX_POSITIONS_PER_SYMBOL=1
-V3_SCALE_IN_ENABLED=false
+BINANCE_LEVERAGE=50
+RISK_PER_TRADE_PERCENT=1
 ```
 
-Reason: with 40-50 USDT, `BINANCE_MIN_ORDER_NOTIONAL_USD=200` can leave no headroom. Use one small BTCUSDT futures position around 100 USDT notional with 5x leverage.
+- Wallet nạp ~40-50 USDT = **margin** trên Binance.
+- Mỗi lệnh notional **tối thiểu $200**, cap exposure **$2000** — giống develop.
+- Leverage 50x (như develop) → 1 lệnh ~$200 cần ~$4 margin; wallet 40-50U đủ 1 position.
+- Thực tế chỉ **1 lệnh** cho đến khi nạp thêm (không scale-in).
+
+## Telegram (bot mới — bắt buộc)
+
+**Không** dùng chung bot/group develop — dễ nhầm testnet vs mainnet.
+
+1. `@BotFather` → `/newbot` → tạo bot mainnet.
+2. Tạo group riêng (vd. `Crypto Mainnet Alerts`), add bot vào group.
+3. Gửi 1 tin nhắn trong group.
+4. Lấy `chat_id`:
+   ```bash
+   curl "https://api.telegram.org/bot<NEW_BOT_TOKEN>/getUpdates"
+   ```
+   Group thường là số âm: `-100...`
+5. Điền vào `.env`:
+   ```env
+   TELEGRAM_BOT_TOKEN=<bot_mới>
+   TELEGRAM_CHAT_IDS=-100...
+   TELEGRAM_ALLOWED_USER_IDS=<user_id_của_bạn>
+   ```
+6. `pm2 reload ecosystem.config.cjs --update-env`
+
+Mỗi VPS chỉ **1 worker** poll 1 bot token — develop và mainnet tách bot là đúng.
+
 
 ## Mainnet Rollout
 
@@ -148,14 +172,14 @@ MAINNET_LIVE_TRADING_ENABLED=true
 MAINNET_TRADING_ACK=I_UNDERSTAND_REAL_MONEY
 ```
 
-Keep:
+Keep (đã có trong `.env.mainnet.example`):
 
 - `MAX_POSITIONS_PER_SYMBOL=1`
-- `MAX_TOTAL_EXPOSURE_USD=100`
-- `BINANCE_LEVERAGE=5`
-- `BINANCE_MIN_ORDER_NOTIONAL_USD=100`
+- `BINANCE_MIN_ORDER_NOTIONAL_USD=200`
+- `MAX_TOTAL_EXPOSURE_USD=2000`
+- `BINANCE_LEVERAGE=50`
 
-Monitor 20-50 tiny live trades before increasing any cap.
+Monitor 20-50 tiny live trades before increasing wallet or enabling scale-in.
 
 ## Kill Switch
 
@@ -196,4 +220,5 @@ DEPLOY_BRANCH=main ~/deploy.sh
 - OpenRouter credit: 10 USD is enough for months at current signal-gated volume.
 - OpenRouter paid Scout is preferred over `:free` models for live trading reliability.
 - Current benchmark did not find a premium model that clearly beats Scout for this strategy; keep Scout + levels adapter.
-- Use a separate Telegram bot or tag messages with `[MAIN]` to avoid confusing testnet and mainnet alerts.
+- Env template: `backend/.env.mainnet.example` (copy → `.env`, điền key `[ĐIỀN]`).
+- Telegram: bot + group mới, không share develop.
