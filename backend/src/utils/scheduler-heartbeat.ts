@@ -66,3 +66,24 @@ export function getAllSchedulerHeartbeats(): Record<SchedulerName, string | null
     PendingOrderLifecycle: lastRuns.get('PendingOrderLifecycle')?.toISOString() ?? null,
   };
 }
+
+/** Dashboard worker liveness — scheduler heartbeats, not OHLCV bar timestamps. */
+export async function inferWorkerActivityStatus(): Promise<'healthy' | 'stale' | 'idle'> {
+  const staleAfterMs = parseInt(process.env.WORKER_STALE_AFTER_MS || String(10 * 60_000), 10);
+  const [persistedMarket, persistedLlm, persistedPos] = await Promise.all([
+    getPersistedSchedulerLastRun('MarketScan'),
+    getPersistedSchedulerLastRun('LLMDispatch'),
+    getPersistedSchedulerLastRun('PositionMonitor'),
+  ]);
+  const inMemory = [
+    getSchedulerLastRun('MarketScan'),
+    getSchedulerLastRun('LLMDispatch'),
+    getSchedulerLastRun('PositionMonitor'),
+  ];
+  const times = [...[persistedMarket, persistedLlm, persistedPos], ...inMemory]
+    .filter((d): d is Date => d instanceof Date)
+    .map((d) => d.getTime());
+  if (times.length === 0) return 'idle';
+  const last = Math.max(...times);
+  return Date.now() - last < staleAfterMs ? 'healthy' : 'stale';
+}

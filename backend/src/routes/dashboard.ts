@@ -28,6 +28,7 @@ import {
 import {
   getPersistedSchedulerLastRun,
   getSchedulerLastRun,
+  inferWorkerActivityStatus,
 } from '../utils/scheduler-heartbeat';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
 import { calculatePnlPercent } from '../services/position-mark';
@@ -237,36 +238,7 @@ router.get('/system', async (_req: Request, res: Response) => {
       databaseStatus = 'error';
     }
 
-    const [lastCandle, lastDecision, lastAccountTouch] = await Promise.all([
-      prisma.ohlcvCandle.findFirst({
-        where: { coin: 'BTC' },
-        orderBy: { timestamp: 'desc' },
-        select: { timestamp: true },
-      }),
-      prisma.tradeDecision.findFirst({
-        orderBy: { timestamp: 'desc' },
-        select: { timestamp: true },
-      }),
-      prisma.testnetAccount.findFirst({
-        orderBy: { updated_at: 'desc' },
-        select: { updated_at: true },
-      }),
-    ]);
-
-    const activityTimes = [
-      lastCandle?.timestamp,
-      lastDecision?.timestamp,
-      lastAccountTouch?.updated_at,
-    ]
-      .filter(Boolean)
-      .map((t) => new Date(t as Date).getTime());
-    const lastActivity = activityTimes.length ? new Date(Math.max(...activityTimes)) : null;
-
-    const workerStatus = lastActivity
-      ? Date.now() - lastActivity.getTime() < 300_000
-        ? 'healthy'
-        : 'stale'
-      : 'idle';
+    const workerStatus = await inferWorkerActivityStatus();
 
     const btcOnlyScope = btcOnlyFromConfig();
 
