@@ -9,7 +9,10 @@ import {
   getGroqPrimaryModel,
 } from '../config/groq-models';
 import { isCerebrasDispatchFallbackEnabled } from '../config/cerebras-models';
-import { isOpenRouterDispatchFallbackEnabled } from '../config/openrouter-models';
+import {
+  isOpenRouterDispatchFallbackEnabled,
+  isOpenRouterPrimaryProvider,
+} from '../config/openrouter-models';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -338,45 +341,78 @@ class GroqClient {
     return null;
   }
 
+  private async tryOpenRouterDispatch(
+    params: Pick<GroqAnalysisRequest, 'systemPrompt' | 'userPrompt' | 'temperature'>,
+    stepLabel: string
+  ): Promise<GroqAnalysis | null> {
+    if (!isOpenRouterDispatchFallbackEnabled()) return null;
+    try {
+      console.log(`[GroqClient] ${stepLabel}: OpenRouter Scout`);
+      const { analyzeViaOpenRouter } = await import('./openrouter-client');
+      return await analyzeViaOpenRouter(params);
+    } catch (openRouterErr: unknown) {
+      const msg = openRouterErr instanceof Error ? openRouterErr.message : String(openRouterErr);
+      console.error(`[GroqClient] OpenRouter dispatch failed: ${msg}`);
+      return null;
+    }
+  }
+
+  private async tryCerebrasDispatch(
+    params: Pick<GroqAnalysisRequest, 'systemPrompt' | 'userPrompt' | 'temperature'>,
+    stepLabel: string
+  ): Promise<GroqAnalysis | null> {
+    if (!isCerebrasDispatchFallbackEnabled()) return null;
+    try {
+      console.log(`[GroqClient] ${stepLabel}: Cerebras gpt-oss fallback`);
+      const { analyzeViaCerebras } = await import('./cerebras-client');
+      return await analyzeViaCerebras(params);
+    } catch (cerebrasErr: unknown) {
+      const msg = cerebrasErr instanceof Error ? cerebrasErr.message : String(cerebrasErr);
+      console.error(`[GroqClient] Cerebras dispatch fallback failed: ${msg}`);
+      return null;
+    }
+  }
+
   /**
-   * Dispatch fallback order:
+   * Dispatch fallback order (groq default):
    * 1. Groq primary (Scout)
    * 2. Cerebras gpt-oss-120b + json_object
    * 3. OpenRouter Scout + json_object
    * 4+ Other Groq fallbacks
+   *
+   * LLM_PROVIDER=openrouter (mainnet):
+   * 1. OpenRouter Scout
+   * 2. Groq primary
+   * 3. Cerebras
+   * 4+ Groq fallbacks
    */
   private async analyzeDispatchChain(params: GroqAnalysisRequest): Promise<GroqAnalysis> {
     const { systemPrompt, userPrompt, temperature = 0.2, maxRetries = 5 } = params;
     const groqParams = { systemPrompt, userPrompt, temperature, maxRetries };
-    let lastError: Error | undefined;
+    const llmParams = { systemPrompt, userPrompt, temperature };
 
-    const primary = getGroqPrimaryModel();
-    console.log(`[GroqClient] Dispatch step 1: Groq primary ${primary}`);
-    const primaryResult = await this.tryGroqModels([primary], groqParams);
-    if (primaryResult) return primaryResult;
+    if (isOpenRouterPrimaryProvider()) {
+      const openRouterPrimary = await this.tryOpenRouterDispatch(llmParams, 'Dispatch step 1');
+      if (openRouterPrimary) return openRouterPrimary;
 
-    if (isCerebrasDispatchFallbackEnabled()) {
-      try {
-        console.log('[GroqClient] Dispatch step 2: Cerebras gpt-oss fallback');
-        const { analyzeViaCerebras } = await import('./cerebras-client');
-        return await analyzeViaCerebras({ systemPrompt, userPrompt, temperature });
-      } catch (cerebrasErr: unknown) {
-        const msg = cerebrasErr instanceof Error ? cerebrasErr.message : String(cerebrasErr);
-        console.error(`[GroqClient] Cerebras dispatch fallback failed: ${msg}`);
-        lastError = cerebrasErr instanceof Error ? cerebrasErr : new Error(msg);
-      }
-    }
+      const primary = getGroqPrimaryModel();
+      console.log(`[GroqClient] Dispatch step 2: Groq primary ${primary}`);
+      const groqPrimary = await this.tryGroqModels([primary], groqParams);
+      if (groqPrimary) return groqPrimary;
 
-    if (isOpenRouterDispatchFallbackEnabled()) {
-      try {
-        console.log('[GroqClient] Dispatch step 3: OpenRouter Scout fallback');
-        const { analyzeViaOpenRouter } = await import('./openrouter-client');
-        return await analyzeViaOpenRouter({ systemPrompt, userPrompt, temperature });
-      } catch (openRouterErr: unknown) {
-        const msg = openRouterErr instanceof Error ? openRouterErr.message : String(openRouterErr);
-        console.error(`[GroqClient] OpenRouter dispatch fallback failed: ${msg}`);
-        lastError = openRouterErr instanceof Error ? openRouterErr : new Error(msg);
-      }
+      const cerebrasResult = await this.tryCerebrasDispatch(llmParams, 'Dispatch step 3');
+      if (cerebrasResult) return cerebrasResult;
+    } else {
+      const primary = getGroqPrimaryModel();
+      console.log(`[GroqClient] Dispatch step 1: Groq primary ${primary}`);
+      const primaryResult = await this.tryGroqModels([primary], groqParams);
+      if (primaryResult) return primaryResult;
+
+      const cerebrasResult = await this.tryCerebrasDispatch(llmParams, 'Dispatch step 2');
+      if (cerebrasResult) return cerebrasResult;
+
+      const openRouterFallback = await this.tryOpenRouterDispatch(llmParams, 'Dispatch step 3');
+      if (openRouterFallback) return openRouterFallback;
     }
 
     const groqFallbacks = getGroqDispatchFallbackModels();
@@ -388,7 +424,7 @@ class GroqClient {
       if (fallbackResult) return fallbackResult;
     }
 
-    throw new Error(`All dispatch providers failed: ${lastError?.message ?? 'unknown error'}`);
+    throw new Error('All dispatch providers failed');
   }
 
   /**

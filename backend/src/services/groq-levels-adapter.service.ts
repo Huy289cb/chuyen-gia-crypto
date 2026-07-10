@@ -17,15 +17,67 @@ import {
 import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
 import { getGroqLevelsAdapterModel } from '../config/groq-models';
+import {
+  getOpenRouterLevelsAdapterModel,
+  isOpenRouterLevelsAdapterProvider,
+} from '../config/openrouter-models';
 
+export function isLevelsAdapterConfigured(): boolean {
+  if (process.env.GROQ_LEVELS_ADAPTER_ENABLED !== 'true') return false;
+  if (isOpenRouterLevelsAdapterProvider()) {
+    return !!process.env.OPENROUTER_API_KEY?.trim();
+  }
+  return !!process.env.GROQ_API_KEY_2?.trim();
+}
+
+/** @deprecated use isLevelsAdapterConfigured */
 export function isGroqLevelsAdapterConfigured(): boolean {
-  return (
-    process.env.GROQ_LEVELS_ADAPTER_ENABLED === 'true' && !!process.env.GROQ_API_KEY_2?.trim()
-  );
+  return isLevelsAdapterConfigured();
 }
 
 function adapterModelId(): string {
+  if (isOpenRouterLevelsAdapterProvider()) {
+    return getOpenRouterLevelsAdapterModel();
+  }
   return getGroqLevelsAdapterModel();
+}
+
+async function callLevelsAdapterLLM(input: {
+  systemPrompt: string;
+  userPrompt: string;
+  temperature: number;
+}): Promise<GroqAnalysis | null> {
+  if (!isLevelsAdapterConfigured()) return null;
+
+  if (isOpenRouterLevelsAdapterProvider()) {
+    try {
+      const { analyzeViaOpenRouter } = await import('./openrouter-client');
+      return await analyzeViaOpenRouter({
+        ...input,
+        model: adapterModelId(),
+        logLabel: 'Levels adapter',
+      });
+    } catch (e: unknown) {
+      console.warn('[LevelsAdapter] OpenRouter call failed:', e instanceof Error ? e.message : e);
+      return null;
+    }
+  }
+
+  const key2 = process.env.GROQ_API_KEY_2?.trim();
+  if (!key2) return null;
+  const client = createGroqClient([key2]);
+  if (!client) return null;
+
+  try {
+    return await client.analyze({
+      ...input,
+      maxRetries: 1,
+      preferredModels: [adapterModelId()],
+    });
+  } catch (e: unknown) {
+    console.warn('[LevelsAdapter] Groq call failed:', e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 function validateAndMergeRepairedLevels(input: {
@@ -220,7 +272,7 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
   methodId: string;
   analysis: GroqAnalysis;
 }): Promise<GroqAnalysis | null> {
-  if (!isGroqLevelsAdapterConfigured()) return null;
+  if (!isLevelsAdapterConfigured()) return null;
 
   const actionRaw = String(input.analysis.action || '').toLowerCase();
   if (actionRaw !== 'buy' && actionRaw !== 'sell') return null;
@@ -234,10 +286,6 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
   const minSlPct = getRiskPolicy().minSlDistancePercent;
   if (checkMinSlDistance(entry, sl0, minSlPct).ok) return null;
 
-  const key2 = process.env.GROQ_API_KEY_2!.trim();
-  const client = createGroqClient([key2]);
-  if (!client) return null;
-
   const minRr = getMethodConfig(input.methodId).autoEntry.minRRRatio;
   const { systemPrompt, userPrompt } = buildAdapterPrompts({
     symbol: input.symbol,
@@ -250,19 +298,18 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
     minRr,
   });
 
-  let raw: GroqAnalysis;
+  let raw: GroqAnalysis | null;
   try {
-    raw = await client.analyze({
+    raw = await callLevelsAdapterLLM({
       systemPrompt,
       userPrompt,
       temperature: 0.12,
-      maxRetries: 1,
-      preferredModels: [adapterModelId()],
     });
   } catch (e: unknown) {
-    console.warn('[LevelsAdapter] Groq call failed:', e instanceof Error ? e.message : e);
+    console.warn('[LevelsAdapter] adapter call failed:', e instanceof Error ? e.message : e);
     return null;
   }
+  if (!raw) return null;
 
   let nSl = Number(raw.suggested_stop_loss);
   let nTp = Number(raw.suggested_take_profit);
@@ -326,7 +373,7 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
   methodId: string;
   analysis: GroqAnalysis;
 }): Promise<GroqAnalysis | null> {
-  if (!isGroqLevelsAdapterConfigured()) return null;
+  if (!isLevelsAdapterConfigured()) return null;
 
   const actionRaw = String(input.analysis.action || '').toLowerCase();
   if (actionRaw !== 'buy' && actionRaw !== 'sell') return null;
@@ -344,10 +391,6 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
   const curRr = computeExpectedRrFromPrices(entry, sl0, tp0);
   if (curRr == null || curRr + 1e-9 >= minRr) return null;
 
-  const key2 = process.env.GROQ_API_KEY_2!.trim();
-  const client = createGroqClient([key2]);
-  if (!client) return null;
-
   const { systemPrompt, userPrompt } = buildRrOnlyTpAdapterPrompts({
     symbol: input.symbol,
     timeframe: input.timeframe,
@@ -360,19 +403,12 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
     currentRr: curRr,
   });
 
-  let raw: GroqAnalysis;
-  try {
-    raw = await client.analyze({
-      systemPrompt,
-      userPrompt,
-      temperature: 0.12,
-      maxRetries: 1,
-      preferredModels: [adapterModelId()],
-    });
-  } catch (e: unknown) {
-    console.warn('[LevelsAdapter:RR] Groq call failed:', e instanceof Error ? e.message : e);
-    return null;
-  }
+  const raw = await callLevelsAdapterLLM({
+    systemPrompt,
+    userPrompt,
+    temperature: 0.12,
+  });
+  if (!raw) return null;
 
   const nTp = Number(raw.suggested_take_profit);
   if (!Number.isFinite(nTp)) {

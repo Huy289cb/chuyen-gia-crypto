@@ -13,6 +13,9 @@ export interface OpenRouterAnalyzeRequest {
   systemPrompt: string;
   userPrompt: string;
   temperature?: number;
+  /** Override dispatch model (e.g. levels adapter). */
+  model?: string;
+  logLabel?: string;
 }
 
 const OPENROUTER_CHAT_URL =
@@ -27,15 +30,16 @@ export async function analyzeViaOpenRouter(
     throw new Error('OPENROUTER_API_KEY not configured');
   }
 
-  const model = getOpenRouterDispatchModel();
+  const model = params.model?.trim() || getOpenRouterDispatchModel();
   const { systemPrompt, userPrompt, temperature = 0.15 } = params;
+  const logLabel = params.logLabel?.trim() || 'Dispatch fallback';
 
-  console.log(`[OpenRouterClient] Dispatch fallback model=${model} (json_object)`);
+  console.log(`[OpenRouterClient] ${logLabel} model=${model} (json_object)`);
 
   const response = await fetch(OPENROUTER_CHAT_URL, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${key}`,
+      Apehorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       ...getOpenRouterAppHeaders(),
     },

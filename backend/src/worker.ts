@@ -5,7 +5,7 @@ import { startWorkerScheduler, stopWorkerScheduler } from './services/worker-sch
 import { startTelegramBot, stopTelegramBot } from './services/telegram/telegram-bot.service';
 import { startTelegramDailyReportScheduler, stopTelegramDailyReportScheduler } from './schedulers/telegram-daily-report.scheduler';
 import { isTelegramEnabled, logTelegramProcessContext } from './config/telegram';
-import { isGroqLevelsAdapterConfigured } from './services/groq-levels-adapter.service';
+import { isLevelsAdapterConfigured } from './services/groq-levels-adapter.service';
 import { getOrCreateTestnetAccount } from './repositories/testnet.repository';
 import dotenv from 'dotenv';
 dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
@@ -109,7 +109,7 @@ async function startWorker() {
   console.log(`Leader Lock Key: ${appConfig.workerLeaderLockKey}`);
   console.log(`Database: ${appConfig.databaseUrl ? 'configured' : 'NOT CONFIGURED'}`);
   console.log(
-    `Groq levels adapter (GROQ_API_KEY_2): ${isGroqLevelsAdapterConfigured() ? 'ENABLED' : 'disabled'}`
+    `Levels adapter (${process.env.LEVELS_ADAPTER_PROVIDER || 'groq'}): ${isLevelsAdapterConfigured() ? 'ENABLED' : 'disabled'}`
   );
   console.log('=================================');
 
