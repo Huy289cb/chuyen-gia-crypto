@@ -80,9 +80,9 @@ Returns current cached ICT Smart Money analysis for BTC and ETH.
         },
         "predictions": {
           "15m": { "direction": "up", "target": 2060, "confidence": 0.7 },
-          "1h": { "direction": "up", "target": 2080, "confidence": 0.75 },
-          "4h": { "direction": "up", "target": 2100, "confidence": 0.8 },
-          "1d": { "direction": "up", "target": 2150, "confidence": 0.7 }
+          "1h": { "direction": "up", "target": 2080, "confidence": 0.82 },
+          "4h": { "direction": "up", "target": 2100, "confidence": 0.85 },
+          "1d": { "direction": "up", "target": 2150, "confidence": 0.8 }
         },
         "risk": "Rủi ro tương quan với BTC. Vô hiệu hóa: Break dưới $2,020."
       },
@@ -177,7 +177,7 @@ Get prediction history for a coin with pagination and raw AI data.
       "current_price": 67000,
       "bias": "bullish",
       "action": "buy",
-      "confidence": 0.75,
+      "confidence": 0.82,
       "narrative": "Giá đã quét thanh khoản sell-side và đảo chiều...",
       "raw_question": "SYSTEM PROMPT:\n...\n\nUSER PROMPT:\n...",
       "raw_answer": "{\n  \"btc\": {\n    \"bias\": \"bullish\",\n    ...\n  }\n}",
@@ -185,8 +185,8 @@ Get prediction history for a coin with pagination and raw AI data.
         {
           "timeframe": "1h",
           "direction": "up",
-          "target": 67500,
-          "confidence": 0.75
+          "target": 67500.50,
+          "confidence": 0.82
         }
       ]
     }

@@ -1,0 +1,30 @@
+---
+name: frontend-feature
+description: Add or extend Next.js dashboard panels, data fetching, or v3 context slices. Use for new sections, API wiring, or dashboard UX on the trading workspace.
+---
+
+# Frontend feature
+
+## When to use
+- New panel in `app/sections/`, hook, or dashboard data slice
+- Consume new `/api/dashboard/*` or related endpoints
+
+## Inspect first
+- `app/page.tsx` layout grid and existing panels
+- `app/contexts/V3DashboardDataContext.tsx` and `app/lib/v3DashboardFetchers.ts`
+- `app/types/index.ts` for shared types
+- `app/rules/v3-rules.tsx` if changing pipeline/product copy on `/rules`
+- `getApiBase()` behavior (browser vs server); production API via Vercel env `NEXT_PUBLIC_API_URL`
+
+## Steps
+1. Add typed fetcher in `v3DashboardFetchers.ts` (or extend existing loader).
+2. Wire slice in `V3DashboardDataProvider` with `loading` / `error` / `refresh`.
+3. Build section component using `Card` / `CardHeader`; keep JSX presentational.
+4. Place panel on page grid; match spacing and responsive columns.
+5. Use `'use client'` only on files that need interactivity.
+
+## Verification
+- [ ] `cd frontend && npm run build`
+- [ ] `npm run lint` if touching many files
+- [ ] Browser check: loading, error, and refresh paths
+- [ ] API base works in dev (backend on :3000, frontend on :3001)

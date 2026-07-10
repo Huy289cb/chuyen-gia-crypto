@@ -1,0 +1,32 @@
+---
+name: backend-feature
+description: Add or extend Express API routes, services, schedulers, or worker jobs in the Node/TS backend. Use for new endpoints, trading pipeline steps, Binance/Groq integration, or dashboard data feeds.
+---
+
+# Backend feature
+
+## When to use
+- New `/api` endpoint or extending `routes/dashboard.ts`, `testnet.ts`, `market.ts`, etc.
+- New service, scheduler, or analyzer in the v3 pipeline (signal gate → risk → Groq → testnet)
+
+## Inspect first
+- `backend/src/routes/index.ts` (mount points)
+- Related `services/`, `repositories/`, `config/`
+- `backend/prisma/schema.prisma` if persistence changes
+- `docs/api-spec.md`, `docs/v3-operations.md`, and frontend `app/lib/v3DashboardFetchers.ts` if UI consumes the API
+- `backend/.env.example` for new config
+- V3 path: schedulers → `signal-gate.service.ts` → `groq-dispatch.service.ts` → `v3-trade-execution.service.ts` → `binance-order-fill.service.ts` / `position-close.service.ts`
+
+## Steps
+1. Define contract (method, path, query/body, response JSON).
+2. Add repository functions for Prisma access; keep routes thin.
+3. Implement service logic; call analyzers/config validators before side effects.
+4. Wire route; return correct HTTP status and `{ success, data }` shape.
+5. Register scheduler only in worker path if background job needed.
+6. Update docs/types/tests when behavior is user-visible or risk-sensitive.
+
+## Verification
+- [ ] `cd backend && npm run build` (or `tsc` after `prisma generate` if schema changed)
+- [ ] `npm run test:run` for affected tests
+- [ ] Manual hit of new route (curl or existing `backend/test-api.js` pattern)
+- [ ] Worker/API process flags respected (`API_ONLY` / `WORKER_ONLY`)

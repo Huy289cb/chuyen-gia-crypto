@@ -3,6 +3,7 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries, type Time, type CandlestickData, type LineData } from 'lightweight-charts';
 import type { Prediction, Analysis } from '@/app/types';
+import { normalizeChartCandles } from '@/app/lib/chartCandles';
 
 interface ChartDataPoint {
   time: number;
@@ -49,12 +50,14 @@ export function PriceChart({
 }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
+  const chartCandles = useMemo(() => normalizeChartCandles(data), [data]);
+
   // Extract ICT levels
   const ictLevels = useMemo(() => {
     if (!analysis?.key_levels) return { orderBlocks: [], fvg: [], liquidity: [], bos: [], choch: [] };
 
     const { liquidity, order_blocks, fvg, bos, choch } = analysis.key_levels;
-    const currentPrice = data[data.length - 1]?.close || 0;
+    const currentPrice = chartCandles[chartCandles.length - 1]?.close || 0;
 
     return {
       orderBlocks: extractPrices(order_blocks, currentPrice),
@@ -63,7 +66,7 @@ export function PriceChart({
       bos: extractPrices(bos, currentPrice),
       choch: extractPrices(choch, currentPrice)
     };
-  }, [analysis, data]);
+  }, [analysis, chartCandles]);
 
   // Extract Kim Nghia indicators
   const kimNghiaIndicators = useMemo(() => {
@@ -73,7 +76,7 @@ export function PriceChart({
 
     // If method is kim_nghia but analysis.indicators is missing, return default indicators
     if (!analysis?.indicators) {
-      const currentPrice = data[data.length - 1]?.close || 0;
+      const currentPrice = chartCandles[chartCandles.length - 1]?.close || 0;
       return {
         fibonacci: {
           retracement: [
@@ -98,13 +101,13 @@ export function PriceChart({
       fairValueGaps: analysis.indicators.fairValueGaps || [],
       volume: analysis.indicators.volume || 'normal'
     };
-  }, [analysis, method, data]);
+  }, [analysis, method, chartCandles]);
 
   // Generate prediction line data like Vite implementation
   const predictionLineData = useMemo(() => {
-    console.log('[PriceChart] Generating prediction line data:', { showPredictions, predictionsLength: predictions?.length || 0, dataLength: data.length });
+    console.log('[PriceChart] Generating prediction line data:', { showPredictions, predictionsLength: predictions?.length || 0, dataLength: chartCandles.length });
     
-    if (!showPredictions || !predictions || predictions.length === 0 || data.length === 0) {
+    if (!showPredictions || !predictions || predictions.length === 0 || chartCandles.length === 0) {
       console.log('[PriceChart] Returning empty - missing data');
       return [];
     }
@@ -134,7 +137,7 @@ export function PriceChart({
     }
 
     const lineData: LineData[] = [];
-    const lastCandle = data[data.length - 1];
+    const lastCandle = chartCandles[chartCandles.length - 1];
     const startPrice = lastCandle.close;
     const baseTime = lastCandle.time;
 
@@ -143,6 +146,7 @@ export function PriceChart({
 
     // Calculate interval in minutes based on selected timeframe
     const intervalMinutes =
+      timeframe === '5m' ? 5 :
       timeframe === '15m' ? 15 :
       timeframe === '1h' ? 60 :
       timeframe === '4h' ? 240 : 1440;
@@ -194,11 +198,11 @@ export function PriceChart({
 
     console.log('[PriceChart] Generated lineData:', lineData.length, 'points');
     return lineData;
-  }, [data, predictions, showPredictions, timeframe]);
+  }, [chartCandles, predictions, showPredictions, timeframe]);
 
   useEffect(() => {
     console.log('[PriceChart] useEffect running - predictionLineData:', predictionLineData?.length);
-    if (!chartContainerRef.current || data.length === 0) return;
+    if (!chartContainerRef.current || chartCandles.length === 0) return;
     
     // Detect dark mode
     const isDarkMode = document.documentElement.classList.contains('dark');
@@ -241,7 +245,7 @@ export function PriceChart({
       wickUpColor: '#22c55e',
       wickDownColor: '#ef4444',
     });
-    candleSeries.setData(data as CandlestickData[]);
+    candleSeries.setData(chartCandles as CandlestickData[]);
 
     // Add prediction line series (dashed) using v5 API
     console.log('[PriceChart] Prediction line data:', predictionLineData.length, 'points');
@@ -264,7 +268,7 @@ export function PriceChart({
     }
 
     // Parse and add method-specific indicators
-    const currentPrice = data[data.length - 1]?.close || 0;
+    const currentPrice = chartCandles[chartCandles.length - 1]?.close || 0;
     const getPriceRange = (coin: string, price: number): [number, number] => {
       return [price * 0.7, price * 1.3];
     };
@@ -409,7 +413,7 @@ export function PriceChart({
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [data, predictionLineData, ictLevels, kimNghiaIndicators, color, analysis, showPredictions, symbol, height, method]);
+  }, [chartCandles, predictionLineData, ictLevels, kimNghiaIndicators, color, analysis, showPredictions, symbol, height, method, timeframe]);
 
   return (
     <div 

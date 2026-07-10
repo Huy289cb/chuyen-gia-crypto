@@ -6,19 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockPost = vi.hoisted(() => vi.fn(() => Promise.resolve({
   orderId: 12345,
+  algoId: 12345,
   clientOrderId: 'abc',
   symbol: 'BTCUSDT',
   side: 'SELL',
   type: 'STOP_MARKET',
-  price: '0',
-  stopPrice: '49000',
-  origQty: '0.01',
-  executedQty: '0',
-  cummulativeQuoteQty: '0',
   status: 'NEW',
-  timeInForce: 'GTC',
-  transactTime: 123,
-  updateTime: 123,
 })));
 
 vi.mock('../../src/services/binance/client.js', () => ({
@@ -37,7 +30,7 @@ describe('Binance Trading Adapter', () => {
     vi.clearAllMocks();
   });
 
-  it('places stop-market orders via the standard order endpoint with type=STOP_MARKET', async () => {
+  it('places stop-market orders via algo order API', async () => {
     await placeStopMarketOrder({
       symbol: 'BTCUSDT',
       side: 'SELL',
@@ -47,18 +40,23 @@ describe('Binance Trading Adapter', () => {
       closePosition: true,
     });
 
-    expect(mockPost).toHaveBeenCalledWith('/fapi/v1/order', {
-      symbol: 'BTCUSDT',
-      side: 'SELL',
-      quantity: '0.01',
-      stopPrice: '49000',
-      positionSide: 'LONG',
-      closePosition: true,
-      type: 'STOP_MARKET',
-    }, true);
+    expect(mockPost).toHaveBeenCalledWith(
+      '/fapi/v1/algoOrder',
+      expect.objectContaining({
+        symbol: 'BTCUSDT',
+        side: 'SELL',
+        quantity: '0.01',
+        triggerPrice: '49000',
+        positionSide: 'LONG',
+        closePosition: true,
+        algoType: 'CONDITIONAL',
+        type: 'STOP_MARKET',
+      }),
+      true
+    );
   });
 
-  it('places take-profit-market orders via the standard order endpoint with type=TAKE_PROFIT_MARKET', async () => {
+  it('places take-profit-market orders via algo order API', async () => {
     await placeTakeProfitMarketOrder({
       symbol: 'BTCUSDT',
       side: 'SELL',
@@ -68,14 +66,47 @@ describe('Binance Trading Adapter', () => {
       closePosition: true,
     });
 
-    expect(mockPost).toHaveBeenCalledWith('/fapi/v1/order', {
+    expect(mockPost).toHaveBeenCalledWith(
+      '/fapi/v1/algoOrder',
+      expect.objectContaining({
+        symbol: 'BTCUSDT',
+        side: 'SELL',
+        quantity: '0.01',
+        triggerPrice: '52000',
+        positionSide: 'LONG',
+        closePosition: true,
+        algoType: 'CONDITIONAL',
+        type: 'TAKE_PROFIT_MARKET',
+      }),
+      true
+    );
+  });
+
+  it('omits positionSide for one-way stop-market algo orders', async () => {
+    await placeStopMarketOrder({
       symbol: 'BTCUSDT',
-      side: 'SELL',
-      quantity: '0.01',
-      stopPrice: '52000',
-      positionSide: 'LONG',
-      closePosition: true,
-      type: 'TAKE_PROFIT_MARKET',
-    }, true);
+      side: 'BUY',
+      quantity: '0.0119',
+      stopPrice: '70000',
+      reduceOnly: true,
+    });
+
+    const params = mockPost.mock.calls[0][1];
+    expect(params).not.toHaveProperty('positionSide');
+    expect(params.reduceOnly).toBe(true);
+  });
+
+  it('omits positionSide for one-way take-profit algo orders', async () => {
+    await placeTakeProfitMarketOrder({
+      symbol: 'BTCUSDT',
+      side: 'BUY',
+      quantity: '0.0119',
+      stopPrice: '60000',
+      reduceOnly: true,
+    });
+
+    const params = mockPost.mock.calls[0][1];
+    expect(params).not.toHaveProperty('positionSide');
+    expect(params.reduceOnly).toBe(true);
   });
 });

@@ -1,15 +1,18 @@
-# Binance Futures Integration (REST API)
+# Binance Futures Integration (REST API + WebSocket)
 
 ## Overview
 
-This project integrates Binance USD-M Futures using the official REST API, with support for:
+This project integrates Binance USD-M Futures using both REST API and WebSocket User Data Stream, with support for:
 
 - Demo trading via `https://demo-fapi.binance.com`
 - Mainnet via `https://fapi.binance.com`
 - BTC-only execution for the active Kim Nghia method
-- Running in parallel with paper trading for comparison
+- Primary trading system (paper trading deprecated)
+- Real-time order synchronization via WebSocket
+- Automatic reconciliation on startup
+- Hedge mode detection and compatibility
 
-The implementation does not use a Binance SDK. All requests go through the local REST modules in `backend/src/services/binance/`.
+The implementation uses local REST modules in `backend/src/services/binance/` and WebSocket synchronization in `backend/src/services/binance-websocket-sync.ts`.
 
 ## Runtime Database
 
@@ -158,35 +161,111 @@ Path: `backend/src/services/binance/`
 
 - `config.js`: base URL, API key, recvWindow, symbol, leverage
 - `client.js`: signed HTTP requests and retry policy
+- `stream.js`: User Data Stream listen key management
 - `market.js`: server time and market data
-- `account.js`: balances and positions
 - `trading.js`: leverage, margin type, position mode, order placement, cancellations
 
-### Wrapper service
+### WebSocket Synchronization
 
-Path: `backend/src/services/binanceClient.js`
+Path: `backend/src/services/binance-websocket-sync.ts`
 
-This layer adapts the low-level REST modules into application-facing helpers such as:
+Real-time synchronization from Binance Futures User Data Stream:
 
-- `placeMarketOrder()`
-- `placeStopLossOrder()`
-- `placeTakeProfitOrder()`
+- **ORDER_TRADE_UPDATE**: Order status changes (NEW, PARTIALLY_FILLED, FILLED, CANCELED, EXPIRED, REJECTED)
+- **ACCOUNT_UPDATE**: Account balance and position updates
+- **Partial Fill Support**: Tracks executed quantity, average price, cumulative fills
+- **Auto Reconnect**: Exponential backoff reconnection on disconnection
+- **Keep-Alive**: Automatic listen key refresh every 30 minutes
+
+**Key Features:**
+- Local DB mirrors Binance state in real-time for orders and positions
+- Positions created only after Binance confirms fills
+- SL/TP orders placed automatically on entry fill
+- Order lifecycle managed from WebSocket events
+
+### Startup Reconciliation
+
+Path: `backend/src/services/binance-reconciliation.ts`
+
+Automatic state synchronization on backend startup:
+
+- Fetches open orders from Binance
+- Fetches open positions from Binance
+- Compares against local DB
+- Repairs inconsistencies from crashes/restarts/missed events
+- Periodic polling every 60 seconds for ongoing verification
+
+### Hedge Mode Detection
+
+Path: `backend/src/services/binance-hedge-mode.ts`
+
+Automatic account mode detection:
+
+- Detects ONE_WAY vs HEDGE mode on startup (once, with promise caching)
+- Returns correct `positionSide` (LONG/SHORT for HEDGE, null for ONE_WAY)
+- Validates mode compatibility
+- Prevents rejected order from incorrect positionSide
+- **resolvePositionSide()** function with proper logic for side, intent, and currentPosition:
+  - OPEN intent: BUY → LONG, SELL → SHORT
+  - CLOSE intent: Uses currentPosition to determine correct positionSide
+  - Throws error if context is missing or invalid
+- **validatePositionSide()** function for strict validation:
+  - HEDGE mode: positionSide REQUIRED and must be LONG/SHORT
+  - ONE_WAY mode: positionSide must NOT be sent
+- **ensurePositionModeDetected()** ensures detection happens once at startup
+
+### Order Logging and Validation
+
+All order placement functions now include comprehensive runtime logging and strict validation:
+
+**Logging Format:**
+- MARKET ORDER REQUEST: symbol, side, intent, quantity, positionSide, currentPosition
+- MARKET ORDER PLACED: symbol, side, intent, quantity, positionSide, orderId, estimated fee
+- MARKET ORDER FAILED: symbol, side, intent, error details
+
+Similar logging for LIMIT, STOP LOSS, and TAKE PROFIT orders.
+
+**Validation Rules:**
+- Intent is REQUIRED for all orders (OPEN or CLOSE)
+- currentPosition is REQUIRED for CLOSE orders
+- Orders are rejected before API call if validation fails
+- No retry logic for -4061 (position side mismatch) errors
+
+**Optional Function:**
+- `fetchRealPositionFromBinance(symbol)` - Fetch real position from Binance for validation before CLOSE orders
+
+### Wrapper Service
+
+Path: `backend/src/services/binanceClient.ts`
+
+This layer adapts the low-level REST modules into application-facing helpers:
+
+- `placeMarketOrder()` - with intent and currentPosition parameters
+- `placeLimitOrder()` - with intent, currentPosition, and newClientOrderId for idempotency
+- `placeStopLossOrder()` - with intent and currentPosition parameters
+- `placeTakeProfitOrder()` - with intent and currentPosition parameters
+- `getOpenOrders()`
+- `getPositionRisk()`
 - `getAccountBalance()`
+- `fetchRealPositionFromBinance()` - optional position validation
 
-### Testnet engine
+## WebSocket Configuration
+BINANCE_TESTNET_WS_URL=wss://stream.binancefuture.com/ws
+
+### Testnet Engine
 
 Path: `backend/src/services/testnetEngine.js`
 
 Responsibilities:
 
-- open and close Binance testnet positions
-- place and track SL/TP
-- recover from entry-protection failures
-- sync DB state with Binance state
-- detect and close orphan Binance positions
-- create account snapshots
+- Open and close Binance testnet positions
+- Place and track SL/TP
+- Recover from entry-protection failures
+- Sync DB state with Binance state
+- Detect and close orphan Binance positions
+- Create account snapshots
 
-### Testnet database
+### Testnet Database
 
 Path: `backend/src/db/testnetDatabase.js`
 
@@ -206,6 +285,53 @@ Relevant `testnet_positions` fields include:
 - `tp_levels`
 - `tp_hit_count`
 - `partial_closed`
+
+## Binance -4061 Error Fix (May 2026)
+
+### Problem
+Binance API error -4061 ("Order's position side does not match user's setting") was occurring due to incorrect positionSide handling.
+
+### Solution
+Implemented robust hedge mode detection and positionSide resolution:
+
+**Changes to `backend/src/services/binance-hedge-mode.ts`:**
+- Detect position mode ONCE at startup (with promise caching)
+- Implemented `resolvePositionSide()` with proper logic:
+  - OPEN intent: BUY → LONG, SELL → SHORT
+  - CLOSE intent: Uses currentPosition to determine correct positionSide
+  - Throws error if context is missing or invalid
+- Implemented `validatePositionSide()` for strict validation:
+  - HEDGE mode: positionSide REQUIRED and must be LONG/SHORT
+  - ONE_WAY mode: positionSide must NOT be sent
+- Removed old `getPositionSide()` function that assumed BUY=LONG, SELL=SHORT
+
+**Changes to `backend/src/services/binanceClient.ts`:**
+- Updated all order placement functions with new signature:
+  - `placeMarketOrder(side, intent, currentPosition, positionSide?)`
+  - `placeLimitOrder(side, intent, currentPosition, positionSide?, newClientOrderId?)`
+  - `placeStopLossOrder(side, intent, currentPosition, positionSide?)`
+  - `placeTakeProfitOrder(side, intent, currentPosition, positionSide?)`
+- Added comprehensive runtime logging for all orders:
+  - Logs: symbol, side, intent, positionSide, currentPosition
+  - Logs: orderId after placement
+  - Logs: error details on failure
+- Added strict validation:
+  - Rejects orders with missing intent
+  - Rejects CLOSE orders with missing currentPosition
+- Removed ALL retry logic for -4061 errors
+- Added `fetchRealPositionFromBinance(symbol)` for optional position validation
+
+**Changes to callers:**
+- `backend/src/services/kim-nghia-analysis-job.ts`: Updated to pass intent='OPEN' and currentPosition=null
+- `backend/src/services/binance-websocket-sync.ts`: Updated to pass intent='CLOSE' and currentPosition with positionAmt
+
+### Acceptance Criteria
+- ✅ No more -4061 errors
+- ✅ Every order log includes: side, positionSide, intent (OPEN/CLOSE)
+- ✅ No incorrect positionSide mapping
+- ✅ Position mode detected once at startup
+- ✅ Strict validation prevents invalid orders
+- ✅ No retry logic for -4061 errors
 
 ## Environment Variables
 
@@ -242,8 +368,12 @@ Current response shape:
   "data": {
     "balance": 1000,
     "equity": 1050,
-    "unrealized_pnl": 50,
-    "synced_at": "2026-04-29T12:00:00.000Z"
+    "unrealized_pnlWebSocket Streams](https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket)
+- [Binance User Data Stream](https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket/user-data-streams)
+- [Binance Futures ": 50,
+    "synced_at": "2026-04-29T12:00:00.000Z"es)
+- [Testing Plan](./binance-testnet-tting-plan.md)
+- [Feedback Document](./feedback/fb.md
   }
 }
 ```
@@ -281,7 +411,7 @@ If you see:
 Binance API Error -5000: Path /fapi/v1/order/stopMarket, Method POST is invalid
 ```
 
-The deployment is still running old code. Pull the latest backend and restart PM2.
+The deployment is still running old code. On VPS run `~/deploy.sh` (or `./scripts/deploy.sh`). See `docs/deployment.md`.
 
 ### Repeated balance discrepancy warnings
 

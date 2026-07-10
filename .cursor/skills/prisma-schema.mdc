@@ -1,0 +1,32 @@
+---
+name: prisma-schema
+description: Change Prisma schema, generate client, and align repositories, services, and API responses. Use for new models, fields, indexes, or Postgres migrations.
+---
+
+# Prisma schema
+
+## When to use
+- Edit `backend/prisma/schema.prisma` or add migrations
+
+## Inspect first
+- Full schema and `@@map` / `@@index` / relations
+- All `prisma.*` usages via grep in `backend/src/repositories` and routes
+- Whether data is legacy paper (`Account`) vs testnet (`TestnetAccount`)
+
+## Steps
+1. Update schema with explicit types; add `@@index` for filtered query patterns (`coin`, `method_id`, `timestamp`).
+2. Run `cd backend && npx prisma migrate dev --name <short_name>` to create migration SQL.
+3. Run `npm run prisma:generate` (also part of `npm run build`).
+4. Update repositories first, then services/routes.
+5. Update `docs/api-spec.md` only if public contract changes.
+
+## Rules
+- Postgres provider only; `DATABASE_URL` required in production
+- Prefer nullable new columns or defaults for backward-compatible deploys
+- Cascade deletes already defined on relations — preserve semantics when adding FKs
+- snake_case in DB via `@map` / `@@map` when matching existing tables
+
+## Verification
+- [ ] `npm run build` succeeds
+- [ ] `prisma studio` or sample query against new fields
+- [ ] Integration tests or manual API read/write on affected models

@@ -2,6 +2,59 @@
 
 All notable changes to the project will be documented in this file.
 
+## [26/06/2026] - LLM multi-provider dispatch + production fixes
+
+### LLM dispatch fallback chain
+
+- **Order:** Groq Scout → Cerebras `gpt-oss-120b` (`json_object`) → OpenRouter Scout paid → Groq fallbacks (70B, Qwen, 8B)
+- **New:** `cerebras-client.ts`, `openrouter-client.ts`, `config/cerebras-models.ts`, `config/openrouter-models.ts`
+- **Refactor:** `groq-client.ts` — `analyzeDispatchChain()`, `tryGroqModels()`
+- **Docs:** [docs/llm-dispatch-providers.md](./docs/llm-dispatch-providers.md)
+- **Tests:** `tests/unit/cerebras-client.test.ts`, `tests/unit/openrouter-client.test.ts`
+
+### Production fixes (PnL, history, risk)
+
+- **Telegram PnL** (`/lenh`, `/show`, `/baocao`): wallet-first từ Binance equity; W/L từ income rounds
+- **Dashboard trade history:** fetch Binance `userTrades` without `startTime` on demo API; per-fill `realizedPnl` aggregation
+- **Phantom rounds:** dust filter + rewrite `aggregateUserTradesToRounds`
+- **Cooldown:** `getBinanceLossStreak()` when DB `consecutive_losses` frozen on bookkeeping closes
+
+### Files
+
+- `backend/src/services/groq-client.ts`, `account-summary.service.ts`, `binance-trade-history.service.ts`, `account-risk-guard.service.ts`
+- `docs/v3-operations.md`, `docs/architecture.md`, `docs/deployment.md`, `docs/setup.md`
+
+## [10/05/2026] - v2.9.1 - Download Money Rebrand
+
+### Brand Update
+
+**Complete Frontend Rebrand to "Download Money"**
+- **Objective**: Rebrand frontend copy and core UI identity from "Crypto Analyzer" to "Download Money" while keeping trading functionality stable
+- **Phase 1 - Core Brand Surface**:
+  - Updated global app metadata (title, description, keywords) in `frontend/app/layout.tsx`
+  - Updated top navigation branding and subtitle in `frontend/app/layout/Header.tsx`
+  - Updated footer disclaimer/supporting copy in `frontend/app/layout/Footer.tsx`
+  - Updated home loading/error language in `frontend/app/page.tsx`
+- **Phase 2 - Product Copy Consistency**:
+  - Updated hero section titles/subtitles in `frontend/app/sections/HeroSection.tsx`
+  - Updated prediction wording to new product language in `frontend/app/sections/PredictionsSection.tsx`
+  - Reviewed positions/pending/history labels for brand voice consistency
+  - Updated rules pages wording (`frontend/app/rules/*`)
+- **Phase 3 - Visual Identity**:
+  - Confirmed logo/icon treatment in header (kept Zap)
+  - Updated accent text/marketing tone in key cards:
+    - `PerformanceSection.tsx`: "Download Money Performance"
+    - `PendingOrdersSection.tsx`: "Download Money Planned Entries"
+    - `HistorySection.tsx`: "Download Money Execution History"
+  - Validated dark/light mode visual consistency after copy updates
+  - Fixed text overflow in CardHeader component with truncation for mobile
+- **Phase 4 - QA Notes**:
+  - Desktop and mobile layout overflow addressed with CSS truncation
+  - Dark/light mode theme consistency verified via CSS variables
+- **Impact**: Complete visual rebrand to "Download Money" identity
+- **Files**: `frontend/app/layout.tsx`, `frontend/app/layout/Header.tsx`, `frontend/app/layout/Footer.tsx`, `frontend/app/page.tsx`, `frontend/app/sections/HeroSection.tsx`, `frontend/app/sections/PredictionsSection.tsx`, `frontend/app/sections/PerformanceSection.tsx`, `frontend/app/sections/PendingOrdersSection.tsx`, `frontend/app/sections/HistorySection.tsx`, `frontend/app/components/ui/Card.tsx`
+- **Documentation**: Updated `docs/plans/download-money-rebrand-checklist.md` to mark phases 1-3 as completed
+
 ## [06/05/2026] - v1.2.42 - Prediction Reversal Close Reason Fix
 
 ### Bug Fixes

@@ -12,7 +12,14 @@ export function formatToGMT7(
   if (!ts) return 'N/A';
 
   try {
-    const date = new Date(ts);
+    // Backend often sends UTC without "Z"; parse as UTC so Asia/Ho_Chi_Minh is not double-shifted
+    const utcInput =
+      typeof ts === 'string' && (ts.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(ts))
+        ? ts
+        : typeof ts === 'string'
+          ? ts.replace(' ', 'T') + 'Z'
+          : String(ts);
+    const date = new Date(utcInput);
     // Use timeZone option to convert UTC to GMT+7 (Asia/Ho_Chi_Minh)
     return date.toLocaleString('vi-VN', {
       day: '2-digit',

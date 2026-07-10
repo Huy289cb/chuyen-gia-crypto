@@ -129,7 +129,7 @@ func TestConfig_DefaultValues(t *testing.T) {
 
 	// Check default analysis config
 	assert.Equal(t, 0.70, AppConfig.Analysis.ICTConfidenceThreshold)
-	assert.Equal(t, 0.75, AppConfig.Analysis.KimNghiaConfidenceThreshold)
+	assert.Equal(t, 0.82, AppConfig.Analysis.KimNghiaConfidenceThreshold)
 	assert.Equal(t, 0.80, AppConfig.Analysis.AutoEntryConfidenceThreshold)
 
 	// Check default trading config

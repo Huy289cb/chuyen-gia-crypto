@@ -1,28 +1,62 @@
 {
   "name": "crypto-analyzer-backend",
   "version": "1.2.37",
-  "type": "module",
   "scripts": {
-    "dev": "node src/index.js",
-    "start": "node src/index.js",
+    "dev": "tsx src/server.ts",
+    "dev:legacy": "node src/index.js",
+    "dev:api": "cross-env API_ONLY=true tsx src/server.ts",
+    "dev:worker": "cross-env WORKER_ONLY=true tsx src/worker.ts",
+    "dev:ts": "tsx src/server.ts",
+    "start": "npm run build && npm run start:api",
+    "start:api": "node dist/server.js",
+    "start:worker": "node dist/worker.js",
+    "build": "prisma generate && tsc",
     "db:init": "node src/db/init.js",
     "setup:data": "node scripts/ensure-data-dir.js",
-    "testnet:cleanup": "node scripts/testnet-cleanup.js",
+    "testnet:cleanup": "tsx scripts/testnet-cleanup.ts",
+    "testnet:backfill-pnl": "tsx scripts/backfill-testnet-pnl.ts",
+    "testnet:fix-pipeline-backfill": "tsx scripts/fix-pipeline-backfill-artifact.ts",
+    "testnet:reconcile-wallet": "tsx scripts/reconcile-testnet-wallet.ts",
+    "testnet:reconcile-position-pnl": "tsx scripts/reconcile-position-pnl.ts",
+    "v3:reset-5m": "tsx scripts/v3-reset-for-5m.ts",
+    "v3:backfill-ohlcv": "tsx scripts/v3-backfill-ohlcv.ts",
+    "backtest:historical": "tsx scripts/run-historical-testbed.ts",
+    "benchmark:cerebras": "tsx scripts/benchmark-cerebras-dispatch-models.ts",
+    "benchmark:openrouter": "tsx scripts/benchmark-openrouter-dispatch-models.ts",
+    "smoke:llm-providers": "tsx scripts/smoke-llm-providers.ts",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "smoke:cursor": "tsx scripts/smoke-cursor-chat.ts",
+    "test:coverage": "vitest run --coverage",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "tsx scripts/migrate-sqlite-to-postgres.ts"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.18",
+    "@prisma/client": "^5.22.0",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
+    "cross-env": "^10.1.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
-    "openai": "^4.52.0",
-    "sqlite3": "^5.1.7"
+    "openai": "^4.52.0"
   },
   "devDependencies": {
-    "@vitest/ui": "^4.1.4",
-    "vitest": "^4.1.4"
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/node-cron": "^3.0.11",
+    "@types/ws": "^8.18.1",
+    "@vitest/ui": "^3.2.4",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "vite": "^5.4.21"
   }
 }

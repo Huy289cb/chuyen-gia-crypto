@@ -10,8 +10,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'JetBrains Mono', 'monospace'],
       },
       colors: {
         background: {
@@ -19,6 +19,14 @@ const config: Config = {
           secondary: "var(--bg-secondary)",
           tertiary: "var(--bg-tertiary)",
         },
+        /** Matches utility classes used across panels: bg-bg-primary, bg-bg-secondary */
+        bg: {
+          primary: "var(--bg-primary)",
+          secondary: "var(--bg-secondary)",
+          tertiary: "var(--bg-tertiary)",
+        },
+        /** Matches border-border-default used on cards and dividers */
+        "border-default": "var(--border-default)",
         surface: {
           1: "var(--surface-1)",
           2: "var(--surface-2)",
@@ -65,13 +73,15 @@ const config: Config = {
         "2xl": "1.25rem",
       },
       boxShadow: {
-        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2)',
-        'glow': '0 0 20px rgba(245, 158, 11, 0.15)',
+        card: 'var(--shadow-card)',
+        'card-hover': 'var(--shadow-card-hover)',
+        glow: '0 0 20px var(--accent-glow)',
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'fade-in': 'fadeIn 0.5s ease-out',
-        'slide-up': 'slideUp 0.3s ease-out',
+        'slide-up': 'slideUp 0.4s cubic-bezier(0.32, 0.72, 0, 1)',
+        shimmer: 'shimmer 1.8s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -79,8 +89,12 @@ const config: Config = {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { transform: 'translateY(10px)', opacity: '0' },
+          '0%': { transform: 'translateY(12px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
         },
       },
     },

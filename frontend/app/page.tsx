@@ -1,220 +1,178 @@
 'use client';
 
-// Cache-bust: v{APP_VERSION}
-import { useState, useEffect, Suspense } from 'react';
-import { APP_VERSION } from '@/lib/version';
-import { cn } from '@/lib/utils';
+import { Suspense, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Header } from './layout/Header';
 import { Footer } from './layout/Footer';
-import { HeroSection } from './sections/HeroSection';
-import { TradingDashboard } from './sections/TradingDashboard';
-import { PositionsSection } from './sections/PositionsSection';
-import { HistorySection } from './sections/HistorySection';
-import { PendingOrdersSection } from './sections/PendingOrdersSection';
-import { PredictionsSection } from './sections/PredictionsSection';
-import { PerformanceSection } from './sections/PerformanceSection';
-import { TestnetPanel } from './components/crypto/TestnetPanel';
-import { ComparisonDashboard } from './components/crypto/ComparisonDashboard';
-import { useTrends } from './hooks/useTrends';
-import { usePaperTrading } from './hooks/usePaperTrading';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { DashboardCommandStrip } from './components/DashboardCommandStrip';
+import { DashboardSectionNav } from './components/DashboardSectionNav';
+import { DashboardZone } from './components/DashboardZone';
+import { SystemOverview } from './sections/SystemOverview';
+import { SchedulerStatusPanel } from './sections/SchedulerStatusPanel';
+import { CandleWarmupPanel } from './sections/CandleWarmupPanel';
+import { MarketChartPanel } from './sections/MarketChartPanel';
+import { IndicatorPanel } from './sections/IndicatorPanel';
+import { TestnetBalancePanel } from './sections/TestnetBalancePanel';
+import { OpenPositionsPanel } from './sections/OpenPositionsPanel';
+import { ActiveOrdersPanel } from './sections/ActiveOrdersPanel';
+import { TradeHistoryPanel } from './sections/TradeHistoryPanel';
+import { DecisionFlowPanel } from './sections/DecisionFlowPanel';
+import { SignalGatePanel } from './sections/SignalGatePanel';
+import { NoTradeReasonsPanel } from './sections/NoTradeReasonsPanel';
+import { RiskEnginePanel } from './sections/RiskEnginePanel';
+import { LlmDispatchPanel } from './sections/LlmDispatchPanel';
+import { MemoryInsightsPanel } from './sections/MemoryInsightsPanel';
+import { TelegramAiPanel } from './sections/TelegramAiPanel';
+import { EventLogFeed } from './sections/EventLogFeed';
+import { V3DashboardDataProvider, useV3Dashboard } from './contexts/V3DashboardDataContext';
 
 export default function Home() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-bg-primary flex items-center justify-center"><Loader2 className="w-12 h-12 text-accent-primary animate-spin" /></div>}>
-      <HomeContent />
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+          <Loader2 className="w-12 h-12 text-accent-primary animate-spin" />
+        </div>
+      }
+    >
+      <V3DashboardDataProvider marketSymbol="BTC">
+        <DashboardPage />
+      </V3DashboardDataProvider>
     </Suspense>
   );
 }
 
-function HomeContent() {
-  const { data, loading: trendsLoading, error: trendsError, refetch } = useTrends('kim_nghia');
-  const { accounts, positions, tradeHistory, loading: ptLoading, resetAccount, closePosition, refresh: refreshPaperTrading } = usePaperTrading('kim_nghia');
-  const [activeTab, setActiveTab] = useState<'paper' | 'testnet' | 'comparison'>('paper');
-  const [isTriggering, setIsTriggering] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+function DashboardPage() {
+  const { summary, account, intelligence, market } = useV3Dashboard();
+  const [eventLogRefreshToken, setEventLogRefreshToken] = useState(0);
 
-  const prices = data?.prices;
-  const analysis = data?.analysis;
-  const lastPriceUpdate = prices?.timestamp || data?.lastUpdated;
-  const lastAnalysisUpdate = data?.lastUpdated;
+  const isLoading =
+    summary.loading || account.loading || intelligence.loading || market.loading;
 
   const handleRefresh = () => {
-    refetch();
-    refreshPaperTrading();
-    setRefreshKey(prev => prev + 1);
+    summary.refresh();
+    account.refresh();
+    intelligence.refresh();
+    market.refresh();
+    setEventLogRefreshToken((t) => t + 1);
   };
 
-  const handleTriggerAnalysis = async () => {
-    setIsTriggering(true);
-    try {
-      const response = await fetch('/api/analysis/run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to trigger analysis');
-      }
-      
-      // Wait a moment for the analysis to complete, then refresh
-      setTimeout(() => {
-        refetch();
-        setIsTriggering(false);
-      }, 2000);
-    } catch (error) {
-      console.error('Error triggering analysis:', error);
-      setIsTriggering(false);
-    }
-  };
-
-  // Initial loading state
-  if (trendsLoading && !data) {
-    return (
-      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-accent-primary animate-spin mx-auto mb-4" />
-          <p className="text-foreground-secondary">Loading market data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state without data
-  if (trendsError && !data) {
-    return (
-      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
-          <AlertCircle className="w-12 h-12 text-warning mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-foreground mb-2">Service Unavailable</h2>
-          <p className="text-foreground-secondary mb-4">{trendsError}</p>
-          <button
-            onClick={handleRefresh}
-            className="px-4 py-2 bg-accent-primary hover:bg-accent-secondary text-bg-primary font-medium rounded-lg transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const schedulerRuns = summary.data?.schedulers
+    ?.map((s) => s.lastRunAt || s.lastRun)
+    .filter(Boolean) as string[] | undefined;
+  const lastDashboardUpdate = schedulerRuns?.length
+    ? schedulerRuns.sort().at(-1)
+    : intelligence.data?.signalGate?.timestamp;
 
   return (
     <div className="min-h-screen bg-bg-primary">
       <Header
         onRefresh={handleRefresh}
-        onTriggerAnalysis={handleTriggerAnalysis}
-        isTriggering={isTriggering}
-        isLoading={trendsLoading}
-        lastPriceUpdate={lastPriceUpdate}
-        lastAnalysisUpdate={lastAnalysisUpdate}
+        isLoading={isLoading}
+        lastDashboardUpdate={lastDashboardUpdate}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Hero Section - Crypto Cards with Charts */}
-        <HeroSection
-          btcData={data?.prices.btc}
-          ethData={data?.prices.eth}
-          btcAnalysis={data?.analysis.btc}
-          ethAnalysis={data?.analysis.eth}
-          showEthTrading={false}
-          method="kim_nghia"
-        />
+      <DashboardSectionNav />
 
-        {/* Trading System Tabs */}
-        <div className="mb-6">
-          <div className="flex gap-2 border-b border-surface-2 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setActiveTab('paper')}
-              className={cn(
-                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
-                activeTab === 'paper'
-                  ? 'text-accent-primary border-b-2 border-accent-primary'
-                  : 'text-foreground-secondary hover:text-foreground'
-              )}
-            >
-              Paper Trading
-            </button>
-            <button
-              onClick={() => setActiveTab('testnet')}
-              className={cn(
-                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
-                activeTab === 'testnet'
-                  ? 'text-accent-primary border-b-2 border-accent-primary'
-                  : 'text-foreground-secondary hover:text-foreground'
-              )}
-            >
-              Binance Testnet
-            </button>
-            <button
-              onClick={() => setActiveTab('comparison')}
-              className={cn(
-                'px-3 sm:px-4 py-2 font-medium transition-colors whitespace-nowrap text-sm sm:text-base',
-                activeTab === 'comparison'
-                  ? 'text-accent-primary border-b-2 border-accent-primary'
-                  : 'text-foreground-secondary hover:text-foreground'
-              )}
-            >
-              Comparison
-            </button>
+      <main
+        id="main-content"
+        className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 overflow-x-hidden animate-fade-in space-y-10 sm:space-y-12"
+      >
+        {/* 1. Tóm tắt — trả lời "hệ thống đang ở đâu?" trong 5 giây */}
+        <DashboardZone
+          id="overview"
+          title="Tóm tắt"
+          description="Trạng thái pipeline, tín hiệu, vị thế và PnL — xem trước khi đi sâu chi tiết."
+        >
+          <DashboardCommandStrip />
+          <div className="mt-4">
+            <SystemOverview />
           </div>
-        </div>
+        </DashboardZone>
 
-        {/* Paper Trading Dashboard */}
-        {activeTab === 'paper' && (
-          <TradingDashboard
-            accounts={accounts}
-            loading={ptLoading}
-            onReset={resetAccount}
-            method="kim_nghia"
-          />
-        )}
+        {/* 2. Thị trường — bối cảnh giá trước khi quyết định */}
+        <DashboardZone
+          id="market"
+          title="Thị trường"
+          description="Biểu đồ BTC và chỉ báo Kim Nghia trên khung thời gian đang chọn."
+        >
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+            <div className="xl:col-span-8 min-w-0">
+              <MarketChartPanel symbol="BTC" method="kim_nghia" />
+            </div>
+            <div className="xl:col-span-4 min-w-0">
+              <IndicatorPanel />
+            </div>
+          </div>
+        </DashboardZone>
 
-        {/* Testnet Panel */}
-        {activeTab === 'testnet' && <TestnetPanel />}
+        {/* 3. Thực thi — tiền, vị thế, lệnh */}
+        <DashboardZone
+          id="execution"
+          title="Thực thi"
+          description="Số dư testnet, vị thế đang mở, lệnh chờ và lịch sử giao dịch."
+        >
+          <div className="space-y-4">
+            <TestnetBalancePanel />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+              <div id="open-positions" className="min-w-0">
+                <OpenPositionsPanel />
+              </div>
+              <div className="min-w-0">
+                <ActiveOrdersPanel />
+              </div>
+              <div className="min-w-0 md:col-span-2 xl:col-span-1">
+                <TradeHistoryPanel />
+              </div>
+            </div>
+          </div>
+        </DashboardZone>
 
-        {/* Comparison Dashboard */}
-        {activeTab === 'comparison' && <ComparisonDashboard />}
+        {/* 4. Pipeline — tại sao vào lệnh / không vào lệnh */}
+        <DashboardZone
+          id="pipeline"
+          title="Pipeline quyết định"
+          description="Luồng MarketScan → Signal Gate → Risk → LLM. Xem chi tiết khi tín hiệu bị chặn."
+        >
+          <div className="space-y-4">
+            <DecisionFlowPanel variant="full" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div id="signal-gate" className="min-w-0">
+                <SignalGatePanel />
+              </div>
+              <div id="risk-engine" className="min-w-0">
+                <RiskEnginePanel />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div id="llm-dispatch" className="min-w-0">
+                <LlmDispatchPanel />
+              </div>
+              <div className="min-w-0">
+                <NoTradeReasonsPanel />
+              </div>
+            </div>
+          </div>
+        </DashboardZone>
 
-        {/* Open Positions - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <PositionsSection
-            positions={positions}
-            onClosePosition={closePosition}
-          />
-        )}
-
-        {/* Pending Orders - Only show on paper trading tab */}
-        {activeTab === 'paper' && <PendingOrdersSection method="kim_nghia" refreshKey={refreshKey} />}
-
-        {/* Trade History - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <HistorySection
-            symbol="BTC"
-            method="kim_nghia"
-            refreshKey={refreshKey}
-          />
-        )}
-
-        {/* Prediction Timeline - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <PredictionsSection
-            symbol="BTC"
-            method="kim_nghia"
-            refreshKey={refreshKey}
-          />
-        )}
-
-        {/* Performance Charts & Metrics - Only show on paper trading tab */}
-        {activeTab === 'paper' && (
-          <PerformanceSection
-            symbol="BTC"
-            method="kim_nghia"
-            refreshKey={refreshKey}
-          />
-        )}
+        {/* 5. Hệ thống — vận hành & debug */}
+        <DashboardZone
+          id="system"
+          title="Hệ thống"
+          description="Scheduler, warmup nến, bộ nhớ AI và nhật ký sự kiện."
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <div className="space-y-4 min-w-0">
+              <SchedulerStatusPanel />
+              <CandleWarmupPanel />
+              <MemoryInsightsPanel />
+              <TelegramAiPanel />
+            </div>
+            <div id="event-log" className="min-w-0">
+              <EventLogFeed refreshToken={eventLogRefreshToken} />
+            </div>
+          </div>
+        </DashboardZone>
       </main>
 
       <Footer />

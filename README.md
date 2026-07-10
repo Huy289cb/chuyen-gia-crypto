@@ -27,7 +27,7 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 ### Paper Trading System
 - **Multi-Method Support**: ICT Smart Money (temporarily disabled) và Kim Nghia (SMC + Volume + Fibonacci) - code preserved for future multi-method support
 - **ICT Auto-Entry** (Temporarily Disabled): Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
-- **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 75%, R:R >= 2.5
+- **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 82%, R:R >= 2.5
 - **Risk Management**:
   - ICT: 1% risk per trade, SL distance minimum 0.75% (disabled)
   - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
@@ -44,7 +44,17 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Advanced Metrics**: Accuracy by timeframe, accuracy by bias, average hold time
 - **Data Freshness Indicators**: Hiển thị trạng thái freshness của giá và phân tích
 
-### Real-time Data
+### Binance Futures Testnet Integration
+- **Real Order Placement**: Orders placed on Binance Futures Testnet (not paper trading)
+- **WebSocket Synchronization**: Real-time order and position updates via User Data Stream
+- **Startup Reconciliation**: Automatic state sync on backend startup
+- **Hedge Mode Detection**: Automatic detection of ONE_WAY vs HEDGE mode
+- **Idempotency Protection**: Duplicate order prevention with newClientOrderId
+- **Binance-First Approach**: Cancel Binance orders before local DB updates
+- **SL/TP Management**: Real SL/TP orders on Binance with reduceOnly
+- **Error Handling**: No silent fallback, explicit errors on failures
+- See `docs/binance-testnet-integration.md` for details
+- See `docs/binance-testnet-testing-plan.md` for testing procedures
 - Giá BTC/ETH cập nhật real-time từ **Binance API** (primary), CoinGecko (fallback)
 - Phân tích tự động mỗi 15 phút (KimNghia: 0,15,30,45), ICT: disabled
 - Cache 20 phút để đảm bảo performance
@@ -54,37 +64,26 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
 - **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
 - **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
-- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 75% (Kim Nghia)
+- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 82% (Kim Nghia)
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - See `docs/ai-position-management.md` for detailed documentation
 
-### Binance Futures Integration (New - REST API)
-- **Real Trading**: Execute actual trades on Binance Futures (Demo + Mainnet support)
-- **Official REST API**: No SDK dependency, uses official Binance REST API directly
-- **Parallel with Paper Trading**: Compare performance between paper trading and real execution
-- **BTC-Only**: Currently supports BTCUSDT trading with Kim Nghia method
-- **Auto-Entry**: Automatic position opening based on Kim Nghia analysis (75% confidence threshold, R:R >= 2.5)
-- **Risk Management**: 10% risk per trade, SL/TP orders placed immediately, leverage support (default 20x)
-- **Conditional Orders**: Hedge-mode SL/TP uses the standard Binance Futures `POST /fapi/v1/order` endpoint with `STOP_MARKET` and `TAKE_PROFIT_MARKET`
-- **Account Sync**: Auto-sync with Binance every 5 minutes, manual sync available via API, wallet balance used as the source of truth for realized balance
-- **Position Management**: Open/close positions, update SL, partial TP support
-- **Recovery Logic**: If market entry succeeds but SL/TP placement fails, system immediately places a recovery close to avoid orphan Binance positions
-- **Trade Events**: Complete audit trail of all trading actions
-- **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown
-- **API Endpoints**: Full REST API for accounts, positions, performance metrics
-- **Cleanup Tools**: Manual cleanup route and CLI script to cancel orphan open orders, close orphan Binance positions, and resync snapshots
-- **Environment Switch**: Switch between Demo and Mainnet by changing `BINANCE_BASE_URL`
-- See `docs/binance-testnet-integration.md` for detailed documentation
+### AI Position Management
+- **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
+- **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
+- **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
+- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 82% (Kim Nghia)
+- **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
+- **Testnet Integration**: AI decisions are executed on Binance Testnet positions and orders
+- See `docs/ai-position-management.md` for detailed documentation
 
 ### Price Data & AI Models
 - Price consistency: 100% Binance API để tránh chênh lệch giữa các sàn
 - Không còn lỗi 429 rate limit (Binance: 1200 req/min vs CoinGecko: ~10-50 req/min)
 - **1-minute Candle Data**: Sử dụng nến 1 phút (OHLC) để detect chính xác SL/TP (v2.2.0)
-- **Groq AI Models**: 
-  - Primary: meta-llama/llama-4-scout-17b-16e-instruct (30,000 TPM, most reliable)
-  - Secondary: llama-3.3-70b-versatile, llama-3.1-8b-instant
-  - Fallback: qwen/qwen3-32b, openai/gpt-oss-120b
-  - JSON parsing: cleanJSONResponse function handles malformed JSON from models
+- **LLM dispatch (V3 trading)** — xem `docs/llm-dispatch-providers.md`:
+  - Groq Scout → Cerebras gpt-oss-120b → OpenRouter Scout → Groq fallbacks (70B, Qwen, 8B)
+  - Telegram `/ai` và levels adapter: Groq only
 
 ### Testing (New - v2.2.0)
 - **Vitest Framework**: Unit và integration tests với Vitest

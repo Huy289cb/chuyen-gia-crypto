@@ -1,0 +1,32 @@
+---
+description: Vitest, validation placement, and error-handling conventions
+globs: "{backend/**/*,frontend/**/*}"
+alwaysApply: false
+---
+
+# Testing, validation, and errors
+
+## Tests (backend)
+- Runner: **Vitest** (`backend/vitest.config.js`), tests in `backend/tests/**/*.{test,spec}.{js,ts}`
+- Run: `cd backend && npm run test:run` (or `npm test` watch)
+- Prefer **unit tests** for pure validation, analyzers, and format helpers
+- Prefer **integration tests** when behavior depends on DB, schedulers, or HTTP (mock external APIs)
+- Update or add tests when trading logic, signal gate, risk checks, or API response shapes change
+- Existing suites are mostly `.js` — new tests may be `.ts`; match nearby file style
+
+## Validation
+- No shared schema library in repo — validate at boundaries:
+  - Startup: `validateAppConfig()`, `validateSafetyRequirements()` in `config/app.ts`
+  - Trading: `config/methods.ts`, `config/risk-policy.ts`, analyzers, `signal-gate.service.ts`, `risk-manager.service.ts`
+- Reject bad input early with explicit reason strings (dashboard surfaces reasons to UI)
+- Do not weaken confidence thresholds, cooldowns, SL distance, or volume guards without code/task justification
+
+## Error handling
+- **Never** empty `catch` blocks; log and return structured JSON errors
+- External calls (Binance, Groq): surface failures; testnet path avoids silent fallback per project docs
+- Async route handlers: `try/catch` per handler or delegate to service that throws typed errors
+- Worker jobs: log and continue only when the schedule should not crash the whole worker; document intentional swallowing
+
+## Frontend errors
+- Store `error: string | null` in context slices; show user-visible message in panel empty/error states
+- Do not assume API success — check `success` flag and handle network failures in fetchers

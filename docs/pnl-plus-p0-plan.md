@@ -1,0 +1,231 @@
+# PnL+ Phase 0 Plan
+
+**Status:** Implemented (code + env)  
+**Deploy:** Run `./scripts/deploy.sh` after review (use `DEPLOY_SKIP_PULL=1` if deploying local commits not yet pushed)
+
+## Goal
+
+Stop behaviors that destroy PnL **before** optimizing for more profit. Phase 0 is defensive: fewer bad entries, no phantom accounting, exchange-first exits, enforced cooldown.
+
+## Evidence that motivated P0
+
+| Issue | Symptom |
+|-------|---------|
+| PositionMonitor | Multi-reduce, early exit, ~0% PnL churn |
+| Phantom close | DB TP +$11 → reopen → real loss -$14 |
+| Range trading | 98% scans BLOCK/range; executed trades lost |
+| Overtrade | LLM 88% conf, same-side stacking |
+| Accounting | `realized_pnl` ≠ wallet |
+
+## P0 scope (4 pillars)
+
+### P0.1 — Trend-only entries
+
+| Item | Implementation |
+|------|----------------|
+| Allowed regimes | `V3_ALLOWED_REGIMES=trend` (default). `range`/`chop`/`unknown` blocked at gate + dispatch |
+| Signal gate | `signal-gate.service.ts` reads allowed regimes from `v3-entry-policy.ts` |
+| LLM dispatch | `groq-dispatch.service.ts` rejects non-trend before confirm |
+| Grade | `MIN_SIGNAL_GRADE=B` (unchanged) |
+
+**Env:**
+
+```env
+V3_ALLOWED_REGIMES=trend
+V3_BLOCK_RANGE_ENTRIES=true
+```
+
+**Verify:**
+
+- Logs: `Regime X blocked` or gate BLOCK in range
+- No new `Binance pending order` when only range PASS on dashboard
+
+---
+
+### P0.2 — No phantom PnL
+
+| Item | Implementation |
+|------|----------------|
+| Paper SL/TP on candle | Already skipped when `BINANCE_ENABLED=true` (`testnet-sync.ts`) |
+| WS close | Only if `binance_order_id` matches SL/TP/entry (`position-close.service.ts`) |
+| ACCOUNT_UPDATE close | Verify `positionAmt==0` on Binance before DB close |
+| Phantom reopen | **Disabled** unless `PHANTOM_REOPEN_ENABLED=true` (`binance-reconciliation.ts`) |
+| Unverified SL/TP close | Block `closeLocalPosition` for `stop_loss`/`take_profit` without Binance proof |
+
+**Env:**
+
+```env
+PHANTOM_REOPEN_ENABLED=false
+BINANCE_ENABLED=true
+```
+
+**Verify:**
+
+- No `reconciliation_reopened` in logs after deploy
+- No `position_closed` with `source: paper_candle_simulation` when Binance on
+- `trade_outcomes` only after verified close paths
+
+---
+
+### P0.3 — PositionMonitor: emergency only
+
+| Item | Implementation |
+|------|----------------|
+| REDUCE | Off unless `POSITION_MONITOR_ALLOW_REDUCE=true` |
+| EXIT | Off unless `POSITION_MONITOR_ALLOW_EXIT=true` (default **false**) |
+| Defer | `POSITION_MONITOR_DEFER_TO_EXCHANGE_SLTP=true` when SL+TP order ids exist |
+| Min age | `POSITION_MONITOR_MIN_MINUTES=30` |
+
+**Env:**
+
+```env
+POSITION_MONITOR_ALLOW_REDUCE=false
+POSITION_MONITOR_ALLOW_EXIT=false
+POSITION_MONITOR_DEFER_TO_EXCHANGE_SLTP=true
+POSITION_MONITOR_MIN_MINUTES=30
+```
+
+**Verify:**
+
+- Startup log: `allow_reduce=false allow_exit=false defer_sl_tp=true`
+- No `Reduced ` / `position_monitor_exit` in logs
+- Log: `deferring to exchange SL/TP` while position open
+
+---
+
+### P0.4 — Cooldown + exposure caps
+
+| Item | Implementation |
+|------|----------------|
+| Max positions/symbol | `MAX_POSITIONS_PER_SYMBOL=1` |
+| Consecutive loss cooldown | `MAX_CONSECUTIVE_LOSSES=2` → set `cooldown_until` on close (`account-risk-guard` + `testnet.repository`) |
+| Binance loss streak (2026-06) | `getBinanceLossStreak()` từ `binance-trade-history.service.ts` — dùng khi DB streak đóng băng do `reconciliation_bookkeeping` PnL=0 |
+| Cooldown hours | `CONSECUTIVE_LOSS_COOLDOWN_HOURS=4` |
+| Exposure cap | `MAX_EXPOSURE_PCT_OF_EQUITY=0.15` (15% of wallet, replaces flat $2000 cap when set) |
+| Account guard | `assertTestnetAccountCanOpenTrade` in Groq + V3 execution |
+| Skip LLM new trade if open/pending | `llm-dispatch.scheduler.ts` skips **new** trades; runs pending lifecycle/review first |
+
+**Env:**
+
+```env
+MAX_POSITIONS_PER_SYMBOL=1
+MAX_CONSECUTIVE_LOSSES=2
+CONSECUTIVE_LOSS_COOLDOWN_HOURS=4
+MAX_EXPOSURE_PCT_OF_EQUITY=0.15
+```
+
+**Verify:**
+
+- After 2 losses: `cooldown_until` set, LLM/V3 blocked with cooldown reason
+- Exposure: order blocked if open+pending notional > 15% equity
+- `LLMDispatch` skip log when same symbol already open
+
+---
+
+## Files changed (P0)
+
+| File | Change |
+|------|--------|
+| `docs/pnl-plus-p0-plan.md` | This plan |
+| `backend/src/config/v3-entry-policy.ts` | Trend/regime + exposure % helpers |
+| `backend/src/config/position-monitor-policy.ts` | EXIT default false |
+| `backend/src/config/risk-policy.ts` | `maxExposurePercentOfEquity` |
+| `backend/src/services/signal-gate.service.ts` | Allowed regimes from env |
+| `backend/src/services/account-risk-guard.service.ts` | Cooldown + consecutive loss guard + Binance streak |
+| `backend/src/services/binance-trade-history.service.ts` | Closed rounds, loss streak, dashboard/Telegram history |
+| `backend/src/services/account-summary.service.ts` | Wallet-first PnL, Telegram `/lenh` `/baocao` |
+| `backend/src/services/groq-dispatch.service.ts` | Trend-only, account guard, regime in decisions |
+| `backend/src/services/v3-trade-execution.service.ts` | Exposure %, account guard |
+| `backend/src/services/position-close.service.ts` | Verified close, merge PnL, cooldown |
+| `backend/src/services/position-pnl-backfill.service.ts` | Historical PnL backfill |
+| `backend/src/services/binance-reconciliation.ts` | Phantom reopen gated, close with PnL |
+| `backend/src/schedulers/llm-dispatch.scheduler.ts` | Pending lifecycle before skip new trade |
+| `backend/src/schedulers/pending-order.scheduler.ts` | TTL / drift / LLM review cron |
+| `backend/src/repositories/testnet.repository.ts` | Cooldown threshold from risk policy |
+| `backend/.env.example` | P0 env documentation |
+| `backend/.env` | Production P0 values (VPS) |
+
+---
+
+## Double-check checklist (post-deploy)
+
+```bash
+# 1. Monitor config
+grep "PositionMonitor\] Starting scheduler" backend/logs/worker-out.log | tail -1
+# Expect: allow_reduce=false allow_exit=false defer_sl_tp=true
+
+# 2. No monitor churn (24h)
+grep -E "Reduced |position_monitor_exit" backend/logs/worker-out.log | tail -5
+# Expect: empty or only pre-P0 timestamps
+
+# 3. No phantom reopen
+grep "reconciliation_reopened\|phantom" backend/logs/worker-out.log | tail -5
+
+# 4. Outcomes growing
+cd backend && node -e "const {PrismaClient}=require('@prisma/client');new PrismaClient().tradeOutcome.count().then(console.log).finally(()=>process.exit())"
+
+# 5. API health
+curl -s http://127.0.0.1:3000/health
+
+# 6. Regime blocks
+grep "blocked for entries\|not in V3_ALLOWED_REGIMES" backend/logs/worker-out.log | tail -5
+```
+
+---
+
+## P1 — Pending lifecycle + PnL measurement (May 2026)
+
+| Item | Doc / module |
+|------|----------------|
+| Pending TTL / drift / LLM review | [pending-order-lifecycle.md](./pending-order-lifecycle.md) |
+| Reconciliation close with PnL | `position-close.service.ts` → `closeLocalPosition` |
+| Merge duplicate rows with PnL | `closeDuplicateForMerge()` in reconciliation |
+| Reflection in Groq dispatch | `memory.service.ts` → `formatRecentReflectionsForPrompt` |
+| Historical backfill script | [pnl-backfill.md](./pnl-backfill.md), `npm run testnet:backfill-pnl` |
+
+**Verify after backfill:**
+
+```bash
+cd backend && npm run testnet:backfill-pnl
+# outcomes > 0, null close_price on closed → 0
+```
+
+---
+
+## P1.5+ roadmap
+
+Chi tiết fix/cải thiện tiếp theo (measurement → learning): **[pnl-plus-roadmap.md](./pnl-plus-roadmap.md)**.
+
+Tóm tắt ưu tiên:
+
+1. **P1.5** — Close PnL từ `userTrades`/income; dashboard wallet-first; tắt reflection trên close ước lượng  
+2. **P2** — Verified close taxonomy; WS fill sync; pending E2E; modify limit trên exchange  
+3. **P3** — Entry quality (HTF guard, cooldown từ income, exposure)  
+4. **P4** — Reflection / auto-block (sau ≥30 verified closes)
+
+## Out of scope (until P2 done)
+
+- Auto-block playbook from `trade_outcomes` stats (needs ≥30 **verified** samples)
+- Strategy tuning from DB win-rate (misleading until fill-based PnL)
+- Leverage reduction (manual env `BINANCE_LEVERAGE`)
+
+---
+
+## Rollback
+
+| Rollback | Env change |
+|----------|------------|
+| Allow range again | `V3_ALLOWED_REGIMES=trend,range` |
+| Re-enable monitor exit | `POSITION_MONITOR_ALLOW_EXIT=true` |
+| Phantom reopen | `PHANTOM_REOPEN_ENABLED=true` |
+| More exposure | `MAX_EXPOSURE_PCT_OF_EQUITY=0.4` or unset + `MAX_TOTAL_EXPOSURE_USD=2000` |
+
+---
+
+## Success criteria (7 days)
+
+1. **0** monitor-driven reduces/exits (unless EXIT explicitly enabled)
+2. **0** phantom reopen events
+3. **≥80%** no-trade reasons cite regime/cooldown/exposure (not execution bugs)
+4. New closes all have `trade_outcomes` rows
+5. Expectancy measurable with trend-only sample (target: ≥15 closed trades before judging edge)

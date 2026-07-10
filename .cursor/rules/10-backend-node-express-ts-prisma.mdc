@@ -1,0 +1,43 @@
+---
+description: Express routes, services, repositories, Prisma, and worker patterns
+globs: backend/**/*
+alwaysApply: false
+---
+
+# Backend (Express + TS + Prisma)
+
+## Layering
+- **Routes** (`backend/src/routes/*.ts`): parse params/query/body, map HTTP status, call services/repos; keep thin
+- **Services** (`backend/src/services/`): business logic, orchestration, external APIs (Binance, Groq)
+- **Analyzers** (`backend/src/analyzers/`): pure-ish signal/setup evaluation; no Express types
+- **Repositories** (`backend/src/repositories/`): Prisma reads/writes only; export typed helpers/interfaces
+- **Config** (`backend/src/config/`): env-backed settings; validate in `validateAppConfig()` / `validateSafetyRequirements()`
+- **Schedulers** (`backend/src/schedulers/`): worker-only; v3 = `market-scan`, `llm-dispatch`, `position-monitor`; heartbeats in `utils/scheduler-heartbeat.ts`
+- **Trading close path**: `services/position-close.service.ts` (local close + Binance market); WS in `binance-websocket-sync.ts`
+
+## Prisma
+- Import singleton from `backend/src/lib/prisma.ts`; use `disconnectPrisma()` on shutdown
+- Respect `@@map` / snake_case DB columns vs camelCase Prisma fields
+- Filter trading data by `method_id` when the feature is method-scoped
+- Use `$transaction` when multiple writes must succeed or fail together
+
+## HTTP responses
+- Prefer `{ success: true, data, meta? }` for dashboard-style endpoints
+- Errors: `{ success: false, error: string }` or `{ error: string }`; use 404 when resource missing, 403 when intentionally disabled
+- Log with prefixed tags: `[Routes]`, `[Server]`, `[SafetyValidation]`
+- Global handler in `app.ts` hides stack traces outside development
+
+## Imports & style
+- CommonJS output (`module: commonjs`); use `import`/`export` in source
+- Named exports for services/repos; default export for route routers
+- Extend `Request` sparingly; prefer explicit function args over `req: any` when touching new code
+
+## V3 pipeline (worker)
+- MarketScan → Signal Gate (`signal-gate.service.ts`, env: `MIN_SIGNAL_GRADE`, `MIN_SIGNAL_CONFIDENCE`) → LLM best-of one TF (`signal-gate-ranking.ts`) → `executeV3Trade` → Binance limit + pending → WS fill → SL/TP
+- `trade-levels.ts`: `reconcileExpectedRr()` from entry/SL/TP; do not trust LLM `expected_rr` alone
+- Position monitor: **executes** REDUCE/EXIT on Binance when `BINANCE_ENABLED=true`, not log-only
+- Exposure: `MAX_TOTAL_EXPOSURE_USD` caps open + pending notional (`config/risk-policy.ts`)
+
+## Legacy
+- `allowJs: true` — some tests/scripts remain JS; new production code should be `.ts`
+- Legacy kim_nghia auto-entry and `POST /api/analysis/run` are **disabled** — do not re-enable without explicit task scope

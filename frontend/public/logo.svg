@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Download Money">
+  <defs>
+    <linearGradient id="dm-bg" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f59e0b"/>
+      <stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#dm-bg)"/>
+  <path
+    d="M38 11 24 35h11l-7 18 22-30H35l3-12z"
+    fill="#0a0a0f"
+    stroke="#0a0a0f"
+    stroke-width="1.5"
+    stroke-linejoin="round"
+  />
+</svg>

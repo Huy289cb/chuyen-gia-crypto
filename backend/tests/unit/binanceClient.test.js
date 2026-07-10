@@ -52,6 +52,30 @@ const mockGetOpenOrders = vi.hoisted(() => vi.fn(() => Promise.resolve([])));
 const mockSetLeverage = vi.hoisted(() => vi.fn(() => Promise.resolve({ symbol: 'BTCUSDT', leverage: 5 })));
 const mockSetMarginType = vi.hoisted(() => vi.fn(() => Promise.resolve({ symbol: 'BTCUSDT', marginType: 'ISOLATED' })));
 
+const mockGetExchangeInfo = vi.hoisted(() => vi.fn(() => Promise.resolve({
+  symbols: [{
+    symbol: 'BTCUSDT',
+    filters: [
+      { filterType: 'LOT_SIZE', stepSize: '0.001', minQty: '0.001', maxQty: '1000' },
+      { filterType: 'PRICE_FILTER', tickSize: '0.1', minPrice: '0.1', maxPrice: '1000000' },
+      { filterType: 'MIN_NOTIONAL', minNotional: '5' },
+    ],
+  }],
+})));
+
+vi.mock('../../src/services/binance/client.js', () => ({
+  get: mockGetExchangeInfo,
+}));
+
+const mockEnsurePositionModeDetected = vi.hoisted(() => vi.fn().mockResolvedValue('HEDGE'));
+
+vi.mock('../../src/services/binance-hedge-mode.js', () => ({
+  ensurePositionModeDetected: mockEnsurePositionModeDetected,
+  getPositionMode: vi.fn(() => 'HEDGE'),
+  resolvePositionSide: vi.fn(() => 'LONG'),
+  validatePositionSide: vi.fn(),
+}));
+
 vi.mock('../../src/services/binance/config.js', () => ({
   validateConfig: mockValidateConfig,
 }));
@@ -129,7 +153,7 @@ describe('Binance REST Client Wrapper', () => {
   });
 
   it('places a market order through placeOrder', async () => {
-    await placeMarketOrder({}, 'BTCUSDT', 'BUY', 0.01, 'LONG');
+    await placeMarketOrder({}, 'BTCUSDT', 'BUY', 0.01, 'OPEN', null, 'LONG');
 
     expect(mockPlaceOrder).toHaveBeenCalledWith({
       symbol: 'BTCUSDT',
@@ -141,7 +165,7 @@ describe('Binance REST Client Wrapper', () => {
   });
 
   it('places a limit order through placeOrder', async () => {
-    await placeLimitOrder({}, 'BTCUSDT', 'BUY', 0.01, 50000, 'LONG');
+    await placeLimitOrder({}, 'BTCUSDT', 'BUY', 0.01, 50000, 'OPEN', null, 'LONG');
 
     expect(mockPlaceOrder).toHaveBeenCalledWith({
       symbol: 'BTCUSDT',
@@ -155,7 +179,7 @@ describe('Binance REST Client Wrapper', () => {
   });
 
   it('places hedge-mode stop loss through conditional order adapter', async () => {
-    await placeStopLossOrder({}, 'BTCUSDT', 'SELL', 0.01, 49000, 'LONG');
+    await placeStopLossOrder({}, 'BTCUSDT', 'SELL', 0.01, 49000, 'CLOSE', { positionAmt: 0.01, positionSide: 'LONG' }, 'LONG');
 
     expect(mockPlaceStopMarketOrder).toHaveBeenCalledWith({
       symbol: 'BTCUSDT',
@@ -169,7 +193,7 @@ describe('Binance REST Client Wrapper', () => {
   });
 
   it('places hedge-mode take profit through conditional order adapter', async () => {
-    await placeTakeProfitOrder({}, 'BTCUSDT', 'SELL', 0.01, 52000, 'LONG');
+    await placeTakeProfitOrder({}, 'BTCUSDT', 'SELL', 0.01, 52000, 'CLOSE', { positionAmt: 0.01, positionSide: 'LONG' }, 'LONG');
 
     expect(mockPlaceTakeProfitMarketOrder).toHaveBeenCalledWith({
       symbol: 'BTCUSDT',
@@ -182,30 +206,42 @@ describe('Binance REST Client Wrapper', () => {
     expect(mockPlaceOrder).not.toHaveBeenCalled();
   });
 
-  it('places one-way stop loss using reduceOnly on standard order endpoint', async () => {
-    await placeStopLossOrder({}, 'BTCUSDT', 'SELL', 0.01, 49000);
+  it('places one-way stop loss via algo order (Demo/mainnet)', async () => {
+    const hedge = await import('../../src/services/binance-hedge-mode.js');
+    vi.mocked(hedge.getPositionMode).mockReturnValue('ONE_WAY');
+    vi.mocked(hedge.resolvePositionSide).mockReturnValue(null);
 
-    expect(mockPlaceOrder).toHaveBeenCalledWith({
-      symbol: 'BTCUSDT',
-      side: 'SELL',
-      quantity: '0.01',
-      stopPrice: '49000',
-      type: 'STOP_MARKET',
-      reduceOnly: true,
-    });
+    await placeStopLossOrder({}, 'BTCUSDT', 'SELL', 0.01, 49000, 'CLOSE', { positionAmt: 0.01 });
+
+    expect(mockPlaceStopMarketOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: 'BTCUSDT',
+        side: 'SELL',
+        stopPrice: '49000',
+        reduceOnly: true,
+      })
+    );
+    expect(mockPlaceStopMarketOrder.mock.calls[0][0]).not.toHaveProperty('positionSide');
+    expect(mockPlaceOrder).not.toHaveBeenCalled();
   });
 
-  it('places one-way take profit using reduceOnly on standard order endpoint', async () => {
-    await placeTakeProfitOrder({}, 'BTCUSDT', 'SELL', 0.01, 52000);
+  it('places one-way take profit via algo order (Demo/mainnet)', async () => {
+    const hedge = await import('../../src/services/binance-hedge-mode.js');
+    vi.mocked(hedge.getPositionMode).mockReturnValue('ONE_WAY');
+    vi.mocked(hedge.resolvePositionSide).mockReturnValue(null);
 
-    expect(mockPlaceOrder).toHaveBeenCalledWith({
-      symbol: 'BTCUSDT',
-      side: 'SELL',
-      quantity: '0.01',
-      stopPrice: '52000',
-      type: 'TAKE_PROFIT_MARKET',
-      reduceOnly: true,
-    });
+    await placeTakeProfitOrder({}, 'BTCUSDT', 'SELL', 0.01, 52000, 'CLOSE', { positionAmt: 0.01 });
+
+    expect(mockPlaceTakeProfitMarketOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: 'BTCUSDT',
+        side: 'SELL',
+        stopPrice: '52000',
+        reduceOnly: true,
+      })
+    );
+    expect(mockPlaceTakeProfitMarketOrder.mock.calls[0][0]).not.toHaveProperty('positionSide');
+    expect(mockPlaceOrder).not.toHaveBeenCalled();
   });
 
   it('cancels and fetches orders through REST trading module', async () => {

@@ -70,7 +70,7 @@ The AI now returns decision arrays for positions and pending orders:
 Actions are only executed if the AI's confidence meets or exceeds the method-specific threshold:
 
 - **ICT Method**: 70% confidence threshold
-- **Kim Nghia Method**: 75% confidence threshold
+- **Kim Nghia Method**: 82% confidence threshold
 
 If confidence is below the threshold, the action defaults to `hold`.
 
@@ -95,7 +95,7 @@ Close_early is only allowed when:
 **Important**: When `close_early` is executed with negative PnL, it is counted as a losing trade. This means:
 - The `consecutive_losses` counter is incremented
 - After 3 consecutive losses (including close_early losses), a 4-hour cooldown is triggered
-- This applies to both paper trading and testnet systems
+- This applies to the testnet system
 - The cooldown prevents new auto-entries to protect the account from further losses
 
 ### Universal Loss Tracking

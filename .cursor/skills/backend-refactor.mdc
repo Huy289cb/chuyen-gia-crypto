@@ -1,0 +1,32 @@
+---
+name: backend-refactor
+description: Refactor backend analyzers, services, repositories, routes, or schedulers without changing trading safety invariants. Use when splitting files, reducing duplication, or clarifying boundaries.
+---
+
+# Backend refactor
+
+## When to use
+- Restructure `backend/src/services`, `analyzers`, `repositories`, or `routes` with stable external behavior
+- Extract helpers shared by worker and API
+
+## Inspect first
+- Call graph: route/scheduler → service → repository → Prisma
+- `config/methods.ts`, `config/risk-policy.ts`, `validateSafetyRequirements()`
+- Tests under `backend/tests/` for the flow
+
+## Steps
+1. Map current flow and invariants (`method_id`, bias/action/side, SL/TP ordering).
+2. Choose smallest extraction (function/module), not new frameworks.
+3. Move code; keep exports and HTTP shapes unchanged unless task says otherwise.
+4. Run targeted vitest files; fix regressions before broad cleanup.
+
+## Invariants (do not break)
+- `kim_nghia` active; `ict` disabled unless explicitly re-enabling
+- Signal gate / risk engine / memory layer remain on critical paths
+- Testnet: Binance-first cancel/update patterns in existing services
+- No duplicate Prisma queries across route and service — single repository entry point
+
+## Verification
+- [ ] Diff shows no accidental API field renames
+- [ ] `npm run test:run` for touched areas
+- [ ] Grep for removed exports still used elsewhere

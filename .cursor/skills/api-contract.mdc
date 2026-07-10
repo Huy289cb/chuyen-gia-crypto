@@ -1,0 +1,33 @@
+---
+name: api-contract
+description: Define or change HTTP API contracts between Express backend and Next.js frontend. Use when adding fields, versioning responses, or aligning docs with implementation.
+---
+
+# API contract
+
+## When to use
+- New or changed JSON for `/api/*` consumed by dashboard or external clients
+- Align `docs/api-spec.md` with implementation
+
+## Inspect first
+- Implementing route file under `backend/src/routes/`
+- Consumer: `frontend/app/lib/v3DashboardFetchers.ts` and `app/types/index.ts`
+- `docs/api-spec.md`, `backend-go/docs/openapi.yaml` only if Go service must stay in sync (separate stack)
+
+## Steps
+1. Document method, path, query params, and example JSON response.
+2. Implement backend with stable field names (camelCase in JSON for dashboard DTOs).
+3. Add/update TypeScript interfaces on frontend fetchers (source of truth for UI typing).
+4. Prefer additive changes (`optional` fields) over renames; if renaming, update all fetch sites in one change.
+5. Use HTTP codes: 200 success, 404 missing resource, 403 disabled feature, 500 server error.
+
+## Response patterns in this repo
+```json
+{ "success": true, "data": { } }
+{ "success": false, "error": "message" }
+```
+
+## Verification
+- [ ] Frontend types match live response (network tab or logged sample)
+- [ ] `success: false` handled in fetcher and panel UI
+- [ ] `docs/api-spec.md` updated when contract is public/stable

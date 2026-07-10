@@ -1,66 +1,63 @@
 ---
 name: deploy-vps
-description: Use when deploying, restarting, validating, or troubleshooting this repo on a VPS with PM2 or Nginx, or when handling Binance and live-trading operational checks, 502 incidents, stale deploys, environment drift, or cleanup and recovery flows.
+description: Use when deploying, restarting, validating, or troubleshooting backend on VPS (PM2/Nginx), or handling Binance testnet operational checks. Frontend deploys on Vercel via git push — not on VPS.
 ---
 
+## Phạm vi deploy
+
+| Thành phần | Nơi deploy | Lệnh |
+|------------|------------|------|
+| Backend (`crypto-api`, `crypto-worker`) | VPS | `~/deploy.sh` hoặc `./scripts/deploy.sh` |
+| Frontend (Next.js) | Vercel | `git push` (branch Vercel đã kết nối) |
+
 ## Khi sử dụng
-- Dùng khi deploy repo này lên VPS.
-- Dùng khi restart PM2, check Nginx, verify env, hoặc troubleshoot 502.
-- Dùng khi cần xử lý drift giữa local DB và Binance hoặc testnet state.
+- Deploy / restart backend trên VPS
+- Troubleshoot 502, stale code, PM2 crash
+- Drift DB testnet vs Binance, orphan orders
 
-## Input yêu cầu
-- Thư mục deploy hoặc branch hoặc commit cần rollout.
-- Tên service PM2, Nginx host, và đường dẫn app.
-- Trạng thái env vars (`GROQ_API_KEY`, `BINANCE_*` nếu dùng real trading).
-- Triệu chứng nếu đang sự cố: 502, stale code, cleanup fail, balance drift, orphan orders.
+## Script deploy (`scripts/deploy.sh`)
 
-## Quy trình
-1. Kiểm tra trước deploy.
-   - Xác nhận code version.
-   - Xác nhận `backend/.env`.
-   - Xác nhận có cần build hoặc test trước restart hay không.
-2. Thực hiện deploy theo thứ tự an toàn.
-   - Pull code đúng branch.
-   - Cài dependency nếu cần.
-   - Chạy migration hoặc init nếu thay đổi schema.
-   - Restart backend bằng PM2.
-3. Validate sau deploy.
-   - Check `pm2 status`.
-   - Check health hoặc API response.
-   - Check log PM2 hoặc Nginx.
-   - Nếu có Binance flow, check cleanup hoặc sync path nếu cần.
-4. Xử lý sự cố theo symptom.
-   - `502`: check PM2, process listen port, Nginx upstream, log.
-   - Binance invalid path hoặc stale code: pull latest backend và restart PM2.
-   - Balance drift hoặc orphan orders: chạy sync hoặc cleanup flow.
-   - Env init fail: verify `BINANCE_ENABLED`, key, secret, permissions, base URL.
-5. Báo cáo kết quả ngắn gọn.
-   - Đã deploy hoặc rollback gì.
-   - Health status.
-   - Log hoặc bước tiếp theo nếu chưa ổn định.
+Mặc định:
+1. `git pull --ff-only origin develop`
+2. Kiểm tra `backend/.env`
+3. `npm ci` / `npm install`
+4. `npm run build` (xóa `dist` trước)
+5. `pm2 reload ecosystem.config.cjs --update-env` (+ `pm2 save`)
+6. Chờ `http://127.0.0.1:3000/health` → 200
+7. In `pm2 status` + 20 dòng log worker (`--nostream`)
 
-## Output
-- Checklist kết quả sau deploy:
-  - code version
-  - service status
-  - health check
-  - warning còn tồn đọng
+Biến tùy chọn:
+- `DEPLOY_BRANCH=develop`
+- `DEPLOY_SKIP_PULL=1` — chỉ build + reload
+- `DEPLOY_DB_PUSH=1` — `prisma db push` khi đổi schema
+- `DEPLOY_FLUSH_LOGS=1` — xóa log PM2 (mặc định **không** xóa)
 
-## Quy tắc bắt buộc
-- Không expose secret trong log hoặc output.
-- Không restart mù trước khi capture status hoặc log nếu đang debug sự cố.
-- Không bỏ qua cleanup khi có dấu hiệu orphan orders hoặc positions.
-- Phải phân biệt paper trading và Binance real hoặc testnet flow.
+## Validate sau deploy
+- [ ] `pm2 status` — cả `crypto-api` và `crypto-worker` online
+- [ ] `curl -s http://127.0.0.1:3000/health` → 200
+- [ ] Worker log: MarketScan completed, không lỗi Prisma/Binance liên tục
+- [ ] Nginx active nếu dùng domain công khai
 
-## Không được làm
-- Không giả định Nginx hoặc PM2 đã đúng config nếu chưa check.
-- Không nói deploy xong nếu chưa có health check hoặc status check.
-- Không chạy lệnh cleanup Binance nếu env và permission chưa đủ.
-- Không mô phỏng kết quả production khi không có access thực tế.
+## Log vận hành (không phải lỗi)
+`[MarketScan] Previous scan still running, skipping cycle` — cron 5 phút trùng lúc scan sau restart (~60s). Bỏ qua nếu chỉ 1–2 lần sau deploy.
 
-## Tài nguyên
-- `docs/setup.md`
+## Sự cố
+| Triệu chứng | Hướng xử lý |
+|-------------|-------------|
+| 502 | `pm2 status`, port 3000, `nginx -t`, upstream |
+| Stale code | `git log -1`, chạy lại `~/deploy.sh` |
+| Orphan position / not on Binance | `cd backend && npm run testnet:cleanup` |
+| `-4061` position side | Worker đã init hedge mode; verify `BINANCE_ENABLED` |
+| LLM không chạy | Signal Gate block (Grade D) — bình thường khi thị trường yếu |
+
+## Quy tắc
+- Không expose secret trong log
+- Không nói deploy xong nếu health check fail
+- Không build frontend trên VPS trừ khi task yêu cầu rõ
+- Phân biệt testnet Binance vs paper legacy
+
+## Tài liệu
+- `docs/deployment.md`
+- `docs/v3-operations.md`
 - `docs/binance-testnet-integration.md`
-- `docs/architecture.md`
-- `backend/src/services/testnetEngine.js`
-- `backend/src/services/binanceClient.js`
+- `backend/ecosystem.config.cjs`
