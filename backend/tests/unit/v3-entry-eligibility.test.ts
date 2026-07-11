@@ -6,11 +6,15 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
   getBlockingTestnetPendingOrders: vi.fn(),
 }));
 
-vi.mock('../../src/config/v3-entry-policy', () => ({
-  isV3ScaleInEnabled: vi.fn(() => true),
-  resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
-  getBinanceMinOrderNotionalUsd: vi.fn(() => 50),
-}));
+vi.mock('../../src/config/v3-entry-policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/config/v3-entry-policy')>();
+  return {
+    ...actual,
+    isV3ScaleInEnabled: vi.fn(() => true),
+    resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
+    getBinanceMinOrderNotionalUsd: vi.fn(() => 50),
+  };
+});
 
 import {
   canRunLlmDispatchForSymbol,
