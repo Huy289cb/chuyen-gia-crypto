@@ -235,18 +235,37 @@ if (lossPercent < -100) {
 - Reduces overtrading during drawdowns
 - Forces review of recent performance
 
-## Volume Management (Updated 24/04/2026)
+## Volume Management / Symbol Pools (Updated 2026-07-11)
+
+Current trading runtime uses BTC/ETH/SOL symbol pools on Binance demo/testnet. The active BTC pool is capped at `$2,000`.
+
+Volume is managed as **one pool per token**, not one shared account-wide bucket:
+
+```text
+symbol pool = open position notional + blocking pending order notional
+```
+
+Target pools:
+
+| Symbol | Max pool | Min SL | Grade/confidence |
+|--------|----------|--------|------------------|
+| BTC | `$2,000` | `0.8%` | `A / 0.75` |
+| ETH | `$1,200` | `1.2%` | `A / 0.78` |
+| SOL | `$700` | `2.0%` | `A / 0.82`, `liquidity_sweep_reclaim` only |
+
+See [multi-symbol-volume-pools.md](./multi-symbol-volume-pools.md) for the rollout checklist.
 
 ### Individual Position/Order Size Limits (Updated 23/04/2026)
-- **Position Size Limit**: 2k USD per individual position
-- **Pending Order Size Limit**: 2k USD per individual pending order
+- **Position Size Limit**: cannot exceed the symbol's remaining pool
+- **Pending Order Size Limit**: cannot exceed the symbol's remaining pool
 - **Rationale**: Prevents oversized single trades even when account balance allows larger positions
 - **Implementation**: Size is capped after risk-based calculation, so it only affects oversized positions
 
-### Total Volume Limit
-- **Limit**: 2k USD total volume per account
-- **Calculation**: Open positions + Pending orders
-- **Rationale**: Prevents over-leveraging across both active and waiting positions
+### Symbol Pool Limit
+- **BTC current limit**: `$2,000`
+- **Calculation**: open BTC positions + blocking BTC pending orders
+- **Rationale**: Prevents over-leveraging across both active and waiting positions for the same token
+- **Multi-symbol rule**: ETH and SOL get their own smaller pools; they do not borrow from BTC's `$2,000` pool
 
 ### Automatic Volume Management (New - 24/04/2026)
 
@@ -255,7 +274,7 @@ The system automatically manages volume limits at two critical points:
 #### 1. Before Executing Pending Orders
 When a pending order is about to execute (price hits entry level):
 - Check current market volume (open positions)
-- If market volume >= limit (2k): Cancel pending order
+- If market volume >= symbol pool limit: Cancel pending order
 - If market volume + pending order volume > limit: Cancel pending order
 - If market volume + pending order volume <= limit: Execute order
 - **Rationale**: Prevents pending orders from executing when market orders have already filled the volume limit
@@ -263,7 +282,7 @@ When a pending order is about to execute (price hits entry level):
 #### 2. After Opening Market Positions
 When a market order is executed:
 - Check total volume after opening position
-- If market volume >= limit (2k): Cancel all remaining pending orders
+- If market volume >= symbol pool limit: Cancel all remaining pending orders for that symbol
 - If market volume + pending orders volume > limit: Cancel all pending orders
 - If market volume + pending orders volume <= limit: Keep pending orders
 - **Rationale**: Automatically cleans up pending orders when market orders fill the volume limit
@@ -271,22 +290,28 @@ When a market order is executed:
 ### Example Scenarios
 
 **Scenario 1: Pending Order Execution Check**
-- Current open positions: $1,800
-- Pending order volume: $300
+- BTC open positions: $1,800
+- BTC pending order volume: $300
 - Total would be: $2,100 > $2,000 limit
 - **Action**: Cancel pending order with reason "volume_limit_reached"
 
 **Scenario 2: Market Order Fills Limit**
-- Before market order: Open $1,700, Pending $400
+- Before BTC market order: Open $1,700, Pending $400
 - Market order executes: $300
 - After market order: Open $2,000 (at limit)
-- **Action**: Cancel all pending orders ($400) to prevent exceeding limit
+- **Action**: Cancel all BTC pending orders ($400) to prevent exceeding BTC pool
 
 **Scenario 3: Keep Pending Orders**
-- After market order: Open $1,500
-- Pending orders: $400
+- After BTC market order: Open $1,500
+- BTC pending orders: $400
 - Total: $1,900 < $2,000 limit
 - **Action**: Keep pending orders (still room for $100 more)
+
+**Scenario 4: Separate Token Pools**
+- BTC pool: $2,000 / $2,000 used
+- ETH pool: $0 / $1,200 used
+- SOL pool: $0 / $700 used
+- **Action**: Block new BTC entries, but ETH/SOL may still be considered if their own gate, pool, and correlation guard pass.
 
 ### Strategic Entry Validation
 When volume reaches limit:
@@ -318,9 +343,9 @@ When volume reaches limit:
 
 ### Total Position Limit
 
-- No hard limit across symbols
-- Each symbol (BTC, ETH) tracked independently
-- Allows diversification if both have signals
+- One position per symbol remains the default.
+- Each symbol pool is tracked independently.
+- A separate correlation guard is required before enabling BTC + ETH + SOL together, because all three can move in the same direction during broad market selloffs.
 
 ## Drawdown Management
 

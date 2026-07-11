@@ -1,6 +1,8 @@
 # Crypto Trend Analyzer (v2.9.0)
 
-MVP web app phân tích xu hướng BTC/ETH sử dụng **Kim Nghia (SMC + Volume + Fibonacci)** với AI và **Paper Trading**.
+MVP web app phân tích xu hướng crypto sử dụng **Kim Nghia (SMC + Volume + Fibonacci)** với AI và Binance Futures Testnet.
+
+**Current trading runtime:** BTC/ETH/SOL on Binance demo/testnet with separate symbol pools; SOL uses a liquidity-sweep-only profile. See `docs/multi-symbol-volume-pools.md`.
 
 **Note:** ICT Smart Money method is temporarily disabled (code preserved for future multi-method support). System currently runs KimNghia method only.
 
@@ -29,16 +31,17 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **ICT Auto-Entry** (Temporarily Disabled): Chỉ trade trong London/NY killzone sessions, multi-timeframe alignment (4h, 1d)
 - **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 82%, R:R >= 2.5
 - **Risk Management**:
-  - ICT: 1% risk per trade, SL distance minimum 0.75% (disabled)
-  - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
+  - BTC runtime: grade A gate, min confidence 0.75, min SL distance 0.8%
+  - ETH runtime: grade A, min confidence 0.78, min SL distance 1.2%, smaller token pool
+  - SOL runtime: grade A, min confidence 0.82, min SL distance 2.0%, `liquidity_sweep_reclaim` only
 - **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
-- **Volume Limit**: Tối đa 2k USD tổng volume positions per account (open positions + pending orders). Tối đa 2k USD cho từng position và pending order riêng lẻ. Khi volume đạt giới hạn, các pending order mới chỉ được phép nếu entry align với SL/TP của các position đang chạy (±0.5% tolerance)
+- **Volume Pool**: BTC/ETH/SOL có pool riêng (`open positions + pending orders`), không dùng chung pool BTC; xem `docs/multi-symbol-volume-pools.md`.
 - **Order Validation**: Validation SL/TP placement đảm bảo logic hợp lý (LONG: SL<entry<TP, SHORT: SL>entry>TP)
 - **Real-time PnL**: Cập nhật PnL mỗi 10 giây với 1-minute candle data, auto-close khi hit SL/TP
 - **Cooldown System**: 4h cooldown sau 3 consecutive losses (updated from 8)
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown, average R multiple
-- **Price Updates**: Cập nhật giá và PnL mỗi 10 giây với 1-minute candle OHLC data từ Binance API
+- **Price Updates**: Cập nhật giá và PnL với candle OHLC data từ Binance API
 - **Prediction Timeline**: Hiển thị lịch sử dự báo theo thời gian với filter
 - **Performance Charts**: Equity curve, trade stats, trade history trong 1 component
 - **Advanced Metrics**: Accuracy by timeframe, accuracy by bias, average hold time
@@ -55,24 +58,24 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Error Handling**: No silent fallback, explicit errors on failures
 - See `docs/binance-testnet-integration.md` for details
 - See `docs/binance-testnet-testing-plan.md` for testing procedures
-- Giá BTC/ETH cập nhật real-time từ **Binance API** (primary), CoinGecko (fallback)
+- Giá thị trường lấy từ **Binance API**. Trading runtime hiện bật BTC/ETH/SOL trên demo/testnet với symbol policy riêng.
 - Phân tích tự động mỗi 15 phút (KimNghia: 0,15,30,45), ICT: disabled
 - Cache 20 phút để đảm bảo performance
 - Lưu trữ OHLCV candles trong SQLite database
 
 ### AI Position Management (New)
-- **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
+- **Multi-Symbol Mode**: AI position management and V3 entry scope use BTC/ETH/SOL symbol policy on demo/testnet.
 - **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
 - **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
-- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 82% (Kim Nghia)
+- **Confidence Thresholds**: Position/order management actions use method thresholds; V3 entry gate currently uses BTC grade A + confidence >= 0.75
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - See `docs/ai-position-management.md` for detailed documentation
 
 ### AI Position Management
-- **BTC-Only Mode**: AI position management currently focuses on BTC only (ETH temporarily paused)
+- **Multi-Symbol Mode**: AI position management and V3 entry scope use BTC/ETH/SOL symbol policy on demo/testnet.
 - **Position Actions**: AI can recommend hold, close_early, close_partial, move_sl, or reverse for open positions
 - **Order Actions**: AI can recommend hold, cancel, or modify for pending orders
-- **Confidence Thresholds**: Actions only execute if AI confidence >= 70% (ICT) or 82% (Kim Nghia)
+- **Confidence Thresholds**: Position/order management actions use method thresholds; V3 entry gate currently uses BTC grade A + confidence >= 0.75
 - **Enhanced Context**: AI receives 30 most recent 15m candles, open positions with PnL/time-in-position, pending orders with price distance
 - **Testnet Integration**: AI decisions are executed on Binance Testnet positions and orders
 - See `docs/ai-position-management.md` for detailed documentation

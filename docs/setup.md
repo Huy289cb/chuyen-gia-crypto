@@ -180,7 +180,7 @@ Open browser: `http://localhost:3000`
 - **Runs**: Continuously while backend is running
 
 ### What It Does
-1. Fetches latest BTC/ETH prices
+1. Fetches latest market candles from Binance. Current trading runtime is BTC-only; ETH/SOL require the multi-symbol rollout first.
 2. Calls Groq API for analysis
 3. Updates cache with new data
 4. Logs to console

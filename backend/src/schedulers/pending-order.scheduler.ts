@@ -7,6 +7,7 @@ import { PENDING_ORDER_LIFECYCLE_CRON } from '../config/pending-order-policy';
 import { runPendingOrderLifecycle } from '../services/pending-order-lifecycle.service';
 import { runPendingOrderReview as runPendingOrderLlmReview } from '../services/pending-order-review.service';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
+import { getEnabledSymbols } from '../config/symbol-policy';
 
 let pendingOrderTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -20,18 +21,20 @@ async function runPendingOrderSchedulerCycle(): Promise<void> {
   isRunning = true;
   recordSchedulerRun('PendingOrderLifecycle');
   try {
-    const lifecycle = await runPendingOrderLifecycle('BTC');
-    if (lifecycle.reviewed > 0) {
-      console.log(
-        `[PendingOrderScheduler] Lifecycle: reviewed ${lifecycle.reviewed}, cancelled ${lifecycle.cancelled}`
-      );
-    }
+    for (const symbol of getEnabledSymbols()) {
+      const lifecycle = await runPendingOrderLifecycle(symbol);
+      if (lifecycle.reviewed > 0) {
+        console.log(
+          `[PendingOrderScheduler] ${symbol} lifecycle: reviewed ${lifecycle.reviewed}, cancelled ${lifecycle.cancelled}`
+        );
+      }
 
-    const review = await runPendingOrderLlmReview('BTC');
-    if (review.llmCalled) {
-      console.log(
-        `[PendingOrderScheduler] LLM review: cancelled=${review.cancelled} modified=${review.modified} held=${review.held}`
-      );
+      const review = await runPendingOrderLlmReview(symbol);
+      if (review.llmCalled) {
+        console.log(
+          `[PendingOrderScheduler] ${symbol} LLM review: cancelled=${review.cancelled} modified=${review.modified} held=${review.held}`
+        );
+      }
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

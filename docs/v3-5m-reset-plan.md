@@ -1,6 +1,7 @@
 # V3 — Chuyển Signal Gate sang 5m + Reset DB
 
 **Status:** Implemented (2026-05-23) — code, env, DB reset script, deploy VPS  
+**Current baseline note (2026-07-11):** production BTC gate is stricter than this experiment: `MIN_SIGNAL_GRADE=A`, `MIN_SIGNAL_CONFIDENCE=0.75`, `MIN_SL_DISTANCE_PERCENT=0.008`. Do not copy old grade-B settings into production.
 **Giả định:** Chấp nhận **clear DB trading/V3** và đo lại từ đầu  
 **Stack đề xuất:** `5m` (trigger nhanh) + `15m` (structure) + `1h` (HTF bias)  
 **Giữ P0:** monitor/phantom/cooldown/exposure — chỉ nới gate khi bật profile test
@@ -179,9 +180,10 @@ MAX_POSITIONS_PER_SYMBOL=1
 MAX_CONSECUTIVE_LOSSES=2
 MAX_EXPOSURE_PCT_OF_EQUITY=0.15
 
-# Gate chất lượng (strict — ít lệnh hơn)
-MIN_SIGNAL_GRADE=B
-MIN_SIGNAL_CONFIDENCE=0.70
+# Gate chất lượng current baseline (stricter than original 5m experiment)
+MIN_SIGNAL_GRADE=A
+MIN_SIGNAL_CONFIDENCE=0.75
+MIN_SL_DISTANCE_PERCENT=0.008
 V3_MIN_LLM_CONFIRM_CONFIDENCE=0.75
 
 # Worker price sync (không bắt buộc đổi)

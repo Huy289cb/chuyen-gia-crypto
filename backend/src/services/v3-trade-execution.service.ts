@@ -6,6 +6,7 @@
 import type { GroqAnalysis } from './groq-client';
 import { getMethodConfig } from '../config/methods';
 import { getRiskPolicy } from '../config/risk-policy';
+import { getSymbolPolicy } from '../config/symbol-policy';
 import {
   isV3OppositeFlipEnabled,
   isV3ScaleInEnabled,
@@ -17,6 +18,7 @@ import { checkBinanceAccountTradable } from './binance-account-health.service';
 import { tryOppositeFlipBeforeEntry } from './opposite-flip.service';
 import {
   assertScaleInSideAllowed,
+  assertCorrelationExposureAllowed,
   getSymbolExposureSnapshot,
   oppositeLocalSide,
 } from './v3-entry-eligibility.service';
@@ -106,9 +108,10 @@ export async function executeV3Trade(
 
   const auto = getMethodConfig(methodId).autoEntry;
   const riskPolicy = getRiskPolicy();
+  const symbolPolicy = getSymbolPolicy(symbol);
   const minSlDistancePercent =
-    riskPolicy.minSlDistancePercent > 0
-      ? riskPolicy.minSlDistancePercent
+    symbolPolicy.minSlDistancePercent > 0
+      ? symbolPolicy.minSlDistancePercent
       : auto.minSLDistancePercent;
 
   const slCheck = checkMinSlDistance(entry, stopLoss, minSlDistancePercent);
@@ -239,7 +242,8 @@ export async function executeV3Trade(
 
   const remainingCapacity = exposure.remainingUsd;
   const minNotional = getBinanceMinOrderNotionalUsd();
-  const riskUsd = Math.max(1, balance * (riskPolicy.riskPerTradePercent / 100));
+  const effectiveRiskPercent = riskPolicy.riskPerTradePercent * symbolPolicy.riskMultiplier;
+  const riskUsd = Math.max(1, balance * (effectiveRiskPercent / 100));
   const computedSizeUsd = riskUsd / slDistancePct;
   const sizeUsd = resolveTargetPositionNotionalUsd({
     computedUsd: computedSizeUsd,
@@ -255,6 +259,16 @@ export async function executeV3Trade(
         ? `Scale-in headroom $${remainingCapacity.toFixed(0)} below Binance min order $${minNotional}`
         : `Order notional $${sizeUsd.toFixed(0)} below Binance minimum $${minNotional}`;
     return { success: false, reason: headroomMsg };
+  }
+
+  const correlationBlock = await assertCorrelationExposureAllowed({
+    symbol,
+    side,
+    candidateUsd: sizeUsd,
+    methodId,
+  });
+  if (correlationBlock) {
+    return { success: false, reason: correlationBlock };
   }
 
   const sizeQty = sizeUsd / entry;
@@ -331,7 +345,7 @@ export async function executeV3Trade(
     sizeUsd,
     sizeQty: normalizedSizeQty,
     riskUsd,
-    riskPercent: riskPolicy.riskPerTradePercent,
+    riskPercent: effectiveRiskPercent,
     expectedRr,
     invalidationLevel: isValidNumber(analysis.invalidation_level)
       ? analysis.invalidation_level

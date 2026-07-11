@@ -9,6 +9,9 @@ export interface TestbedVariant {
   minConfidence?: number;
   gradeBMinConfidence?: number;
   gradeBAllowedPlaybooks?: string[];
+  allowedTimeframes?: string[];
+  allowedPlaybooks?: string[];
+  allowedSides?: Array<'long' | 'short'>;
   block5mWhen1hRange?: boolean;
   require5mHtfConfirm?: boolean;
   enableCooldown?: boolean;
@@ -53,6 +56,65 @@ export const TESTBED_VARIANTS: Record<string, TestbedVariant> = {
     block5mWhen1hRange: true,
     require5mHtfConfirm: true,
     enableCooldown: true,
+  },
+  'only-5m': {
+    id: 'only-5m',
+    label: 'Only 5m entries',
+    allowedTimeframes: ['5m'],
+  },
+  'only-15m': {
+    id: 'only-15m',
+    label: 'Only 15m entries',
+    allowedTimeframes: ['15m'],
+  },
+  'only-1h': {
+    id: 'only-1h',
+    label: 'Only 1h entries',
+    allowedTimeframes: ['1h'],
+  },
+  'only-liquidity-sweep': {
+    id: 'only-liquidity-sweep',
+    label: 'Only liquidity_sweep_reclaim playbook',
+    allowedPlaybooks: ['liquidity_sweep_reclaim'],
+  },
+  'only-breakout': {
+    id: 'only-breakout',
+    label: 'Only breakout_volume playbook',
+    allowedPlaybooks: ['breakout_volume'],
+  },
+  'only-5m-breakout': {
+    id: 'only-5m-breakout',
+    label: 'Only 5m breakout_volume entries',
+    allowedTimeframes: ['5m'],
+    allowedPlaybooks: ['breakout_volume'],
+  },
+  'only-5m-liquidity-sweep': {
+    id: 'only-5m-liquidity-sweep',
+    label: 'Only 5m liquidity_sweep_reclaim entries',
+    allowedTimeframes: ['5m'],
+    allowedPlaybooks: ['liquidity_sweep_reclaim'],
+  },
+  'only-1h-liquidity-sweep': {
+    id: 'only-1h-liquidity-sweep',
+    label: 'Only 1h liquidity_sweep_reclaim entries',
+    allowedTimeframes: ['1h'],
+    allowedPlaybooks: ['liquidity_sweep_reclaim'],
+  },
+  'liquidity-sweep-cooldown': {
+    id: 'liquidity-sweep-cooldown',
+    label: 'liquidity_sweep_reclaim only + tiered cooldown',
+    allowedPlaybooks: ['liquidity_sweep_reclaim'],
+    enableCooldown: true,
+  },
+  'only-long': {
+    id: 'only-long',
+    label: 'Only long entries',
+    allowedSides: ['long'],
+  },
+  'only-short': {
+    id: 'only-short',
+    label: 'Only short entries',
+    allowedSides: ['short'],
   },
 };
 

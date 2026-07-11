@@ -3,7 +3,7 @@
 
 import { createGroqClient } from '../services/groq-client';
 import { getMethodConfig } from '../config/methods';
-import { getRiskPolicy } from '../config/risk-policy';
+import { getSymbolPolicy } from '../config/symbol-policy';
 
 interface MethodConfig {
   methodId: string;
@@ -678,7 +678,7 @@ async function formatAnalysisResponse(rawResponse: any, priceData: PriceData, me
       // Additional validation: ensure stop loss follows the configured minimum distance.
       if (type === 'stop_loss' && suggestedEntry) {
         const distance = Math.abs(p - suggestedEntry);
-        const minSlDistancePercent = getRiskPolicy().minSlDistancePercent || 0.005;
+        const minSlDistancePercent = getSymbolPolicy(coin).minSlDistancePercent || 0.005;
         const minDistance = suggestedEntry * minSlDistancePercent;
         if (distance < minDistance) {
           console.log(`[AnalyzerFactory][${methodId}] Stop loss ${p} too close to entry ${suggestedEntry} (distance ${distance.toFixed(2)} < minimum ${minDistance.toFixed(2)}), adjusting to minimum`);

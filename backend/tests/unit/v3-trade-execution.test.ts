@@ -9,6 +9,7 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
 
 vi.mock('../../src/services/v3-entry-eligibility.service', () => ({
   assertScaleInSideAllowed: vi.fn(),
+  assertCorrelationExposureAllowed: vi.fn(),
   getSymbolExposureSnapshot: vi.fn(),
   oppositeLocalSide: (side: 'long' | 'short') => (side === 'long' ? 'short' : 'long'),
 }));
@@ -66,6 +67,7 @@ import {
 } from '../../src/repositories/testnet.repository';
 import {
   assertScaleInSideAllowed,
+  assertCorrelationExposureAllowed,
   getSymbolExposureSnapshot,
 } from '../../src/services/v3-entry-eligibility.service';
 import { isV3ScaleInEnabled } from '../../src/config/v3-entry-policy';
@@ -82,6 +84,7 @@ describe('executeV3Trade', () => {
     process.env.BINANCE_ENABLED = 'true';
     vi.mocked(isV3ScaleInEnabled).mockReturnValue(true);
     vi.mocked(assertScaleInSideAllowed).mockResolvedValue(null);
+    vi.mocked(assertCorrelationExposureAllowed).mockResolvedValue(null);
     vi.mocked(getSymbolExposureSnapshot).mockResolvedValue({
       openUsd: 0,
       pendingUsd: 0,

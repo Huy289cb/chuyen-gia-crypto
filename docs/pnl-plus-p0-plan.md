@@ -26,13 +26,16 @@ Stop behaviors that destroy PnL **before** optimizing for more profit. Phase 0 i
 | Allowed regimes | `V3_ALLOWED_REGIMES=trend` (default). `range`/`chop`/`unknown` blocked at gate + dispatch |
 | Signal gate | `signal-gate.service.ts` reads allowed regimes from `v3-entry-policy.ts` |
 | LLM dispatch | `groq-dispatch.service.ts` rejects non-trend before confirm |
-| Grade | `MIN_SIGNAL_GRADE=B` (unchanged) |
+| Grade | Current BTC baseline: `MIN_SIGNAL_GRADE=A`, `MIN_SIGNAL_CONFIDENCE=0.75` |
 
 **Env:**
 
 ```env
 V3_ALLOWED_REGIMES=trend
 V3_BLOCK_RANGE_ENTRIES=true
+MIN_SIGNAL_GRADE=A
+MIN_SIGNAL_CONFIDENCE=0.75
+MIN_SL_DISTANCE_PERCENT=0.008
 ```
 
 **Verify:**
@@ -219,6 +222,8 @@ Tóm tắt ưu tiên:
 | Re-enable monitor exit | `POSITION_MONITOR_ALLOW_EXIT=true` |
 | Phantom reopen | `PHANTOM_REOPEN_ENABLED=true` |
 | More exposure | `MAX_EXPOSURE_PCT_OF_EQUITY=0.4` or unset + `MAX_TOTAL_EXPOSURE_USD=2000` |
+
+Do not use the BTC `$2,000` pool as a shared BTC/ETH/SOL account bucket. The multi-symbol plan requires separate symbol pools; see [multi-symbol-volume-pools.md](./multi-symbol-volume-pools.md).
 
 ---
 

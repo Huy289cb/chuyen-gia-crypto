@@ -2,8 +2,8 @@
  * Shared entry eligibility for LLM dispatch and V3 execution (scale-in within exposure cap).
  */
 
-import { getRiskPolicy } from '../config/risk-policy';
-import { isV3ScaleInEnabled, resolveMaxTotalExposureUsd, getBinanceMinOrderNotionalUsd } from '../config/v3-entry-policy';
+import { isV3ScaleInEnabled, getBinanceMinOrderNotionalUsd } from '../config/v3-entry-policy';
+import { getCorrelationMaxExposureUsd, getSymbolMaxExposureUsd } from '../config/symbol-policy';
 import { hasBinanceExposureForSide } from './binance-exposure.service';
 import {
   getActiveTestnetPositions,
@@ -38,8 +38,7 @@ export async function getSymbolExposureSnapshot(
   ]);
 
   const balance = Number(account.current_balance ?? account.equity ?? 10000);
-  const riskPolicy = getRiskPolicy();
-  const maxExposureUsd = resolveMaxTotalExposureUsd(balance, riskPolicy.maxTotalExposureUsd);
+  const maxExposureUsd = getSymbolMaxExposureUsd(symbol, balance);
 
   const openUsd = openPositions.reduce(
     (sum, p) => sum + Math.abs(Number(p.size_usd) || 0),
@@ -75,6 +74,39 @@ export async function getSymbolExposureSnapshot(
     openSides,
     pendingSides,
   };
+}
+
+export async function assertCorrelationExposureAllowed(input: {
+  symbol: string;
+  side: LocalSide;
+  candidateUsd: number;
+  methodId?: string;
+}): Promise<string | null> {
+  const { symbol, side, candidateUsd, methodId = 'kim_nghia' } = input;
+  const cap = getCorrelationMaxExposureUsd(side);
+  if (!cap) return null;
+
+  const [openPositions, pendingOrders] = await Promise.all([
+    getActiveTestnetPositions({ methodId }),
+    getBlockingTestnetPendingOrders({ methodId }),
+  ]);
+
+  const sameSideOpenUsd = openPositions
+    .filter((p) => String(p.side).toLowerCase() === side)
+    .reduce((sum, p) => sum + Math.abs(Number(p.size_usd) || 0), 0);
+  const sameSidePendingUsd = pendingOrders
+    .filter((o) => String(o.side).toLowerCase() === side)
+    .reduce((sum, o) => sum + Math.abs(Number(o.size_usd) || 0), 0);
+  const totalAfter = sameSideOpenUsd + sameSidePendingUsd + Math.max(0, candidateUsd);
+
+  if (totalAfter > cap) {
+    return (
+      `Correlation ${side} exposure cap exceeded: ` +
+      `${totalAfter.toFixed(0)}/${cap.toFixed(0)} USD after ${symbol.toUpperCase()} candidate`
+    );
+  }
+
+  return null;
 }
 
 export async function canRunLlmDispatchForSymbol(

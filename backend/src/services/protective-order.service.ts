@@ -3,6 +3,7 @@
  */
 
 import { getRiskPolicy } from '../config/risk-policy';
+import { getSymbolPolicy } from '../config/symbol-policy';
 import { updateTestnetPosition, recordTestnetTradeEvent } from '../repositories/testnet.repository';
 import { placeStopLossOrder, placeTakeProfitOrder } from './binanceClient';
 import { ensurePositionModeDetected, getPositionMode } from './binance-hedge-mode';
@@ -453,6 +454,7 @@ export async function placeProtectiveOrdersForPosition(position: {
           plannedEntry: position.entry_price,
           plannedSl: position.stop_loss,
           plannedTp: position.take_profit,
+          minSlDistancePercent: getSymbolPolicy(position.symbol).minSlDistancePercent,
         }).stop_loss,
         mark
       ))
@@ -473,6 +475,7 @@ export async function placeProtectiveOrdersForPosition(position: {
     plannedSl: position.stop_loss,
     plannedTp: position.take_profit,
     markPrice: mark > 0 ? mark : undefined,
+    minSlDistancePercent: getSymbolPolicy(position.symbol).minSlDistancePercent,
   });
 
   const levelAction = evaluateProtectiveAction({
@@ -541,7 +544,7 @@ export async function placeProtectiveOrdersForPosition(position: {
       plannedTp: position.take_profit,
       markPrice: mark,
       minSlDistancePercent:
-        getRiskPolicy().minSlDistancePercent +
+        getSymbolPolicy(position.symbol).minSlDistancePercent +
         parseFloat(process.env.SL_PLACEMENT_MARK_BUFFER_PCT || '0.001'),
     });
     console.warn(

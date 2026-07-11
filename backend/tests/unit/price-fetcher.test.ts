@@ -31,18 +31,21 @@ describe('price-fetcher (Binance Futures)', () => {
     getKlinesMock.mockReset();
   });
 
-  it('fetchRealTimePrices uses USD-M futures klines for BTC and ETH', async () => {
+  it('fetchRealTimePrices uses USD-M futures klines for BTC, ETH, and SOL', async () => {
     getKlinesMock
       .mockResolvedValueOnce([sampleKline(65_000)])
-      .mockResolvedValueOnce([sampleKline(3_500)]);
+      .mockResolvedValueOnce([sampleKline(3_500)])
+      .mockResolvedValueOnce([sampleKline(150)]);
 
     const { fetchRealTimePrices } = await import('../../src/services/price-fetcher');
     const prices = await fetchRealTimePrices();
 
     expect(getKlinesMock).toHaveBeenCalledWith('BTCUSDT', '1m', 1);
     expect(getKlinesMock).toHaveBeenCalledWith('ETHUSDT', '1m', 1);
+    expect(getKlinesMock).toHaveBeenCalledWith('SOLUSDT', '1m', 1);
     expect(prices.btc.price).toBe(65_000);
     expect(prices.eth?.price).toBe(3_500);
+    expect(prices.sol?.price).toBe(150);
   });
 
   it('fetchHistoricalCandles appends USDT and returns raw kline rows', async () => {

@@ -24,6 +24,7 @@ import { runPendingOrderLifecycle } from '../services/pending-order-lifecycle.se
 import { runPendingOrderReview } from '../services/pending-order-review.service';
 import { canRunLlmDispatchForSymbol } from '../services/v3-entry-eligibility.service';
 import { isV3ScaleInEnabled } from '../config/v3-entry-policy';
+import { getEnabledSymbols } from '../config/symbol-policy';
 
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -88,7 +89,7 @@ async function runLLMDispatch() {
   try {
     console.log('[LLMDispatch] Starting LLM dispatch');
 
-    const symbols = ['BTC'];
+    const symbols = getEnabledSymbols();
 
     for (const symbol of symbols) {
       const [openPositions, blockingPending] = await Promise.all([

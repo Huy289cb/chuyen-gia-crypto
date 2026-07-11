@@ -101,7 +101,7 @@ The system is designed to support multiple trading methods running in parallel. 
 ```
 1. Scheduler triggers (ICT: 15m, Kim Nghia: 7.5m)
    │
-2. Fetch BTC/ETH prices from Binance API (primary), CoinGecko (fallback)
+2. Fetch market candles from Binance API. Current trading runtime is BTC-only; ETH/SOL are planned after symbol-policy rollout.
    │
 3. Send price data + OHLC candles to Groq API with method-specific prompt
    │
@@ -125,9 +125,10 @@ The system is designed to support multiple trading methods running in parallel. 
    - predictions table (ICT only)
    - OHLCV candles (15m timeframe)
    │
-8. Evaluate auto-entry:
-   - ICT: Check confidence >= 70%, multi-timeframe alignment, R:R >= 2.0
-   - Kim Nghia: Check confidence >= 82%, R:R >= 2.5 (skip multi-timeframe alignment)
+8. Evaluate V3 entry:
+   - Signal gate: current BTC baseline requires grade A and confidence >= 0.75
+   - Risk policy: min SL distance 0.8%, R:R >= 2.0, BTC pool <= $2,000
+   - LLM confirmation and Binance execution happen only after gate/risk checks pass
    │
 9. If entry criteria met, create position in paper trading system
    │
@@ -148,7 +149,7 @@ The system is designed to support multiple trading methods running in parallel. 
 ### Frontend (Port 3000)
 - **Stack**: Next.js 15, TypeScript, TailwindCSS, lightweight-charts, Lucide Icons
 - **Features**:
-  - BTC/ETH candlestick charts với OHLCV data
+  - Candlestick charts với OHLCV data. Current execution scope is BTC-only; ETH/SOL are planned symbols.
   - ICT indicator overlays (BOS, CHOCH, OB, FVG, Liquidity)
   - Multi-method analysis display (ICT, Kim Nghia)
   - Multi-timeframe prediction lines on charts (ICT only)
@@ -295,6 +296,8 @@ The system is designed to support multiple trading methods running in parallel. 
 - **Data Retention**: 15m candles kept for 30 days (auto-cleanup via maintenance job)
 
 ## Big Update v3 pipeline (current — Kim Nghia, BTC-only)
+
+ETH/SOL rollout plan: [multi-symbol-volume-pools.md](./multi-symbol-volume-pools.md). Current scheduler loops still hardcode BTC.
 
 Worker schedulers (see `docs/v3-operations.md`):
 

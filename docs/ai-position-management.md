@@ -6,7 +6,7 @@ The AI position management system enables the AI to actively manage open positio
 
 ## BTC-Only Mode
 
-**Current Status:** The system is operating in BTC-only mode. ETH analysis has been temporarily paused to focus on refining the AI position management capabilities for BTC before expanding to other assets.
+**Current Status:** The system is operating in BTC-only mode. ETH/SOL must go through the symbol-policy rollout before live enablement. See [multi-symbol-volume-pools.md](./multi-symbol-volume-pools.md).
 
 ## AI Response Structure
 
@@ -71,6 +71,8 @@ Actions are only executed if the AI's confidence meets or exceeds the method-spe
 
 - **ICT Method**: 70% confidence threshold
 - **Kim Nghia Method**: 82% confidence threshold
+
+For current V3 entry gating, BTC uses `MIN_SIGNAL_GRADE=A`, `MIN_SIGNAL_CONFIDENCE=0.75`, and `MIN_SL_DISTANCE_PERCENT=0.008`. ETH/SOL should not use looser gates than BTC when added.
 
 If confidence is below the threshold, the action defaults to `hold`.
 

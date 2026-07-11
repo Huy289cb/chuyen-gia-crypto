@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { validateTelegramConfig } from './telegram';
 import { validateCursorAgentConfig, validateTelegramAiConfig } from './telegram-ai';
+import { getEnabledSymbols } from './symbol-policy';
 
 /**
  * Application Configuration
@@ -106,33 +107,15 @@ export function validateAppConfig(): void {
 }
 
 /**
- * Validate safety requirements per Big Update Plan v3
+ * Validate safety requirements for V3 automated entries.
  * This ensures critical safety features cannot be disabled
  */
 export function validateSafetyRequirements(): void {
   const errors: string[] = [];
 
-  // Import method config to check BTC-only scope
-  try {
-    const { METHODS } = require('./methods');
-    const enabledMethods = Object.values(METHODS).filter((m: any) => m.enabled);
-    
-    for (const method of enabledMethods) {
-      const methodConfig = method as any;
-      const symbols = methodConfig.autoEntry?.enabledSymbols || [];
-      
-      // Check for ETH in enabled symbols (violates BTC-only requirement)
-      if (symbols.includes('ETH')) {
-        errors.push(`Method ${methodConfig.methodId} has ETH in enabledSymbols - violates BTC-only requirement per Big Update Plan v3`);
-      }
-      
-      // Ensure BTC is in enabled symbols
-      if (!symbols.includes('BTC')) {
-        errors.push(`Method ${methodConfig.methodId} does not have BTC in enabledSymbols - BTC is required per Big Update Plan v3`);
-      }
-    }
-  } catch (error) {
-    console.warn('[SafetyValidation] Could not validate method configuration:', error);
+  const enabledSymbols = getEnabledSymbols();
+  if (!enabledSymbols.includes('BTC')) {
+    errors.push('ENABLED_SYMBOLS must include BTC as the primary reference pool');
   }
 
   // Check that safety features cannot be disabled via environment

@@ -1,8 +1,9 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: require('path').resolve(__dirname, '../.env'), override: true });
+
 import { createApp } from './app';
 import { appConfig, isApiProcess } from './config/app';
 import { validateAppConfig, validateSafetyRequirements } from './config/app';
-import dotenv from 'dotenv';
-dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
 
 /**

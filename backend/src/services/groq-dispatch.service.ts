@@ -15,7 +15,7 @@ import {
   formatLlmTradeSummary,
   reconcileExpectedRr,
 } from '../utils/trade-levels';
-import { getRiskPolicy } from '../config/risk-policy';
+import { getSymbolPolicy } from '../config/symbol-policy';
 import {
   evaluateHtfTrendRequirement,
   evaluate5mEntryGuards,
@@ -196,7 +196,7 @@ export class GroqDispatchService {
     ) {
       const entry = Number(analysis.suggested_entry);
       let sl = Number(analysis.suggested_stop_loss);
-      const minSlPct = getRiskPolicy().minSlDistancePercent;
+      const minSlPct = getSymbolPolicy(symbol).minSlDistancePercent;
       let slCheck = checkMinSlDistance(entry, sl, minSlPct);
 
       if (!slCheck.ok) {
@@ -695,7 +695,7 @@ export class GroqDispatchService {
       prompt += `${i + 1}. O: ${candle.open} H: ${candle.high} L: ${candle.low} C: ${candle.close} V: ${candle.volume}\n`;
     });
 
-    const minSlPct = getRiskPolicy().minSlDistancePercent;
+    const minSlPct = getSymbolPolicy(symbol).minSlDistancePercent;
     const minSlLabel = (minSlPct * 100).toFixed(2);
 
     prompt +=
@@ -706,7 +706,7 @@ export class GroqDispatchService {
       '\nCRITICAL — STOP LOSS (system rejects tighter stops):\n' +
       `- Minimum |entry - suggested_stop_loss| / entry >= ${minSlLabel}% (your last outputs near 0.3% were rejected).\n` +
       '- Place SL beyond the recent swing liquidity (swing high for SHORT, swing low for LONG), not only inside the current candle wick.\n' +
-      `- On ${timeframe} BTC, aim SL roughly ${minSlLabel}%-0.8% from entry unless structure requires wider.\n` +
+      `- On ${timeframe} ${symbol.toUpperCase()}, aim SL at least ${minSlLabel}% from entry, wider when structure requires it.\n` +
       '\nCRITICAL — R:R:\n' +
       'expected_rr MUST equal |take_profit - entry| / |entry - stop_loss| (2 decimal places). ' +
       'Compute from suggested_entry, suggested_stop_loss, suggested_take_profit — do not invent expected_rr.\n';

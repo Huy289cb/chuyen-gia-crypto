@@ -58,6 +58,7 @@ export interface PriceData {
   timestamp: string;
   btc: CandleData;
   eth?: CandleData;
+  sol?: CandleData;
 }
 
 /**
@@ -69,12 +70,13 @@ export async function fetchRealTimePrices(): Promise<PriceData> {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const [btcKlines, ethKlines] = await Promise.all([
+      const [btcKlines, ethKlines, solKlines] = await Promise.all([
         getKlines('BTCUSDT', '1m', 1),
         getKlines('ETHUSDT', '1m', 1),
+        getKlines('SOLUSDT', '1m', 1),
       ]);
 
-      if (btcKlines.length === 0 || ethKlines.length === 0) {
+      if (btcKlines.length === 0 || ethKlines.length === 0 || solKlines.length === 0) {
         throw new Error('Binance futures klines returned empty');
       }
 
@@ -82,6 +84,7 @@ export async function fetchRealTimePrices(): Promise<PriceData> {
         timestamp: new Date().toISOString(),
         btc: klineToCandle(btcKlines[0]),
         eth: klineToCandle(ethKlines[0]),
+        sol: klineToCandle(solKlines[0]),
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -210,9 +213,12 @@ export async function fetchHistoricalCandlesPaginated(
 export async function fetchPrices(coin: string = 'BTC'): Promise<CandleData> {
   try {
     const prices = await fetchRealTimePrices();
-    const key = coin.toUpperCase() as 'BTC' | 'ETH';
+    const key = coin.toUpperCase() as 'BTC' | 'ETH' | 'SOL';
     if (key === 'ETH' && prices.eth) {
       return prices.eth;
+    }
+    if (key === 'SOL' && prices.sol) {
+      return prices.sol;
     }
     return prices.btc;
   } catch (error: unknown) {

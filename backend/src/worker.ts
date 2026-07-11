@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: require('path').resolve(__dirname, '../.env'), override: true });
+
 import { appConfig, isWorkerProcess } from './config/app';
 import { validateAppConfig, validateSafetyRequirements } from './config/app';
 import { disconnectPrisma } from './lib/prisma';
@@ -7,8 +10,6 @@ import { startTelegramDailyReportScheduler, stopTelegramDailyReportScheduler } f
 import { isTelegramEnabled, logTelegramProcessContext } from './config/telegram';
 import { isGroqLevelsAdapterConfigured } from './services/groq-levels-adapter.service';
 import { getOrCreateTestnetAccount } from './repositories/testnet.repository';
-import dotenv from 'dotenv';
-dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
 /**
  * Worker Process Entry Point

@@ -36,6 +36,7 @@ import { getGroqPrimaryModel } from '../config/groq-models';
 import { isTelegramAiEnabled } from '../config/telegram-ai';
 import { runTelegramAiQuery } from '../services/telegram/telegram-ai.service';
 import type { AiContextScope } from '../services/telegram/ai-context.builder';
+import { getEnabledSymbols } from '../config/symbol-policy';
 const router = Router();
 
 function formatRelativeAgo(ts: Date | null): string {
@@ -103,9 +104,7 @@ function toReasonCodes(reason: string | null | undefined): string[] {
 
 function btcOnlyFromConfig(): boolean {
   if (process.env.BTC_ONLY === 'true') return true;
-  const enabled = Object.values(METHODS).filter((m) => m.enabled);
-  if (enabled.length === 0) return false;
-  return !enabled.some((m) => m.autoEntry?.enabledSymbols?.includes('ETH'));
+  return getEnabledSymbols().length === 1 && getEnabledSymbols()[0] === 'BTC';
 }
 
 function isSignalGateOnlyReason(reason: string): boolean {
@@ -388,7 +387,7 @@ router.get('/schedulers', async (_req: Request, res: Response) => {
 
 /**
  * GET /api/dashboard/scope
- * Get BTC-only scope status
+ * Get trading scope status
  */
 router.get('/scope', async (_req: Request, res: Response) => {
   try {
@@ -401,6 +400,7 @@ router.get('/scope', async (_req: Request, res: Response) => {
 
     const scope = {
       btcOnly: btcOnlyFromConfig(),
+      enabledSymbols: getEnabledSymbols(),
       enabledMethods,
       disabledMethods,
     };

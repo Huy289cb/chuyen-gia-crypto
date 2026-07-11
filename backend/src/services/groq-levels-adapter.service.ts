@@ -15,7 +15,7 @@ import {
   reconcileExpectedRr,
 } from '../utils/trade-levels';
 import { getMethodConfig } from '../config/methods';
-import { getRiskPolicy } from '../config/risk-policy';
+import { getSymbolPolicy } from '../config/symbol-policy';
 import { getGroqLevelsAdapterModel } from '../config/groq-models';
 
 export function isGroqLevelsAdapterConfigured(): boolean {
@@ -231,7 +231,7 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
   const tp0 = Number(input.analysis.suggested_take_profit);
   if (!Number.isFinite(entry) || !Number.isFinite(sl0) || !Number.isFinite(tp0)) return null;
 
-  const minSlPct = getRiskPolicy().minSlDistancePercent;
+  const minSlPct = getSymbolPolicy(input.symbol).minSlDistancePercent;
   if (checkMinSlDistance(entry, sl0, minSlPct).ok) return null;
 
   const key2 = process.env.GROQ_API_KEY_2!.trim();
@@ -337,7 +337,7 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
   const tp0 = Number(input.analysis.suggested_take_profit);
   if (!Number.isFinite(entry) || !Number.isFinite(sl0) || !Number.isFinite(tp0)) return null;
 
-  const minSlPct = getRiskPolicy().minSlDistancePercent;
+  const minSlPct = getSymbolPolicy(input.symbol).minSlDistancePercent;
   if (!checkMinSlDistance(entry, sl0, minSlPct).ok) return null;
 
   const minRr = getMethodConfig(input.methodId).autoEntry.minRRRatio;

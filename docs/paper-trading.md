@@ -69,30 +69,31 @@ The system is designed to support multiple trading methods running in parallel. 
 
 ### Existing Features
 
-- **Auto-Entry Logic**: Automatically suggests positions when confidence >= 80% and ICT criteria are met
+- **Current V3 Runtime**: Binance Futures Testnet, Kim Nghia, BTC-only. Legacy paper-trading notes below are kept for historical context.
+- **Auto-Entry Logic**: V3 uses signal gate + LLM confirmation; current BTC baseline is grade A, min confidence 0.75, min SL 0.8%.
 - **Dual Order Types**: Supports both **Market Orders** (immediate execution) and **Limit Orders** (wait for price)
 - **Pending Orders System**: Automatically creates limit orders when entry price differs from current price
-- **Risk Management**: 10% risk per trade with risk-based position sizing
+- **Risk Management**: Risk-based position sizing capped by the active symbol pool.
 - **Position Management**: Automatic Stop Loss (SL) and Take Profit (TP) monitoring
 - **Early Position Closure**: Automatic closure on prediction reversal (>80% confidence, opposite bias)
 - **AI Position Analysis**: AI evaluates open positions every 15 minutes and recommends closure (>80% confidence)
 - **AI Limit Order Analysis**: AI evaluates pending limit orders every 15 minutes and recommends keep/cancel (>80% confidence)
 - **Performance Tracking**: Comprehensive metrics including win rate, profit factor, drawdown
-- **Account Management**: 100U BTC account (ETH trading temporarily disabled)
-- **Volume Limit**: Max 2k USD total position volume per account (open positions + pending orders). Individual positions and pending orders are capped at 2k USD each. When volume reaches limit, new pending orders only allowed if entry aligns with SL/TP of existing positions (±0.5% tolerance) (updated 23/04/2026)
+- **Account Management**: Current live testnet execution is BTC-only. ETH/SOL require the symbol-policy rollout in `multi-symbol-volume-pools.md`.
+- **Volume Pool**: BTC has a dedicated `$2,000` pool (`open positions + blocking pending orders`). Planned ETH/SOL pools are separate and smaller; they do not share BTC's `$2,000` pool.
 - **Order Validation**: SL/TP validation ensures logical placement (LONG: SL<entry<TP, SHORT: SL>entry>TP) (updated 23/04/2026)
 - **Cooldown**: 4h cooldown after 3 consecutive losses (updated from 8, 23/04/2026)
-- **Position Limits**: Maximum 6 concurrent positions per symbol
+- **Position Limits**: Current V3 default is 1 position/order set per symbol unless scale-in is explicitly enabled.
 - **Trade History Pagination**: Paginated viewing of trade history (10 trades per page)
 - **Limit Order Management**: Automatic execution when price hits entry, manual cancellation available
 
 ## Account Structure
 
-**Current Status (19/04/2026)**:
-- **ICT Method Accounts**: 100 USDT starting balance per symbol (BTC, ETH)
-- **Kim Nghia Method Accounts**: 100 USDT starting balance per symbol (BTC, ETH)
-- **ETH Trading**: Temporarily disabled for both methods to focus on BTC
-- **Focus**: BTC-only trading to improve core skills and achieve profitability
+**Current Status (2026-07-11)**:
+- **Live testnet scope**: BTC-only.
+- **BTC pool**: `$2,000` max open + blocking pending notional.
+- **ETH/SOL**: planned controlled rollout with their own pools, wider SL, and lower exposure.
+- **Focus**: keep BTC stable before enabling additional symbols.
 
 Each trading method has its own independent paper trading accounts:
 - **Starting Balance**: 100 USDT per method per symbol
@@ -101,17 +102,16 @@ Each trading method has its own independent paper trading accounts:
 - **Database Schema**: Accounts table uses UNIQUE(symbol, method_id) for method separation
 
 **Account Examples**:
-- `BTC - ICT Method`: 100U starting balance, ICT analysis
-- `BTC - Kim Nghia Method`: 100U starting balance, Kim Nghia analysis
-- `ETH - ICT Method`: 100U starting balance (trading disabled)
-- `ETH - Kim Nghia Method`: 100U starting balance (trading disabled)
+- `BTC - Kim Nghia Method`: active testnet account.
+- `ETH - Kim Nghia Method`: planned only after symbol-policy rollout.
+- `SOL - Kim Nghia Method`: planned only after ETH is stable.
 
 ## Auto-Entry Criteria (Updated 27/04/2026)
 
 A position is suggested when ALL of the following conditions are met:
 
 1. **Symbol Enablement**: Symbol must be in enabled list (currently only BTC)
-2. **Confidence >= 70%**: AI confidence score must be at least 70% (updated from 80%)
+2. **Signal Gate**: Current BTC runtime requires grade A and confidence >= 0.75
 3. **Clear Bias**: Bias must be bullish or bearish (not neutral)
 4. **Bias-Action Consistency**: AI action must match bias (bullish→buy, bearish→sell) - **NEW v1.2.0**
 5. **Multi-Timeframe Alignment**: Majority of 1h and 4h timeframes must align with bias (1h primary)
@@ -445,8 +445,9 @@ Positions can have the following statuses:
 - **Frontend**: ETH trading information hidden, price charts and predictions preserved
 
 #### 2. Position Management
-- **Position Limit**: Maximum 6 concurrent positions per symbol
-- **Entry Logic**: Each new prediction (>80% confidence) can open 1 position if total <6
+- **Legacy Position Limit**: Earlier paper-trading experiments allowed up to 6 concurrent positions per symbol.
+- **Current V3 Position Limit**: Default is 1 position/order set per symbol unless scale-in is explicitly enabled.
+- **Entry Logic**: V3 requires signal gate + LLM confirmation + symbol pool headroom.
 - **Validation**: Symbol enablement check at entry level
 - **Timeframe Priority**: 1h primary, 4h secondary (changed from 4h+1d)
 
@@ -686,22 +687,29 @@ The system logs all TP hits and SL movements:
 4. **Adaptive Strategy**: Different approaches for different R:R ratios
 5. **Professional Trading**: Follows institutional trading practices
 
-## Configuration (Updated 17/04/2026)
+## Configuration (Updated 2026-07-11)
 
 Key configuration options in `.env`:
 
 ```bash
-# Paper Trading Configuration
+# V3 Testnet Trading Configuration
 RISK_PER_TRADE_PERCENT=1
-MIN_CONFIDENCE_THRESHOLD=70  # Updated from 80% on 18/04/2026
+MIN_SIGNAL_GRADE=A
+MIN_SIGNAL_CONFIDENCE=0.75
+MIN_SL_DISTANCE_PERCENT=0.008
 MIN_RR_RATIO=2
-PRICE_UPDATE_INTERVAL=30
+PRICE_UPDATE_INTERVAL_MS=30000
 MAX_CONSECUTIVE_LOSSES=3
-COOLDOWN_HOURS=4
+CONSECUTIVE_LOSS_COOLDOWN_HOURS=4
 
-# Symbol Configuration (BTC-only trading - Updated 17/04/2026)
+# Current symbol scope
 ENABLED_SYMBOLS=BTC
-MAX_POSITIONS_PER_SYMBOL=8
+MAX_POSITIONS_PER_SYMBOL=1
+MAX_TOTAL_EXPOSURE_USD=2000
+
+# Planned symbol pools (not live until symbol-policy rollout)
+# SYMBOL_POLICY_ETH_MAX_EXPOSURE_USD=1200
+# SYMBOL_POLICY_SOL_MAX_EXPOSURE_USD=700
 
 # Prediction Reversal Check (New - 17/04/2026)
 PREDICTION_REVERSAL_ENABLED=true
@@ -723,8 +731,9 @@ TRAIL_DISTANCE_PCT=0.5
 
 ### New Configuration Variables (Updated 17/04/2026)
 
-- **ENABLED_SYMBOLS**: Controls which symbols can trade (currently BTC only)
-- **MAX_POSITIONS_PER_SYMBOL**: Maximum concurrent positions per symbol (8 for BTC, increased from 5)
+- **ENABLED_SYMBOLS**: Controls which symbols can trade (currently BTC only; scheduler loops still need rollout work)
+- **MAX_POSITIONS_PER_SYMBOL**: Current V3 default is 1
+- **MAX_TOTAL_EXPOSURE_USD**: Current BTC fallback pool cap (`$2,000`)
 - **PREDICTION_REVERSAL_ENABLED**: Enable/disable early closure on prediction reversal
 - **PREDICTION_REVERSAL_CONFIDENCE**: Minimum confidence for reversal-triggered closure (80%)
 - **AI_POSITION_ANALYSIS**: AI analyzes open positions every 15 minutes for closure recommendations

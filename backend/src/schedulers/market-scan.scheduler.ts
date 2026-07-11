@@ -7,12 +7,13 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { getCandles } from '../services/candle.service';
 import { getV3SignalGateTimeframes } from '../config/v3-schedulers';
-import { getV3LtfAlignRegimeHtf } from '../config/v3-entry-policy';
+import { getSignalGateAllowedRegimes, getV3LtfAlignRegimeHtf } from '../config/v3-entry-policy';
 import { getSignalGateCandleLimit } from '../config/signal-gate-windows';
-import { signalGateService, type SignalGateOutput } from '../services/signal-gate.service';
+import { SignalGateService, type SignalGateOutput } from '../services/signal-gate.service';
 import type { UnifiedCandle } from '../services/candle.service';
 import type { MarketRegime } from '../analyzers/market-regime.analyzer';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
+import { getEnabledSymbols, getSymbolPolicy } from '../config/symbol-policy';
 
 let marketScanTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -26,6 +27,7 @@ export interface MarketScanResult {
 }
 
 const scanResults = new Map<string, MarketScanResult>();
+const signalGatesBySymbol = new Map<string, SignalGateService>();
 
 function lastBarOpenTimestamp(candles: UnifiedCandle[]): number | null {
   if (candles.length === 0) return null;
@@ -74,6 +76,21 @@ function mergeDuplicateScanWithPriorEligible(
   return incoming;
 }
 
+function getSignalGateForSymbol(symbol: string): SignalGateService {
+  const normalized = symbol.toUpperCase();
+  const existing = signalGatesBySymbol.get(normalized);
+  if (existing) return existing;
+
+  const policy = getSymbolPolicy(normalized);
+  const gate = new SignalGateService({
+    minGrade: policy.minSignalGrade,
+    minConfidence: policy.minSignalConfidence,
+    allowedRegimes: getSignalGateAllowedRegimes(),
+  });
+  signalGatesBySymbol.set(normalized, gate);
+  return gate;
+}
+
 async function scanSymbolTimeframe(
   symbol: string,
   timeframe: string,
@@ -97,18 +114,34 @@ async function scanSymbolTimeframe(
   }
 
   const alignHtf = getV3LtfAlignRegimeHtf();
-  const signalResult = await signalGateService.evaluate({
+  const signalResult = await getSignalGateForSymbol(symbol).evaluate({
     candles,
     symbol,
     timeframe,
     htfRegime: alignHtf && timeframe !== alignHtf ? htfRegime : undefined,
   });
+  const policy = getSymbolPolicy(symbol);
+  const playbook = signalResult.setupResult.playbookKey ?? '';
+  const policyBlocked =
+    signalResult.pass &&
+    policy.allowedPlaybooks.length > 0 &&
+    !policy.allowedPlaybooks.includes(playbook);
+  const effectiveSignalResult: SignalGateOutput = policyBlocked
+    ? {
+        ...signalResult,
+        pass: false,
+        shouldCallGroq: false,
+        reason:
+          `${signalResult.reason} · Symbol policy blocked playbook ${playbook || 'unknown'} ` +
+          `(allowed=${policy.allowedPlaybooks.join(',')})`,
+      }
+    : signalResult;
 
   const result: MarketScanResult = {
     symbol,
     timeframe,
     candles,
-    signalResult,
+    signalResult: effectiveSignalResult,
     timestamp: new Date(),
   };
 
@@ -120,11 +153,11 @@ async function scanSymbolTimeframe(
   const dupTag = signalResult.isDuplicate ? ' (duplicate)' : '';
   if (toStore !== result) {
     console.log(
-      `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} — kept prior fresh signal for LLM (same bar)`
+      `[MarketScan] ${symbol} ${timeframe}: ${effectiveSignalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} — kept prior fresh signal for LLM (same bar)`
     );
   } else {
     console.log(
-      `[MarketScan] ${symbol} ${timeframe}: ${signalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${signalResult.reason}`
+      `[MarketScan] ${symbol} ${timeframe}: ${effectiveSignalResult.pass ? 'PASS' : 'BLOCK'}${dupTag} - ${effectiveSignalResult.reason}`
     );
   }
 }
@@ -143,7 +176,7 @@ async function runMarketScan() {
   try {
     console.log('[MarketScan] Starting market scan');
 
-    const symbols = ['BTC'];
+    const symbols = getEnabledSymbols();
     const timeframes = marketScanTimeframeOrder(getV3SignalGateTimeframes());
     const alignHtf = getV3LtfAlignRegimeHtf();
 

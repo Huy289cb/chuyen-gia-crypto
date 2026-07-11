@@ -1,21 +1,14 @@
+import { getEnabledSymbols } from './symbol-policy';
+
 export interface WorkerConfig {
   syncSymbols: string[];
   ohlcvTimeframe: string;
   enableTestnetSync: boolean;
 }
 
-function parseSymbols(value: string | undefined): string[] {
-  const raw = (value || 'BTC,ETH')
-    .split(',')
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
-
-  return raw.length > 0 ? Array.from(new Set(raw)) : ['BTC', 'ETH'];
-}
-
 export const workerConfig: WorkerConfig = {
   // Reuse ENABLED_SYMBOLS so API/worker stay aligned by default.
-  syncSymbols: parseSymbols(process.env.ENABLED_SYMBOLS),
+  syncSymbols: getEnabledSymbols(),
   ohlcvTimeframe: process.env.WORKER_OHLCV_TIMEFRAME || '1m',
   enableTestnetSync: process.env.WORKER_ENABLE_TESTNET_SYNC !== 'false',
 };

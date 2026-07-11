@@ -42,6 +42,7 @@ async function runPriceSyncJob() {
     const symbolToCandle = {
       BTC: prices.btc,
       ETH: prices.eth,
+      SOL: prices.sol,
     };
 
     const updates: Array<{ coin: string; price: number; volume: number }> = [];

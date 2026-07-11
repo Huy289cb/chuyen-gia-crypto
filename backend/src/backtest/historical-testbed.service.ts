@@ -3,7 +3,7 @@
  */
 
 import { SignalGateService } from '../services/signal-gate.service';
-import { getRiskPolicy } from '../config/risk-policy';
+import { getSymbolPolicy } from '../config/symbol-policy';
 import { getV3EntryTfPriorityRank, getV3SignalGateTimeframes } from '../config/v3-schedulers';
 import {
   evaluateHtfTrendRequirement,
@@ -69,10 +69,10 @@ export async function runHistoricalTestbed(
   const symbol = (options.symbol ?? 'BTC').toUpperCase();
   const weeks = options.days ? options.days / 7 : (options.weeks ?? 3);
   const variant = resolveTestbedVariant(options.variant);
-  const policy = getRiskPolicy();
-  const minSlPct = options.minSlPct ?? policy.minSlDistancePercent;
+  const symbolPolicy = getSymbolPolicy(symbol);
+  const minSlPct = options.minSlPct ?? symbolPolicy.minSlDistancePercent;
   const minRr = options.minRr ?? 2;
-  const notionalUsd = options.notionalUsd ?? 2000;
+  const notionalUsd = options.notionalUsd ?? symbolPolicy.maxExposureUsd;
   const feePctPerSide = options.feePctPerSide ?? 0.0004;
   const timeframes = [...getV3SignalGateTimeframes()];
   const entryRank = getV3EntryTfPriorityRank();
@@ -96,8 +96,8 @@ export async function runHistoricalTestbed(
   const walkBars = candles5m.filter((c) => c.timestamp >= periodStartTs);
 
   const gate = new SignalGateService({
-    minGrade: variant.minGrade ?? policy.minSignalGrade,
-    minConfidence: variant.minConfidence ?? policy.minSignalConfidence,
+    minGrade: variant.minGrade ?? symbolPolicy.minSignalGrade,
+    minConfidence: variant.minConfidence ?? symbolPolicy.minSignalConfidence,
     allowedRegimes: getSignalGateAllowedRegimes(),
     enableDuplicateFilter: false,
   });
@@ -236,6 +236,31 @@ export async function runHistoricalTestbed(
     const side = inferSetupTradeSide(pick.result.setupResult, pick.timeframe, pick.candles);
     if (!side) {
       blocks.no_direction += 1;
+      continue;
+    }
+
+    if (
+      variant.allowedTimeframes &&
+      variant.allowedTimeframes.length > 0 &&
+      !variant.allowedTimeframes.includes(pick.timeframe)
+    ) {
+      blocks.grade_playbook += 1;
+      continue;
+    }
+    if (
+      variant.allowedPlaybooks &&
+      variant.allowedPlaybooks.length > 0 &&
+      !variant.allowedPlaybooks.includes(pick.result.setupResult.playbookKey ?? '')
+    ) {
+      blocks.grade_playbook += 1;
+      continue;
+    }
+    if (
+      variant.allowedSides &&
+      variant.allowedSides.length > 0 &&
+      !variant.allowedSides.includes(side)
+    ) {
+      blocks.grade_playbook += 1;
       continue;
     }
 

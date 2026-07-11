@@ -528,6 +528,9 @@ export async function getPendingOrderLines(
 }
 
 export function getDefaultTradingScope(): { symbol: string; methodId: string } {
-  const symbols = (process.env.ENABLED_SYMBOLS || 'BTC').split(',')[0]?.trim() || 'BTC';
-  return { symbol: symbols.toUpperCase(), methodId: 'kim_nghia' };
+  const symbols = (process.env.ENABLED_SYMBOLS || 'BTC')
+    .split(',')
+    .map((s) => s.trim().toUpperCase().replace(/USDT$/, ''))
+    .filter(Boolean);
+  return { symbol: symbols[0] || 'BTC', methodId: 'kim_nghia' };
 }

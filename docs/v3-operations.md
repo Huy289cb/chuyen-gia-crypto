@@ -1,6 +1,8 @@
 # V3 Operations Reference
 
-Operational behavior for Big Update v3 (BTC-only, Kim Nghia, Binance Futures testnet).
+Operational behavior for Big Update v3 (Kim Nghia, Binance Futures demo/testnet, BTC/ETH/SOL symbol policy).
+
+For the ETH/SOL rollout plan and token-specific volume pools, see [multi-symbol-volume-pools.md](./multi-symbol-volume-pools.md).
 
 **Signal gate stack (May 2026):** `5m`, `15m`, `1h` — see [v3-5m-reset-plan.md](./v3-5m-reset-plan.md).
 
@@ -17,6 +19,37 @@ PendingOrderLifecycle (*/5) → TTL / drift cancel → optional LLM pending revi
        ↓
 PositionMonitor (*/1) → defer to exchange SL/TP (PnL+ P0: reduce/exit off by default)
 ```
+
+## Symbol Scope
+
+Current runtime uses `ENABLED_SYMBOLS`:
+
+| Area | Current state |
+|------|---------------|
+| Market scan | Iterates `ENABLED_SYMBOLS` |
+| LLM dispatch | Iterates `ENABLED_SYMBOLS` |
+| Pending scheduler | Runs lifecycle/review per enabled symbol |
+| Exposure snapshot | Symbol-aware, with per-symbol policy caps |
+
+Current demo/testnet env is `ENABLED_SYMBOLS=BTC,ETH,SOL`.
+
+### Per-Symbol Pools
+
+Each token has its own pool:
+
+```text
+symbol pool = open position notional + blocking pending order notional
+```
+
+Initial rollout targets:
+
+| Symbol | Max pool | Min SL | Min grade | Min confidence |
+|--------|----------|--------|-----------|----------------|
+| BTC | `$2,000` | `0.8%` | `A` | `0.75` |
+| ETH | `$1,200` | `1.2%` | `A` | `0.78` |
+| SOL | `$700` | `2.0%` | `A` | `0.82` |
+
+BTC's `$2,000` pool is the primary baseline. ETH/SOL do not consume BTC's pool; same-direction exposure across tokens is capped by the correlation guard. SOL additionally allows only `liquidity_sweep_reclaim`.
 
 ## Schedulers
 
@@ -110,6 +143,16 @@ V3_ALLOWED_REGIMES=trend
 POSITION_MONITOR_ALLOW_REDUCE=false
 POSITION_MONITOR_ALLOW_EXIT=false
 PHANTOM_REOPEN_ENABLED=false
+```
+
+Current BTC baseline:
+
+```env
+ENABLED_SYMBOLS=BTC
+MAX_TOTAL_EXPOSURE_USD=2000
+MIN_SIGNAL_GRADE=A
+MIN_SIGNAL_CONFIDENCE=0.75
+MIN_SL_DISTANCE_PERCENT=0.008
 ```
 
 ## Telegram AI runbook

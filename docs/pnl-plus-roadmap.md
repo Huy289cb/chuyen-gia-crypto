@@ -131,7 +131,9 @@ Mục tiêu: Giảm overtrade khi đã đo đúng.
 | 4.2 | Auto-block playbook từ `trade_outcomes` (regime, TF, side) | ≥30 samples, expectancy CI |
 | 4.3 | Telegram / daily report từ wallet PnL + verified stats | P2.4 dashboard |
 
-**Không làm sớm:** Tăng size, thêm symbol, đổi model Groq chính — dễ overfit noise.
+**Không làm sớm:** Tăng size, bật thêm symbol trực tiếp, đổi model Groq chính — dễ overfit noise.
+
+**Multi-symbol exception:** ETH/SOL chỉ được thêm qua rollout có kiểm soát với symbol-specific volume pools, testbed riêng từng symbol, và correlation guard. Xem [multi-symbol-volume-pools.md](./multi-symbol-volume-pools.md).
 
 ---
 
@@ -164,6 +166,7 @@ Tuần 4+: P3 theo metric tuần 3; P4 khi đủ sample
 
 - Tối ưu prompt Groq dựa trên win-rate DB hiện tại  
 - Tăng `MAX_EXPOSURE_PCT` khi wallet âm  
+- Bật ETH/SOL vào cùng pool BTC `$2,000`
 - Bật `POSITION_MONITOR_ALLOW_EXIT` để “cứu” lệnh  
 - Backfill lại toàn bộ outcomes mà không có userTrades  
 
