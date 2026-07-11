@@ -13,7 +13,6 @@ vi.mock('../../src/config/v3-entry-policy', () => ({
 }));
 
 import {
-  assertCorrelationExposureAllowed,
   canRunLlmDispatchForSymbol,
 } from '../../src/services/v3-entry-eligibility.service';
 import {
@@ -27,8 +26,6 @@ describe('canRunLlmDispatchForSymbol', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SYMBOL_POLICY_BTC_MAX_EXPOSURE_USD;
-    delete process.env.CORRELATION_MAX_LONG_EXPOSURE_USD;
-    delete process.env.CORRELATION_MAX_SHORT_EXPOSURE_USD;
     vi.mocked(isV3ScaleInEnabled).mockReturnValue(true);
     vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
       current_balance: 10000,
@@ -96,22 +93,4 @@ describe('canRunLlmDispatchForSymbol', () => {
     expect(result.reason).toContain('below Binance min order');
   });
 
-  it('blocks candidate trades when same-side correlation cap would be exceeded', async () => {
-    process.env.CORRELATION_MAX_LONG_EXPOSURE_USD = '2500';
-    vi.mocked(getActiveTestnetPositions).mockResolvedValue([
-      { symbol: 'BTC', side: 'long', size_usd: 1800 },
-    ] as never);
-    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([
-      { symbol: 'ETH', side: 'long', size_usd: 400 },
-    ] as never);
-
-    const result = await assertCorrelationExposureAllowed({
-      symbol: 'SOL',
-      side: 'long',
-      candidateUsd: 500,
-    });
-
-    expect(result).toContain('Correlation long exposure cap exceeded');
-    expect(result).toContain('2700/2500');
-  });
 });

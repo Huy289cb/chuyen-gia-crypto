@@ -87,13 +87,3 @@ export function getSymbolMaxExposureUsd(symbol: string, walletBalance: number): 
 
   return resolveMaxTotalExposureUsd(walletBalance, getSymbolPolicy(normalized).maxExposureUsd);
 }
-
-export function getCorrelationMaxExposureUsd(side: 'long' | 'short'): number | null {
-  const key = side === 'long'
-    ? 'CORRELATION_MAX_LONG_EXPOSURE_USD'
-    : 'CORRELATION_MAX_SHORT_EXPOSURE_USD';
-  const raw = process.env[key];
-  if (!raw?.trim()) return null;
-  const n = parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}

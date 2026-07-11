@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  getCorrelationMaxExposureUsd,
   getEnabledSymbols,
   getSymbolMaxExposureUsd,
   getSymbolPolicy,
@@ -25,8 +24,6 @@ const envKeys = [
   'SYMBOL_POLICY_ETH_MIN_SIGNAL_CONFIDENCE',
   'SYMBOL_POLICY_ETH_RISK_MULTIPLIER',
   'SYMBOL_POLICY_ETH_ALLOWED_PLAYBOOKS',
-  'CORRELATION_MAX_LONG_EXPOSURE_USD',
-  'CORRELATION_MAX_SHORT_EXPOSURE_USD',
 ] as const;
 
 const savedEnv = new Map<string, string | undefined>();
@@ -88,11 +85,4 @@ describe('symbol-policy', () => {
     expect(getSymbolMaxExposureUsd('BTC', 5000)).toBe(500);
   });
 
-  it('parses optional same-side correlation caps', () => {
-    process.env.CORRELATION_MAX_LONG_EXPOSURE_USD = '2500';
-    process.env.CORRELATION_MAX_SHORT_EXPOSURE_USD = 'bad';
-
-    expect(getCorrelationMaxExposureUsd('long')).toBe(2500);
-    expect(getCorrelationMaxExposureUsd('short')).toBeNull();
-  });
 });

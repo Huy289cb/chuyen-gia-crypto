@@ -18,7 +18,6 @@ import { checkBinanceAccountTradable } from './binance-account-health.service';
 import { tryOppositeFlipBeforeEntry } from './opposite-flip.service';
 import {
   assertScaleInSideAllowed,
-  assertCorrelationExposureAllowed,
   getSymbolExposureSnapshot,
   oppositeLocalSide,
 } from './v3-entry-eligibility.service';
@@ -259,16 +258,6 @@ export async function executeV3Trade(
         ? `Scale-in headroom $${remainingCapacity.toFixed(0)} below Binance min order $${minNotional}`
         : `Order notional $${sizeUsd.toFixed(0)} below Binance minimum $${minNotional}`;
     return { success: false, reason: headroomMsg };
-  }
-
-  const correlationBlock = await assertCorrelationExposureAllowed({
-    symbol,
-    side,
-    candidateUsd: sizeUsd,
-    methodId,
-  });
-  if (correlationBlock) {
-    return { success: false, reason: correlationBlock };
   }
 
   const sizeQty = sizeUsd / entry;
