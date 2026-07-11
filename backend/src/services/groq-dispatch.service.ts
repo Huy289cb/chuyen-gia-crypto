@@ -622,14 +622,25 @@ export class GroqDispatchService {
     if (!raw || typeof raw !== 'object') return null;
 
     const record = raw as Record<string, unknown>;
+    const singleNestedAnalysis =
+      !('bias' in record) &&
+      Object.keys(record).length === 1 &&
+      Object.values(record)[0] &&
+      typeof Object.values(record)[0] === 'object' &&
+      !Array.isArray(Object.values(record)[0])
+        ? Object.values(record)[0]
+        : undefined;
     const nested =
       record.btc ??
       record.BTC ??
       record.eth ??
       record.ETH ??
+      record.sol ??
+      record.SOL ??
       (typeof record.symbol === 'string'
         ? record[record.symbol.toLowerCase()]
-        : undefined);
+        : undefined) ??
+      singleNestedAnalysis;
 
     const base =
       nested && typeof nested === 'object' && !Array.isArray(nested)

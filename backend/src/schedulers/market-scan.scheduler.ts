@@ -49,10 +49,15 @@ function marketScanTimeframeOrder(timeframes: readonly string[]): string[] {
  * Overwriting the in-memory snapshot would erase the last fresh PASS — LLMDispatch then skips Groq until the next bar.
  * Keep the prior fresh `signalResult` while still refreshing candles for the same bar open time.
  */
-function mergeDuplicateScanWithPriorEligible(
+export function mergeDuplicateScanWithPriorEligible(
   prev: MarketScanResult | undefined,
-  incoming: MarketScanResult
+  incoming: MarketScanResult,
+  allowKeepPriorEligible = true
 ): MarketScanResult {
+  if (!allowKeepPriorEligible) {
+    return incoming;
+  }
+
   const prevBar = lastBarOpenTimestamp(prev?.candles ?? []);
   const nextBar = lastBarOpenTimestamp(incoming.candles);
   const p = prev?.signalResult;
@@ -147,7 +152,7 @@ async function scanSymbolTimeframe(
 
   const key = `${symbol}_${timeframe}`;
   const prev = scanResults.get(key);
-  const toStore = mergeDuplicateScanWithPriorEligible(prev, result);
+  const toStore = mergeDuplicateScanWithPriorEligible(prev, result, !policyBlocked);
   scanResults.set(key, toStore);
 
   const dupTag = signalResult.isDuplicate ? ' (duplicate)' : '';

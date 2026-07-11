@@ -26,6 +26,39 @@ describe('GroqDispatchService.normalizeGroqAnalysis', () => {
     expect(out?.confidence).toBe(0.85);
   });
 
+  it('unwraps sol-keyed Kim Nghia payloads', () => {
+    const nested = {
+      sol: {
+        bias: 'bearish',
+        action: 'sell',
+        confidence: '86',
+        suggested_entry: 78,
+        suggested_stop_loss: 80,
+        suggested_take_profit: 74,
+      },
+    } as unknown as GroqAnalysis;
+
+    const out = normalize(nested);
+    expect(out?.bias).toBe('bearish');
+    expect(out?.action).toBe('sell');
+    expect(out?.confidence).toBe(0.86);
+  });
+
+  it('unwraps a single symbol-keyed payload for future symbols', () => {
+    const nested = {
+      xrp: {
+        bias: 'neutral',
+        action: 'hold',
+        confidence: 0.55,
+      },
+    } as unknown as GroqAnalysis;
+
+    const out = normalize(nested);
+    expect(out?.bias).toBe('neutral');
+    expect(out?.action).toBe('hold');
+    expect(out?.confidence).toBe(0.55);
+  });
+
   it('coerces percent confidence to 0-1 scale', () => {
     const nested = {
       btc: {
