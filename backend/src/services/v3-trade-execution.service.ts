@@ -11,6 +11,8 @@ import {
   isV3ScaleInEnabled,
   getBinanceMinOrderNotionalUsd,
   resolveTargetPositionNotionalUsd,
+  getNotionalTolerancePercent,
+  minNotionalWithTolerance,
 } from '../config/v3-entry-policy';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import { checkBinanceAccountTradable } from './binance-account-health.service';
@@ -27,6 +29,7 @@ import {
   getOrCreateTestnetAccount,
 } from '../repositories/testnet.repository';
 import { ensurePositionModeDetected } from './binance-hedge-mode';
+import { resolveQuantityForMinNotional } from '../utils/order-quantity';
 import { checkMinSlDistance, computeExpectedRrFromPrices } from '../utils/trade-levels';
 import { initTestnetClient, normalizeQuantityForSymbol, placeLimitOrder } from './binanceClient';
 import { hookPendingOrderPlaced } from './telegram/telegram-hooks';
@@ -239,6 +242,7 @@ export async function executeV3Trade(
 
   const remainingCapacity = exposure.remainingUsd;
   const minNotional = getBinanceMinOrderNotionalUsd();
+  const notionalTolerance = getNotionalTolerancePercent();
   const riskUsd = Math.max(1, balance * (riskPolicy.riskPerTradePercent / 100));
   const computedSizeUsd = riskUsd / slDistancePct;
   const sizeUsd = resolveTargetPositionNotionalUsd({
@@ -249,11 +253,12 @@ export async function executeV3Trade(
   if (sizeUsd <= 0) {
     return { success: false, reason: 'Computed position size <= 0' };
   }
-  if (sizeUsd < minNotional) {
+  const minNotionalFloor = minNotionalWithTolerance(minNotional, notionalTolerance);
+  if (sizeUsd < minNotionalFloor) {
     const headroomMsg =
       exposure.openUsd > 0
         ? `Scale-in headroom $${remainingCapacity.toFixed(0)} below Binance min order $${minNotional}`
-        : `Order notional $${sizeUsd.toFixed(0)} below Binance minimum $${minNotional}`;
+        : `Order notional $${sizeUsd.toFixed(0)} well below Binance minimum $${minNotional}`;
     return { success: false, reason: headroomMsg };
   }
 
@@ -261,23 +266,24 @@ export async function executeV3Trade(
   const symbolUsdt = `${symbol.toUpperCase()}USDT`;
 
   const qtyCheck = await normalizeQuantityForSymbol(symbolUsdt, sizeQty);
-  if (!qtyCheck.valid) {
+  const qtyResolved = resolveQuantityForMinNotional({
+    quantity: sizeQty,
+    entryPrice: entry,
+    minNotionalUsd: minNotional,
+    stepSize: qtyCheck.stepSize,
+    minQty: qtyCheck.minQty,
+    maxNotionalUsd: remainingCapacity,
+    tolerancePercent: notionalTolerance,
+  });
+  if (!qtyResolved.valid) {
     return {
       success: false,
-      reason: qtyCheck.reason ?? 'Order quantity invalid after exchange normalization',
+      reason: qtyResolved.reason ?? 'Order quantity invalid after exchange normalization',
     };
   }
-  const normalizedSizeQty = qtyCheck.normalizedQty;
-  if (normalizedSizeQty <= 0) {
-    return { success: false, reason: 'Normalized quantity is zero — order blocked' };
-  }
-  const orderNotional = normalizedSizeQty * entry;
-  if (orderNotional < minNotional) {
-    return {
-      success: false,
-      reason: `Order notional $${orderNotional.toFixed(0)} below Binance minimum $${minNotional} after qty normalization`,
-    };
-  }
+  const normalizedSizeQty = qtyResolved.normalizedQty;
+  const orderNotional = qtyResolved.orderNotional;
+  const effectiveSizeUsd = orderNotional;
 
   const expectedRr =
     computeExpectedRrFromPrices(entry, stopLoss, takeProfit) ??
@@ -312,7 +318,7 @@ export async function executeV3Trade(
     binanceOrderId = String(order.orderId);
     console.log(
       `[V3TradeExecution] Binance limit order ${binanceOrderId} (${newClientOrderId}) ` +
-        `${symbol} ${timeframe} ${side} entry=${entry} sizeUsd=${sizeUsd.toFixed(2)}`
+        `${symbol} ${timeframe} ${side} entry=${entry} sizeUsd=${effectiveSizeUsd.toFixed(2)}`
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -328,7 +334,7 @@ export async function executeV3Trade(
     entryPrice: entry,
     stopLoss,
     takeProfit,
-    sizeUsd,
+    sizeUsd: effectiveSizeUsd,
     sizeQty: normalizedSizeQty,
     riskUsd,
     riskPercent: riskPolicy.riskPerTradePercent,
@@ -348,7 +354,7 @@ export async function executeV3Trade(
     stopLoss,
     takeProfit,
     sizeQty: normalizedSizeQty,
-    sizeUsd,
+    sizeUsd: effectiveSizeUsd,
     accountBalance: balance,
     orderId,
     binanceOrderId,

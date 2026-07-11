@@ -352,4 +352,49 @@ describe('executeV3Trade', () => {
     expect(result.reason).toContain('below Binance min order');
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
+
+  it('accepts floored qty slightly below min notional (40U wallet scenario)', async () => {
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      id: 1,
+      current_balance: 40,
+    } as never);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(initTestnetClient).mockReturnValue({} as never);
+    vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
+      rawQty: 200 / 64380,
+      normalizedQty: 0.003,
+      stepSize: 0.001,
+      minQty: 0.001,
+      valid: true,
+    });
+    vi.mocked(placeLimitOrder).mockResolvedValue({ orderId: 77777 } as never);
+    vi.mocked(createTestnetPendingOrder).mockResolvedValue({ order_id: 'v3_tol' } as never);
+
+    const result = await executeV3Trade({
+      symbol: 'BTC',
+      timeframe: '15m',
+      analysis: {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.92,
+        suggested_entry: 64380,
+        suggested_stop_loss: 63630,
+        suggested_take_profit: 66480,
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(placeLimitOrder).toHaveBeenCalledWith(
+      expect.anything(),
+      'BTCUSDT',
+      'BUY',
+      0.003,
+      64380,
+      'OPEN',
+      null,
+      null,
+      expect.any(String)
+    );
+  });
 });

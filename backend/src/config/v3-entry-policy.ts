@@ -101,6 +101,22 @@ export function getBinanceMinOrderNotionalUsd(): number {
   return Number.isFinite(v) && v > 0 ? v : 200;
 }
 
+/** Allow small notional drift from rounding (default 5%). */
+export function getNotionalTolerancePercent(): number {
+  const v = parseFloat(process.env.NOTIONAL_TOLERANCE_PERCENT || '5');
+  return Number.isFinite(v) && v >= 0 && v <= 50 ? v : 5;
+}
+
+export function minNotionalWithTolerance(minNotionalUsd: number, tolerancePercent?: number): number {
+  const tol = tolerancePercent ?? getNotionalTolerancePercent();
+  return minNotionalUsd * (1 - tol / 100);
+}
+
+export function maxNotionalWithTolerance(maxNotionalUsd: number, tolerancePercent?: number): number {
+  const tol = tolerancePercent ?? getNotionalTolerancePercent();
+  return maxNotionalUsd * (1 + tol / 100);
+}
+
 /** Risk-based size floored at min notional, capped by exposure headroom. */
 export function resolveTargetPositionNotionalUsd(input: {
   computedUsd: number;
