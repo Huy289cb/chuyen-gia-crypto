@@ -39,7 +39,7 @@ export async function analyzeViaOpenRouter(
   const response = await fetch(OPENROUTER_CHAT_URL, {
     method: 'POST',
     headers: {
-      Apehorization: `Bearer ${key}`,
+      Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       ...getOpenRouterAppHeaders(),
     },

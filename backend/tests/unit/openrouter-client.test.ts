@@ -69,6 +69,7 @@ describe('analyzeViaOpenRouter', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer sk-or-test');
+    expect(headers).not.toHaveProperty('Apehorization');
     expect(headers['HTTP-Referer']).toBeTruthy();
     expect(headers['X-Title']).toBeTruthy();
     const body = JSON.parse(String(init.body));
