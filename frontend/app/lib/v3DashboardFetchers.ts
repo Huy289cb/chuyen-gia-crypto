@@ -33,6 +33,13 @@ export interface DashboardSummaryData {
   };
 }
 
+export interface DashboardScopeData {
+  btcOnly: boolean;
+  enabledSymbols: string[];
+  enabledMethods: string[];
+  disabledMethods: string[];
+}
+
 export interface AccountData {
   balance: {
     isInitialized?: boolean;
@@ -340,8 +347,23 @@ export async function loadDashboardSummary(): Promise<DashboardSummaryData> {
   };
 }
 
-export async function loadAccountData(): Promise<AccountData> {
-  const q = 'symbol=BTC&method=kim_nghia';
+export async function loadDashboardScope(): Promise<DashboardScopeData> {
+  const scope = await fetchJson('/dashboard/scope', 'dashboard/scope');
+  const data = (scope.data as Partial<DashboardScopeData> | undefined) ?? {};
+  const enabledSymbols = Array.isArray(data.enabledSymbols)
+    ? data.enabledSymbols.map((s) => String(s).toUpperCase()).filter(Boolean)
+    : ['BTC'];
+
+  return {
+    btcOnly: Boolean(data.btcOnly),
+    enabledSymbols: enabledSymbols.length > 0 ? enabledSymbols : ['BTC'],
+    enabledMethods: Array.isArray(data.enabledMethods) ? data.enabledMethods.map(String) : [],
+    disabledMethods: Array.isArray(data.disabledMethods) ? data.disabledMethods.map(String) : [],
+  };
+}
+
+export async function loadAccountData(symbol = 'BTC'): Promise<AccountData> {
+  const q = `symbol=${encodeURIComponent(symbol)}&method=kim_nghia`;
   const [balance, positions, orders, trades] = await Promise.all([
     settleJson(`/account/balance?${q}`, 'account/balance'),
     settleJson(`/account/positions?${q}`, 'account/positions'),
@@ -381,13 +403,14 @@ export async function loadAccountData(): Promise<AccountData> {
   };
 }
 
-export async function loadIntelligenceData(): Promise<IntelligenceData> {
+export async function loadIntelligenceData(symbol = 'BTC'): Promise<IntelligenceData> {
+  const q = `symbol=${encodeURIComponent(symbol)}`;
   const [signals, risk, llm, memory, noTrade] = await Promise.all([
-    settleJson('/dashboard/signals?limit=1', 'dashboard/signals'),
-    settleJson('/dashboard/risk', 'dashboard/risk'),
-    settleJson('/dashboard/llm', 'dashboard/llm'),
-    settleJson('/dashboard/memory', 'dashboard/memory'),
-    settleJson('/dashboard/no-trade-reasons', 'dashboard/no-trade-reasons'),
+    settleJson(`/dashboard/signals?${q}&limit=1`, 'dashboard/signals'),
+    settleJson(`/dashboard/risk?${q}`, 'dashboard/risk'),
+    settleJson(`/dashboard/llm?${q}`, 'dashboard/llm'),
+    settleJson(`/dashboard/memory?${q}`, 'dashboard/memory'),
+    settleJson(`/dashboard/no-trade-reasons?${q}`, 'dashboard/no-trade-reasons'),
   ]);
 
   const errors = [signals.error, risk.error, llm.error, memory.error, noTrade.error].filter(

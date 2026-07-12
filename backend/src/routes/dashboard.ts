@@ -602,6 +602,7 @@ router.get('/signals', async (req: Request, res: Response) => {
 
     const decisions = await prisma.tradeDecision.findMany({
       where: {
+        symbol: sym,
         OR: [
           { reason: { startsWith: 'Signal gate:' } },
           { reason: { startsWith: 'Signal gate blocked:' } },
@@ -642,12 +643,13 @@ router.get('/signals', async (req: Request, res: Response) => {
  * GET /api/dashboard/risk
  * Get risk engine state
  */
-router.get('/risk', async (_req: Request, res: Response) => {
+router.get('/risk', async (req: Request, res: Response) => {
   try {
-    const riskState = await readCache.get('dashboard:risk:BTC', DASHBOARD_READ_TTL_MS, async () => {
+    const symbol = String(req.query.symbol || 'BTC').toUpperCase();
+    const riskState = await readCache.get(`dashboard:risk:${symbol}`, DASHBOARD_READ_TTL_MS, async () => {
     const policy = getRiskPolicy();
     const accounts = await prisma.testnetAccount.findMany({
-      where: { symbol: 'BTC' },
+      where: { symbol },
     });
 
     const account = accounts[0];
@@ -718,15 +720,16 @@ router.get('/risk', async (_req: Request, res: Response) => {
  * GET /api/dashboard/llm
  * Get LLM dispatch statistics
  */
-router.get('/llm', async (_req: Request, res: Response) => {
+router.get('/llm', async (req: Request, res: Response) => {
   try {
-    const llmStats = await readCache.get('dashboard:llm:kim_nghia', DASHBOARD_READ_TTL_MS, async () => {
+    const symbol = String(req.query.symbol || 'BTC').toUpperCase();
+    const llmStats = await readCache.get(`dashboard:llm:${symbol}:kim_nghia`, DASHBOARD_READ_TTL_MS, async () => {
     const methodId = 'kim_nghia';
     const startUtc = new Date();
     startUtc.setUTCHours(0, 0, 0, 0);
 
     const decisionsToday = await prisma.tradeDecision.findMany({
-      where: { method_id: methodId, timestamp: { gte: startUtc } },
+      where: { symbol, method_id: methodId, timestamp: { gte: startUtc } },
       select: { reason: true, decision: true, timestamp: true },
     });
 
@@ -752,6 +755,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
 
     const lastLlmDecision = await prisma.tradeDecision.findFirst({
       where: {
+        symbol,
         method_id: methodId,
         NOT: [
           { reason: { startsWith: 'Signal gate:' } },
@@ -774,7 +778,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
       : null;
 
     const recentAnalysis = await prisma.analysisHistory.findFirst({
-      where: { coin: 'BTC', method_id: methodId },
+      where: { coin: symbol, method_id: methodId },
       orderBy: { timestamp: 'desc' },
       select: { raw_answer: true },
     });
@@ -824,13 +828,14 @@ router.get('/llm', async (_req: Request, res: Response) => {
  * GET /api/dashboard/memory
  * Get memory-based insights
  */
-router.get('/memory', async (_req: Request, res: Response) => {
+router.get('/memory', async (req: Request, res: Response) => {
   try {
-    const memory = await readCache.get('dashboard:memory', DASHBOARD_READ_TTL_MS, async () => {
+    const symbol = String(req.query.symbol || 'BTC').toUpperCase();
+    const memory = await readCache.get(`dashboard:memory:${symbol}`, DASHBOARD_READ_TTL_MS, async () => {
     // Get similar setups from recent trade decisions
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const recentDecisions = await prisma.tradeDecision.findMany({
-      where: { timestamp: { gte: since } },
+      where: { symbol, timestamp: { gte: since } },
       orderBy: { timestamp: 'desc' },
       take: 10,
       include: { trade_outcome: true },
@@ -849,7 +854,7 @@ router.get('/memory', async (_req: Request, res: Response) => {
 
     // Playbook stats with at least one recorded trade only
     const playbookStats = await prisma.playbookStats.findMany({
-      where: { total_trades: { gt: 0 } },
+      where: { symbol, total_trades: { gt: 0 } },
     });
     const playbookWinrate: Record<string, number> = {};
     playbookStats.forEach((stat) => {
@@ -858,6 +863,7 @@ router.get('/memory', async (_req: Request, res: Response) => {
 
     // Get failure patterns from trade reflections
     const reflections = await prisma.tradeReflection.findMany({
+      where: { symbol },
       take: 3,
       orderBy: { timestamp: 'desc' },
     });
@@ -888,10 +894,11 @@ router.get('/memory', async (_req: Request, res: Response) => {
  * GET /api/dashboard/no-trade-reasons
  * Get aggregated no-trade reasons
  */
-router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
+router.get('/no-trade-reasons', async (req: Request, res: Response) => {
   try {
+    const symbol = String(req.query.symbol || 'BTC').toUpperCase();
     const noTradeReasons = await readCache.get(
-      'dashboard:no-trade-reasons',
+      `dashboard:no-trade-reasons:${symbol}`,
       DASHBOARD_READ_TTL_MS,
       async () => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -899,6 +906,7 @@ router.get('/no-trade-reasons', async (_req: Request, res: Response) => {
     // Recent no_trade decisions only (last 24h) — avoid stale historical aggregates
     const recentDecisions = await prisma.tradeDecision.findMany({
       where: {
+        symbol,
         decision: 'no_trade',
         timestamp: { gte: since },
       },

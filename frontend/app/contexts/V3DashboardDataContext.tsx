@@ -11,10 +11,12 @@ import {
 } from 'react';
 import {
   loadDashboardSummary,
+  loadDashboardScope,
   loadAccountData,
   loadIntelligenceData,
   loadMarketData,
   type DashboardSummaryData,
+  type DashboardScopeData,
   type AccountData,
   type IntelligenceData,
   type DashboardMarketData,
@@ -56,6 +58,8 @@ export type V3DashboardContextValue = {
   intelligence: IntelligenceSlice;
   market: MarketSlice;
   marketSymbol: string;
+  enabledSymbols: string[];
+  setMarketSymbol: (symbol: string) => void;
   marketTimeframe: MarketTimeframe;
   setMarketTimeframe: (tf: MarketTimeframe) => void;
 };
@@ -69,6 +73,8 @@ export function V3DashboardDataProvider({
   children: ReactNode;
   marketSymbol?: string;
 }) {
+  const [selectedSymbol, setSelectedSymbol] = useState(marketSymbol.toUpperCase());
+  const [scopeData, setScopeData] = useState<DashboardScopeData | null>(null);
   const [summaryData, setSummaryData] = useState<DashboardSummaryData | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -77,13 +83,18 @@ export function V3DashboardDataProvider({
     try {
       setSummaryLoading(true);
       setSummaryError(null);
-      setSummaryData(await loadDashboardSummary());
+      const [summary, scope] = await Promise.all([loadDashboardSummary(), loadDashboardScope()]);
+      setSummaryData(summary);
+      setScopeData(scope);
+      if (!scope.enabledSymbols.includes(selectedSymbol)) {
+        setSelectedSymbol(scope.enabledSymbols[0] ?? 'BTC');
+      }
     } catch (e) {
       setSummaryError(e instanceof Error ? e.message : 'Failed to fetch dashboard summary');
     } finally {
       setSummaryLoading(false);
     }
-  }, []);
+  }, [selectedSymbol]);
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
@@ -93,13 +104,13 @@ export function V3DashboardDataProvider({
     try {
       setAccountLoading(true);
       setAccountError(null);
-      setAccountData(await loadAccountData());
+      setAccountData(await loadAccountData(selectedSymbol));
     } catch (e) {
       setAccountError(e instanceof Error ? e.message : 'Failed to fetch account data');
     } finally {
       setAccountLoading(false);
     }
-  }, []);
+  }, [selectedSymbol]);
 
   const [intelData, setIntelData] = useState<IntelligenceData | null>(null);
   const [intelLoading, setIntelLoading] = useState(true);
@@ -109,13 +120,13 @@ export function V3DashboardDataProvider({
     try {
       setIntelLoading(true);
       setIntelError(null);
-      setIntelData(await loadIntelligenceData());
+      setIntelData(await loadIntelligenceData(selectedSymbol));
     } catch (e) {
       setIntelError(e instanceof Error ? e.message : 'Failed to fetch intelligence data');
     } finally {
       setIntelLoading(false);
     }
-  }, []);
+  }, [selectedSymbol]);
 
   const [marketTimeframe, setMarketTimeframe] = useState<MarketTimeframe>('15m');
   const [marketData, setMarketData] = useState<DashboardMarketData | null>(null);
@@ -126,13 +137,18 @@ export function V3DashboardDataProvider({
     try {
       setMarketLoading(true);
       setMarketError(null);
-      setMarketData(await loadMarketData(marketSymbol, marketTimeframe));
+      setMarketData(await loadMarketData(selectedSymbol, marketTimeframe));
     } catch (e) {
       setMarketError(e instanceof Error ? e.message : 'Failed to fetch market data');
     } finally {
       setMarketLoading(false);
     }
-  }, [marketSymbol, marketTimeframe]);
+  }, [selectedSymbol, marketTimeframe]);
+
+  const setMarketSymbol = useCallback((symbol: string) => {
+    const normalized = symbol.toUpperCase();
+    setSelectedSymbol(normalized);
+  }, []);
 
   useEffect(() => {
     void refreshSummary();
@@ -185,7 +201,9 @@ export function V3DashboardDataProvider({
         error: marketError,
         refresh: refreshMarket,
       },
-      marketSymbol,
+      marketSymbol: selectedSymbol,
+      enabledSymbols: scopeData?.enabledSymbols ?? [selectedSymbol],
+      setMarketSymbol,
       marketTimeframe,
       setMarketTimeframe,
     }),
@@ -206,7 +224,9 @@ export function V3DashboardDataProvider({
       marketLoading,
       marketError,
       refreshMarket,
-      marketSymbol,
+      selectedSymbol,
+      scopeData,
+      setMarketSymbol,
       marketTimeframe,
     ]
   );

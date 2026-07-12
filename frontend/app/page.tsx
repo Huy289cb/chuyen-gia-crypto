@@ -43,7 +43,15 @@ export default function Home() {
 }
 
 function DashboardPage() {
-  const { summary, account, intelligence, market } = useV3Dashboard();
+  const {
+    summary,
+    account,
+    intelligence,
+    market,
+    marketSymbol,
+    enabledSymbols,
+    setMarketSymbol,
+  } = useV3Dashboard();
   const [eventLogRefreshToken, setEventLogRefreshToken] = useState(0);
 
   const isLoading =
@@ -85,6 +93,32 @@ function DashboardPage() {
           description="Trạng thái pipeline, tín hiệu, vị thế và PnL — xem trước khi đi sâu chi tiết."
         >
           <DashboardCommandStrip />
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-foreground-tertiary">
+              Theo dõi
+            </span>
+            <div className="inline-flex rounded-lg border border-border-default bg-surface-1 p-1">
+              {enabledSymbols.map((symbol) => {
+                const active = symbol === marketSymbol;
+                return (
+                  <button
+                    key={symbol}
+                    type="button"
+                    onClick={() => setMarketSymbol(symbol)}
+                    className={[
+                      'h-8 px-3 text-sm font-medium rounded-md transition-colors',
+                      active
+                        ? 'bg-accent-primary text-bg-primary'
+                        : 'text-foreground-secondary hover:text-foreground hover:bg-surface-2',
+                    ].join(' ')}
+                    aria-pressed={active}
+                  >
+                    {symbol}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="mt-4">
             <SystemOverview />
           </div>
@@ -94,14 +128,14 @@ function DashboardPage() {
         <DashboardZone
           id="market"
           title="Thị trường"
-          description="Biểu đồ BTC và chỉ báo Kim Nghia trên khung thời gian đang chọn."
+          description={`Biểu đồ ${marketSymbol} và chỉ báo Kim Nghia trên khung thời gian đang chọn.`}
         >
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
             <div className="xl:col-span-8 min-w-0">
-              <MarketChartPanel symbol="BTC" method="kim_nghia" />
+              <MarketChartPanel symbol={marketSymbol} method="kim_nghia" />
             </div>
             <div className="xl:col-span-4 min-w-0">
-              <IndicatorPanel />
+              <IndicatorPanel symbol={marketSymbol} />
             </div>
           </div>
         </DashboardZone>
