@@ -11,7 +11,7 @@ export function Footer() {
             <p className="text-xs text-foreground-secondary leading-relaxed">
               Trading involves substantial risk of loss. Download Money provides AI-powered market analysis
               for educational and research purposes only. Past performance does not guarantee future results.
-              Simulation environments may differ from live execution conditions.
+              This dashboard reflects live Binance Futures mainnet (exchange SL/TP, profit-protect, invalidation).
               Always conduct your own research and never invest more than you can afford to lose.
             </p>
           </div>

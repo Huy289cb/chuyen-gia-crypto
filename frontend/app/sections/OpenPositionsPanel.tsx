@@ -115,11 +115,19 @@ export function OpenPositionsPanel({ className }: OpenPositionsPanelProps) {
             <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-border-default">
               <div>
                 <span className="text-foreground-tertiary">SL:</span>
-                <span className="ml-1 font-mono text-danger">{formatPrice(position.stopLoss)}</span>
+                <span className="ml-1 font-mono text-danger">
+                  {position.stopLoss != null && position.stopLoss > 0
+                    ? formatPrice(position.stopLoss)
+                    : '—'}
+                </span>
               </div>
               <div>
                 <span className="text-foreground-tertiary">TP:</span>
-                <span className="ml-1 font-mono text-success">{formatPrice(position.takeProfit)}</span>
+                <span className="ml-1 font-mono text-success">
+                  {position.takeProfit != null && position.takeProfit > 0
+                    ? formatPrice(position.takeProfit)
+                    : '—'}
+                </span>
               </div>
             </div>
           </div>

@@ -39,6 +39,70 @@ import type { AiContextScope } from '../services/telegram/ai-context.builder';
 import { getEnabledSymbols } from '../config/symbol-policy';
 const router = Router();
 
+function formatTimeInPosition(entry: Date | string | null | undefined): string {
+  if (!entry) return '—';
+  const ms = Date.now() - new Date(entry).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h ${mins % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+}
+
+function formatLevel(v: unknown): string {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) && n > 0 ? n.toFixed(2) : '—';
+}
+
+function mapProtectiveTradeEvent(
+  eventType: string,
+  parsed: Record<string, unknown> | null,
+  rawDetails: string
+): { message: string; module: string; details: string; severity: 'info' | 'warning' | 'error' } | null {
+  if (eventType === 'profit_protect_sl') {
+    const action = String(parsed?.action ?? 'protect');
+    const reason = String(parsed?.reason ?? '');
+    return {
+      module: 'PositionMonitor',
+      message: `Profit protect — ${action}`,
+      details: [
+        `SL ${formatLevel(parsed?.old_sl)} → ${formatLevel(parsed?.new_sl)}`,
+        reason,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      severity: 'info',
+    };
+  }
+  if (eventType === 'position_invalidation') {
+    const reason = String(parsed?.reason ?? '');
+    const score = parsed?.score != null ? `score ${parsed.score}` : '';
+    return {
+      module: 'PositionMonitor',
+      message: 'Invalidation — tighten BE',
+      details: [
+        `SL ${formatLevel(parsed?.old_sl)} → ${formatLevel(parsed?.new_sl)}`,
+        score,
+        reason,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      severity: 'warning',
+    };
+  }
+  if (eventType.startsWith('protective_') || eventType.includes('emergency')) {
+    return {
+      module: 'Protective',
+      message: eventType.replace(/_/g, ' '),
+      details: rawDetails.substring(0, 500),
+      severity: eventType.includes('fail') || eventType.includes('error') ? 'error' : 'warning',
+    };
+  }
+  return null;
+}
+
 function formatRelativeAgo(ts: Date | null): string {
   if (!ts) return 'never';
   const ms = Date.now() - ts.getTime();
@@ -997,16 +1061,30 @@ router.get('/events', async (req: Request, res: Response) => {
       }
 
       const isExecBlocked = event.event_type === 'execution_blocked';
-      let message = event.event_type;
-      let details =
+      const rawDetailsStr =
         typeof rawDetails === 'string'
           ? rawDetails.substring(0, 500)
           : rawDetails != null
             ? JSON.stringify(rawDetails).substring(0, 500)
             : '';
 
+      const mappedProtect = mapProtectiveTradeEvent(
+        event.event_type,
+        parsed,
+        rawDetailsStr
+      );
+
+      let message = mappedProtect?.message ?? event.event_type;
+      let details = mappedProtect?.details ?? rawDetailsStr;
+      let module = mappedProtect?.module ?? 'Trading';
+      let severity: 'info' | 'warning' | 'error' =
+        mappedProtect?.severity ??
+        (event.event_type.toLowerCase().includes('error') ? 'error' : 'info');
+
       if (isExecBlocked) {
         message = 'LLM TRADE — không vào lệnh';
+        module = 'Execution';
+        severity = 'warning';
         const blockReason =
           (parsed?.reason as string) ||
           (typeof parsed === 'object' && parsed ? details : 'Execution blocked');
@@ -1035,13 +1113,9 @@ router.get('/events', async (req: Request, res: Response) => {
       return {
         id: `te-${event.id}`,
         timestamp: event.timestamp.toISOString(),
-        module: isExecBlocked ? 'Execution' : 'Testnet',
+        module,
         message,
-        severity: (event.event_type.toLowerCase().includes('error')
-          ? 'error'
-          : isExecBlocked
-            ? 'warning'
-            : 'info') as 'info' | 'warning' | 'error',
+        severity,
         details,
       };
     });
@@ -1162,6 +1236,8 @@ router.get('/positions', async (req: Request, res: Response) => {
 
     const formattedPositions = positions.map((pos) => {
       const pnlPercentage = calculatePnlPercent(pos.side, pos.entry, pos.mark);
+      const stopLoss = pos.stopLoss != null && pos.stopLoss > 0 ? pos.stopLoss : null;
+      const takeProfit = pos.takeProfit != null && pos.takeProfit > 0 ? pos.takeProfit : null;
       return {
         id: pos.positionId,
         symbol: pos.symbol,
@@ -1171,9 +1247,9 @@ router.get('/positions', async (req: Request, res: Response) => {
         markPrice: pos.mark,
         unrealizedPnL: pos.unrealizedPnl,
         pnlPercentage: pnlPercentage.toFixed(2),
-        stopLoss: 0,
-        takeProfit: 0,
-        timeInPosition: '—',
+        stopLoss,
+        takeProfit,
+        timeInPosition: formatTimeInPosition(pos.entryTime),
         source: 'binance',
       };
     });
@@ -1207,9 +1283,9 @@ router.get('/orders', async (req: Request, res: Response) => {
       type: 'LIMIT',
       status: order.status,
       price: order.entry,
-      quantity: 0,
-      reduceOnly: false,
-      createdAt: new Date().toISOString(),
+      quantity: order.quantity ?? 0,
+      reduceOnly: order.reduceOnly ?? false,
+      createdAt: order.createdAt ?? new Date().toISOString(),
       source: 'binance',
     }));
 

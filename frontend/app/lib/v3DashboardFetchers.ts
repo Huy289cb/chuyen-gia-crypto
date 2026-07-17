@@ -71,8 +71,8 @@ export interface AccountData {
     markPrice: number;
     unrealizedPnL: number;
     pnlPercentage: string;
-    stopLoss: number;
-    takeProfit: number;
+    stopLoss: number | null;
+    takeProfit: number | null;
     timeInPosition: string;
   }>;
   orders: Array<{

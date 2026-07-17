@@ -18,7 +18,7 @@ const header = {
       v3: 'Big Update v3',
       btc: 'Chỉ BTC',
       method: 'Kim Nghia',
-      testnet: 'Binance Testnet',
+      testnet: 'Binance Futures Mainnet',
     },
   },
   en: {
@@ -32,7 +32,7 @@ const header = {
       v3: 'Big Update v3',
       btc: 'BTC Only',
       method: 'Kim Nghia',
-      testnet: 'Binance Testnet',
+      testnet: 'Binance Futures Mainnet',
     },
   },
 } as const;
