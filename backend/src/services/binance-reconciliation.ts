@@ -497,6 +497,22 @@ async function closeLocalIfAbsentOnBinance(
   });
   if (!full || full.status !== 'open' || !full.account) return;
 
+  const { shouldDeferAbsentOnBinanceBookkeepingClose } = await import(
+    './position-lifecycle-guard.service'
+  );
+  const deferClose = await shouldDeferAbsentOnBinanceBookkeepingClose({
+    position_id: full.position_id,
+    symbol: full.symbol,
+    side: full.side,
+    entry_time: full.entry_time,
+  });
+  if (deferClose.defer) {
+    console.log(
+      `[BinanceReconciliation] Defer absent-on-Binance close for ${full.position_id}: ${deferClose.reason}`
+    );
+    return;
+  }
+
   const closePrice = full.current_price > 0 ? full.current_price : full.entry_price;
   const closeReason = opts?.staleGhost ? 'stale_ghost_open' : 'reconciliation_closed_not_on_binance';
   const provenFill = hasBinanceFillProof(full);

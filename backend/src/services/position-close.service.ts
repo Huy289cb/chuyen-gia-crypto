@@ -304,12 +304,39 @@ export interface BinanceCloseResult {
   normalizedQty?: number;
 }
 
+export interface BinanceMarketCloseOptions {
+  guardSource?: string;
+  bypassLifecycleGuard?: boolean;
+  positionId?: string;
+  entryTime?: Date | null;
+}
+
 export async function closePositionOnBinanceMarket(
   position: { symbol: string; side: string; size_qty: number },
-  closeQty?: number
+  closeQty?: number,
+  options?: BinanceMarketCloseOptions
 ): Promise<BinanceCloseResult> {
   if (process.env.BINANCE_ENABLED !== 'true') {
     return { ok: true, reason: 'binance_disabled' };
+  }
+
+  if (!options?.bypassLifecycleGuard) {
+    const { shouldDeferEmergencyMarketClose } = await import(
+      './position-lifecycle-guard.service'
+    );
+    const defer = await shouldDeferEmergencyMarketClose({
+      symbol: position.symbol,
+      side: position.side,
+      source: options?.guardSource ?? 'closePositionOnBinanceMarket',
+      positionId: options?.positionId,
+      entryTime: options?.entryTime,
+    });
+    if (defer.defer) {
+      return {
+        ok: false,
+        reason: `lifecycle_guard: ${defer.reason ?? 'deferred'}`,
+      };
+    }
   }
 
   await ensurePositionModeDetected();
@@ -354,6 +381,19 @@ export async function closePositionOnBinanceMarket(
   console.log(
     `[PositionClose] Binance market close ${symbol} ${binanceSide} qty=${normalizedQty} (raw ${qty})`
   );
+
+  if (!options?.bypassLifecycleGuard) {
+    const emergencySources = new Set([
+      'protective_exposure_audit',
+      'protective_failed_market_close',
+      'position_monitor_unhedged',
+    ]);
+    if (options?.guardSource && emergencySources.has(options.guardSource)) {
+      const { noteEmergencyMarketClose } = await import('./position-lifecycle-guard.service');
+      noteEmergencyMarketClose(position.symbol, position.side, options.guardSource);
+    }
+  }
+
   return { ok: true, normalizedQty };
 }
 

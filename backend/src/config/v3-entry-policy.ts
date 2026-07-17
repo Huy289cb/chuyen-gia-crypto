@@ -101,10 +101,10 @@ export function getBinanceMinOrderNotionalUsd(): number {
   return Number.isFinite(v) && v > 0 ? v : 200;
 }
 
-/** Allow small notional drift from rounding (default 5%). */
+/** Allow small notional drift from rounding (default 15%). */
 export function getNotionalTolerancePercent(): number {
-  const v = parseFloat(process.env.NOTIONAL_TOLERANCE_PERCENT || '5');
-  return Number.isFinite(v) && v >= 0 && v <= 50 ? v : 5;
+  const v = parseFloat(process.env.NOTIONAL_TOLERANCE_PERCENT || '15');
+  return Number.isFinite(v) && v >= 0 && v <= 50 ? v : 15;
 }
 
 export function minNotionalWithTolerance(minNotionalUsd: number, tolerancePercent?: number): number {

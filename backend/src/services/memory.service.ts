@@ -89,6 +89,16 @@ export class MemoryService {
     }
   }
 
+  /** Existing decision for this candle bar (LLM dedup before Groq call). */
+  async findDecisionForBar(
+    symbol: string,
+    timeframe: string,
+    candle_hash: string,
+    method_id = 'kim_nghia'
+  ) {
+    return MemoryRepository.findTradeDecisionForBar(symbol, timeframe, candle_hash, method_id);
+  }
+
   /** After LLM approved trade but Binance/order path failed */
   async recordExecutionBlocked(
     decisionId: number,

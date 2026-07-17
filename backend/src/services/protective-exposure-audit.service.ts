@@ -12,6 +12,7 @@ import {
 } from '../repositories/testnet.repository';
 import type { ParsedBinancePosition } from '../utils/binance-position-match';
 import { getOpenAlgoOrders } from './binanceClient';
+import { recoverPendingOrderFromBinance } from './binance-order-fill.service';
 import { fetchActiveBinancePositions } from './binance-exposure.service';
 import { closePositionOnBinanceMarket } from './position-close.service';
 import { placeProtectiveOrdersForPosition } from './protective-order.service';
@@ -20,6 +21,10 @@ import {
   clearProtectiveExposureEntryBlock,
   setProtectiveExposureEntryBlock,
 } from './protective-exposure-state';
+import {
+  findBlockingPendingForSymbol,
+  findRecentlyExecutedPending,
+} from './position-lifecycle-guard.service';
 
 export interface ProtectiveAlgoLike {
   symbol?: string;
@@ -54,6 +59,8 @@ function entryBlockTtlMs(): number {
   const raw = parseInt(process.env.PROTECTIVE_EXPOSURE_ENTRY_BLOCK_MS || '600000', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : 600000;
 }
+
+export { protectiveAuditStartupDelayMs } from './position-lifecycle-guard.service';
 
 function algoId(order: ProtectiveAlgoLike): string | null {
   const id = order.algoId ?? order.orderId;
@@ -115,6 +122,48 @@ async function findLocalOpenPosition(position: ParsedBinancePosition) {
   });
 }
 
+/**
+ * Pending limit fill may exist on Binance before local position + SL/TP are written.
+ * Recover or defer — never emergency-close during that window.
+ */
+async function tryRecoverOrDeferUntrackedExposure(
+  position: ParsedBinancePosition
+): Promise<'recovered' | 'deferred' | 'none'> {
+  const blocking = await findBlockingPendingForSymbol(position.symbol, position.side);
+  if (blocking) {
+    const outcome = await recoverPendingOrderFromBinance(blocking);
+    if (outcome === 'filled') {
+      console.log(
+        `[ProtectiveExposureAudit] Recovered fill from pending ${blocking.order_id} for ${position.symbol} ${position.side}`
+      );
+      return 'recovered';
+    }
+    if (
+      outcome === 'api_unavailable' ||
+      outcome === 'unchanged' ||
+      blocking.status === 'pending' ||
+      blocking.status === 'partially_filled'
+    ) {
+      console.log(
+        `[ProtectiveExposureAudit] Defer emergency close for ${position.symbol} ${position.side} — ` +
+          `pending ${blocking.order_id} (${outcome})`
+      );
+      return 'deferred';
+    }
+  }
+
+  const recentExecuted = await findRecentlyExecutedPending(position.symbol, position.side);
+  if (recentExecuted) {
+    console.log(
+      `[ProtectiveExposureAudit] Defer emergency close for ${position.symbol} ${position.side} — ` +
+        `recent executed pending ${recentExecuted.order_id}`
+    );
+    return 'deferred';
+  }
+
+  return 'none';
+}
+
 async function ensurePipelineAnchor(): Promise<void> {
   const account = await getOrCreateTestnetAccount('BTC', 'kim_nghia', 10000);
   await ensurePipelineEventPosition(account.id);
@@ -135,11 +184,15 @@ async function recordAuditEvent(eventData: Record<string, unknown>): Promise<voi
 }
 
 async function closeUntrackedExposure(position: ParsedBinancePosition, reason: string): Promise<boolean> {
-  const closeResult = await closePositionOnBinanceMarket({
-    symbol: position.symbol,
-    side: position.side,
-    size_qty: position.positionAmt,
-  });
+  const closeResult = await closePositionOnBinanceMarket(
+    {
+      symbol: position.symbol,
+      side: position.side,
+      size_qty: position.positionAmt,
+    },
+    undefined,
+    { guardSource: 'protective_exposure_audit' }
+  );
 
   await recordPipelineEvent('untracked_exposure_protective_close', {
     symbol: position.symbol,
@@ -152,6 +205,17 @@ async function closeUntrackedExposure(position: ParsedBinancePosition, reason: s
   });
 
   if (!closeResult.ok) {
+    const deferred =
+      closeResult.reason?.includes('warmup') ||
+      closeResult.reason?.includes('pending') ||
+      closeResult.reason?.includes('grace') ||
+      closeResult.reason?.includes('lifecycle_guard');
+    if (deferred) {
+      console.log(
+        `[ProtectiveExposureAudit] Deferred untracked close ${position.symbol} ${position.side}: ${closeResult.reason}`
+      );
+      return false;
+    }
     setProtectiveExposureEntryBlock(
       `Unprotected ${position.symbol} ${position.side} exposure; emergency close failed: ${closeResult.reason}`,
       entryBlockTtlMs()
@@ -248,6 +312,15 @@ export async function auditProtectiveCoverageForSymbol(symbol: string): Promise<
       }
 
       if (!local) {
+        const recoverOrDefer = await tryRecoverOrDeferUntrackedExposure(position);
+        if (recoverOrDefer === 'recovered') {
+          repaired += 1;
+          continue;
+        }
+        if (recoverOrDefer === 'deferred') {
+          continue;
+        }
+
         const ok = await closeUntrackedExposure(position, 'missing_sl_no_local_position');
         if (ok) {
           closed += 1;

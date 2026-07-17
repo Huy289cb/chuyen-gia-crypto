@@ -659,14 +659,43 @@ export async function emergencyMarketCloseUnhedged(
     | 'protective_failed_market_close' = 'protective_failed_market_close'
 ): Promise<boolean> {
   const mark = closePrice > 0 ? closePrice : position.entry_price;
+  const bypassGuard =
+    closeReason === 'protective_sl_breached_market' ||
+    closeReason === 'protective_tp_reached_market';
+  const guardSource =
+    eventReason === 'monitor_unhedged_sl_progress'
+      ? 'position_monitor_unhedged'
+      : closeReason;
 
-  const closeResult = await closePositionOnBinanceMarket({
-    symbol: position.symbol,
-    side: position.side,
-    size_qty: position.size_qty,
+  const { prisma: db } = await import('../lib/prisma');
+  const full = await db.testnetPosition.findUnique({
+    where: { position_id: position.position_id },
+    include: { account: true },
   });
 
+  const closeResult = await closePositionOnBinanceMarket(
+    {
+      symbol: position.symbol,
+      side: position.side,
+      size_qty: position.size_qty,
+    },
+    undefined,
+    {
+      guardSource,
+      bypassLifecycleGuard: bypassGuard,
+      positionId: position.position_id,
+      entryTime: full?.entry_time ?? null,
+    }
+  );
+
   if (!closeResult.ok) {
+    const deferred = closeResult.reason?.includes('lifecycle_guard');
+    if (deferred) {
+      console.warn(
+        `[ProtectiveOrder] Deferred emergency close for ${position.position_id}: ${closeResult.reason}`
+      );
+      return false;
+    }
     console.error(
       `[ProtectiveOrder] Emergency close failed for ${position.position_id}: ${closeResult.reason}`
     );
@@ -679,11 +708,6 @@ export async function emergencyMarketCloseUnhedged(
     return false;
   }
 
-  const { prisma: db } = await import('../lib/prisma');
-  const full = await db.testnetPosition.findUnique({
-    where: { position_id: position.position_id },
-    include: { account: true },
-  });
   if (full?.status === 'open') {
     await closeLocalPosition(
       { ...full, account: full.account },

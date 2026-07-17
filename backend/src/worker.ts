@@ -66,6 +66,8 @@ async function releaseLeaderLock(): Promise<void> {
 
 async function startWorker() {
   console.log('[Worker] Starting worker process...');
+  const { markWorkerStarted } = await import('./services/position-lifecycle-guard.service');
+  markWorkerStarted();
 
   // Validate configuration
   try {

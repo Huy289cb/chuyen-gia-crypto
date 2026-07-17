@@ -1,21 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindFirstPosition = vi.hoisted(() => vi.fn());
+const mockFindFirstPending = vi.hoisted(() => vi.fn());
 const mockFetchActiveBinancePositions = vi.hoisted(() => vi.fn());
 const mockGetOpenAlgoOrders = vi.hoisted(() => vi.fn());
 const mockClosePositionOnBinanceMarket = vi.hoisted(() => vi.fn());
 const mockPlaceProtectiveOrdersForPosition = vi.hoisted(() => vi.fn());
 const mockRecordPipelineEvent = vi.hoisted(() => vi.fn());
+const mockRecoverPendingOrderFromBinance = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {
     testnetPosition: {
       findFirst: mockFindFirstPosition,
     },
+    testnetPendingOrder: {
+      findFirst: mockFindFirstPending,
+    },
   },
 }));
 
 vi.mock('../../src/repositories/testnet.repository', () => ({
+  BLOCKING_PENDING_ORDER_STATUSES: ['pending', 'partially_filled', 'reconciliation_failed_not_on_binance'],
   PIPELINE_EVENT_POSITION_ID: 'pipeline_v3_kim_nghia',
   ensurePipelineEventPosition: vi.fn(),
   getOrCreateTestnetAccount: vi.fn().mockResolvedValue({ id: 1 }),
@@ -37,6 +43,10 @@ vi.mock('../../src/services/position-close.service', () => ({
 
 vi.mock('../../src/services/protective-order.service', () => ({
   placeProtectiveOrdersForPosition: mockPlaceProtectiveOrdersForPosition,
+}));
+
+vi.mock('../../src/services/binance-order-fill.service', () => ({
+  recoverPendingOrderFromBinance: mockRecoverPendingOrderFromBinance,
 }));
 
 vi.mock('../../src/services/telegram/telegram-notify.service', () => ({
@@ -67,10 +77,14 @@ describe('protective exposure audit', () => {
     vi.clearAllMocks();
     process.env.BINANCE_ENABLED = 'true';
     process.env.PROTECTIVE_EXPOSURE_AUDIT_ENABLED = 'true';
+    process.env.PROTECTIVE_AUDIT_STARTUP_DELAY_MS = '0';
     clearProtectiveExposureEntryBlock();
     mockFetchActiveBinancePositions.mockResolvedValue([activeLong]);
     mockGetOpenAlgoOrders.mockResolvedValue([]);
     mockFindFirstPosition.mockResolvedValue(null);
+    mockFindFirstPending.mockReset();
+    mockFindFirstPending.mockResolvedValue(null);
+    mockRecoverPendingOrderFromBinance.mockResolvedValue('unchanged');
     mockClosePositionOnBinanceMarket.mockResolvedValue({ ok: true });
     mockPlaceProtectiveOrdersForPosition.mockResolvedValue('ok');
   });
@@ -91,11 +105,15 @@ describe('protective exposure audit', () => {
 
     expect(result.closed).toBe(1);
     expect(result.blocked).toBe(false);
-    expect(mockClosePositionOnBinanceMarket).toHaveBeenCalledWith({
-      symbol: 'BTC',
-      side: 'long',
-      size_qty: 0.01,
-    });
+    expect(mockClosePositionOnBinanceMarket).toHaveBeenCalledWith(
+      {
+        symbol: 'BTC',
+        side: 'long',
+        size_qty: 0.01,
+      },
+      undefined,
+      { guardSource: 'protective_exposure_audit' }
+    );
     expect(mockRecordPipelineEvent).toHaveBeenCalledWith(
       'untracked_exposure_protective_close',
       expect.objectContaining({ reason: 'missing_sl_no_local_position', close_ok: true })
@@ -112,6 +130,46 @@ describe('protective exposure audit', () => {
 
     expect(result.blocked).toBe(true);
     expect(getProtectiveExposureEntryBlock()?.reason).toContain('missing SL');
+  });
+
+  it('defers close when a blocking pending order exists for the same exposure', async () => {
+    mockFindFirstPending
+      .mockResolvedValueOnce({
+        order_id: 'v3_pending_1',
+        symbol: 'BTC',
+        side: 'long',
+        status: 'pending',
+      })
+      .mockResolvedValueOnce(null);
+
+    const result = await auditProtectiveCoverageForSymbol('BTC');
+
+    expect(result.closed).toBe(0);
+    expect(mockClosePositionOnBinanceMarket).not.toHaveBeenCalled();
+    expect(mockRecoverPendingOrderFromBinance).toHaveBeenCalled();
+  });
+
+  it('recovers pending fill instead of emergency close', async () => {
+    mockFindFirstPending.mockImplementation(async (args: { where?: { status?: { in?: string[] } } }) => {
+      const statuses = args?.where?.status?.in ?? [];
+      if (statuses.includes('pending')) {
+        return {
+          order_id: 'v3_pending_2',
+          symbol: 'BTC',
+          side: 'long',
+          status: 'pending',
+        };
+      }
+      return null;
+    });
+    mockRecoverPendingOrderFromBinance.mockResolvedValueOnce('filled');
+
+    const result = await auditProtectiveCoverageForSymbol('BTC');
+
+    expect(result.repaired).toBe(1);
+    expect(result.closed).toBe(0);
+    expect(mockClosePositionOnBinanceMarket).not.toHaveBeenCalled();
+    expect(mockRecoverPendingOrderFromBinance).toHaveBeenCalled();
   });
 
   it('repairs a local position missing TP when SL exists', async () => {

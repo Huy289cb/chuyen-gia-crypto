@@ -34,6 +34,7 @@ import {
   tryRepairLevelsWithSecondaryKey,
   tryRepairTpForMinRrWithSecondaryKey,
 } from './groq-levels-adapter.service';
+import { buildDispatchOutputFromStoredDecision } from '../utils/llm-dispatch-dedup';
 
 export interface GroqDispatchInput {
   symbol: string;
@@ -137,6 +138,22 @@ export class GroqDispatchService {
           decision: 'no_trade',
           reason: `Regime ${gateRegime} not in V3_ALLOWED_REGIMES (${process.env.V3_ALLOWED_REGIMES ?? 'trend'})`,
         };
+      }
+    }
+
+    if (this.config.enableMemory) {
+      const existing = await memoryService.findDecisionForBar(
+        symbol,
+        timeframe,
+        candleHash,
+        method_id
+      );
+      if (existing) {
+        const cached = buildDispatchOutputFromStoredDecision(existing);
+        console.log(
+          `[GroqDispatch] Skip duplicate bar ${candleHash} for ${symbol} ${timeframe} — reusing decision id=${existing.id} (${cached.decision})`
+        );
+        return cached;
       }
     }
 

@@ -205,6 +205,14 @@ export async function materializePositionFromPendingFill(
     return null;
   }
 
+  const liveExposure = await findStrictActiveBinanceExposure(localOrder.symbol, localOrder.side);
+  if (!liveExposure) {
+    console.warn(
+      `[BinanceOrderFill] Refuse materialize ${localOrder.order_id} — no live ${localOrder.side} exposure on Binance`
+    );
+    return null;
+  }
+
   const qty = Math.abs(executedQty);
   if (!Number.isFinite(qty) || qty <= 0) {
     console.error(
@@ -462,6 +470,22 @@ export async function recoverPendingOrderFromBinance(
           { reconciliationBackfill: true }
         );
         return positionId ? 'filled' : 'failed';
+      }
+
+      const activeExposure = await findStrictActiveBinanceExposure(
+        localOrder.symbol,
+        localOrder.side
+      );
+      if (!activeExposure) {
+        const { wasRecentEmergencyMarketClose } = await import('./position-lifecycle-guard.service');
+        const reason = wasRecentEmergencyMarketClose(localOrder.symbol, localOrder.side)
+          ? 'fill_no_exposure_after_emergency_close'
+          : 'fill_no_live_exposure';
+        await markPendingExecutedWithoutPosition(localOrder, avg, qty, reason);
+        console.warn(
+          `[BinanceOrderFill] Skip materialize for ${localOrder.order_id} — FILLED but no live ${localOrder.side} on Binance (${reason})`
+        );
+        return 'stale_skipped';
       }
 
       const positionId = await materializePositionFromPendingFill(

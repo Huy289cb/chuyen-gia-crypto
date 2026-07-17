@@ -1,5 +1,9 @@
 # AI Position Management
 
+> **v3 note (2026-07):** Live open-position policy is **not** this legacy LLM `position_decisions` path.
+> Source of truth: [`position-invalidation-plan.md`](./position-invalidation-plan.md) (structure rules)
+> + profit-protect (BE/trail). Phase A = rule tighten-BE only; no separate AI manager process.
+
 ## Overview
 
 The AI position management system enables the AI to actively manage open positions and pending orders with specific actions based on market analysis. This enhancement allows for more dynamic and intelligent trading decisions.

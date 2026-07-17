@@ -32,6 +32,10 @@ import {
   isUnhedgedEmergencyExitEnabled,
 } from '../config/position-monitor-policy';
 import { emergencyMarketCloseUnhedged } from '../services/protective-order.service';
+import { maybeApplyProfitProtectSl } from '../services/profit-protect.service';
+import { maybeApplyInvalidationProtect } from '../services/position-invalidation.service';
+import { isProfitProtectEnabled } from '../config/profit-protect-policy';
+import { isInvalidationEnabled } from '../config/position-invalidation-policy';
 
 let positionMonitorTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -170,6 +174,35 @@ async function runPositionMonitor() {
 
       if (refreshed.status !== 'open') continue;
 
+      // Profit protect: tighten exchange SL (BE / trail) — runs even when deferring exit to SL/TP.
+      if (isProfitProtectEnabled() && refreshed.binance_sl_order_id) {
+        try {
+          const protect = await maybeApplyProfitProtectSl(refreshed, mark);
+          if (protect.applied && protect.newSl != null) {
+            refreshed = {
+              ...refreshed,
+              stop_loss: protect.newSl,
+            };
+          }
+        } catch (protectErr: unknown) {
+          const msg = protectErr instanceof Error ? protectErr.message : String(protectErr);
+          console.warn(`[PositionMonitor] Profit protect failed for ${refreshed.position_id}: ${msg}`);
+        }
+      }
+
+      // Structure invalidation (Phase A): adverse HTF/sweep → BE when green.
+      if (isInvalidationEnabled() && refreshed.binance_sl_order_id) {
+        try {
+          const inv = await maybeApplyInvalidationProtect(refreshed, mark);
+          if (inv.applied && inv.newSl != null) {
+            refreshed = { ...refreshed, stop_loss: inv.newSl };
+          }
+        } catch (invErr: unknown) {
+          const msg = invErr instanceof Error ? invErr.message : String(invErr);
+          console.warn(`[PositionMonitor] Invalidation failed for ${refreshed.position_id}: ${msg}`);
+        }
+      }
+
       const exchangeActive =
         deferToExchangeSlTp() && hasExchangeSlTp(refreshed);
 
@@ -216,7 +249,15 @@ async function runPositionMonitor() {
         if (shouldSkipPrecisionAction(position.position_id)) {
           continue;
         }
-        const closeResult = await closePositionOnBinanceMarket(refreshed);
+        const closeResult = await closePositionOnBinanceMarket(
+          refreshed,
+          undefined,
+          {
+            guardSource: 'position_monitor_exit',
+            positionId: refreshed.position_id,
+            entryTime: refreshed.entry_time ?? null,
+          }
+        );
         if (!closeResult.ok) {
           markPrecisionSkip(position.position_id, closeResult.reason ?? 'exit close failed');
           continue;
@@ -256,7 +297,11 @@ async function runPositionMonitor() {
           console.log(`[PositionMonitor] REDUCE skipped — qty too small for ${position.position_id}`);
           continue;
         }
-        const closeResult = await closePositionOnBinanceMarket(refreshed, reduceQty);
+        const closeResult = await closePositionOnBinanceMarket(refreshed, reduceQty, {
+          guardSource: 'position_monitor_reduce',
+          positionId: refreshed.position_id,
+          entryTime: refreshed.entry_time ?? null,
+        });
         if (!closeResult.ok) {
           markPrecisionSkip(position.position_id, closeResult.reason ?? 'reduce close failed');
           continue;
@@ -304,7 +349,8 @@ export function startPositionMonitorScheduler(cronExpression: string = '*/1 * * 
   console.log(
     `[PositionMonitor] Starting scheduler cron=${cronExpression} enabled=${isPositionMonitorEnabled()} ` +
       `allow_reduce=${isPositionMonitorReduceEnabled()} allow_exit=${isPositionMonitorExitEnabled()} ` +
-      `defer_sl_tp=${deferToExchangeSlTp()}`
+      `defer_sl_tp=${deferToExchangeSlTp()} profit_protect=${isProfitProtectEnabled()} ` +
+      `invalidation=${isInvalidationEnabled()}`
   );
   positionMonitorTask = cron.schedule(cronExpression, runPositionMonitor);
   runPositionMonitor();

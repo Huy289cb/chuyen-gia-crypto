@@ -15,9 +15,11 @@ import { startPositionMonitorScheduler } from '../schedulers/position-monitor.sc
 import { startPendingOrderScheduler } from '../schedulers/pending-order.scheduler';
 import { syncAllTestnetAccountsFromBinance } from './binance-balance-sync.service';
 import { auditProtectiveCoverageForSymbols } from './protective-exposure-audit.service';
+import { protectiveAuditStartupDelayMs } from './position-lifecycle-guard.service';
 
 let priceSyncInterval: NodeJS.Timeout | null = null;
 let protectiveAuditInterval: NodeJS.Timeout | null = null;
+let protectiveAuditStartupTimer: NodeJS.Timeout | null = null;
 const cronTasks: ScheduledTask[] = [];
 let priceSyncJobRunning = false;
 
@@ -186,11 +188,18 @@ export async function startWorkerScheduler(): Promise<void> {
 
   if (process.env.BINANCE_ENABLED === 'true' && process.env.PROTECTIVE_EXPOSURE_AUDIT_ENABLED !== 'false') {
     const intervalMs = protectiveAuditIntervalMs();
-    protectiveAuditInterval = setInterval(() => {
+    const startupDelayMs = protectiveAuditStartupDelayMs();
+    const runAudit = () => {
       void auditProtectiveCoverageForSymbols(workerConfig.syncSymbols);
-    }, intervalMs);
-    void auditProtectiveCoverageForSymbols(workerConfig.syncSymbols);
-    console.log(`[WorkerScheduler] Protective exposure audit started interval=${intervalMs}ms`);
+    };
+    protectiveAuditStartupTimer = setTimeout(() => {
+      protectiveAuditStartupTimer = null;
+      runAudit();
+      protectiveAuditInterval = setInterval(runAudit, intervalMs);
+    }, startupDelayMs);
+    console.log(
+      `[WorkerScheduler] Protective exposure audit scheduled interval=${intervalMs}ms startupDelay=${startupDelayMs}ms`
+    );
   }
 
   console.log(
@@ -202,6 +211,11 @@ export function stopWorkerScheduler(): void {
   if (priceSyncInterval) {
     clearInterval(priceSyncInterval);
     priceSyncInterval = null;
+  }
+
+  if (protectiveAuditStartupTimer) {
+    clearTimeout(protectiveAuditStartupTimer);
+    protectiveAuditStartupTimer = null;
   }
 
   if (protectiveAuditInterval) {
