@@ -55,8 +55,8 @@ const copy = {
         { n: 4, name: 'Signal Gate Passed', desc: 'Grade/confidence theo env (MIN_SIGNAL_GRADE, MIN_SIGNAL_CONFIDENCE); regime trend hoặc range (không chop).' },
         { n: 5, name: 'Risk Approved', desc: 'Risk engine unlocked, chưa chạm daily loss cap.' },
         { n: 6, name: 'LLM Dispatch Triggered', desc: 'Groq phân tích với memory context; bias/action phải nhất quán.' },
-        { n: 7, name: 'Position Created', desc: 'Lệnh limit Binance testnet → fill WS → position + SL/TP trên sàn (không chỉ local DB).' },
-        { n: 8, name: 'Position Monitor Active', desc: 'Mỗi phút: HOLD / REDUCE (50% market) / EXIT (market close) trên Binance khi kích hoạt.' },
+        { n: 7, name: 'Position Created', desc: 'Lệnh limit Binance Futures → fill WS → position + SL/TP trên sàn (không chỉ local DB).' },
+        { n: 8, name: 'Position Monitor Active', desc: 'Mỗi phút: defer exchange SL/TP; profit-protect (BE/trail); invalidation (tighten BE khi structure gãy + green). REDUCE/EXIT mặc định tắt.' },
       ],
     },
     schedulers: {
@@ -65,7 +65,7 @@ const copy = {
       rows: [
         { name: 'MarketScan', cron: '*/5 * * * *', role: 'Lấy 5m/15m/1h song song, Signal Gate, cache; lastRun từ worker heartbeat.' },
         { name: 'LLMDispatch', cron: '1,6,11,16,21,26,31,36,41,46,51,56 * * * *', role: 'Best-of 1 TF PASS/cycle; Groq + reconcile R:R từ giá entry/SL/TP.' },
-        { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Thực thi REDUCE/EXIT trên Binance; WS đóng position khi SL/TP fill.' },
+        { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Profit-protect + invalidation amend SL; WS đóng khi SL/TP fill. REDUCE/EXIT off mặc định.' },
         { name: 'Price sync', cron: '~30s', role: 'Cập nhật giá BTC cho chart và risk.' },
       ],
     },
@@ -125,9 +125,11 @@ const copy = {
         id: 'p6',
         title: 'Bước 6 — Quản lý vị thế (đơn giản)',
         items: [
-          'Hành động: HOLD, REDUCE (~50% qty market), EXIT (market close).',
+          'Exchange SL/TP là hard exit; profit-protect: BE @ 1R, trail, time-stop BE.',
+          'Invalidation Phase A: structure adverse + green → tighten SL to BE (không market-exit).',
           'Binance WS: SL/TP fill → đóng position local; ACCOUNT_UPDATE sync.',
           'Exposure cap: MAX_TOTAL_EXPOSURE_USD (mở + pending).',
+          'REDUCE/EXIT health actions mặc định tắt (ALLOW_REDUCE/EXIT=false).',
         ],
       },
       {
@@ -135,7 +137,7 @@ const copy = {
         title: 'Bước 7 — Dashboard v3',
         items: [
           'Decision Pipeline, Candle Warmup, Signal Gate, Risk, LLM, Memory, Event Log.',
-          'Testnet Account: balance, positions, orders, trade history.',
+          'Live Account: balance, positions, orders, trade history (Binance mainnet).',
           'No-Trade Reasons: tổng hợp lý do skip (duplicate, gate, LLM, risk).',
           'Market chart: nến + SMA/RSI/ATR từ API /market.',
         ],
@@ -148,7 +150,7 @@ const copy = {
         'ICT method (method_id: ict) — disabled.',
         'Giao dịch ETH / multi-symbol auto-entry.',
         'Gọi Groq mỗi 15 phút bất kể setup.',
-        'Paper Account legacy — dùng TestnetAccount + Binance demo API.',
+        'Paper Account legacy — sổ lệnh vẫn dùng bảng Testnet* + Binance live API.',
         'UI frontend-old (Vite) — thay bằng Next.js dashboard v3.',
       ],
     },
@@ -164,7 +166,7 @@ const copy = {
         ['Duplicate cache TTL', '15 phút'],
         ['LLM model', 'Groq (meta-llama / llama family)'],
         ['Prompt version', 'v3'],
-        ['Execution', 'Binance Futures Testnet (limit + SL/TP on exchange)'],
+        ['Execution', 'Binance Futures Mainnet (limit + SL/TP on exchange)'],
         ['Backend deploy', 'VPS: scripts/deploy.sh'],
         ['Frontend deploy', 'Vercel: git push'],
       ],
@@ -172,7 +174,7 @@ const copy = {
     notes: {
       title: 'Lưu ý',
       items: [
-        'Đây là môi trường testnet / giáo dục — không phải tư vấn tài chính.',
+        'Đây là môi trường live mainnet — rủi ro tiền thật; không phải tư vấn tài chính.',
         'Panel “LLM invalid JSON” = Groq trả về hoặc validate thất bại; xem Event Log.',
         'Scheduler LLM “idle” là bình thường khi không có setup PASS.',
         'Log đỏ “Previous scan still running” sau deploy: cảnh báo trùng cron, thường vô hại.',
@@ -216,8 +218,8 @@ const copy = {
         { n: 4, name: 'Signal Gate Passed', desc: 'Grade/confidence from env (MIN_SIGNAL_GRADE, MIN_SIGNAL_CONFIDENCE); trend or range regime.' },
         { n: 5, name: 'Risk Approved', desc: 'Risk engine unlocked, daily loss cap not hit.' },
         { n: 6, name: 'LLM Dispatch Triggered', desc: 'Groq analyzes with memory context; bias/action must be consistent.' },
-        { n: 7, name: 'Position Created', desc: 'Binance testnet limit order → WS fill → position + SL/TP on exchange.' },
-        { n: 8, name: 'Position Monitor Active', desc: 'Every minute: HOLD / REDUCE (50% market) / EXIT (market close) on Binance.' },
+        { n: 7, name: 'Position Created', desc: 'Binance Futures limit order → WS fill → position + SL/TP on exchange.' },
+        { n: 8, name: 'Position Monitor Active', desc: 'Every minute: defer to exchange SL/TP; profit-protect (BE/trail); invalidation (tighten BE when structure breaks + green). REDUCE/EXIT off by default.' },
       ],
     },
     schedulers: {
@@ -226,7 +228,7 @@ const copy = {
       rows: [
         { name: 'MarketScan', cron: '*/5 * * * *', role: 'Parallel 5m/15m/1h fetch, Signal Gate, cache; lastRun from worker heartbeat.' },
         { name: 'LLMDispatch', cron: '1,6,11,16,21,26,31,36,41,46,51,56 * * * *', role: 'Best-of 1 PASS TF/cycle; Groq + R:R reconcile from prices.' },
-        { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Executes REDUCE/EXIT on Binance; WS closes on SL/TP fill.' },
+        { name: 'PositionMonitor', cron: '*/1 * * * *', role: 'Profit-protect + invalidation amend SL; WS closes on SL/TP fill. REDUCE/EXIT off by default.' },
         { name: 'Price sync', cron: '~30s', role: 'Update BTC price for chart and risk.' },
       ],
     },
@@ -286,9 +288,11 @@ const copy = {
         id: 'p6',
         title: 'Step 6 — Position management (simplified)',
         items: [
-          'Actions: HOLD, REDUCE (~50% qty market), EXIT (market close).',
+          'Exchange SL/TP is the hard exit; profit-protect: BE @ 1R, trail, time-stop BE.',
+          'Invalidation Phase A: adverse structure + green → tighten SL to BE (no market exit).',
           'Binance WS: SL/TP fill closes local position; ACCOUNT_UPDATE sync.',
           'Exposure cap: MAX_TOTAL_EXPOSURE_USD (open + pending).',
+          'REDUCE/EXIT health actions off by default (ALLOW_REDUCE/EXIT=false).',
         ],
       },
       {
@@ -296,7 +300,7 @@ const copy = {
         title: 'Step 7 — Dashboard v3',
         items: [
           'Decision Pipeline, Candle Warmup, Signal Gate, Risk, LLM, Memory, Event Log.',
-          'Testnet Account: balance, positions, orders, trade history.',
+          'Live Account: balance, positions, orders, trade history (Binance mainnet).',
           'No-Trade Reasons: aggregated skip reasons (duplicate, gate, LLM, risk).',
           'Market chart: candles + SMA/RSI/ATR from /market API.',
         ],
@@ -309,7 +313,7 @@ const copy = {
         'ICT method (method_id: ict) — disabled.',
         'ETH trading / multi-symbol auto-entry.',
         'Groq every 15 minutes regardless of setup.',
-        'Legacy Paper Account — use TestnetAccount + Binance demo API.',
+        'Legacy Paper Account — bookkeeping still uses Testnet* tables + Binance live API.',
         'frontend-old (Vite) UI — replaced by Next.js v3 dashboard.',
       ],
     },
@@ -325,7 +329,7 @@ const copy = {
         ['Duplicate cache TTL', '15 minutes'],
         ['LLM model', 'Groq (meta-llama / llama family)'],
         ['Prompt version', 'v3'],
-        ['Execution', 'Binance Futures Testnet (limit + SL/TP on exchange)'],
+        ['Execution', 'Binance Futures Mainnet (limit + SL/TP on exchange)'],
         ['Backend deploy', 'VPS: scripts/deploy.sh'],
         ['Frontend deploy', 'Vercel: git push'],
       ],
@@ -333,7 +337,7 @@ const copy = {
     notes: {
       title: 'Notes',
       items: [
-        'Testnet / educational environment — not financial advice.',
+        'Live mainnet environment — real money risk; not financial advice.',
         '“LLM invalid JSON” panel means Groq response or validation failed; see Event Log.',
         'LLM scheduler “idle” is normal when no setup PASSes the gate.',
         'Red log “Previous scan still running” after deploy: cron overlap warning, usually harmless.',

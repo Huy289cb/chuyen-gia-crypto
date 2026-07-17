@@ -110,7 +110,7 @@ function DashboardPage() {
         <DashboardZone
           id="execution"
           title="Thực thi"
-          description="Số dư testnet, vị thế đang mở, lệnh chờ và lịch sử giao dịch."
+          description="Số dư live Binance, vị thế đang mở, lệnh chờ và lịch sử giao dịch."
         >
           <div className="space-y-4">
             <TestnetBalancePanel />

@@ -353,6 +353,8 @@ export interface OpenPositionLine {
   sizeQty: number;
   stopLoss?: number | null;
   takeProfit?: number | null;
+  /** Local bookkeeping entry time when matched. */
+  entryTime?: Date | null;
 }
 
 export interface PendingOrderLine {
@@ -361,6 +363,9 @@ export interface PendingOrderLine {
   side: string;
   entry: number;
   status: string;
+  quantity?: number;
+  createdAt?: string;
+  reduceOnly?: boolean;
 }
 
 export async function getOpenPositionLines(
@@ -387,6 +392,9 @@ export async function getOpenPositionLines(
       unrealizedPnl: uPnL,
       sizeUsd: pos.size_usd || 0,
       sizeQty: Math.abs(pos.size_qty || 0),
+      stopLoss: pos.stop_loss ?? null,
+      takeProfit: pos.take_profit ?? null,
+      entryTime: pos.entry_time ?? null,
     });
   }
   return lines;
@@ -436,7 +444,44 @@ export async function getBinancePendingOrderLines(symbol?: string): Promise<Pend
       side: String(o.side).toUpperCase() === 'BUY' ? 'long' : 'short',
       entry: Number(o.price) || 0,
       status: String(o.status ?? 'NEW'),
+      quantity: Number(o.quantity ?? o.origQty ?? 0) || 0,
+      createdAt: o.updateTime
+        ? new Date(Number(o.updateTime)).toISOString()
+        : new Date().toISOString(),
+      reduceOnly: Boolean(o.reduceOnly),
     }));
+}
+
+/** Merge local entry_time + SL/TP fallback onto Binance-sourced lines. */
+async function enrichPositionsWithLocalBook(
+  lines: OpenPositionLine[],
+  methodId: string
+): Promise<OpenPositionLine[]> {
+  if (lines.length === 0) return lines;
+  try {
+    const dbPositions = await getTestnetPositions({ status: 'open', methodId });
+    return lines.map((line) => {
+      const side = line.side.toLowerCase();
+      const match = dbPositions.find(
+        (p) =>
+          p.symbol.toUpperCase().replace(/USDT$/i, '') ===
+            line.symbol.toUpperCase().replace(/USDT$/i, '') &&
+          p.side.toLowerCase() === side
+      );
+      if (!match) return line;
+      return {
+        ...line,
+        positionId: match.position_id || line.positionId,
+        stopLoss: line.stopLoss ?? match.stop_loss ?? null,
+        takeProfit: line.takeProfit ?? match.take_profit ?? null,
+        entryTime: match.entry_time ?? line.entryTime ?? null,
+      };
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn(`[AccountSummary] Local book enrich failed: ${msg}`);
+    return lines;
+  }
 }
 
 /** Prefer Binance live data when BINANCE_ENABLED. */
@@ -448,7 +493,8 @@ export async function getLiveOpenPositionLines(
   if (process.env.BINANCE_ENABLED === 'true') {
     try {
       const lines = await getBinanceOpenPositionLines(symbol);
-      return enrichPositionsWithBinanceSlTp(lines, scopeSymbol);
+      const withSlTp = await enrichPositionsWithBinanceSlTp(lines, scopeSymbol);
+      return enrichPositionsWithLocalBook(withSlTp, methodId);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.warn(`[AccountSummary] Binance open positions failed: ${msg}`);
@@ -524,6 +570,9 @@ export async function getPendingOrderLines(
     side: o.side,
     entry: o.entry_price || 0,
     status: o.status,
+    quantity: Math.abs(o.size_qty || 0),
+    createdAt: o.created_at?.toISOString?.() ?? new Date().toISOString(),
+    reduceOnly: false,
   }));
 }
 

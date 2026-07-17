@@ -22,7 +22,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
     return (
       <Card className={className}>
         <SectionHeader
-          title="Testnet Account"
+          title="Live Account"
           subtitle="Loading..."
           icon={<Wallet className="w-5 h-5" />}
         />
@@ -35,7 +35,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
     return (
       <Card className={className}>
         <SectionHeader
-          title="Testnet Account"
+          title="Live Account"
           subtitle="Error loading data"
           icon={<Wallet className="w-5 h-5" />}
         />
@@ -48,7 +48,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
     return (
       <Card className={className}>
         <SectionHeader
-          title="Testnet Account"
+          title="Live Account"
           subtitle="Error loading data"
           icon={<Wallet className="w-5 h-5" />}
         />
@@ -71,14 +71,14 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
     return (
       <Card className={className}>
         <SectionHeader
-          title="Testnet Account"
+          title="Live Account"
           subtitle="Status"
           icon={<Wallet className="w-5 h-5" />}
         />
         <EmptyState
           icon={Wallet}
           title="Account not initialized"
-          description="The testnet account for this method has not been set up or connected to a live source yet."
+          description="The live Binance account for this method has not been set up or connected yet."
           size="sm"
         />
       </Card>
@@ -88,7 +88,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
   return (
     <Card className={className}>
       <SectionHeader
-        title="Testnet Account"
+        title="Live Account"
         subtitle="Balance and equity"
         icon={<Wallet className="w-5 h-5" />}
       />
@@ -165,7 +165,7 @@ export function TestnetBalancePanel({ className }: TestnetBalancePanelProps) {
         )}
         <div className="grid grid-cols-2 gap-3">
           <div className="panel-stat">
-            <p className="text-xs text-foreground-tertiary mb-1">Daily PnL (ICT)</p>
+            <p className="text-xs text-foreground-tertiary mb-1">Daily PnL</p>
             <p
               className={cn(
                 'text-sm font-mono font-semibold',
