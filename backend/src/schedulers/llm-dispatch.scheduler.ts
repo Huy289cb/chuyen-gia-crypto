@@ -98,19 +98,30 @@ async function runLLMDispatch() {
 
       const pendingForLifecycle = blockingPending.filter((o) => o.status === 'pending');
 
+      let cancelledThisCycle = 0;
       if (pendingForLifecycle.length > 0) {
         const lifecycle = await runPendingOrderLifecycle(symbol);
+        cancelledThisCycle += lifecycle.cancelled;
         if (lifecycle.cancelled > 0) {
           console.log(
             `[LLMDispatch] ${symbol}: pending lifecycle cancelled ${lifecycle.cancelled} order(s)`
           );
         }
         const review = await runPendingOrderReview(symbol);
+        cancelledThisCycle += review.cancelled;
         if (review.cancelled > 0 || review.modified > 0) {
           console.log(
             `[LLMDispatch] ${symbol}: pending LLM review cancelled=${review.cancelled} modified=${review.modified}`
           );
         }
+      }
+
+      // Never place a fresh limit in the same cycle we just cancelled — kills place/cancel spam.
+      if (cancelledThisCycle > 0) {
+        console.log(
+          `[LLMDispatch] ${symbol}: skip new trade — cancelled ${cancelledThisCycle} pending this cycle`
+        );
+        continue;
       }
 
       const eligibility = await canRunLlmDispatchForSymbol(symbol);

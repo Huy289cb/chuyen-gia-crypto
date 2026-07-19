@@ -54,10 +54,23 @@ export function isPendingOrderReviewEnabled(): boolean {
   return process.env.PENDING_ORDER_REVIEW_ENABLED !== 'false';
 }
 
-/** Min LLM confidence to cancel/modify (default 0.7). */
+/** Min LLM confidence to cancel/modify (default 0.85 — match review prompt). */
 export function getPendingOrderReviewMinConfidence(): number {
   const raw = process.env.PENDING_ORDER_REVIEW_MIN_CONFIDENCE?.trim();
-  if (!raw) return 0.7;
+  if (!raw) return 0.85;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 && n <= 1 ? n : 0.7;
+  return Number.isFinite(n) && n > 0 && n <= 1 ? n : 0.85;
+}
+
+/** Do not AI-cancel a limit younger than this (default 60m). TTL/drift still apply. */
+export function getPendingOrderReviewMinAgeMinutes(): number {
+  return parseHours('PENDING_ORDER_REVIEW_MIN_AGE_MINUTES', 60);
+}
+
+/**
+ * After any pending cancel, block new place for this many minutes (default 45).
+ * Stops Telegram place→cancel→place churn when LLM still likes the setup.
+ */
+export function getPendingOrderReentryCooldownMinutes(): number {
+  return parseHours('PENDING_ORDER_REENTRY_COOLDOWN_MINUTES', 45);
 }

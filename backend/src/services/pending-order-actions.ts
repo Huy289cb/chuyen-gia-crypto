@@ -86,6 +86,7 @@ export async function cancelPendingOnExchangeAndDb(
   await recordPipelineEvent('pending_order_cancelled', {
     order_id: order.order_id,
     reason,
+    symbol: order.symbol,
     binance_order_id: order.binance_order_id ?? undefined,
   });
 }

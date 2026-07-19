@@ -35,7 +35,9 @@ Return valid JSON only (no markdown):
   ]
 }
 Rules:
-- cancel: setup invalid, price moved away, order too old, or HTF/regime no longer supports the trade
+- Prefer hold for young pullback limits (age_hours low) — waiting for fill is normal
+- cancel: only when order is old / TTL nearly up, OR HTF thesis clearly broken (not mere distance from mark)
+- Do NOT cancel just because mark is away from limit entry — that is expected for limit pulls
 - hold: limit entry still valid and worth waiting
 - modify: only minor SL/TP tweaks in DB (exchange order price unchanged)
 - Use confidence >= 0.85 only when very sure about cancel

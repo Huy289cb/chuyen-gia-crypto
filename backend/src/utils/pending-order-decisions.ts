@@ -2,11 +2,24 @@
  * Validate and apply LLM pending_order_decisions (hold / cancel / modify).
  */
 
+import { getPendingOrderReviewMinAgeMinutes } from '../config/pending-order-policy';
 import {
   getTestnetPendingOrders,
   updateTestnetPendingOrder,
 } from '../repositories/testnet.repository';
 import { cancelPendingOnExchangeAndDb } from '../services/pending-order-actions';
+
+/** Pure age gate for AI cancel (minutes). */
+export function isPendingTooYoungForAiCancel(
+  createdAt: Date | string,
+  nowMs: number,
+  minAgeMinutes: number
+): boolean {
+  if (!(minAgeMinutes > 0)) return false;
+  const createdMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdMs)) return false;
+  return (nowMs - createdMs) / 60_000 < minAgeMinutes;
+}
 
 export interface PendingOrderDecision {
   order_id: string;
@@ -120,6 +133,14 @@ export async function applyPendingOrderDecisions(
     const order = rows[0];
 
     if (dec.action === 'cancel') {
+      const minAge = getPendingOrderReviewMinAgeMinutes();
+      if (isPendingTooYoungForAiCancel(order.created_at, Date.now(), minAge)) {
+        result.skipped += 1;
+        console.log(
+          `[PendingReview] Skip AI cancel ${dec.order_id} — age < ${minAge}m (hold for fill/TTL/drift)`
+        );
+        continue;
+      }
       await cancelPendingOnExchangeAndDb(order, 'ai_review');
       result.cancelled += 1;
       console.log(`[PendingReview] AI cancel ${dec.order_id}: ${dec.reason}`);

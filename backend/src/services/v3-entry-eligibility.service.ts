@@ -3,12 +3,15 @@
  */
 
 import { getRiskPolicy } from '../config/risk-policy';
+import { getPendingOrderReentryCooldownMinutes } from '../config/pending-order-policy';
 import { isV3ScaleInEnabled, resolveMaxTotalExposureUsd, getBinanceMinOrderNotionalUsd, minNotionalWithTolerance, getNotionalTolerancePercent } from '../config/v3-entry-policy';
+import { prisma } from '../lib/prisma';
 import { hasBinanceExposureForSide } from './binance-exposure.service';
 import {
   getActiveTestnetPositions,
   getBlockingTestnetPendingOrders,
   getOrCreateTestnetAccount,
+  PIPELINE_EVENT_POSITION_ID,
 } from '../repositories/testnet.repository';
 
 export type LocalSide = 'long' | 'short';
@@ -77,6 +80,39 @@ export async function getSymbolExposureSnapshot(
   };
 }
 
+async function hasRecentPendingCancelCooldown(symbol: string): Promise<string | null> {
+  const cooldownMin = getPendingOrderReentryCooldownMinutes();
+  if (!(cooldownMin > 0)) return null;
+  const since = new Date(Date.now() - cooldownMin * 60_000);
+  const events = await prisma.testnetTradeEvent.findMany({
+    where: {
+      position_id: PIPELINE_EVENT_POSITION_ID,
+      event_type: 'pending_order_cancelled',
+      timestamp: { gte: since },
+    },
+    orderBy: { timestamp: 'desc' },
+    take: 20,
+    select: { event_data: true, timestamp: true },
+  });
+  const sym = symbol.toUpperCase();
+  for (const ev of events) {
+    if (!ev.event_data) {
+      // BTC-only production: treat unscoped cancel as blocking.
+      return `pending re-entry cooldown ${cooldownMin}m after cancel`;
+    }
+    try {
+      const data = JSON.parse(ev.event_data) as { symbol?: string; order_id?: string };
+      if (!data.symbol || String(data.symbol).toUpperCase().replace(/USDT$/i, '') === sym) {
+        const ago = Math.ceil((Date.now() - ev.timestamp.getTime()) / 60_000);
+        return `pending re-entry cooldown ${cooldownMin}m after cancel (${ago}m ago)`;
+      }
+    } catch {
+      return `pending re-entry cooldown ${cooldownMin}m after cancel`;
+    }
+  }
+  return null;
+}
+
 export async function canRunLlmDispatchForSymbol(
   symbol: string,
   methodId = 'kim_nghia'
@@ -97,6 +133,11 @@ export async function canRunLlmDispatchForSymbol(
       allowed: false,
       reason: `blocking pending=${blockingPending.length}`,
     };
+  }
+
+  const cancelCooldown = await hasRecentPendingCancelCooldown(symbol);
+  if (cancelCooldown) {
+    return { allowed: false, reason: cancelCooldown };
   }
 
   const exposure = await getSymbolExposureSnapshot(symbol, methodId);
