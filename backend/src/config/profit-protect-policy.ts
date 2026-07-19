@@ -50,3 +50,11 @@ export function getProfitProtectMinMinutes(): number {
 export function getTimeStopHours(): number {
   return envInt('PROFIT_PROTECT_TIME_STOP_HOURS', 24);
 }
+
+/**
+ * Place BE stop this many % of entry into profit (covers fees/slip).
+ * Long: entry*(1+buf), short: entry*(1-buf). Default 0.08%.
+ */
+export function getBreakevenFeeBufferPct(): number {
+  return envFloat('PROFIT_PROTECT_BE_FEE_BUFFER_PCT', 0.08);
+}

@@ -4,6 +4,7 @@
 
 import {
   getBreakevenAtR,
+  getBreakevenFeeBufferPct,
   getMinSlMovePct,
   getProfitProtectMinMinutes,
   getTimeStopHours,
@@ -84,6 +85,7 @@ export async function maybeApplyProfitProtectSl(
     minSlMovePct: getMinSlMovePct(),
     minAgeMinutes: getProfitProtectMinMinutes(),
     timeStopHours: getTimeStopHours(),
+    beFeeBufferPct: getBreakevenFeeBufferPct(),
   });
 
   if (plan.action === 'none') {

@@ -12,7 +12,11 @@ const base = {
   minAgeMinutes: 30,
   minUpnlPct: 0.15,
   htfLostMinHours: 6,
+  beFeeBufferPct: 0.08,
 };
+
+const beLong = Math.round(63703.6 * 1.0008 * 100) / 100;
+const beShort = Math.round(63703.6 * 0.9992 * 100) / 100;
 
 describe('evaluatePositionInvalidation', () => {
   it('holds when young', () => {
@@ -37,7 +41,8 @@ describe('evaluatePositionInvalidation', () => {
     });
     expect(out.action).toBe('tighten_be');
     expect(out.score).toBe(2);
-    expect(out.newSl).toBe(63703.6);
+    expect(out.newSl).toBe(beLong);
+    expect(out.newSl).toBeGreaterThan(base.entry);
     expect(out.signals.some((s) => s.id === 'htf_chop')).toBe(true);
   });
 
@@ -106,7 +111,7 @@ describe('evaluatePositionInvalidation', () => {
   it('holds when SL already at/above BE', () => {
     const out = evaluatePositionInvalidation({
       ...base,
-      currentSl: 63703.6,
+      currentSl: beLong,
       htf: { timeframe: '1h', regime: 'chop' },
     });
     expect(out.action).toBe('hold');
@@ -122,6 +127,7 @@ describe('evaluatePositionInvalidation', () => {
       htf: { timeframe: '1h', regime: 'trend', trendDirection: 'bullish' },
     });
     expect(out.action).toBe('tighten_be');
-    expect(out.newSl).toBe(63703.6);
+    expect(out.newSl).toBe(beShort);
+    expect(out.newSl).toBeLessThan(63703.6);
   });
 });

@@ -3,6 +3,8 @@
  * docs/position-invalidation-plan.md §5
  */
 
+import { feeAwareBreakevenSl } from './breakeven-sl';
+
 export type InvalidationSide = 'long' | 'short';
 
 export interface InvalidationScanSnap {
@@ -32,6 +34,8 @@ export interface InvalidationInput {
   minAgeMinutes: number;
   minUpnlPct: number;
   htfLostMinHours: number;
+  /** Move BE into profit by this % of entry (fee cover). Default 0. */
+  beFeeBufferPct?: number;
 }
 
 export interface InvalidationSignal {
@@ -120,6 +124,7 @@ export function evaluatePositionInvalidation(input: InvalidationInput): Invalida
     minAgeMinutes,
     minUpnlPct,
     htfLostMinHours,
+    beFeeBufferPct = 0,
   } = input;
 
   const uPct = unrealizedPct(side, entry, mark);
@@ -204,22 +209,22 @@ export function evaluatePositionInvalidation(input: InvalidationInput): Invalida
     );
   }
 
-  const beSl = Math.round(entry * 100) / 100;
+  const beSl = feeAwareBreakevenSl(side, entry, beFeeBufferPct);
   if (!isTighter(side, beSl, currentSl)) {
-    return hold(`score ${score} but SL already ≥ BE`, uniq, score);
+    return hold(`score ${score} but SL already ≥ BE+fee`, uniq, score);
   }
   if (side === 'long' && beSl >= mark) {
-    return hold(`score ${score} but BE would trigger immediately`, uniq, score);
+    return hold(`score ${score} but BE+fee would trigger immediately`, uniq, score);
   }
   if (side === 'short' && beSl <= mark) {
-    return hold(`score ${score} but BE would trigger immediately`, uniq, score);
+    return hold(`score ${score} but BE+fee would trigger immediately`, uniq, score);
   }
 
   return {
     action: 'tighten_be',
     score,
     signals: uniq,
-    reason: `invalidation score ${score}: ${uniq.map((s) => s.id).join('+')}`,
+    reason: `invalidation score ${score}: ${uniq.map((s) => s.id).join('+')} (BE+fee ${beFeeBufferPct}%)`,
     unrealizedPct: uPct,
     newSl: beSl,
   };

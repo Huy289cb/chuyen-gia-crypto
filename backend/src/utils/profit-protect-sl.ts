@@ -2,6 +2,8 @@
  * Pure SL tighten math for breakeven + trail (no I/O).
  */
 
+import { feeAwareBreakevenSl } from './breakeven-sl';
+
 export type ProfitProtectSide = 'long' | 'short';
 
 export interface ProfitProtectInput {
@@ -18,6 +20,8 @@ export interface ProfitProtectInput {
   minSlMovePct: number;
   minAgeMinutes: number;
   timeStopHours: number;
+  /** Move BE into profit by this % of entry (fee cover). Default 0. */
+  beFeeBufferPct?: number;
 }
 
 export interface ProfitProtectResult {
@@ -59,6 +63,7 @@ export function computeProfitProtectSl(input: ProfitProtectInput): ProfitProtect
     minSlMovePct,
     minAgeMinutes,
     timeStopHours,
+    beFeeBufferPct = 0,
   } = input;
 
   const none = (reason: string, unrealizedPct: number, rMultiple: number): ProfitProtectResult => ({
@@ -88,24 +93,23 @@ export function computeProfitProtectSl(input: ProfitProtectInput): ProfitProtect
   let candidate = currentSl;
   let action: ProfitProtectResult['action'] = 'none';
   let reason = 'no tighten';
+  const beSl = feeAwareBreakevenSl(side, entry, beFeeBufferPct);
 
   // 1) Breakeven at ≥ N R
   if (beAtR > 0 && rMultiple >= beAtR) {
-    const beSl = roundPrice(entry);
     if (isTighter(side, beSl, candidate)) {
       candidate = beSl;
       action = 'breakeven';
-      reason = `breakeven at ${rMultiple.toFixed(2)}R (threshold ${beAtR}R)`;
+      reason = `breakeven+fee ${beFeeBufferPct}% at ${rMultiple.toFixed(2)}R (threshold ${beAtR}R)`;
     }
   }
 
-  // 2) Time-stop BE: held long enough, still green, SL still below/above entry
+  // 2) Time-stop BE: held long enough, still green, SL still below/above fee-aware BE
   if (timeStopHours > 0 && ageMinutes >= timeStopHours * 60 && unrealizedPct > 0) {
-    const beSl = roundPrice(entry);
     if (isTighter(side, beSl, candidate)) {
       candidate = beSl;
       action = 'time_stop_be';
-      reason = `time-stop BE after ${(ageMinutes / 60).toFixed(1)}h (uPnL ${unrealizedPct.toFixed(2)}%)`;
+      reason = `time-stop BE+fee ${beFeeBufferPct}% after ${(ageMinutes / 60).toFixed(1)}h (uPnL ${unrealizedPct.toFixed(2)}%)`;
     }
   }
 

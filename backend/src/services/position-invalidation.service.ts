@@ -13,7 +13,7 @@ import {
   getInvalidationMinUpnlPct,
   isInvalidationEnabled,
 } from '../config/position-invalidation-policy';
-import { getMinSlMovePct } from '../config/profit-protect-policy';
+import { getBreakevenFeeBufferPct, getMinSlMovePct } from '../config/profit-protect-policy';
 import { getScanResult } from '../schedulers/market-scan.scheduler';
 import {
   evaluatePositionInvalidation,
@@ -87,6 +87,7 @@ export async function maybeApplyInvalidationProtect(
     minAgeMinutes: getInvalidationMinMinutes(),
     minUpnlPct: getInvalidationMinUpnlPct(),
     htfLostMinHours: getInvalidationHtfLostMinHours(),
+    beFeeBufferPct: getBreakevenFeeBufferPct(),
   });
 
   if (decision.action !== 'tighten_be' || decision.newSl == null) {

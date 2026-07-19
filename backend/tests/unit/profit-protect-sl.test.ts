@@ -14,7 +14,10 @@ const base = {
   minSlMovePct: 0.05,
   minAgeMinutes: 15,
   timeStopHours: 24,
+  beFeeBufferPct: 0.08,
 };
+
+const beLong = Math.round(63703.6 * 1.0008 * 100) / 100;
 
 describe('computeProfitProtectSl', () => {
   it('does nothing when flat / young', () => {
@@ -28,7 +31,8 @@ describe('computeProfitProtectSl', () => {
     const mark = base.entry + base.initialRisk;
     const out = computeProfitProtectSl({ ...base, mark });
     expect(out.action).toBe('breakeven');
-    expect(out.newSl).toBe(63703.6);
+    expect(out.newSl).toBe(beLong);
+    expect(out.newSl).toBeGreaterThan(base.entry);
     expect(out.rMultiple).toBeGreaterThanOrEqual(1);
   });
 
@@ -49,7 +53,7 @@ describe('computeProfitProtectSl', () => {
       ageMinutes: 25 * 60,
     });
     expect(out.action).toBe('time_stop_be');
-    expect(out.newSl).toBe(base.entry);
+    expect(out.newSl).toBe(beLong);
   });
 
   it('short: trail above mark', () => {
