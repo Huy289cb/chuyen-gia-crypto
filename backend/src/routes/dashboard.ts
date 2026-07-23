@@ -79,6 +79,15 @@ function mapProtectiveTradeEvent(
   if (eventType === 'position_invalidation') {
     const reason = String(parsed?.reason ?? '');
     const score = parsed?.score != null ? `score ${parsed.score}` : '';
+    const action = String(parsed?.action ?? 'tighten_be');
+    if (action === 'exit') {
+      return {
+        module: 'PositionMonitor',
+        message: 'Invalidation — early exit',
+        details: [score, reason].filter(Boolean).join('\n'),
+        severity: 'warning',
+      };
+    }
     return {
       module: 'PositionMonitor',
       message: 'Invalidation — tighten BE',

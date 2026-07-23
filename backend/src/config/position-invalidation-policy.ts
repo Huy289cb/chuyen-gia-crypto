@@ -1,5 +1,5 @@
 /**
- * Position invalidation — structure-based tighten (Phase A).
+ * Position invalidation — structure-based tighten / red exit.
  * See docs/position-invalidation-plan.md
  */
 
@@ -16,6 +16,14 @@ function envInt(name: string, fallback: number): number {
 /** Master switch — default on. */
 export function isInvalidationEnabled(): boolean {
   return process.env.INVALIDATION_ENABLED !== 'false';
+}
+
+/**
+ * When score≥min and uPnL &lt; 0, market-exit instead of log-only.
+ * Default on — Phase A gap that let losers run to full SL.
+ */
+export function isInvalidationExitEnabled(): boolean {
+  return process.env.INVALIDATION_ALLOW_EXIT !== 'false';
 }
 
 export function getInvalidationMinScore(): number {

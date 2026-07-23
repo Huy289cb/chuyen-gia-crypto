@@ -3,7 +3,10 @@
  */
 
 import { getRiskPolicy } from '../config/risk-policy';
-import { getPendingOrderReentryCooldownMinutes } from '../config/pending-order-policy';
+import {
+  getPendingOrderReentryCooldownMinutes,
+  getPostCloseSameSideCooldownMinutes,
+} from '../config/pending-order-policy';
 import { isV3ScaleInEnabled, resolveMaxTotalExposureUsd, getBinanceMinOrderNotionalUsd, minNotionalWithTolerance, getNotionalTolerancePercent } from '../config/v3-entry-policy';
 import { prisma } from '../lib/prisma';
 import { hasBinanceExposureForSide } from './binance-exposure.service';
@@ -111,6 +114,48 @@ async function hasRecentPendingCancelCooldown(symbol: string): Promise<string | 
     }
   }
   return null;
+}
+
+/**
+ * Anti-chase: block same-side entry soon after a close (longer after a loss).
+ */
+export async function assertSameSidePostCloseCooldown(
+  symbol: string,
+  side: LocalSide,
+  methodId = 'kim_nghia'
+): Promise<string | null> {
+  const winCd = getPostCloseSameSideCooldownMinutes(false);
+  const lossCd = getPostCloseSameSideCooldownMinutes(true);
+  const lookbackMin = Math.max(winCd, lossCd);
+  if (!(lookbackMin > 0)) return null;
+
+  const since = new Date(Date.now() - lookbackMin * 60_000);
+  const sym = symbol.toUpperCase().replace(/USDT$/i, '');
+  const recent = await prisma.testnetPosition.findFirst({
+    where: {
+      symbol: sym,
+      side,
+      status: 'closed',
+      close_time: { gte: since },
+      account: { method_id: methodId },
+    },
+    orderBy: { close_time: 'desc' },
+    select: { close_time: true, realized_pnl: true, position_id: true },
+  });
+  if (!recent?.close_time) return null;
+
+  const wasLoss = (recent.realized_pnl ?? 0) < -0.01;
+  const cooldownMin = getPostCloseSameSideCooldownMinutes(wasLoss);
+  if (!(cooldownMin > 0)) return null;
+
+  const elapsedMin = (Date.now() - recent.close_time.getTime()) / 60_000;
+  if (elapsedMin >= cooldownMin) return null;
+
+  const left = Math.ceil(cooldownMin - elapsedMin);
+  return (
+    `same-side ${side} cooldown ${left}m after ${wasLoss ? 'loss' : 'close'} ` +
+    `(${cooldownMin}m window)`
+  );
 }
 
 export async function canRunLlmDispatchForSymbol(

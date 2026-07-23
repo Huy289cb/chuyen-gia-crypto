@@ -71,7 +71,7 @@ describe('GroqClient', () => {
           userPrompt: 'test',
           maxRetries: 1,
         });
-        const assertion = expect(run).rejects.toThrow(/All models failed/);
+        const assertion = expect(run).rejects.toThrow(/All (models|dispatch providers) failed/);
         await vi.runAllTimersAsync();
         await assertion;
       } finally {
@@ -97,7 +97,7 @@ describe('GroqClient', () => {
           userPrompt: 'test',
           maxRetries: 1,
         });
-        const assertion = expect(run).rejects.toThrow(/All models failed/);
+        const assertion = expect(run).rejects.toThrow(/All (models|dispatch providers) failed/);
         await vi.runAllTimersAsync();
         await assertion;
       } finally {

@@ -19,6 +19,7 @@ import { checkBinanceAccountTradable } from './binance-account-health.service';
 import { tryOppositeFlipBeforeEntry } from './opposite-flip.service';
 import {
   assertScaleInSideAllowed,
+  assertSameSidePostCloseCooldown,
   getSymbolExposureSnapshot,
   oppositeLocalSide,
 } from './v3-entry-eligibility.service';
@@ -153,6 +154,11 @@ export async function executeV3Trade(
   const sideBlockReason = await assertScaleInSideAllowed(symbol, side);
   if (sideBlockReason) {
     return { success: false, reason: sideBlockReason };
+  }
+
+  const chaseBlock = await assertSameSidePostCloseCooldown(symbol, side, methodId);
+  if (chaseBlock) {
+    return { success: false, reason: chaseBlock };
   }
 
   const [openPositions, pendingOrders] = await Promise.all([

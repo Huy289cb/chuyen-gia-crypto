@@ -19,7 +19,9 @@ import { getRiskPolicy } from '../config/risk-policy';
 import {
   evaluateHtfTrendRequirement,
   evaluate5mEntryGuards,
+  evaluateHtfSideAlign,
   evaluateSetupGradePlaybookFilter,
+  getV3HtfSideAlignTf,
   getV3HtfTrendAlt,
   getV3RequireHtfTrend,
   isRangeEntryBlocked,
@@ -483,7 +485,7 @@ export class GroqDispatchService {
       }
     }
 
-    if (llmConfirms && timeframe === '5m') {
+    if (llmConfirms) {
       const scanState = (tf: string) => {
         const scan = getScanResult(symbol, tf);
         const regime = scan?.signalResult
@@ -494,14 +496,14 @@ export class GroqDispatchService {
         return { regime, trendDirection };
       };
       const side = analysis.action === 'buy' ? 'long' : 'short';
-      const fiveMGuard = evaluate5mEntryGuards({
-        entryTimeframe: timeframe,
+      const alignTf = getV3HtfSideAlignTf();
+      const sideAlign = evaluateHtfSideAlign({
         side,
-        tf1h: scanState('1h'),
-        tf15m: scanState('15m'),
+        htfTf: alignTf,
+        htf: scanState(alignTf),
       });
-      if (!fiveMGuard.pass) {
-        const reason = fiveMGuard.reason ?? '5m entry guard blocked';
+      if (!sideAlign.pass) {
+        const reason = sideAlign.reason ?? 'HTF side align blocked';
         if (this.config.enableMemory) {
           await memoryService.storeDecision({
             symbol,
@@ -517,6 +519,33 @@ export class GroqDispatchService {
           });
         }
         return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+      }
+
+      if (timeframe === '5m') {
+        const fiveMGuard = evaluate5mEntryGuards({
+          entryTimeframe: timeframe,
+          side,
+          tf1h: scanState('1h'),
+          tf15m: scanState('15m'),
+        });
+        if (!fiveMGuard.pass) {
+          const reason = fiveMGuard.reason ?? '5m entry guard blocked';
+          if (this.config.enableMemory) {
+            await memoryService.storeDecision({
+              symbol,
+              timeframe,
+              playbook_key: gatePlaybook,
+              grade: gateGrade,
+              confidence: gateConfidence,
+              regime: gateRegime,
+              decision: 'no_trade',
+              reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+              method_id,
+              candle_hash: candleHash,
+            });
+          }
+          return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+        }
       }
     }
 

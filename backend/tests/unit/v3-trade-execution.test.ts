@@ -9,6 +9,7 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
 
 vi.mock('../../src/services/v3-entry-eligibility.service', () => ({
   assertScaleInSideAllowed: vi.fn(),
+  assertSameSidePostCloseCooldown: vi.fn(),
   getSymbolExposureSnapshot: vi.fn(),
   oppositeLocalSide: (side: 'long' | 'short') => (side === 'long' ? 'short' : 'long'),
 }));
@@ -66,6 +67,7 @@ import {
 } from '../../src/repositories/testnet.repository';
 import {
   assertScaleInSideAllowed,
+  assertSameSidePostCloseCooldown,
   getSymbolExposureSnapshot,
 } from '../../src/services/v3-entry-eligibility.service';
 import { isV3ScaleInEnabled } from '../../src/config/v3-entry-policy';
@@ -82,6 +84,7 @@ describe('executeV3Trade', () => {
     process.env.BINANCE_ENABLED = 'true';
     vi.mocked(isV3ScaleInEnabled).mockReturnValue(true);
     vi.mocked(assertScaleInSideAllowed).mockResolvedValue(null);
+    vi.mocked(assertSameSidePostCloseCooldown).mockResolvedValue(null);
     vi.mocked(getSymbolExposureSnapshot).mockResolvedValue({
       openUsd: 0,
       pendingUsd: 0,
@@ -277,6 +280,33 @@ describe('executeV3Trade', () => {
 
     expect(result.success).toBe(false);
     expect(result.reason).toContain('Binance already has');
+    expect(placeLimitOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects when same-side post-close cooldown active', async () => {
+    vi.mocked(assertSameSidePostCloseCooldown).mockResolvedValue(
+      'same-side long cooldown 60m after loss (180m window)'
+    );
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      id: 1,
+      current_balance: 10000,
+    } as never);
+
+    const result = await executeV3Trade({
+      symbol: 'BTC',
+      timeframe: '1h',
+      analysis: {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.9,
+        suggested_entry: 100000,
+        suggested_stop_loss: 99000,
+        suggested_take_profit: 102000,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain('same-side long cooldown');
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 

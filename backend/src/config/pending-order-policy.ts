@@ -74,3 +74,14 @@ export function getPendingOrderReviewMinAgeMinutes(): number {
 export function getPendingOrderReentryCooldownMinutes(): number {
   return parseHours('PENDING_ORDER_REENTRY_COOLDOWN_MINUTES', 45);
 }
+
+/**
+ * After a closed position, block same-side re-entry (anti-chase). Default 90m.
+ * After a losing close, uses POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES when set (default 180m).
+ */
+export function getPostCloseSameSideCooldownMinutes(wasLoss: boolean): number {
+  if (wasLoss) {
+    return parseHours('POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES', 180);
+  }
+  return parseHours('POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES', 90);
+}

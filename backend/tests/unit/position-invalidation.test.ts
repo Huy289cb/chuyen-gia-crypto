@@ -55,6 +55,18 @@ describe('evaluatePositionInvalidation', () => {
     expect(out.signals.some((s) => s.id === 'htf_trend_against')).toBe(true);
   });
 
+  it('exits when score high and red if allowExitWhenRed', () => {
+    const out = evaluatePositionInvalidation({
+      ...base,
+      mark: 63000, // red long
+      htf: { timeframe: '1h', regime: 'chop' },
+      allowExitWhenRed: true,
+    });
+    expect(out.action).toBe('exit');
+    expect(out.score).toBe(2);
+    expect(out.reason).toContain('invalidation exit');
+  });
+
   it('logs only when score high but red', () => {
     const out = evaluatePositionInvalidation({
       ...base,
@@ -63,6 +75,17 @@ describe('evaluatePositionInvalidation', () => {
     });
     expect(out.action).toBe('hold');
     expect(out.score).toBe(2);
+    expect(out.reason).toContain('log only');
+  });
+
+  it('barely green + allowExit still log-only (not exit)', () => {
+    const out = evaluatePositionInvalidation({
+      ...base,
+      mark: 63710, // ~+0.01% — below minUpnlPct
+      htf: { timeframe: '1h', regime: 'chop' },
+      allowExitWhenRed: true,
+    });
+    expect(out.action).toBe('hold');
     expect(out.reason).toContain('log only');
   });
 

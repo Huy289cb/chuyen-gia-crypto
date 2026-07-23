@@ -17,6 +17,19 @@ vi.mock('../../src/services/binanceClient', () => ({
   placeMarketOrder: mockPlaceMarketOrder,
 }));
 
+vi.mock('../../src/services/position-lifecycle-guard.service', () => ({
+  shouldDeferEmergencyMarketClose: vi.fn().mockResolvedValue({ defer: false }),
+  noteEmergencyMarketClose: vi.fn(),
+  markWorkerStarted: vi.fn(),
+  isWorkerInWarmup: vi.fn(() => false),
+  workerWarmupMs: vi.fn(() => 0),
+  fillGraceMs: vi.fn(() => 0),
+  newPositionGraceMs: vi.fn(() => 0),
+  emergencyCloseMemoryMs: vi.fn(() => 0),
+  protectiveAuditStartupDelayMs: vi.fn(() => 0),
+  wasRecentEmergencyMarketClose: vi.fn(() => false),
+}));
+
 import { closePositionOnBinanceMarket } from '../../src/services/position-close.service';
 
 describe('closePositionOnBinanceMarket', () => {

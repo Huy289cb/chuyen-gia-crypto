@@ -1,5 +1,5 @@
 /**
- * Structure invalidation → tighten SL to BE when green (Phase A).
+ * Structure invalidation → BE when green; market exit when red + score≥min.
  * docs/position-invalidation-plan.md
  */
 
@@ -12,6 +12,7 @@ import {
   getInvalidationMinScore,
   getInvalidationMinUpnlPct,
   isInvalidationEnabled,
+  isInvalidationExitEnabled,
 } from '../config/position-invalidation-policy';
 import { getBreakevenFeeBufferPct, getMinSlMovePct } from '../config/profit-protect-policy';
 import { getScanResult } from '../schedulers/market-scan.scheduler';
@@ -20,13 +21,32 @@ import {
   type InvalidationScanSnap,
 } from '../utils/position-invalidation';
 import { amendProtectiveStopLoss } from './amend-protective-sl.service';
+import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
+import {
+  closeLocalPosition,
+  closePositionOnBinanceMarket,
+} from './position-close.service';
 import {
   getRememberedInitialRisk,
   rememberInitialRisk,
   type ProfitProtectPosition,
 } from './profit-protect.service';
+import { recordTestnetTradeEvent } from '../repositories/testnet.repository';
 
 const lastAmendAt = new Map<string, number>();
+
+export type InvalidationPosition = ProfitProtectPosition & {
+  account_id: number;
+  account: { current_balance: number };
+  size_usd?: number;
+  take_profit?: number;
+  expected_rr?: number;
+  risk_usd?: number;
+  entry_fee?: number;
+  binance_order_id?: string | null;
+  binance_tp_order_id?: string | null;
+  status?: string;
+};
 
 function toSnap(symbol: string, timeframe: string): InvalidationScanSnap | null {
   const scan = getScanResult(symbol, timeframe);
@@ -48,16 +68,24 @@ function toSnap(symbol: string, timeframe: string): InvalidationScanSnap | null 
 }
 
 export async function maybeApplyInvalidationProtect(
-  position: ProfitProtectPosition,
+  position: InvalidationPosition,
   mark: number
-): Promise<{ applied: boolean; reason: string; newSl?: number; score?: number }> {
+): Promise<{
+  applied: boolean;
+  exited?: boolean;
+  reason: string;
+  newSl?: number;
+  score?: number;
+}> {
   if (!isInvalidationEnabled()) {
     return { applied: false, reason: 'invalidation disabled' };
   }
   if (process.env.BINANCE_ENABLED !== 'true') {
     return { applied: false, reason: 'binance disabled' };
   }
-  if (!position.binance_sl_order_id) {
+
+  const allowExit = isInvalidationExitEnabled();
+  if (!position.binance_sl_order_id && !allowExit) {
     return { applied: false, reason: 'no exchange SL id' };
   }
 
@@ -88,7 +116,60 @@ export async function maybeApplyInvalidationProtect(
     minUpnlPct: getInvalidationMinUpnlPct(),
     htfLostMinHours: getInvalidationHtfLostMinHours(),
     beFeeBufferPct: getBreakevenFeeBufferPct(),
+    allowExitWhenRed: allowExit,
   });
+
+  if (decision.action === 'exit') {
+    const closeResult = await closePositionOnBinanceMarket(position, undefined, {
+      guardSource: 'invalidation_exit',
+      positionId: position.position_id,
+      entryTime: position.entry_time ?? null,
+    });
+    if (!closeResult.ok) {
+      console.error(
+        `[Invalidation] Exit failed for ${position.position_id}: ${closeResult.reason}`
+      );
+      return { applied: false, reason: closeResult.reason ?? 'exit failed', score: decision.score };
+    }
+
+    await closeLocalPosition(
+      { ...position, account: position.account },
+      mark,
+      'invalidation_exit',
+      {
+        score: decision.score,
+        signals: decision.signals,
+        unrealized_pct: decision.unrealizedPct,
+        reason: decision.reason,
+      }
+    );
+    await recordTestnetTradeEvent(position.position_id, 'position_invalidation', {
+      action: 'exit',
+      reason: decision.reason,
+      score: decision.score,
+      signals: decision.signals,
+      unrealized_pct: decision.unrealizedPct,
+      mark,
+    });
+
+    lastAmendAt.set(position.position_id, Date.now());
+    try {
+      await syncTestnetAccountFromBinance(position.account_id);
+    } catch (syncErr: unknown) {
+      const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+      console.warn(`[Invalidation] Balance sync after exit failed: ${msg}`);
+    }
+
+    console.log(
+      `[Invalidation] ${position.position_id} EXIT @ ${mark} — ${decision.reason}`
+    );
+    return {
+      applied: true,
+      exited: true,
+      reason: decision.reason,
+      score: decision.score,
+    };
+  }
 
   if (decision.action !== 'tighten_be' || decision.newSl == null) {
     if (decision.score > 0) {
@@ -97,6 +178,10 @@ export async function maybeApplyInvalidationProtect(
       );
     }
     return { applied: false, reason: decision.reason, score: decision.score };
+  }
+
+  if (!position.binance_sl_order_id) {
+    return { applied: false, reason: 'no exchange SL id for tighten', score: decision.score };
   }
 
   const minMove = position.entry_price * (getMinSlMovePct() / 100);
@@ -137,4 +222,9 @@ export async function maybeApplyInvalidationProtect(
     newSl: decision.newSl,
     score: decision.score,
   };
+}
+
+/** Clear in-memory cooldown (tests). */
+export function clearInvalidationCooldownState(): void {
+  lastAmendAt.clear();
 }

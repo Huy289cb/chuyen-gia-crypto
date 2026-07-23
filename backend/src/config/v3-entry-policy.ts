@@ -249,6 +249,21 @@ export function isV3Require5mHtfConfirm(): boolean {
   return process.env.V3_REQUIRE_5M_HTF_CONFIRM === 'true';
 }
 
+/**
+ * Block entries against primary HTF trend direction (all TFs).
+ * Default on — stops longing into 1h bearish trend.
+ */
+export function isV3RequireHtfSideAlign(): boolean {
+  return process.env.V3_REQUIRE_HTF_SIDE_ALIGN !== 'false';
+}
+
+/** TF used for side-align (default V3_REQUIRE_HTF_TREND or 1h). */
+export function getV3HtfSideAlignTf(): string {
+  const raw = process.env.V3_HTF_SIDE_ALIGN_TF?.trim();
+  if (raw) return raw;
+  return getV3RequireHtfTrend() ?? '1h';
+}
+
 export type TrendDirection = 'bullish' | 'bearish';
 
 export interface HtfConfirmTfState {
@@ -261,6 +276,11 @@ export interface FiveMEntryGuardResult {
   reason?: string;
 }
 
+export interface HtfSideAlignResult {
+  pass: boolean;
+  reason?: string;
+}
+
 function sideToTrendDirection(side: 'long' | 'short'): TrendDirection {
   return side === 'long' ? 'bullish' : 'bearish';
 }
@@ -269,6 +289,32 @@ function tfConfirmsSide(state: HtfConfirmTfState, side: 'long' | 'short'): boole
   if (state.regime !== 'trend') return false;
   const want = sideToTrendDirection(side);
   return state.trendDirection === want;
+}
+
+/**
+ * When HTF is in trend, side must match trendDirection.
+ * Non-trend HTF: pass (regime gates handle chop/range elsewhere).
+ */
+export function evaluateHtfSideAlign(input: {
+  side: 'long' | 'short';
+  htfTf: string;
+  htf: HtfConfirmTfState;
+  enabled?: boolean;
+}): HtfSideAlignResult {
+  const enabled = input.enabled ?? isV3RequireHtfSideAlign();
+  if (!enabled) return { pass: true };
+
+  const { side, htfTf, htf } = input;
+  if (htf.regime !== 'trend' || !htf.trendDirection) {
+    return { pass: true };
+  }
+  if (tfConfirmsSide(htf, side)) {
+    return { pass: true, reason: `${htfTf} ${htf.trendDirection} aligns ${side}` };
+  }
+  return {
+    pass: false,
+    reason: `blocked: ${side} against ${htfTf} ${htf.trendDirection} trend (V3_REQUIRE_HTF_SIDE_ALIGN)`,
+  };
 }
 
 /**

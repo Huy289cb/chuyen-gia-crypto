@@ -4,7 +4,10 @@ const closeLocalPosition = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {
-    testnetPendingOrder: { findMany: vi.fn().mockResolvedValue([]) },
+    testnetPendingOrder: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
     testnetPosition: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
@@ -19,6 +22,11 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
   getTestnetPositions: vi.fn(),
   updateTestnetPosition: vi.fn(),
   recordTestnetTradeEvent: vi.fn(),
+  BLOCKING_PENDING_ORDER_STATUSES: [
+    'pending',
+    'partially_filled',
+    'reconciliation_failed_not_on_binance',
+  ],
 }));
 
 vi.mock('../../src/services/binance-order-fill.service', () => ({
@@ -79,10 +87,14 @@ describe('binance-reconciliation absent-on-Binance close', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BINANCE_ENABLED = 'true';
+    process.env.PROTECTIVE_AUDIT_STARTUP_DELAY_MS = '0';
+    process.env.POSITION_NEW_GRACE_MS = '0';
+    process.env.PROTECTIVE_AUDIT_FILL_GRACE_MS = '0';
     vi.mocked(fetchActiveBinancePositions).mockResolvedValue([]);
     vi.mocked(isBinancePositionRiskUnavailable).mockReturnValue(false);
     vi.mocked(getTestnetPositions).mockResolvedValue([openProvenPosition] as never);
     vi.mocked(prisma.testnetPosition.findUnique).mockResolvedValue(openProvenPosition as never);
+    vi.mocked(prisma.testnetPendingOrder.findFirst).mockResolvedValue(null);
   });
 
   it('proven-fill close via reconciliation (no bookkeeping flag)', async () => {

@@ -36,6 +36,8 @@ export interface InvalidationInput {
   htfLostMinHours: number;
   /** Move BE into profit by this % of entry (fee cover). Default 0. */
   beFeeBufferPct?: number;
+  /** When score≥min and red, return exit instead of log-only hold. */
+  allowExitWhenRed?: boolean;
 }
 
 export interface InvalidationSignal {
@@ -45,7 +47,7 @@ export interface InvalidationSignal {
 }
 
 export interface InvalidationResult {
-  action: 'hold' | 'tighten_be';
+  action: 'hold' | 'tighten_be' | 'exit';
   score: number;
   signals: InvalidationSignal[];
   reason: string;
@@ -125,6 +127,7 @@ export function evaluatePositionInvalidation(input: InvalidationInput): Invalida
     minUpnlPct,
     htfLostMinHours,
     beFeeBufferPct = 0,
+    allowExitWhenRed = false,
   } = input;
 
   const uPct = unrealizedPct(side, entry, mark);
@@ -202,6 +205,16 @@ export function evaluatePositionInvalidation(input: InvalidationInput): Invalida
   }
 
   if (uPct < minUpnlPct) {
+    // Red + thesis broken → cut early (avoid full SL). Barely green still log-only (can't BE safely).
+    if (allowExitWhenRed && uPct < 0) {
+      return {
+        action: 'exit',
+        score,
+        signals: uniq,
+        reason: `invalidation exit score ${score}: ${uniq.map((s) => s.id).join('+')} uPnL ${uPct.toFixed(2)}%`,
+        unrealizedPct: uPct,
+      };
+    }
     return hold(
       `score ${score} but uPnL ${uPct.toFixed(2)}% < min ${minUpnlPct}% — log only`,
       uniq,

@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import {
   evaluateHtfTrendRequirement,
+  evaluateHtfSideAlign,
   getV3HtfTrendAlt,
   isRangeEntryBlocked,
   isV3HtfFlexLtfOnly,
@@ -107,5 +108,38 @@ describe('evaluateHtfTrendRequirement', () => {
     expect(isV3HtfFlexLtfOnly()).toBe(true);
     process.env.V3_HTF_FLEX_LTF_ONLY = 'false';
     expect(isV3HtfFlexLtfOnly()).toBe(false);
+  });
+});
+
+describe('evaluateHtfSideAlign', () => {
+  it('blocks long against bearish 1h trend', () => {
+    const r = evaluateHtfSideAlign({
+      side: 'long',
+      htfTf: '1h',
+      htf: { regime: 'trend', trendDirection: 'bearish' },
+      enabled: true,
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reason).toContain('against');
+  });
+
+  it('allows short against bearish 1h (aligned)', () => {
+    const r = evaluateHtfSideAlign({
+      side: 'short',
+      htfTf: '1h',
+      htf: { regime: 'trend', trendDirection: 'bearish' },
+      enabled: true,
+    });
+    expect(r.pass).toBe(true);
+  });
+
+  it('passes when HTF not in trend', () => {
+    const r = evaluateHtfSideAlign({
+      side: 'long',
+      htfTf: '1h',
+      htf: { regime: 'chop', trendDirection: null },
+      enabled: true,
+    });
+    expect(r.pass).toBe(true);
   });
 });

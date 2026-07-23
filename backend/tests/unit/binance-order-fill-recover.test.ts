@@ -199,6 +199,17 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
       price: 64000,
       updateTime: now - 60_000,
     });
+    mockFetchActiveBinancePositions.mockResolvedValue([
+      {
+        symbol: 'BTC',
+        symbolUsdt: 'BTCUSDT',
+        side: 'long',
+        positionAmt: 0.0115,
+        entryPrice: 64000,
+        markPrice: 64010,
+        rawPositionSide: 'BOTH',
+      },
+    ]);
 
     const outcome = await recoverPendingOrderFromBinance(baseOrder);
 
@@ -208,6 +219,29 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
     expect(mockUpdatePending).not.toHaveBeenCalledWith(
       'v3_test',
       expect.objectContaining({ status: 'executed_historical' })
+    );
+  });
+
+  it('fresh FILLED but no live Binance exposure → stale_skipped', async () => {
+    getOrder.mockResolvedValue({
+      status: 'FILLED',
+      executedQty: 0.0115,
+      cummulativeQuoteQty: 0.0115 * 64000,
+      price: 64000,
+      updateTime: now - 60_000,
+    });
+    mockFetchActiveBinancePositions.mockResolvedValue([]);
+
+    const outcome = await recoverPendingOrderFromBinance(baseOrder);
+
+    expect(outcome).toBe('stale_skipped');
+    expect(mockCreatePosition).not.toHaveBeenCalled();
+    expect(mockUpdatePending).toHaveBeenCalledWith(
+      'v3_test',
+      expect.objectContaining({
+        status: 'executed_historical',
+        close_reason: 'fill_no_live_exposure',
+      })
     );
   });
 

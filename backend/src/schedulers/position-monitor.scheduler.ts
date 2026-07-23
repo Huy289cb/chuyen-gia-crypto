@@ -190,10 +190,16 @@ async function runPositionMonitor() {
         }
       }
 
-      // Structure invalidation (Phase A): adverse HTF/sweep → BE when green.
-      if (isInvalidationEnabled() && refreshed.binance_sl_order_id) {
+      // Structure invalidation: BE when green; market exit when red + score≥min.
+      if (isInvalidationEnabled()) {
         try {
           const inv = await maybeApplyInvalidationProtect(refreshed, mark);
+          if (inv.exited) {
+            console.log(
+              `[PositionMonitor] Invalidation exit for ${refreshed.position_id}: ${inv.reason}`
+            );
+            continue;
+          }
           if (inv.applied && inv.newSl != null) {
             refreshed = { ...refreshed, stop_loss: inv.newSl };
           }

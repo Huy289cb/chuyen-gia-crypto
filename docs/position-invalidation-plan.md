@@ -176,11 +176,11 @@ Cooldown: score 2 = one strong signal (chop / against-trend / adverse A-sweep) o
 - [x] `.env` / `.env.example` knobs
 - [ ] Observe live logs `[Invalidation]` for 1–2 weeks
 
-### Phase B (later)
+### Phase B (deferred)
 
+- [x] Rule market exit when red + score≥min (`INVALIDATION_ALLOW_EXIT`, no LLM)
 - [ ] `review` score band + LLM referee service
-- [ ] `INVALIDATION_ALLOW_EXIT` gated market close
-- [ ] Dashboard event surface
+- [ ] Dashboard event surface (partial: exit event in live feed)
 
 ### Explicit non-goals
 
