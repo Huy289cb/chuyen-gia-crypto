@@ -7,6 +7,10 @@ import { getRiskPolicy, resolveLossCooldownUntil } from '../config/risk-policy';
 import { setTestnetAccountCooldown } from '../repositories/testnet.repository';
 import { getBinanceLossStreak } from './binance-trade-history.service';
 import { getProtectiveExposureEntryBlock } from './protective-exposure-state';
+import {
+  applyExpectancyKillCooldownIfNeeded,
+  getAccountCircuitStatus,
+} from './account-circuit.service';
 
 export interface AccountTradeGuardResult {
   allowed: boolean;
@@ -89,6 +93,12 @@ export async function assertTestnetAccountCanOpenTrade(
         };
       }
     }
+  }
+
+  const circuit = await getAccountCircuitStatus(accountId);
+  if (!circuit.allowed) {
+    await applyExpectancyKillCooldownIfNeeded(accountId, circuit);
+    return { allowed: false, reason: circuit.reason };
   }
 
   return { allowed: true, reason: 'Account trade guard passed' };

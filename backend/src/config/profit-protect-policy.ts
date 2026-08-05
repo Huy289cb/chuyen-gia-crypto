@@ -18,9 +18,9 @@ export function isProfitProtectEnabled(): boolean {
   return process.env.PROFIT_PROTECT_ENABLED !== 'false';
 }
 
-/** Move SL to entry once unrealized profit >= this many R (entry→original SL). */
+/** Move SL to entry once unrealized profit >= this many R (entry→original SL). Default 1.5. */
 export function getBreakevenAtR(): number {
-  return envFloat('PROFIT_PROTECT_BE_AT_R', 1);
+  return envFloat('PROFIT_PROTECT_BE_AT_R', 1.5);
 }
 
 /** Activate trailing when unrealized PnL % of entry reaches this. */

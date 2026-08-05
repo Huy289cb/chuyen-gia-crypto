@@ -4,6 +4,20 @@ const mockFindUniqueAccount = vi.hoisted(() => vi.fn());
 const mockUpdateAccount = vi.hoisted(() => vi.fn());
 const mockGetBinanceLossStreak = vi.hoisted(() => vi.fn());
 const mockSetTestnetAccountCooldown = vi.hoisted(() => vi.fn());
+const mockGetCircuit = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    allowed: true,
+    reason: 'circuits clear',
+    dailyLossUsd: 0,
+    dailyLossPercent: 0,
+    dailyLossLimitPercent: 3,
+    peakEquity: 40,
+    drawdownPercent: 0,
+    maxDrawdownPercent: 15,
+    expectancy: { n: 0, sumR: 0, avgR: 0, profitFactor: null },
+  })
+);
+const mockApplyExpectancyCd = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {
@@ -20,6 +34,11 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
 
 vi.mock('../../src/services/binance-trade-history.service', () => ({
   getBinanceLossStreak: mockGetBinanceLossStreak,
+}));
+
+vi.mock('../../src/services/account-circuit.service', () => ({
+  getAccountCircuitStatus: mockGetCircuit,
+  applyExpectancyKillCooldownIfNeeded: mockApplyExpectancyCd,
 }));
 
 import { assertTestnetAccountCanOpenTrade } from '../../src/services/account-risk-guard.service';
@@ -43,6 +62,17 @@ describe('account risk guard', () => {
     mockGetBinanceLossStreak.mockResolvedValue({
       consecutiveLosses: 0,
       lastLossTime: 0,
+    });
+    mockGetCircuit.mockResolvedValue({
+      allowed: true,
+      reason: 'circuits clear',
+      dailyLossUsd: 0,
+      dailyLossPercent: 0,
+      dailyLossLimitPercent: 3,
+      peakEquity: 40,
+      drawdownPercent: 0,
+      maxDrawdownPercent: 15,
+      expectancy: { n: 0, sumR: 0, avgR: 0, profitFactor: null },
     });
   });
 
@@ -82,5 +112,24 @@ describe('account risk guard', () => {
       where: { id: 1 },
       data: { cooldown_until: null },
     });
+  });
+
+  it('blocks entries when account circuit trips', async () => {
+    mockGetCircuit.mockResolvedValue({
+      allowed: false,
+      reason: 'Daily loss circuit 3.50% >= 3%',
+      dailyLossUsd: 1.4,
+      dailyLossPercent: 3.5,
+      dailyLossLimitPercent: 3,
+      peakEquity: 40,
+      drawdownPercent: 5,
+      maxDrawdownPercent: 15,
+      expectancy: { n: 0, sumR: 0, avgR: 0, profitFactor: null },
+    });
+
+    const result = await assertTestnetAccountCanOpenTrade(1, 'BTC');
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('Daily loss circuit');
   });
 });

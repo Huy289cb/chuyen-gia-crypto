@@ -1,9 +1,8 @@
 /**
  * Pure position invalidation scoring (no I/O).
+ * Thesis dead (score≥min) → exit. No BE tighten — entry is not market structure.
  * docs/position-invalidation-plan.md §5
  */
-
-import { feeAwareBreakevenSl } from './breakeven-sl';
 
 export type InvalidationSide = 'long' | 'short';
 
@@ -32,11 +31,12 @@ export interface InvalidationInput {
   ltf?: InvalidationScanSnap | null;
   minScore: number;
   minAgeMinutes: number;
+  /** Kept for API compat; exit no longer gated on green uPnL. */
   minUpnlPct: number;
   htfLostMinHours: number;
-  /** Move BE into profit by this % of entry (fee cover). Default 0. */
+  /** @deprecated Ignored — invalidation no longer tightens to BE. */
   beFeeBufferPct?: number;
-  /** When score≥min and red, return exit instead of log-only hold. */
+  /** When score≥min, market-exit (green or red). */
   allowExitWhenRed?: boolean;
 }
 
@@ -47,21 +47,16 @@ export interface InvalidationSignal {
 }
 
 export interface InvalidationResult {
-  action: 'hold' | 'tighten_be' | 'exit';
+  action: 'hold' | 'exit';
   score: number;
   signals: InvalidationSignal[];
   reason: string;
   unrealizedPct: number;
-  newSl?: number;
 }
 
 function unrealizedPct(side: InvalidationSide, entry: number, mark: number): number {
   if (side === 'long') return ((mark - entry) / entry) * 100;
   return ((entry - mark) / entry) * 100;
-}
-
-function isTighter(side: InvalidationSide, candidate: number, currentSl: number): boolean {
-  return side === 'long' ? candidate > currentSl : candidate < currentSl;
 }
 
 function gradeRank(g: string): number {
@@ -124,9 +119,7 @@ export function evaluatePositionInvalidation(input: InvalidationInput): Invalida
     ltf,
     minScore,
     minAgeMinutes,
-    minUpnlPct,
     htfLostMinHours,
-    beFeeBufferPct = 0,
     allowExitWhenRed = false,
   } = input;
 
@@ -204,41 +197,20 @@ export function evaluatePositionInvalidation(input: InvalidationInput): Invalida
     );
   }
 
-  if (uPct < minUpnlPct) {
-    // Red + thesis broken → cut early (avoid full SL). Barely green still log-only (can't BE safely).
-    if (allowExitWhenRed && uPct < 0) {
-      return {
-        action: 'exit',
-        score,
-        signals: uniq,
-        reason: `invalidation exit score ${score}: ${uniq.map((s) => s.id).join('+')} uPnL ${uPct.toFixed(2)}%`,
-        unrealizedPct: uPct,
-      };
-    }
-    return hold(
-      `score ${score} but uPnL ${uPct.toFixed(2)}% < min ${minUpnlPct}% — log only`,
-      uniq,
-      score
-    );
+  // Thesis broken → flatten. Do not BE (entry is not structure).
+  if (allowExitWhenRed) {
+    return {
+      action: 'exit',
+      score,
+      signals: uniq,
+      reason: `invalidation exit score ${score}: ${uniq.map((s) => s.id).join('+')} uPnL ${uPct.toFixed(2)}%`,
+      unrealizedPct: uPct,
+    };
   }
 
-  const beSl = feeAwareBreakevenSl(side, entry, beFeeBufferPct);
-  if (!isTighter(side, beSl, currentSl)) {
-    return hold(`score ${score} but SL already ≥ BE+fee`, uniq, score);
-  }
-  if (side === 'long' && beSl >= mark) {
-    return hold(`score ${score} but BE+fee would trigger immediately`, uniq, score);
-  }
-  if (side === 'short' && beSl <= mark) {
-    return hold(`score ${score} but BE+fee would trigger immediately`, uniq, score);
-  }
-
-  return {
-    action: 'tighten_be',
-    score,
-    signals: uniq,
-    reason: `invalidation score ${score}: ${uniq.map((s) => s.id).join('+')} (BE+fee ${beFeeBufferPct}%)`,
-    unrealizedPct: uPct,
-    newSl: beSl,
-  };
+  return hold(
+    `score ${score} but exit disabled — log only`,
+    uniq,
+    score
+  );
 }

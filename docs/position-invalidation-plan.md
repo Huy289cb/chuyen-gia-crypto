@@ -83,21 +83,21 @@ PositionMonitor (*/1)
   1. mark refresh
   2. profit-protect (price-based BE/trail)     [done]
   3. invalidation rules (structure-based)     [Phase A]
-       └─ if action=tighten_be & green → amend SL to entry
+       └─ if action=exit & score≥min → market flatten
   4. health / unhedged emergency              [existing]
 ```
 
 **Single pipeline.** No parallel manager process.
 
-### Action policy (Phase A — conservative)
+### Action policy (exit-only)
 
 | Evidence | uPnL | Action |
 |----------|------|--------|
-| Adverse structure (see §5) | **> 0** | `tighten_be` — SL → entry (if tighter) |
-| Adverse structure | ≤ 0 | `hold` — log only (cannot place BE without instant stop) |
-| No evidence | any | `hold` |
+| Adverse structure score≥min | any | `exit` — market flatten (thesis dead) |
+| Score≥min but `INVALIDATION_ALLOW_EXIT=false` | any | `hold` — log only |
+| No / weak evidence | any | `hold` |
 
-**Explicitly out of Phase A:** market exit, reverse, partial fill, LLM.
+**Not used:** `tighten_be` on invalidation. Profit-protect owns price-based BE (@1.5R) and trail.
 
 ### Phase B (deferred)
 
@@ -123,9 +123,9 @@ Inputs: open position `{side, entry, mark, age}` + scan snapshots `1h` (primary)
 | `adverse_sweep` | Liquidity sweep grade A/B **against** side: long + `highSweep`, short + `lowSweep` (1h or 15m) | 2 |
 | `adverse_breakout` | Breakout playbook grade A/B with close direction against side (if metrics expose side; else skip) | 1 |
 
-**Fire `tighten_be` when** total weight ≥ `INVALIDATION_MIN_SCORE` (default **2**) AND uPnL > 0 AND age ≥ min minutes.
+**Fire `exit` when** total weight ≥ `INVALIDATION_MIN_SCORE` (live default **3**) AND age ≥ min minutes AND `INVALIDATION_ALLOW_EXIT`.
 
-Cooldown: score 2 = one strong signal (chop / against-trend / adverse A-sweep) or two soft signals.
+Cooldown: after exit, `INVALIDATION_COOLDOWN_MS` (amend path removed).
 
 ---
 
@@ -156,7 +156,8 @@ Cooldown: score 2 = one strong signal (chop / against-trend / adverse A-sweep) o
 
 ## 8. Success metrics (2 weeks)
 
-- Count of `tighten_be` events vs later outcomes (win/BE/loss).
+- Count of `invalidation_exit` events vs later outcomes (TP-after-exit Y/N).
+- Zero new `tighten_be` invalidation events (removed).
 - No increase in emergency `ProtectiveExposureAudit closed=1` races.
 - Fewer “peak green multi-day → full SL” events on similar setups.
 - OpenRouter cost unchanged (Phase A = 0 LLM).

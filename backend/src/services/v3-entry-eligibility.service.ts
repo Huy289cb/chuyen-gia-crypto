@@ -10,6 +10,7 @@ import {
 import { isV3ScaleInEnabled, resolveMaxTotalExposureUsd, getBinanceMinOrderNotionalUsd, minNotionalWithTolerance, getNotionalTolerancePercent } from '../config/v3-entry-policy';
 import { prisma } from '../lib/prisma';
 import { hasBinanceExposureForSide } from './binance-exposure.service';
+import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import {
   getActiveTestnetPositions,
   getBlockingTestnetPendingOrders,
@@ -117,11 +118,11 @@ async function hasRecentPendingCancelCooldown(symbol: string): Promise<string | 
 }
 
 /**
- * Anti-chase: block same-side entry soon after a close (longer after a loss).
+ * Anti-chase: block either-side entry soon after a close (longer after a loss).
  */
 export async function assertSameSidePostCloseCooldown(
   symbol: string,
-  side: LocalSide,
+  _side: LocalSide,
   methodId = 'kim_nghia'
 ): Promise<string | null> {
   const winCd = getPostCloseSameSideCooldownMinutes(false);
@@ -134,13 +135,12 @@ export async function assertSameSidePostCloseCooldown(
   const recent = await prisma.testnetPosition.findFirst({
     where: {
       symbol: sym,
-      side,
       status: 'closed',
       close_time: { gte: since },
       account: { method_id: methodId },
     },
     orderBy: { close_time: 'desc' },
-    select: { close_time: true, realized_pnl: true, position_id: true },
+    select: { close_time: true, realized_pnl: true, position_id: true, side: true },
   });
   if (!recent?.close_time) return null;
 
@@ -153,8 +153,8 @@ export async function assertSameSidePostCloseCooldown(
 
   const left = Math.ceil(cooldownMin - elapsedMin);
   return (
-    `same-side ${side} cooldown ${left}m after ${wasLoss ? 'loss' : 'close'} ` +
-    `(${cooldownMin}m window)`
+    `post-close cooldown ${left}m after ${wasLoss ? 'loss' : 'close'} ` +
+    `(${cooldownMin}m window, last ${recent.side})`
   );
 }
 
@@ -162,6 +162,16 @@ export async function canRunLlmDispatchForSymbol(
   symbol: string,
   methodId = 'kim_nghia'
 ): Promise<{ allowed: boolean; reason: string }> {
+  const account = await prisma.testnetAccount.findUnique({
+    where: { symbol_method_id: { symbol: symbol.toUpperCase(), method_id: methodId } },
+  });
+  if (account) {
+    const guard = await assertTestnetAccountCanOpenTrade(account.id, symbol);
+    if (!guard.allowed) {
+      return { allowed: false, reason: guard.reason };
+    }
+  }
+
   const blockingPending = await getBlockingTestnetPendingOrders({ symbol, methodId });
   const unresolved = blockingPending.filter(
     (o) => o.status === 'reconciliation_failed_not_on_binance'

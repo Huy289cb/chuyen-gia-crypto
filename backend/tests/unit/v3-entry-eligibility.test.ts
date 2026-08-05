@@ -8,6 +8,9 @@ vi.mock('../../src/lib/prisma', () => ({
     testnetPosition: {
       findFirst: vi.fn().mockResolvedValue(null),
     },
+    testnetAccount: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
   },
 }));
 
@@ -16,6 +19,13 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
   getActiveTestnetPositions: vi.fn(),
   getBlockingTestnetPendingOrders: vi.fn(),
   PIPELINE_EVENT_POSITION_ID: 'pipeline_v3_kim_nghia',
+}));
+
+vi.mock('../../src/services/account-risk-guard.service', () => ({
+  assertTestnetAccountCanOpenTrade: vi.fn().mockResolvedValue({
+    allowed: true,
+    reason: 'ok',
+  }),
 }));
 
 vi.mock('../../src/config/v3-entry-policy', async (importOriginal) => {
@@ -115,27 +125,29 @@ describe('canRunLlmDispatchForSymbol', () => {
 describe('assertSameSidePostCloseCooldown', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES = '90';
-    process.env.POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES = '180';
+    process.env.POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES = '240';
+    process.env.POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES = '360';
   });
 
-  it('blocks same-side after recent loss', async () => {
+  it('blocks either side after recent loss', async () => {
     vi.mocked(prisma.testnetPosition.findFirst).mockResolvedValue({
       close_time: new Date(Date.now() - 30 * 60_000),
       realized_pnl: -1.5,
       position_id: 'pos_x',
+      side: 'long',
     } as never);
 
-    const reason = await assertSameSidePostCloseCooldown('BTC', 'long');
-    expect(reason).toContain('same-side long cooldown');
+    const reason = await assertSameSidePostCloseCooldown('BTC', 'short');
+    expect(reason).toContain('post-close cooldown');
     expect(reason).toContain('loss');
   });
 
   it('allows when outside cooldown window', async () => {
     vi.mocked(prisma.testnetPosition.findFirst).mockResolvedValue({
-      close_time: new Date(Date.now() - 200 * 60_000),
+      close_time: new Date(Date.now() - 400 * 60_000),
       realized_pnl: -1.5,
       position_id: 'pos_x',
+      side: 'long',
     } as never);
 
     const reason = await assertSameSidePostCloseCooldown('BTC', 'long');

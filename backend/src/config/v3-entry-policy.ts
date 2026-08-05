@@ -318,6 +318,229 @@ export function evaluateHtfSideAlign(input: {
 }
 
 /**
+ * Block FOMO entries too far from the lookback range extreme (long from low, short from high).
+ * Default **off** when pullback gate is on (replaced by EMA band). Force with V3_BLOCK_ENTRY_EXTENSION=true.
+ */
+export function isV3BlockEntryExtension(): boolean {
+  if (isV3RequirePullback()) {
+    // Pullback replaces extension unless both forced on.
+    return process.env.V3_BLOCK_ENTRY_EXTENSION === 'true';
+  }
+  return process.env.V3_BLOCK_ENTRY_EXTENSION !== 'false';
+}
+
+export function getV3MaxEntryExtensionPct(): number {
+  const v = parseFloat(process.env.V3_MAX_ENTRY_EXTENSION_PCT || '0.8');
+  return Number.isFinite(v) && v > 0 ? v : 0.8;
+}
+
+export function getV3EntryExtensionTf(): string {
+  return process.env.V3_ENTRY_EXTENSION_TF?.trim() || '1h';
+}
+
+export function getV3EntryExtensionBars(): number {
+  const v = parseInt(process.env.V3_ENTRY_EXTENSION_BARS || '12', 10);
+  return Number.isFinite(v) && v >= 3 ? v : 12;
+}
+
+export interface EntryExtensionResult {
+  pass: boolean;
+  reason?: string;
+  extensionPct?: number;
+}
+
+/**
+ * Pure anti-FOMO: long blocked when entry is too far above range low;
+ * short blocked when entry is too far below range high.
+ */
+export function evaluateEntryExtension(input: {
+  side: 'long' | 'short';
+  entry: number;
+  rangeHigh: number;
+  rangeLow: number;
+  maxExtensionPct?: number;
+  enabled?: boolean;
+  tfLabel?: string;
+}): EntryExtensionResult {
+  const enabled = input.enabled ?? isV3BlockEntryExtension();
+  if (!enabled) return { pass: true };
+
+  const { side, entry, rangeHigh, rangeLow } = input;
+  const maxPct = input.maxExtensionPct ?? getV3MaxEntryExtensionPct();
+  const label = input.tfLabel ?? 'range';
+
+  if (
+    !Number.isFinite(entry) ||
+    entry <= 0 ||
+    !Number.isFinite(rangeHigh) ||
+    !Number.isFinite(rangeLow) ||
+    rangeHigh < rangeLow
+  ) {
+    return { pass: true, reason: 'extension skip: invalid range' };
+  }
+
+  const extensionPct =
+    side === 'long'
+      ? ((entry - rangeLow) / entry) * 100
+      : ((rangeHigh - entry) / entry) * 100;
+
+  if (extensionPct <= maxPct) {
+    return {
+      pass: true,
+      extensionPct,
+      reason: `${side} extension ${extensionPct.toFixed(2)}% ≤ max ${maxPct}% (${label})`,
+    };
+  }
+
+  return {
+    pass: false,
+    extensionPct,
+    reason:
+      `blocked: ${side} extension ${extensionPct.toFixed(2)}% > max ${maxPct}% ` +
+      `from ${label} ${side === 'long' ? 'low' : 'high'} (V3_BLOCK_ENTRY_EXTENSION)`,
+  };
+}
+
+/**
+ * Trend pullback entry — require price near SMA (buy dip / sell rally), not chase.
+ * Default on. Replaces crude range-extension FOMO filter.
+ * Env: V3_REQUIRE_PULLBACK, V3_PULLBACK_*.
+ */
+export function isV3RequirePullback(): boolean {
+  return process.env.V3_REQUIRE_PULLBACK !== 'false';
+}
+
+export function getV3PullbackTf(): string {
+  return process.env.V3_PULLBACK_TF?.trim() || '15m';
+}
+
+export function getV3PullbackSmaPeriod(): number {
+  const v = parseInt(process.env.V3_PULLBACK_SMA_PERIOD || '20', 10);
+  return Number.isFinite(v) && v >= 5 ? v : 20;
+}
+
+/** Long: max % entry may sit above SMA. Short: max % below SMA. Default 0.25. */
+export function getV3PullbackMaxAbovePct(): number {
+  const v = parseFloat(process.env.V3_PULLBACK_MAX_ABOVE_PCT || '0.25');
+  return Number.isFinite(v) && v >= 0 ? v : 0.25;
+}
+
+/** Long: max % entry may sit below SMA. Short: max % above SMA. Default 1.0. */
+export function getV3PullbackMaxBelowPct(): number {
+  const v = parseFloat(process.env.V3_PULLBACK_MAX_BELOW_PCT || '1.0');
+  return Number.isFinite(v) && v >= 0 ? v : 1.0;
+}
+
+export interface TrendPullbackResult {
+  pass: boolean;
+  reason?: string;
+  sma?: number;
+  distPct?: number;
+}
+
+/** SMA of last `period` closes; null if insufficient data. */
+export function smaFromCloses(closes: number[], period: number): number | null {
+  if (!Number.isFinite(period) || period < 1 || closes.length < period) return null;
+  const slice = closes.slice(-period);
+  const sum = slice.reduce((a, b) => a + b, 0);
+  const sma = sum / period;
+  return Number.isFinite(sma) && sma > 0 ? sma : null;
+}
+
+/**
+ * Pure pullback band vs SMA.
+ * Long: entry in [SMA - maxBelow, SMA + maxAbove] (as % of entry).
+ * Short: mirrored (near/above SMA, not far below).
+ */
+export function evaluateTrendPullbackEntry(input: {
+  side: 'long' | 'short';
+  entry: number;
+  closes: number[];
+  smaPeriod?: number;
+  maxAbovePct?: number;
+  maxBelowPct?: number;
+  enabled?: boolean;
+  tfLabel?: string;
+}): TrendPullbackResult {
+  const enabled = input.enabled ?? isV3RequirePullback();
+  if (!enabled) return { pass: true };
+
+  const { side, entry } = input;
+  const period = input.smaPeriod ?? getV3PullbackSmaPeriod();
+  const maxAbove = input.maxAbovePct ?? getV3PullbackMaxAbovePct();
+  const maxBelow = input.maxBelowPct ?? getV3PullbackMaxBelowPct();
+  const label = input.tfLabel ?? `SMA${period}`;
+
+  if (!Number.isFinite(entry) || entry <= 0) {
+    return { pass: true, reason: 'pullback skip: invalid entry' };
+  }
+
+  const sma = smaFromCloses(input.closes, period);
+  if (sma == null) {
+    return { pass: true, reason: `pullback skip: need ${period} closes` };
+  }
+
+  const distPct = ((entry - sma) / entry) * 100;
+
+  if (side === 'long') {
+    if (distPct > maxAbove) {
+      return {
+        pass: false,
+        sma,
+        distPct,
+        reason:
+          `blocked: long ${distPct.toFixed(2)}% above ${label}=${sma.toFixed(1)} ` +
+          `(max +${maxAbove}%) (V3_REQUIRE_PULLBACK)`,
+      };
+    }
+    if (distPct < -maxBelow) {
+      return {
+        pass: false,
+        sma,
+        distPct,
+        reason:
+          `blocked: long ${Math.abs(distPct).toFixed(2)}% below ${label}=${sma.toFixed(1)} ` +
+          `(max -${maxBelow}%) (V3_REQUIRE_PULLBACK)`,
+      };
+    }
+    return {
+      pass: true,
+      sma,
+      distPct,
+      reason: `long pullback ${distPct.toFixed(2)}% vs ${label}=${sma.toFixed(1)}`,
+    };
+  }
+
+  // short: want entry near/above SMA (rally to sell), not far below (chase dump)
+  if (distPct < -maxAbove) {
+    return {
+      pass: false,
+      sma,
+      distPct,
+      reason:
+        `blocked: short ${Math.abs(distPct).toFixed(2)}% below ${label}=${sma.toFixed(1)} ` +
+        `(max -${maxAbove}%) (V3_REQUIRE_PULLBACK)`,
+    };
+  }
+  if (distPct > maxBelow) {
+    return {
+      pass: false,
+      sma,
+      distPct,
+      reason:
+        `blocked: short ${distPct.toFixed(2)}% above ${label}=${sma.toFixed(1)} ` +
+        `(max +${maxBelow}%) (V3_REQUIRE_PULLBACK)`,
+    };
+  }
+  return {
+    pass: true,
+    sma,
+    distPct,
+    reason: `short pullback ${distPct.toFixed(2)}% vs ${label}=${sma.toFixed(1)}`,
+  };
+}
+
+/**
  * 5m entry guards: optional block when 1h range; require 15m or 1h trend + same direction.
  * Used by testbed variants and runtime when env flags set.
  */

@@ -128,6 +128,29 @@ export async function getBookTicker(symbol: string): Promise<BookTicker> {
 }
 
 /**
+ * Get mark price + last funding rate (public premiumIndex).
+ */
+export async function getPremiumIndex(symbol: string): Promise<{
+  symbol: string;
+  markPrice: number;
+  lastFundingRate: number;
+  nextFundingTime: number;
+}> {
+  try {
+    const response: any = await get(endpoints.PREMIUM_INDEX, { symbol });
+    return {
+      symbol: response.symbol,
+      markPrice: parseFloat(response.markPrice),
+      lastFundingRate: parseFloat(response.lastFundingRate),
+      nextFundingTime: Number(response.nextFundingTime),
+    };
+  } catch (error: any) {
+    console.error('[BinanceMarket] Failed to get premium index:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Get exchange information including trading rules and filters
  * @param {string} symbol - Optional symbol to filter (e.g., BTCUSDT)
  * @returns {Promise<object>} Exchange information with symbol filters

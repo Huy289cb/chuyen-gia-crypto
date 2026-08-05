@@ -20,17 +20,34 @@ import {
   evaluateHtfTrendRequirement,
   evaluate5mEntryGuards,
   evaluateHtfSideAlign,
+  evaluateEntryExtension,
+  evaluateTrendPullbackEntry,
   evaluateSetupGradePlaybookFilter,
+  getV3EntryExtensionBars,
+  getV3EntryExtensionTf,
   getV3HtfSideAlignTf,
   getV3HtfTrendAlt,
+  getV3MaxEntryExtensionPct,
+  getV3PullbackMaxAbovePct,
+  getV3PullbackMaxBelowPct,
+  getV3PullbackSmaPeriod,
+  getV3PullbackTf,
   getV3RequireHtfTrend,
   isRangeEntryBlocked,
   isRegimeAllowedForEntry,
+  isV3BlockEntryExtension,
+  isV3RequirePullback,
   resolveGateRegimeFromSignal,
 } from '../config/v3-entry-policy';
+import {
+  evaluateFundingVeto,
+  fetchCachedFundingRate,
+  isFundingVetoEnabled,
+} from '../config/funding-veto';
+import { getPremiumIndex } from './binance/market';
 import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import { getScanResult } from '../schedulers/market-scan.scheduler';
-import type { UnifiedCandle } from './candle.service';
+import { getCandles, type UnifiedCandle } from './candle.service';
 import { generateCandleHash } from '../utils/candle-hash';
 import {
   tryRepairLevelsWithSecondaryKey,
@@ -519,6 +536,117 @@ export class GroqDispatchService {
           });
         }
         return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+      }
+
+      if (isFundingVetoEnabled()) {
+        const pair = `${symbol.toUpperCase().replace(/USDT$/i, '')}USDT`;
+        const fundingRate = await fetchCachedFundingRate(pair, getPremiumIndex);
+        const fundingCheck = evaluateFundingVeto({ side, fundingRate });
+        if (!fundingCheck.pass) {
+          const reason = fundingCheck.reason ?? 'funding veto blocked';
+          if (this.config.enableMemory) {
+            await memoryService.storeDecision({
+              symbol,
+              timeframe,
+              playbook_key: gatePlaybook,
+              grade: gateGrade,
+              confidence: gateConfidence,
+              regime: gateRegime,
+              decision: 'no_trade',
+              reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+              method_id,
+              candle_hash: candleHash,
+            });
+          }
+          return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+        }
+      }
+
+      if (isV3RequirePullback() && analysis.suggested_entry != null) {
+        try {
+          const pbTf = getV3PullbackTf();
+          const period = getV3PullbackSmaPeriod();
+          const { candles: pbCandles } = await getCandles({
+            symbol,
+            timeframe: pbTf,
+            limit: period + 5,
+          });
+          const closes = pbCandles.map((c) => c.close);
+          const pb = evaluateTrendPullbackEntry({
+            side,
+            entry: analysis.suggested_entry,
+            closes,
+            smaPeriod: period,
+            maxAbovePct: getV3PullbackMaxAbovePct(),
+            maxBelowPct: getV3PullbackMaxBelowPct(),
+            tfLabel: `SMA${period}@${pbTf}`,
+          });
+          if (!pb.pass) {
+            const reason = pb.reason ?? 'pullback entry blocked';
+            if (this.config.enableMemory) {
+              await memoryService.storeDecision({
+                symbol,
+                timeframe,
+                playbook_key: gatePlaybook,
+                grade: gateGrade,
+                confidence: gateConfidence,
+                regime: gateRegime,
+                decision: 'no_trade',
+                reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+                method_id,
+                candle_hash: candleHash,
+              });
+            }
+            return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+          }
+        } catch (pbErr: unknown) {
+          const msg = pbErr instanceof Error ? pbErr.message : String(pbErr);
+          console.warn(`[GroqDispatch] Pullback check skipped: ${msg}`);
+        }
+      } else if (isV3BlockEntryExtension() && analysis.suggested_entry != null) {
+        try {
+          const extTf = getV3EntryExtensionTf();
+          const extBars = getV3EntryExtensionBars();
+          const { candles: extCandles } = await getCandles({
+            symbol,
+            timeframe: extTf,
+            limit: extBars + 2,
+          });
+          const window = extCandles.slice(-extBars);
+          if (window.length >= 3) {
+            const rangeHigh = Math.max(...window.map((c) => c.high));
+            const rangeLow = Math.min(...window.map((c) => c.low));
+            const ext = evaluateEntryExtension({
+              side,
+              entry: analysis.suggested_entry,
+              rangeHigh,
+              rangeLow,
+              maxExtensionPct: getV3MaxEntryExtensionPct(),
+              tfLabel: `${extBars}×${extTf}`,
+            });
+            if (!ext.pass) {
+              const reason = ext.reason ?? 'entry extension blocked';
+              if (this.config.enableMemory) {
+                await memoryService.storeDecision({
+                  symbol,
+                  timeframe,
+                  playbook_key: gatePlaybook,
+                  grade: gateGrade,
+                  confidence: gateConfidence,
+                  regime: gateRegime,
+                  decision: 'no_trade',
+                  reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+                  method_id,
+                  candle_hash: candleHash,
+                });
+              }
+              return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+            }
+          }
+        } catch (extErr: unknown) {
+          const msg = extErr instanceof Error ? extErr.message : String(extErr);
+          console.warn(`[GroqDispatch] Entry extension check skipped: ${msg}`);
+        }
       }
 
       if (timeframe === '5m') {

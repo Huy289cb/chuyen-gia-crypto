@@ -13,6 +13,7 @@ import {
   inferWorkerActivityStatus,
 } from '../utils/scheduler-heartbeat';
 import { getDayBoundsICT } from '../utils/ict-time';
+import { getAccountCircuitStatus } from './account-circuit.service';
 
 const POS_CRON = '*/1 * * * *';
 
@@ -169,19 +170,14 @@ export async function getSystemHealthSnapshot(): Promise<SystemHealthSnapshot> {
   let isLocked = false;
   let lockReason: string | null = null;
   if (account) {
-    const { dayStart } = getDayBoundsICT();
-    const baseline = await prisma.testnetAccountSnapshot.findFirst({
-      where: { account_id: account.id, timestamp: { lt: dayStart } },
-      orderBy: { timestamp: 'desc' },
-    });
-    const startEquity = baseline?.equity ?? account.equity ?? 0;
-    const delta = (account.equity ?? 0) - startEquity;
-    dailyLossCurrent = delta < 0 ? Math.abs(delta) : 0;
+    const circuit = await getAccountCircuitStatus(account.id);
+    dailyLossCurrent = circuit.dailyLossUsd;
 
     const lossCooldown = account.cooldown_until && account.cooldown_until > now;
     const precisionCooldown = account.precision_cooldown_until && account.precision_cooldown_until > now;
-    isLocked = Boolean(lossCooldown || precisionCooldown);
-    if (lossCooldown) lockReason = 'Loss cooldown';
+    isLocked = Boolean(lossCooldown || precisionCooldown || !circuit.allowed);
+    if (!circuit.allowed) lockReason = circuit.reason;
+    else if (lossCooldown) lockReason = 'Loss cooldown';
     else if (precisionCooldown) lockReason = 'Precision cooldown';
   }
 

@@ -76,12 +76,13 @@ export function getPendingOrderReentryCooldownMinutes(): number {
 }
 
 /**
- * After a closed position, block same-side re-entry (anti-chase). Default 90m.
- * After a losing close, uses POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES when set (default 180m).
+ * After any closed position, block re-entry on either side (anti-chase / anti-flip).
+ * Default 240m (4h). After a loss: POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES (default 360m / 6h).
+ * Env names keep SAME_SIDE for compat; behavior is any-side.
  */
 export function getPostCloseSameSideCooldownMinutes(wasLoss: boolean): number {
   if (wasLoss) {
-    return parseHours('POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES', 180);
+    return parseHours('POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES', 360);
   }
-  return parseHours('POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES', 90);
+  return parseHours('POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES', 240);
 }

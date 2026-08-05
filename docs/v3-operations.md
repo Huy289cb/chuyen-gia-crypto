@@ -9,13 +9,13 @@ Operational behavior for Big Update v3 (BTC-only, Kim Nghia, Binance Futures tes
 ```
 MarketScan (*/5) → Signal Gate cache (5m/15m/1h parallel)
        ↓
-LLMDispatch (1,6,11,…56 * * * *) → best PASS timeframe → HTF 1h trend guard → LLM dispatch chain → executeV3Trade
+LLMDispatch (1,6,11,…56 * * * *) → best PASS timeframe → HTF trend + side-align → **pullback EMA band** → LLM dispatch chain → executeV3Trade
        ↓
 Binance limit order + pending → WS fill → open position + SL/TP on Binance
        ↓
 PendingOrderLifecycle (*/5) → TTL / drift cancel → optional LLM pending review
        ↓
-PositionMonitor (*/1) → defer to exchange SL/TP (PnL+ P0: reduce/exit off by default)
+PositionMonitor (*/1) → profit-protect + invalidation exit-only → defer exchange SL/TP
 ```
 
 ## Schedulers
@@ -40,7 +40,8 @@ Dashboard `lastRun` for schedulers uses in-memory **heartbeats** (`utils/schedul
 | Area | Module |
 |------|--------|
 | Timeframes | `config/v3-schedulers.ts` — `getV3SignalGateTimeframes()` |
-| HTF guard | `V3_REQUIRE_HTF_TREND=1h` in `groq-dispatch.service.ts` |
+| HTF guard | `V3_REQUIRE_HTF_TREND=1h` + `V3_REQUIRE_HTF_SIDE_ALIGN` in `groq-dispatch.service.ts` |
+| Pullback entry | `V3_REQUIRE_PULLBACK` EMA band — [v3-trend-pullback-entry.md](./v3-trend-pullback-entry.md) |
 | LLM dispatch chain | `groq-client.ts` — Scout → Cerebras → OpenRouter → Groq fallbacks — [llm-dispatch-providers.md](./llm-dispatch-providers.md) |
 | Signal gate env | `signal-gate.service.ts` ← `MIN_SIGNAL_GRADE`, `MIN_SIGNAL_CONFIDENCE` |
 | Best-of ranking | `utils/signal-gate-ranking.ts` — `V3_TF_PRIORITY` |
@@ -102,15 +103,27 @@ pm2 delete crypto-api crypto-worker; pm2 start ecosystem.config.cjs && pm2 save
 
 ```env
 V3_SIGNAL_GATE_TIMEFRAMES=5m,15m,1h
-V3_TF_PRIORITY=5m,15m,1h
+V3_TF_PRIORITY=15m,1h,5m
 V3_LLM_DISPATCH_CRON=1,6,11,16,21,26,31,36,41,46,51,56
 SIGNAL_GATE_CACHE_TTL_MS=300000
 V3_REQUIRE_HTF_TREND=1h
+V3_REQUIRE_HTF_SIDE_ALIGN=true
+V3_REQUIRE_PULLBACK=true
+V3_PULLBACK_TF=15m
+V3_PULLBACK_SMA_PERIOD=20
+V3_PULLBACK_MAX_ABOVE_PCT=0.25
+V3_PULLBACK_MAX_BELOW_PCT=1.0
+V3_BLOCK_ENTRY_EXTENSION=false
 V3_ALLOWED_REGIMES=trend
+PROFIT_PROTECT_BE_AT_R=1.5
+INVALIDATION_ALLOW_EXIT=true
+INVALIDATION_MIN_SCORE=3
 POSITION_MONITOR_ALLOW_REDUCE=false
 POSITION_MONITOR_ALLOW_EXIT=false
 PHANTOM_REOPEN_ENABLED=false
 ```
+
+PnL+ tracking: [pnl-expectancy-monitoring.md](./pnl-expectancy-monitoring.md) · pullback: [v3-trend-pullback-entry.md](./v3-trend-pullback-entry.md)
 
 ## Telegram AI runbook
 

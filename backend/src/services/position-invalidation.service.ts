@@ -1,5 +1,6 @@
 /**
- * Structure invalidation → BE when green; market exit when red + score≥min.
+ * Structure invalidation → market exit when score≥min (green or red).
+ * No BE tighten — profit-protect owns price-based BE/trail.
  * docs/position-invalidation-plan.md
  */
 
@@ -14,13 +15,12 @@ import {
   isInvalidationEnabled,
   isInvalidationExitEnabled,
 } from '../config/position-invalidation-policy';
-import { getBreakevenFeeBufferPct, getMinSlMovePct } from '../config/profit-protect-policy';
+import { getBreakevenFeeBufferPct } from '../config/profit-protect-policy';
 import { getScanResult } from '../schedulers/market-scan.scheduler';
 import {
   evaluatePositionInvalidation,
   type InvalidationScanSnap,
 } from '../utils/position-invalidation';
-import { amendProtectiveStopLoss } from './amend-protective-sl.service';
 import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
 import {
   closeLocalPosition,
@@ -85,8 +85,8 @@ export async function maybeApplyInvalidationProtect(
   }
 
   const allowExit = isInvalidationExitEnabled();
-  if (!position.binance_sl_order_id && !allowExit) {
-    return { applied: false, reason: 'no exchange SL id' };
+  if (!allowExit) {
+    return { applied: false, reason: 'invalidation exit disabled' };
   }
 
   const cooldownUntil = (lastAmendAt.get(position.position_id) ?? 0) + getInvalidationCooldownMs();
@@ -119,59 +119,7 @@ export async function maybeApplyInvalidationProtect(
     allowExitWhenRed: allowExit,
   });
 
-  if (decision.action === 'exit') {
-    const closeResult = await closePositionOnBinanceMarket(position, undefined, {
-      guardSource: 'invalidation_exit',
-      positionId: position.position_id,
-      entryTime: position.entry_time ?? null,
-    });
-    if (!closeResult.ok) {
-      console.error(
-        `[Invalidation] Exit failed for ${position.position_id}: ${closeResult.reason}`
-      );
-      return { applied: false, reason: closeResult.reason ?? 'exit failed', score: decision.score };
-    }
-
-    await closeLocalPosition(
-      { ...position, account: position.account },
-      mark,
-      'invalidation_exit',
-      {
-        score: decision.score,
-        signals: decision.signals,
-        unrealized_pct: decision.unrealizedPct,
-        reason: decision.reason,
-      }
-    );
-    await recordTestnetTradeEvent(position.position_id, 'position_invalidation', {
-      action: 'exit',
-      reason: decision.reason,
-      score: decision.score,
-      signals: decision.signals,
-      unrealized_pct: decision.unrealizedPct,
-      mark,
-    });
-
-    lastAmendAt.set(position.position_id, Date.now());
-    try {
-      await syncTestnetAccountFromBinance(position.account_id);
-    } catch (syncErr: unknown) {
-      const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-      console.warn(`[Invalidation] Balance sync after exit failed: ${msg}`);
-    }
-
-    console.log(
-      `[Invalidation] ${position.position_id} EXIT @ ${mark} — ${decision.reason}`
-    );
-    return {
-      applied: true,
-      exited: true,
-      reason: decision.reason,
-      score: decision.score,
-    };
-  }
-
-  if (decision.action !== 'tighten_be' || decision.newSl == null) {
+  if (decision.action !== 'exit') {
     if (decision.score > 0) {
       console.log(
         `[Invalidation] ${position.position_id} hold score=${decision.score} — ${decision.reason}`
@@ -180,46 +128,53 @@ export async function maybeApplyInvalidationProtect(
     return { applied: false, reason: decision.reason, score: decision.score };
   }
 
-  if (!position.binance_sl_order_id) {
-    return { applied: false, reason: 'no exchange SL id for tighten', score: decision.score };
+  const closeResult = await closePositionOnBinanceMarket(position, undefined, {
+    guardSource: 'invalidation_exit',
+    positionId: position.position_id,
+    entryTime: position.entry_time ?? null,
+  });
+  if (!closeResult.ok) {
+    console.error(
+      `[Invalidation] Exit failed for ${position.position_id}: ${closeResult.reason}`
+    );
+    return { applied: false, reason: closeResult.reason ?? 'exit failed', score: decision.score };
   }
 
-  const minMove = position.entry_price * (getMinSlMovePct() / 100);
-  if (Math.abs(decision.newSl - position.stop_loss) < minMove) {
-    return { applied: false, reason: 'move below min SL bump', score: decision.score };
-  }
-
-  const amended = await amendProtectiveStopLoss({
-    position,
-    newSl: decision.newSl,
+  await closeLocalPosition(
+    { ...position, account: position.account },
     mark,
-    eventType: 'position_invalidation',
-    action: 'tighten_be',
-    reason: decision.reason,
-    meta: {
+    'invalidation_exit',
+    {
       score: decision.score,
       signals: decision.signals,
       unrealized_pct: decision.unrealizedPct,
-    },
+      reason: decision.reason,
+    }
+  );
+  await recordTestnetTradeEvent(position.position_id, 'position_invalidation', {
+    action: 'exit',
+    reason: decision.reason,
+    score: decision.score,
+    signals: decision.signals,
+    unrealized_pct: decision.unrealizedPct,
+    mark,
   });
 
-  if (!amended.ok) {
-    console.error(
-      `[Invalidation] Amend failed for ${position.position_id}: ${amended.reason}`
-    );
-    return { applied: false, reason: amended.reason, score: decision.score };
+  lastAmendAt.set(position.position_id, Date.now());
+  try {
+    await syncTestnetAccountFromBinance(position.account_id);
+  } catch (syncErr: unknown) {
+    const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+    console.warn(`[Invalidation] Balance sync after exit failed: ${msg}`);
   }
 
-  lastAmendAt.set(position.position_id, Date.now());
   console.log(
-    `[Invalidation] ${position.position_id} tighten_be: SL ${position.stop_loss}→${decision.newSl} ` +
-      `(${decision.reason}) uPnL=${decision.unrealizedPct.toFixed(2)}%`
+    `[Invalidation] ${position.position_id} EXIT @ ${mark} — ${decision.reason}`
   );
-
   return {
     applied: true,
+    exited: true,
     reason: decision.reason,
-    newSl: decision.newSl,
     score: decision.score,
   };
 }

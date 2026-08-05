@@ -7,6 +7,13 @@ import { Router, Request, Response } from 'express';
 import { riskManagerService } from '../services/risk-manager.service';
 import { memoryService } from '../services/memory.service';
 import { signalGateService } from '../services/signal-gate.service';
+import { prisma } from '../lib/prisma';
+import { getRiskPolicy } from '../config/risk-policy';
+import { getAccountCircuitStatus } from '../services/account-circuit.service';
+import {
+  profitFactorLabel,
+  rollupExpectancyFromOutcomes,
+} from '../services/expectancy-rollup.service';
 
 const router = Router();
 
@@ -17,12 +24,17 @@ const router = Router();
 router.get('/risk', async (_req: Request, res: Response) => {
   try {
     const config = riskManagerService.getConfig();
-    const dailyStats = riskManagerService.getDailyStats('BTC'); // Default to BTC
-    
+    const policy = getRiskPolicy();
+    const account = await prisma.testnetAccount.findFirst({
+      where: { symbol: 'BTC', method_id: 'kim_nghia' },
+    });
+    const circuit = account ? await getAccountCircuitStatus(account.id) : null;
+
     res.json({
       config: {
         risk_per_trade_percent: config.riskPerTradePercent,
-        daily_loss_limit_percent: config.dailyLossLimitPercent,
+        daily_loss_limit_percent: policy.dailyLossLimitPercent,
+        max_drawdown_percent: policy.maxDrawdownPercent,
         max_consecutive_losses: config.maxConsecutiveLosses,
         consecutive_loss_cooldown_hours: config.consecutiveLossCooldownHours,
         max_spread_percent: config.maxSpreadPercent,
@@ -31,18 +43,66 @@ router.get('/risk', async (_req: Request, res: Response) => {
         min_signal_grade: config.minSignalGrade,
         min_signal_confidence: config.minSignalConfidence,
         max_positions_per_symbol: config.maxPositionsPerSymbol,
-        max_total_positions: config.maxTotalPositions
+        max_total_positions: config.maxTotalPositions,
+        circuit_daily_loss_enabled: policy.circuitDailyLossEnabled,
+        circuit_drawdown_enabled: policy.circuitDrawdownEnabled,
+        circuit_expectancy_kill_enabled: policy.circuitExpectancyKillEnabled,
+        circuit_expectancy_window: policy.circuitExpectancyWindow,
+        circuit_expectancy_min_sum_r: policy.circuitExpectancyMinSumR,
       },
-      daily_stats: dailyStats || {
-        dailyPnL: 0,
-        consecutiveLosses: 0
-      },
-      trading_allowed: dailyStats ? dailyStats.dailyPnL > -config.dailyLossLimitPercent : true,
-      timestamp: new Date().toISOString()
+      circuit: circuit
+        ? {
+            allowed: circuit.allowed,
+            reason: circuit.reason,
+            daily_loss_usd: circuit.dailyLossUsd,
+            daily_loss_percent: circuit.dailyLossPercent,
+            drawdown_percent: circuit.drawdownPercent,
+            peak_equity: circuit.peakEquity,
+            expectancy: circuit.expectancy,
+          }
+        : null,
+      trading_allowed: circuit ? circuit.allowed : true,
+      timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     console.error('[Metrics] Error getting risk metrics:', error.message);
     res.status(500).json({ error: 'Failed to get risk metrics' });
+  }
+});
+
+/**
+ * GET /api/metrics/expectancy?n=20&days=
+ * Rollup avgR / PF / n from trade_outcomes.
+ */
+router.get('/expectancy', async (req: Request, res: Response) => {
+  try {
+    const n = Math.min(200, Math.max(1, parseInt(String(req.query.n || '20'), 10) || 20));
+    const days = parseFloat(String(req.query.days || '0')) || 0;
+    const where =
+      days > 0
+        ? { timestamp: { gte: new Date(Date.now() - days * 86_400_000) } }
+        : {};
+    const rows = await prisma.tradeOutcome.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: days > 0 ? 500 : n,
+      select: { realized_rr: true, realized_pnl: true, close_reason: true, timestamp: true },
+    });
+    const window = days > 0 ? rows : rows.slice(0, n);
+    const rollup = rollupExpectancyFromOutcomes(window);
+    const policy = getRiskPolicy();
+    res.json({
+      window: days > 0 ? `last_${days}d` : `last_${n}`,
+      ...rollup,
+      profit_factor_label: profitFactorLabel(rollup.profitFactor, rollup.wins, rollup.losses),
+      kill_armed:
+        rollup.n >= policy.circuitExpectancyWindow &&
+        rollup.sumR <= policy.circuitExpectancyMinSumR,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[Metrics] Error getting expectancy:', error.message);
+    res.status(500).json({ error: 'Failed to get expectancy' });
   }
 });
 

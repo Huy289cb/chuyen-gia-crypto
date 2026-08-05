@@ -15,9 +15,6 @@ const base = {
   beFeeBufferPct: 0.08,
 };
 
-const beLong = Math.round(63703.6 * 1.0008 * 100) / 100;
-const beShort = Math.round(63703.6 * 0.9992 * 100) / 100;
-
 describe('evaluatePositionInvalidation', () => {
   it('holds when young', () => {
     const out = evaluatePositionInvalidation({ ...base, ageMinutes: 10 });
@@ -34,24 +31,25 @@ describe('evaluatePositionInvalidation', () => {
     expect(out.score).toBe(0);
   });
 
-  it('tightens BE on HTF chop when green', () => {
+  it('exits on HTF chop when score≥min and allowExit', () => {
     const out = evaluatePositionInvalidation({
       ...base,
       htf: { timeframe: '1h', regime: 'chop', trendDirection: null },
+      allowExitWhenRed: true,
     });
-    expect(out.action).toBe('tighten_be');
+    expect(out.action).toBe('exit');
     expect(out.score).toBe(2);
-    expect(out.newSl).toBe(beLong);
-    expect(out.newSl).toBeGreaterThan(base.entry);
+    expect(out.reason).toContain('invalidation exit');
     expect(out.signals.some((s) => s.id === 'htf_chop')).toBe(true);
   });
 
-  it('tightens BE on trend against', () => {
+  it('exits on trend against when allowExit (green or red)', () => {
     const out = evaluatePositionInvalidation({
       ...base,
       htf: { timeframe: '1h', regime: 'trend', trendDirection: 'bearish' },
+      allowExitWhenRed: true,
     });
-    expect(out.action).toBe('tighten_be');
+    expect(out.action).toBe('exit');
     expect(out.signals.some((s) => s.id === 'htf_trend_against')).toBe(true);
   });
 
@@ -67,7 +65,7 @@ describe('evaluatePositionInvalidation', () => {
     expect(out.reason).toContain('invalidation exit');
   });
 
-  it('logs only when score high but red', () => {
+  it('logs only when score high but exit disabled', () => {
     const out = evaluatePositionInvalidation({
       ...base,
       mark: 63000, // red long
@@ -75,18 +73,18 @@ describe('evaluatePositionInvalidation', () => {
     });
     expect(out.action).toBe('hold');
     expect(out.score).toBe(2);
-    expect(out.reason).toContain('log only');
+    expect(out.reason).toContain('exit disabled');
   });
 
-  it('barely green + allowExit still log-only (not exit)', () => {
+  it('barely green + allowExit → exit (no BE path)', () => {
     const out = evaluatePositionInvalidation({
       ...base,
-      mark: 63710, // ~+0.01% — below minUpnlPct
+      mark: 63710, // ~+0.01%
       htf: { timeframe: '1h', regime: 'chop' },
       allowExitWhenRed: true,
     });
-    expect(out.action).toBe('hold');
-    expect(out.reason).toContain('log only');
+    expect(out.action).toBe('exit');
+    expect(out.reason).toContain('invalidation exit');
   });
 
   it('fires adverse high-sweep for long', () => {
@@ -105,8 +103,9 @@ describe('evaluatePositionInvalidation', () => {
           },
         ],
       },
+      allowExitWhenRed: true,
     });
-    expect(out.action).toBe('tighten_be');
+    expect(out.action).toBe('exit');
     expect(out.signals.some((s) => s.id === 'adverse_sweep')).toBe(true);
   });
 
@@ -131,26 +130,26 @@ describe('evaluatePositionInvalidation', () => {
     expect(out.score).toBe(0);
   });
 
-  it('holds when SL already at/above BE', () => {
-    const out = evaluatePositionInvalidation({
-      ...base,
-      currentSl: beLong,
-      htf: { timeframe: '1h', regime: 'chop' },
-    });
-    expect(out.action).toBe('hold');
-    expect(out.reason).toContain('already');
-  });
-
-  it('short: bullish HTF → against', () => {
+  it('short: bullish HTF → exit when allowExit', () => {
     const out = evaluatePositionInvalidation({
       ...base,
       side: 'short',
       mark: 63000,
       currentSl: 64500,
       htf: { timeframe: '1h', regime: 'trend', trendDirection: 'bullish' },
+      allowExitWhenRed: true,
     });
-    expect(out.action).toBe('tighten_be');
-    expect(out.newSl).toBe(beShort);
-    expect(out.newSl).toBeLessThan(63703.6);
+    expect(out.action).toBe('exit');
+    expect(out.signals.some((s) => s.id === 'htf_trend_against')).toBe(true);
+  });
+
+  it('never returns tighten_be', () => {
+    const out = evaluatePositionInvalidation({
+      ...base,
+      htf: { timeframe: '1h', regime: 'chop' },
+      allowExitWhenRed: true,
+    });
+    expect(out.action).not.toBe('tighten_be' as 'hold');
+    expect(out.action).toBe('exit');
   });
 });

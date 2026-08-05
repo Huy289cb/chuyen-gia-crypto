@@ -12,6 +12,7 @@ import { isInternalCloseReason } from '../utils/bookkeeping-close';
 import { fetchBinanceClosedTradeRounds } from '../services/binance-trade-history.service';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
+import { getAccountCircuitStatus } from '../services/account-circuit.service';
 import { METHODS } from '../config/methods';
 import { getCandles } from '../services/candle.service';
 import { getV3LtfAlignRegimeHtf } from '../config/v3-entry-policy';
@@ -79,7 +80,7 @@ function mapProtectiveTradeEvent(
   if (eventType === 'position_invalidation') {
     const reason = String(parsed?.reason ?? '');
     const score = parsed?.score != null ? `score ${parsed.score}` : '';
-    const action = String(parsed?.action ?? 'tighten_be');
+    const action = String(parsed?.action ?? 'exit');
     if (action === 'exit') {
       return {
         module: 'PositionMonitor',
@@ -698,35 +699,29 @@ router.get('/risk', async (_req: Request, res: Response) => {
     const account = accounts[0];
     const now = new Date();
 
+    const circuit = account ? await getAccountCircuitStatus(account.id) : null;
     const lossCooldown = account?.cooldown_until && account.cooldown_until > now;
     const precisionCooldown = account?.precision_cooldown_until && account.precision_cooldown_until > now;
-    const isLocked = Boolean(lossCooldown || precisionCooldown);
+    const isLocked = Boolean(lossCooldown || precisionCooldown || (circuit && !circuit.allowed));
 
     let lockReason: string | null = null;
-    if (lossCooldown) lockReason = 'Loss cooldown active (consecutive losses threshold)';
+    if (circuit && !circuit.allowed) lockReason = circuit.reason;
+    else if (lossCooldown) lockReason = 'Loss cooldown active (consecutive losses threshold)';
     else if (precisionCooldown) lockReason = 'Precision / API error cooldown active';
 
     const balanceBase = account?.current_balance || account?.equity || 0;
     const dailyLossCapUsd = balanceBase * (policy.dailyLossLimitPercent / 100);
-
-    let dailyLossCurrent = 0;
-    if (account) {
-      const dayStart = new Date();
-      dayStart.setUTCHours(0, 0, 0, 0);
-      const baseline = await prisma.testnetAccountSnapshot.findFirst({
-        where: { account_id: account.id, timestamp: { lt: dayStart } },
-        orderBy: { timestamp: 'desc' },
-      });
-      const startEquity = baseline?.equity ?? account.equity;
-      const delta = (account.equity ?? 0) - startEquity;
-      dailyLossCurrent = delta < 0 ? Math.abs(delta) : 0;
-    }
+    const dailyLossCurrent = circuit?.dailyLossUsd ?? 0;
 
     return {
       riskPerTrade: policy.riskPerTradePercent,
       dailyLossCap: dailyLossCapUsd,
       dailyLossLimitPercent: policy.dailyLossLimitPercent,
       dailyLossCurrent: dailyLossCurrent,
+      maxDrawdownPercent: policy.maxDrawdownPercent,
+      drawdownPercent: circuit?.drawdownPercent ?? 0,
+      peakEquity: circuit?.peakEquity ?? 0,
+      expectancy: circuit?.expectancy ?? null,
       maxConsecutiveLosses: policy.maxConsecutiveLosses,
       currentStreak: account?.consecutive_losses || 0,
       currentLockState: isLocked ? 'locked' : 'unlocked',

@@ -143,6 +143,7 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
     reason: 'Không có setup A/B — xem chi tiết playbook bên dưới',
   };
 
+  // Prefer liquidity_sweep over breakout at the same grade (live BO was drowning LS).
   if (liquiditySweep.detected && liquiditySweep.grade === 'A') {
     bestSetup = {
       playbookKey: 'liquidity_sweep_reclaim',
@@ -151,18 +152,14 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
       regime,
       reason: liquiditySweep.reason,
     };
-  }
-
-  if (breakoutVolume.detected && breakoutVolume.grade === 'A') {
-    if (breakoutVolume.confidence > bestSetup.confidence) {
-      bestSetup = {
-        playbookKey: 'breakout_volume',
-        grade: 'A',
-        confidence: breakoutVolume.confidence,
-        regime,
-        reason: breakoutVolume.reason,
-      };
-    }
+  } else if (breakoutVolume.detected && breakoutVolume.grade === 'A') {
+    bestSetup = {
+      playbookKey: 'breakout_volume',
+      grade: 'A',
+      confidence: breakoutVolume.confidence,
+      regime,
+      reason: breakoutVolume.reason,
+    };
   }
 
   if (bestSetup.grade === 'D') {
@@ -174,18 +171,14 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
         regime,
         reason: liquiditySweep.reason,
       };
-    }
-
-    if (breakoutVolume.detected && breakoutVolume.grade === 'B') {
-      if (breakoutVolume.confidence > bestSetup.confidence) {
-        bestSetup = {
-          playbookKey: 'breakout_volume',
-          grade: 'B',
-          confidence: breakoutVolume.confidence,
-          regime,
-          reason: breakoutVolume.reason,
-        };
-      }
+    } else if (breakoutVolume.detected && breakoutVolume.grade === 'B') {
+      bestSetup = {
+        playbookKey: 'breakout_volume',
+        grade: 'B',
+        confidence: breakoutVolume.confidence,
+        regime,
+        reason: breakoutVolume.reason,
+      };
     }
   }
 

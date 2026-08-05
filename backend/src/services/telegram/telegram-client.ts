@@ -1,7 +1,14 @@
 import axios, { isAxiosError } from 'axios';
+import https from 'https';
 import { isTelegramEnabled, telegramConfig } from '../../config/telegram';
 
 const API_BASE = 'https://api.telegram.org';
+
+/**
+ * VPS often has broken IPv6; Node prefers AAAA → ETIMEDOUT to api.telegram.org.
+ * Force IPv4 for all Telegram HTTPS calls.
+ */
+const telegramHttpsAgent = new https.Agent({ family: 4, keepAlive: true });
 
 export interface TelegramUpdate {
   update_id: number;
@@ -68,7 +75,10 @@ async function postSendMessage(
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      await axios.post(botUrl('sendMessage'), payload, { timeout: 25_000 });
+      await axios.post(botUrl('sendMessage'), payload, {
+        timeout: 25_000,
+        httpsAgent: telegramHttpsAgent,
+      });
       return;
     } catch (err: unknown) {
       lastErr = err;
@@ -192,6 +202,7 @@ export async function getTelegramUpdates(
     const res = await axios.get(botUrl('getUpdates'), {
       params,
       timeout: (timeoutSeconds + 10) * 1000,
+      httpsAgent: telegramHttpsAgent,
     });
     const updates = (res.data?.result as TelegramUpdate[]) || [];
     console.log(`[Telegram] getUpdates END pid=${process.pid} count=${updates.length}`);
@@ -206,7 +217,11 @@ export async function getTelegramUpdates(
 export async function deleteTelegramWebhook(): Promise<void> {
   if (!telegramConfig.botToken) return;
   try {
-    await axios.post(botUrl('deleteWebhook'), { drop_pending_updates: false }, { timeout: 15_000 });
+    await axios.post(
+      botUrl('deleteWebhook'),
+      { drop_pending_updates: false },
+      { timeout: 15_000, httpsAgent: telegramHttpsAgent }
+    );
     console.log(`[Telegram] deleteWebhook ok pid=${process.pid}`);
   } catch (err: unknown) {
     console.warn(`[Telegram] deleteWebhook failed pid=${process.pid}: ${formatTelegramApiError(err)}`);

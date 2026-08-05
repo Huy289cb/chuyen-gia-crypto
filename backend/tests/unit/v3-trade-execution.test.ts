@@ -283,9 +283,9 @@ describe('executeV3Trade', () => {
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 
-  it('rejects when same-side post-close cooldown active', async () => {
+  it('rejects when post-close cooldown active', async () => {
     vi.mocked(assertSameSidePostCloseCooldown).mockResolvedValue(
-      'same-side long cooldown 60m after loss (180m window)'
+      'post-close cooldown 60m after loss (360m window, last long)'
     );
     vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
       id: 1,
@@ -306,7 +306,7 @@ describe('executeV3Trade', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.reason).toContain('same-side long cooldown');
+    expect(result.reason).toContain('post-close cooldown');
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 

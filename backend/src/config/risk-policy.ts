@@ -54,6 +54,20 @@ export interface RiskPolicyConfig {
 
   /** Min |entry − SL| / entry before placing order (e.g. 0.005 = 0.5%) */
   minSlDistancePercent: number;
+
+  /** Peak-equity drawdown % that blocks new entries (Phase 0 circuit). */
+  maxDrawdownPercent: number;
+  circuitDailyLossEnabled: boolean;
+  circuitDrawdownEnabled: boolean;
+  /** Pause when last N closes sumR <= minSumR. */
+  circuitExpectancyKillEnabled: boolean;
+  circuitExpectancyWindow: number;
+  circuitExpectancyMinSumR: number;
+  circuitExpectancyCooldownHours: number;
+  /** If set, peak equity for DD = max(this, current); ignores snapshot history. */
+  circuitPeakEquityOverride: number | null;
+  /** If set, expectancy kill only uses outcomes with timestamp >= this. */
+  circuitExpectancySince: Date | null;
 }
 
 export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
@@ -78,6 +92,15 @@ export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
   maxTotalExposureUsd: 2000,
   maxExposurePercentOfEquity: null,
   minSlDistancePercent: 0.004,
+  maxDrawdownPercent: 15,
+  circuitDailyLossEnabled: true,
+  circuitDrawdownEnabled: true,
+  circuitExpectancyKillEnabled: true,
+  circuitExpectancyWindow: 10,
+  circuitExpectancyMinSumR: -3,
+  circuitExpectancyCooldownHours: 168,
+  circuitPeakEquityOverride: null,
+  circuitExpectancySince: null,
 };
 
 /**
@@ -118,6 +141,27 @@ export function getRiskPolicy(): RiskPolicyConfig {
       return Number.isFinite(pct) && pct > 0 ? pct : null;
     })(),
     minSlDistancePercent: parseFloat(process.env.MIN_SL_DISTANCE_PERCENT || '0.004'),
+    maxDrawdownPercent: parseFloat(process.env.MAX_DRAWDOWN_PERCENT || '15'),
+    circuitDailyLossEnabled: process.env.CIRCUIT_DAILY_LOSS_ENABLED !== 'false',
+    circuitDrawdownEnabled: process.env.CIRCUIT_DRAWDOWN_ENABLED !== 'false',
+    circuitExpectancyKillEnabled: process.env.CIRCUIT_EXPECTANCY_KILL_ENABLED !== 'false',
+    circuitExpectancyWindow: parseInt(process.env.CIRCUIT_EXPECTANCY_WINDOW || '10', 10),
+    circuitExpectancyMinSumR: parseFloat(process.env.CIRCUIT_EXPECTANCY_MIN_SUM_R || '-3'),
+    circuitExpectancyCooldownHours: parseFloat(
+      process.env.CIRCUIT_EXPECTANCY_COOLDOWN_HOURS || '168'
+    ),
+    circuitPeakEquityOverride: (() => {
+      const v = process.env.CIRCUIT_PEAK_EQUITY?.trim();
+      if (!v) return null;
+      const n = parseFloat(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    })(),
+    circuitExpectancySince: (() => {
+      const v = process.env.CIRCUIT_EXPECTANCY_SINCE?.trim();
+      if (!v) return null;
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d : null;
+    })(),
   };
 }
 

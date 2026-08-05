@@ -19,8 +19,8 @@ export function isInvalidationEnabled(): boolean {
 }
 
 /**
- * When score≥min and uPnL &lt; 0, market-exit instead of log-only.
- * Default on — Phase A gap that let losers run to full SL.
+ * When score≥min, market-exit (green or red). Default on.
+ * Invalidation no longer tightens to BE — thesis dead → flat.
  */
 export function isInvalidationExitEnabled(): boolean {
   return process.env.INVALIDATION_ALLOW_EXIT !== 'false';

@@ -304,6 +304,8 @@ Worker schedulers (see `docs/v3-operations.md`):
 
 Execution: Binance Futures testnet limit entry → pending order → TTL/drift/LLM review → WS fill → open position + SL/TP. Sync: `binance-order-fill.service.ts`, `position-close.service.ts`, `pending-order-lifecycle.md`. Historical PnL: `npm run testnet:backfill-pnl` ([pnl-backfill.md](./pnl-backfill.md)).
 
+**PnL+ entry/exit (Jul 2026):** HTF side-align → **trend pullback EMA band** ([v3-trend-pullback-entry.md](./v3-trend-pullback-entry.md)) → execute; open book: profit-protect BE@1.5R + invalidation exit-only. Ops: [v3-operations.md](./v3-operations.md), monitor: [pnl-expectancy-monitoring.md](./pnl-expectancy-monitoring.md).
+
 API process: HTTP + Binance WebSocket + reconciliation. Dashboard scheduler status uses worker heartbeats (`utils/scheduler-heartbeat.ts`).
 
 Deploy: backend `scripts/deploy.sh` on VPS; frontend Vercel (`docs/deployment.md`).
