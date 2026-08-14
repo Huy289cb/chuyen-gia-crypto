@@ -37,8 +37,17 @@ import {
   isRegimeAllowedForEntry,
   isV3BlockEntryExtension,
   isV3RequirePullback,
+  isV3RequireHtfSideAlign,
   resolveGateRegimeFromSignal,
 } from '../config/v3-entry-policy';
+import {
+  evaluatePlaybookSideMatch,
+  evaluateStructureSidePermission,
+  getV3StructureBiasCandleLimit,
+  getV3StructureBiasTf,
+  isV3StructureBiasEnabled,
+} from '../config/v3-structure-bias-policy';
+import { inferSetupTradeSide } from '../utils/setup-trade-side';
 import {
   evaluateFundingVeto,
   fetchCachedFundingRate,
@@ -49,11 +58,16 @@ import { assertTestnetAccountCanOpenTrade } from './account-risk-guard.service';
 import { getScanResult } from '../schedulers/market-scan.scheduler';
 import { getCandles, type UnifiedCandle } from './candle.service';
 import { generateCandleHash } from '../utils/candle-hash';
+import { closedCandlesOnly } from '../utils/closed-candles';
+import { evaluateScanFreshness } from '../utils/scan-freshness';
 import {
   tryRepairLevelsWithSecondaryKey,
   tryRepairTpForMinRrWithSecondaryKey,
 } from './groq-levels-adapter.service';
-import { buildDispatchOutputFromStoredDecision } from '../utils/llm-dispatch-dedup';
+import {
+  buildDispatchOutputFromStoredDecision,
+  shouldRevalidateStoredTrade,
+} from '../utils/llm-dispatch-dedup';
 
 export interface GroqDispatchInput {
   symbol: string;
@@ -89,6 +103,34 @@ const DEFAULT_CONFIG: GroqDispatchConfig = {
   enableRiskCheck: true,  // MANDATORY - cannot be disabled
   maxRetries: 1
 };
+
+interface FreshHtfScanState {
+  fresh: boolean;
+  regime: string;
+  trendDirection: 'bullish' | 'bearish' | null;
+  reason?: string;
+}
+
+function readFreshHtfScanState(symbol: string, timeframe: string): FreshHtfScanState {
+  const scan = getScanResult(symbol, timeframe);
+  const freshness = evaluateScanFreshness(scan?.timestamp, {
+    label: `HTF ${timeframe}`,
+  });
+  if (!scan || !freshness.pass) {
+    return {
+      fresh: false,
+      regime: 'unknown',
+      trendDirection: null,
+      reason: freshness.reason ?? `HTF ${timeframe} scan unavailable`,
+    };
+  }
+
+  return {
+    fresh: true,
+    regime: resolveGateRegimeFromSignal(scan.signalResult),
+    trendDirection: scan.signalResult.setupResult.evidence.regime.trendDirection ?? null,
+  };
+}
 
 /**
  * Groq Dispatch Service
@@ -126,6 +168,7 @@ export class GroqDispatchService {
     );
 
     let signalResult: SignalGateOutput | undefined = precomputed;
+    let cachedTradeAnalysis: GroqAnalysis | undefined;
 
     // Step 1: Signal Gate — use MarketScan result when provided (single evaluation per cycle)
     if (this.config.enableSignalGate) {
@@ -169,10 +212,22 @@ export class GroqDispatchService {
       );
       if (existing) {
         const cached = buildDispatchOutputFromStoredDecision(existing);
+        if (!shouldRevalidateStoredTrade(cached)) {
+          console.log(
+            `[GroqDispatch] Skip duplicate bar ${candleHash} for ${symbol} ${timeframe} — reusing safe no-trade id=${existing.id}`
+          );
+          return cached.decision === 'no_trade'
+            ? cached
+            : {
+                decision: 'no_trade',
+                reason: 'Cached trade analysis unavailable — fail-closed',
+                decisionRecordId: cached.decisionRecordId,
+              };
+        }
+        cachedTradeAnalysis = cached.analysis;
         console.log(
-          `[GroqDispatch] Skip duplicate bar ${candleHash} for ${symbol} ${timeframe} — reusing decision id=${existing.id} (${cached.decision})`
+          `[GroqDispatch] Cached trade id=${existing.id} for ${symbol} ${timeframe} — revalidating current hard gates`
         );
-        return cached;
       }
     }
 
@@ -198,8 +253,98 @@ export class GroqDispatchService {
       userPrompt += '\n\n' + reflectionPrompt;
     }
 
-    // Step 4: Call Groq with strict validation
-    let analysis = await this.callGroqWithValidation(systemPrompt, userPrompt);
+    // Step 3b: Structure-first bias + playbook side (pre-LLM — avoid burning tokens)
+    const gatePlaybookPre = signalResult?.setupResult.playbookKey || 'unknown';
+    const gateGradePre = signalResult?.setupResult.grade ?? 'D';
+    const gateConfidencePre = signalResult?.setupResult.confidence ?? 0;
+    const gateRegimePre = resolveGateRegimeFromSignal(signalResult ?? undefined);
+    const playbookSide =
+      signalResult?.setupResult != null
+        ? inferSetupTradeSide(signalResult.setupResult, timeframe, candles)
+        : null;
+
+    if (isV3StructureBiasEnabled() && playbookSide) {
+      try {
+        const structTf = getV3StructureBiasTf();
+        const structLimit = getV3StructureBiasCandleLimit();
+        const { candles: structCandles } = await getCandles({
+          symbol,
+          timeframe: structTf,
+          limit: structLimit + 1,
+        });
+        const closedStructCandles = closedCandlesOnly(structCandles, structTf).slice(-structLimit);
+        const structCheck = evaluateStructureSidePermission({
+          side: playbookSide,
+          candles: closedStructCandles,
+        });
+        if (!structCheck.pass) {
+          const reason = structCheck.reason ?? 'structure bias blocked';
+          console.log(`[GroqDispatch] Pre-LLM structure block: ${reason}`);
+          if (this.config.enableMemory) {
+            await memoryService.storeDecision({
+              symbol,
+              timeframe,
+              playbook_key: gatePlaybookPre,
+              grade: gateGradePre,
+              confidence: gateConfidencePre,
+              regime: gateRegimePre,
+              decision: 'no_trade',
+              reason: `Pre-LLM: ${reason}`,
+              method_id,
+              candle_hash: candleHash,
+            });
+          }
+          return {
+            decision: 'no_trade',
+            reason,
+            memory_context: memoryContext,
+          };
+        }
+      } catch (structErr: unknown) {
+        const msg = structErr instanceof Error ? structErr.message : String(structErr);
+        console.warn(`[GroqDispatch] Structure bias fetch failed (fail-closed): ${msg}`);
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: gatePlaybookPre,
+            grade: gateGradePre,
+            confidence: gateConfidencePre,
+            regime: gateRegimePre,
+            decision: 'no_trade',
+            reason: `Pre-LLM: structure bias unavailable — ${msg}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return {
+          decision: 'no_trade',
+          reason: `structure bias unavailable: ${msg}`,
+          memory_context: memoryContext,
+        };
+      }
+    } else if (isV3StructureBiasEnabled() && !playbookSide) {
+      const reason = 'Pre-LLM: playbook has no direction for structure check (V3_STRUCTURE_BIAS)';
+      if (this.config.enableMemory) {
+        await memoryService.storeDecision({
+          symbol,
+          timeframe,
+          playbook_key: gatePlaybookPre,
+          grade: gateGradePre,
+          confidence: gateConfidencePre,
+          regime: gateRegimePre,
+          decision: 'no_trade',
+          reason,
+          method_id,
+          candle_hash: candleHash,
+        });
+      }
+      return { decision: 'no_trade', reason, memory_context: memoryContext };
+    }
+
+    // Step 4: Reuse only the LLM payload; cached trades still pass every current hard gate below.
+    let analysis =
+      cachedTradeAnalysis ?? (await this.callGroqWithValidation(systemPrompt, userPrompt));
 
     if (!analysis) {
       if (this.config.enableMemory) {
@@ -431,17 +576,38 @@ export class GroqDispatchService {
 
     const htfTf = getV3RequireHtfTrend();
     if (llmConfirms && htfTf) {
-      const htfScan = getScanResult(symbol, htfTf);
-      const htfRegime = htfScan?.signalResult
-        ? resolveGateRegimeFromSignal(htfScan.signalResult)
-        : 'unknown';
+      const htfState = readFreshHtfScanState(symbol, htfTf);
+      if (!htfState.fresh) {
+        const reason = htfState.reason ?? `HTF ${htfTf} scan unavailable`;
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: gatePlaybook,
+            grade: gateGrade,
+            confidence: gateConfidence,
+            regime: gateRegime,
+            decision: 'no_trade',
+            reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+      }
+
+      const htfRegime = htfState.regime;
       const altTf = getV3HtfTrendAlt();
       let altRegime: string | undefined;
-      if (altTf) {
-        const altScan = getScanResult(symbol, altTf);
-        altRegime = altScan?.signalResult
-          ? resolveGateRegimeFromSignal(altScan.signalResult)
-          : 'unknown';
+      let altUnavailableReason: string | undefined;
+      if (altTf && htfRegime !== 'trend') {
+        const altState = readFreshHtfScanState(symbol, altTf);
+        if (altState.fresh) {
+          altRegime = altState.regime;
+        } else {
+          altRegime = 'unknown';
+          altUnavailableReason = altState.reason ?? `HTF ${altTf} scan unavailable`;
+        }
       }
       const htfCheck = evaluateHtfTrendRequirement({
         entryTimeframe: timeframe,
@@ -452,7 +618,9 @@ export class GroqDispatchService {
       });
       if (!htfCheck.pass) {
         const reason =
-          htfCheck.reason ?? `HTF ${htfTf} regime ${htfRegime} !== trend (V3_REQUIRE_HTF_TREND)`;
+          altUnavailableReason ??
+          htfCheck.reason ??
+          `HTF ${htfTf} regime ${htfRegime} !== trend (V3_REQUIRE_HTF_TREND)`;
         if (this.config.enableMemory) {
           await memoryService.storeDecision({
             symbol,
@@ -503,21 +671,111 @@ export class GroqDispatchService {
     }
 
     if (llmConfirms) {
-      const scanState = (tf: string) => {
-        const scan = getScanResult(symbol, tf);
-        const regime = scan?.signalResult
-          ? resolveGateRegimeFromSignal(scan.signalResult)
-          : 'unknown';
-        const trendDirection =
-          scan?.signalResult?.setupResult.evidence.regime.trendDirection ?? null;
-        return { regime, trendDirection };
-      };
+      const scanState = (tf: string) => readFreshHtfScanState(symbol, tf);
       const side = analysis.action === 'buy' ? 'long' : 'short';
+
+      // Phase B: LLM side must match playbook direction
+      const pbMatch = evaluatePlaybookSideMatch({
+        llmSide: side,
+        playbookSide,
+      });
+      if (!pbMatch.pass) {
+        const reason = pbMatch.reason ?? 'playbook side mismatch';
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: gatePlaybook,
+            grade: gateGrade,
+            confidence: gateConfidence,
+            regime: gateRegime,
+            decision: 'no_trade',
+            reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+      }
+
+      // Phase A post-LLM assert (LLM may flip side vs playbook — already matched above)
+      if (isV3StructureBiasEnabled()) {
+        try {
+          const structTf = getV3StructureBiasTf();
+          const structLimit = getV3StructureBiasCandleLimit();
+          const { candles: structCandles } = await getCandles({
+            symbol,
+            timeframe: structTf,
+            limit: structLimit + 1,
+          });
+          const closedStructCandles = closedCandlesOnly(structCandles, structTf).slice(-structLimit);
+          const structCheck = evaluateStructureSidePermission({
+            side,
+            candles: closedStructCandles,
+          });
+          if (!structCheck.pass) {
+            const reason = structCheck.reason ?? 'structure bias blocked';
+            if (this.config.enableMemory) {
+              await memoryService.storeDecision({
+                symbol,
+                timeframe,
+                playbook_key: gatePlaybook,
+                grade: gateGrade,
+                confidence: gateConfidence,
+                regime: gateRegime,
+                decision: 'no_trade',
+                reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+                method_id,
+                candle_hash: candleHash,
+              });
+            }
+            return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+          }
+        } catch (structErr: unknown) {
+          const msg = structErr instanceof Error ? structErr.message : String(structErr);
+          const reason = `structure bias unavailable: ${msg}`;
+          if (this.config.enableMemory) {
+            await memoryService.storeDecision({
+              symbol,
+              timeframe,
+              playbook_key: gatePlaybook,
+              grade: gateGrade,
+              confidence: gateConfidence,
+              regime: gateRegime,
+              decision: 'no_trade',
+              reason: `LLM confirmed but ${reason}`,
+              method_id,
+              candle_hash: candleHash,
+            });
+          }
+          return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+        }
+      }
+
       const alignTf = getV3HtfSideAlignTf();
+      const alignState = scanState(alignTf);
+      if (isV3RequireHtfSideAlign() && !alignState.fresh) {
+        const reason = alignState.reason ?? `HTF ${alignTf} scan unavailable`;
+        if (this.config.enableMemory) {
+          await memoryService.storeDecision({
+            symbol,
+            timeframe,
+            playbook_key: gatePlaybook,
+            grade: gateGrade,
+            confidence: gateConfidence,
+            regime: gateRegime,
+            decision: 'no_trade',
+            reason: `LLM confirmed but ${reason} · ${formatLlmTradeSummary(analysis)}`,
+            method_id,
+            candle_hash: candleHash,
+          });
+        }
+        return { decision: 'no_trade', reason, analysis, memory_context: memoryContext };
+      }
       const sideAlign = evaluateHtfSideAlign({
         side,
         htfTf: alignTf,
-        htf: scanState(alignTf),
+        htf: alignState,
       });
       if (!sideAlign.pass) {
         const reason = sideAlign.reason ?? 'HTF side align blocked';

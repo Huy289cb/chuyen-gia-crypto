@@ -47,7 +47,11 @@ export interface ResolveQuantityForMinNotionalResult {
   reason?: string;
 }
 
-/** Floor to step; accept small notional drift, block only when far outside limits. */
+/**
+ * Floor to step when it still satisfies the configured notional tolerance.
+ * When the requested size is below one exchange lot, raise it to the smallest
+ * valid quantity; the caller must still enforce exposure and effective-risk caps.
+ */
 export function resolveQuantityForMinNotional(
   input: ResolveQuantityForMinNotionalInput
 ): ResolveQuantityForMinNotionalResult {
@@ -70,27 +74,24 @@ export function resolveQuantityForMinNotional(
     };
   }
 
-  const normalizedQty = normalizeToStepSize(quantity, stepSize);
+  const minFloor = minNotionalUsd * (1 - tolerancePercent / 100);
+  let normalizedQty = normalizeToStepSize(quantity, stepSize);
+  let orderNotional = normalizedQty * entryPrice;
+
+  if (normalizedQty < minQty || orderNotional < minFloor) {
+    const minQtyForNotional = ceilToStepSize(minNotionalUsd / entryPrice, stepSize);
+    normalizedQty = Math.max(minQty, minQtyForNotional);
+    orderNotional = normalizedQty * entryPrice;
+  }
 
   if (normalizedQty <= 0) {
     return {
       valid: false,
       normalizedQty: 0,
       orderNotional: 0,
-      reason: `Quantity ${quantity} normalized to 0 (stepSize ${stepSize})`,
+      reason: `Quantity ${quantity} cannot satisfy minQty ${minQty} (stepSize ${stepSize})`,
     };
   }
-  if (normalizedQty < minQty) {
-    return {
-      valid: false,
-      normalizedQty,
-      orderNotional: 0,
-      reason: `Quantity ${normalizedQty} below minQty ${minQty} (raw ${quantity})`,
-    };
-  }
-
-  const orderNotional = normalizedQty * entryPrice;
-  const minFloor = minNotionalUsd * (1 - tolerancePercent / 100);
 
   if (orderNotional < minFloor) {
     return {

@@ -9,6 +9,10 @@ import { getDayBoundsICT } from '../utils/ict-time';
 import { rollupExpectancyFromOutcomes } from './expectancy-rollup.service';
 
 export interface CircuitStatus {
+  scope: 'strategy_epoch';
+  epochStart: Date | null;
+  peakEquitySource: 'override' | 'strategy_epoch_snapshots' | 'full_history_snapshots';
+  expectancySince: Date | null;
   allowed: boolean;
   reason: string;
   dailyLossUsd: number;
@@ -42,23 +46,78 @@ export async function resolvePeakEquity(
   currentEquity: number,
   startingBalance: number
 ): Promise<number> {
+  const resolved = await resolveCircuitPeakEquity(accountId, currentEquity, startingBalance);
+  return resolved.peakEquity;
+}
+
+async function resolveCircuitPeakEquity(
+  accountId: number,
+  currentEquity: number,
+  startingBalance: number
+): Promise<{
+  peakEquity: number;
+  source: CircuitStatus['peakEquitySource'];
+}> {
   const policy = getRiskPolicy();
   if (policy.circuitPeakEquityOverride != null) {
-    return Math.max(policy.circuitPeakEquityOverride, currentEquity || 0);
+    return {
+      peakEquity: Math.max(policy.circuitPeakEquityOverride, currentEquity || 0),
+      source: 'override',
+    };
   }
+
+  if (policy.circuitExpectancySince) {
+    const [baseline, agg] = await Promise.all([
+      prisma.testnetAccountSnapshot.findFirst({
+        where: {
+          account_id: accountId,
+          timestamp: { lt: policy.circuitExpectancySince },
+        },
+        orderBy: { timestamp: 'desc' },
+        select: { equity: true },
+      }),
+      prisma.testnetAccountSnapshot.aggregate({
+        where: {
+          account_id: accountId,
+          timestamp: { gte: policy.circuitExpectancySince },
+        },
+        _max: { equity: true },
+      }),
+    ]);
+    return {
+      peakEquity: Math.max(
+        baseline?.equity ?? startingBalance ?? 0,
+        currentEquity || 0,
+        agg._max.equity ?? 0
+      ),
+      source: 'strategy_epoch_snapshots',
+    };
+  }
+
   const agg = await prisma.testnetAccountSnapshot.aggregate({
     where: { account_id: accountId },
     _max: { equity: true },
   });
   const snapPeak = agg._max.equity ?? 0;
-  return Math.max(startingBalance || 0, currentEquity || 0, snapPeak || 0);
+  return {
+    peakEquity: Math.max(startingBalance || 0, currentEquity || 0, snapPeak || 0),
+    source: 'full_history_snapshots',
+  };
 }
 
 export async function getAccountCircuitStatus(accountId: number): Promise<CircuitStatus> {
   const policy = getRiskPolicy();
+  const scope = {
+    scope: 'strategy_epoch' as const,
+    epochStart: policy.circuitExpectancySince,
+    expectancySince: policy.circuitExpectancySince,
+  };
   const account = await prisma.testnetAccount.findUnique({ where: { id: accountId } });
   if (!account) {
     return {
+      ...scope,
+      peakEquitySource: policy.circuitPeakEquityOverride != null ? 'override' :
+        policy.circuitExpectancySince ? 'strategy_epoch_snapshots' : 'full_history_snapshots',
       allowed: false,
       reason: 'Testnet account not found',
       dailyLossUsd: 0,
@@ -81,7 +140,8 @@ export async function getAccountCircuitStatus(accountId: number): Promise<Circui
   const dailyLossUsd = equity < startEquity ? startEquity - equity : 0;
   const dailyLossPercent = calcDailyLossPercent(startEquity, equity);
 
-  const peakEquity = await resolvePeakEquity(accountId, equity, account.starting_balance);
+  const peak = await resolveCircuitPeakEquity(accountId, equity, account.starting_balance);
+  const peakEquity = peak.peakEquity;
   const drawdownPercent = calcDrawdownPercent(peakEquity, equity);
 
   if (drawdownPercent > (account.max_drawdown ?? 0)) {
@@ -103,6 +163,8 @@ export async function getAccountCircuitStatus(accountId: number): Promise<Circui
 
   if (policy.circuitDailyLossEnabled && dailyLossPercent >= policy.dailyLossLimitPercent) {
     return {
+      ...scope,
+      peakEquitySource: peak.source,
       allowed: false,
       reason: `Daily loss circuit ${dailyLossPercent.toFixed(2)}% >= ${policy.dailyLossLimitPercent}%`,
       dailyLossUsd,
@@ -117,6 +179,8 @@ export async function getAccountCircuitStatus(accountId: number): Promise<Circui
 
   if (policy.circuitDrawdownEnabled && drawdownPercent >= policy.maxDrawdownPercent) {
     return {
+      ...scope,
+      peakEquitySource: peak.source,
       allowed: false,
       reason: `Drawdown circuit ${drawdownPercent.toFixed(2)}% >= ${policy.maxDrawdownPercent}% from peak`,
       dailyLossUsd,
@@ -135,6 +199,8 @@ export async function getAccountCircuitStatus(accountId: number): Promise<Circui
     expectancy.sumR <= policy.circuitExpectancyMinSumR
   ) {
     return {
+      ...scope,
+      peakEquitySource: peak.source,
       allowed: false,
       reason:
         `Expectancy kill: last ${expectancy.n} closes sumR=${expectancy.sumR.toFixed(2)} ` +
@@ -150,6 +216,8 @@ export async function getAccountCircuitStatus(accountId: number): Promise<Circui
   }
 
   return {
+    ...scope,
+    peakEquitySource: peak.source,
     allowed: true,
     reason: 'circuits clear',
     dailyLossUsd,

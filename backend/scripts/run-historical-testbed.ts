@@ -8,6 +8,7 @@
  *   npm run backtest:historical -- --variant=grade-a-only --days=30
  *   npm run backtest:historical -- --sweep-weeks=2,3,4,6 --variant=baseline,cooldown,combo
  *   npm run backtest:historical -- --weeks=3 --sl-sweep=0.004,0.005,0.006
+ *   npm run backtest:historical -- --days=30 --min-rr=3
  *   npm run backtest:historical -- --json
  */
 
@@ -28,6 +29,7 @@ function parseArgs() {
     json: boolean;
     slSweep: number[] | null;
     minSl: number | null;
+    minRr: number | null;
     variant: string | null;
     sweepWeeks: number[] | null;
     sweepVariants: string[] | null;
@@ -38,6 +40,7 @@ function parseArgs() {
     json: false,
     slSweep: null,
     minSl: null,
+    minRr: null,
     variant: null,
     sweepWeeks: null,
     sweepVariants: null,
@@ -49,7 +52,12 @@ function parseArgs() {
     else if (arg.startsWith('--days=')) opts.days = parseFloat(arg.split('=')[1] ?? '30');
     else if (arg.startsWith('--symbol=')) opts.symbol = arg.split('=')[1] ?? 'BTC';
     else if (arg.startsWith('--min-sl=')) opts.minSl = parseFloat(arg.split('=')[1] ?? '0.004');
-    else if (arg.startsWith('--variant=')) opts.variant = arg.split('=')[1] ?? 'baseline';
+    else if (arg.startsWith('--min-rr=')) {
+      const value = parseFloat(arg.split('=')[1] ?? '');
+      opts.minRr = Number.isFinite(value) && value > 0 ? value : null;
+    } else if (arg.startsWith('--variant=')) {
+      opts.variant = arg.split('=')[1] ?? 'baseline';
+    }
     else if (arg.startsWith('--sweep-weeks=')) {
       opts.sweepWeeks = (arg.split('=')[1] ?? '')
         .split(',')
@@ -96,6 +104,7 @@ async function main() {
       weeks: p.weeks ?? undefined,
       days: p.days ?? undefined,
       variant: variants[0],
+      minRr: opts.minRr ?? undefined,
     });
     if (opts.json) {
       console.log(JSON.stringify(results, null, 2));
@@ -125,6 +134,7 @@ async function main() {
           weeks: p.weeks ?? undefined,
           days: p.days ?? undefined,
           minSlPct: opts.minSl ?? undefined,
+          minRr: opts.minRr ?? undefined,
           variant,
         })
       );

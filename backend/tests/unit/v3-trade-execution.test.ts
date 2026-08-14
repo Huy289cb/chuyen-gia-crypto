@@ -20,7 +20,7 @@ vi.mock('../../src/config/v3-entry-policy', async (importOriginal) => {
     ...actual,
     isV3ScaleInEnabled: vi.fn(() => true),
     isV3OppositeFlipEnabled: vi.fn(() => false),
-    getBinanceMinOrderNotionalUsd: vi.fn(() => 200),
+    getBinanceMinOrderNotionalUsd: vi.fn(() => 50),
     resolveMaxTotalExposureUsd: vi.fn((_b: number, fallback: number) => fallback),
   };
 });
@@ -82,6 +82,8 @@ describe('executeV3Trade', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BINANCE_ENABLED = 'true';
+    process.env.RISK_PER_TRADE_PERCENT = '1';
+    process.env.MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT = '2';
     vi.mocked(isV3ScaleInEnabled).mockReturnValue(true);
     vi.mocked(assertScaleInSideAllowed).mockResolvedValue(null);
     vi.mocked(assertSameSidePostCloseCooldown).mockResolvedValue(null);
@@ -383,7 +385,7 @@ describe('executeV3Trade', () => {
     expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 
-  it('accepts floored qty slightly below min notional (40U wallet scenario)', async () => {
+  it('uses one minimum lot without breaching the effective-risk cap (40U wallet)', async () => {
     vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
       id: 1,
       current_balance: 40,
@@ -392,8 +394,8 @@ describe('executeV3Trade', () => {
     vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
     vi.mocked(initTestnetClient).mockReturnValue({} as never);
     vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
-      rawQty: 200 / 64380,
-      normalizedQty: 0.003,
+      rawQty: 50 / 64380,
+      normalizedQty: 0,
       stepSize: 0.001,
       minQty: 0.001,
       valid: true,
@@ -419,12 +421,50 @@ describe('executeV3Trade', () => {
       expect.anything(),
       'BTCUSDT',
       'BUY',
-      0.003,
+      0.001,
       64380,
       'OPEN',
       null,
       null,
       expect.any(String)
     );
+    const pendingInput = vi.mocked(createTestnetPendingOrder).mock.calls[0]?.[0];
+    expect(pendingInput).toEqual(expect.objectContaining({ sizeQty: 0.001, sizeUsd: 64.38 }));
+    expect(pendingInput?.riskUsd).toBeCloseTo(0.75, 8);
+    expect(pendingInput?.riskPercent).toBeCloseTo(1.875, 8);
+  });
+
+  it('rejects a minimum lot when its stop risk breaches the wallet cap', async () => {
+    vi.mocked(getOrCreateTestnetAccount).mockResolvedValue({
+      id: 1,
+      current_balance: 40,
+    } as never);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(initTestnetClient).mockReturnValue({} as never);
+    vi.mocked(normalizeQuantityForSymbol).mockResolvedValue({
+      rawQty: 50 / 64380,
+      normalizedQty: 0,
+      stepSize: 0.001,
+      minQty: 0.001,
+      valid: false,
+    });
+
+    const result = await executeV3Trade({
+      symbol: 'BTC',
+      timeframe: '15m',
+      analysis: {
+        bias: 'bullish',
+        action: 'buy',
+        confidence: 0.92,
+        suggested_entry: 64380,
+        suggested_stop_loss: 63092.4,
+        suggested_take_profit: 68242.8,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain('Exchange minimum would risk');
+    expect(placeLimitOrder).not.toHaveBeenCalled();
   });
 });

@@ -71,4 +71,27 @@ describe('price-fetcher (Binance Futures)', () => {
     expect(rows[0][4]).toBe(59_000);
     expect(rows[1000][4]).toBe(60_999);
   });
+
+  it('anchors backward pagination strictly before an explicit end time', async () => {
+    const endExclusive = Date.UTC(2026, 7, 1, 12, 0, 0);
+    getKlinesMock.mockResolvedValueOnce([
+      sampleKline(64_000, endExclusive - 2 * 60 * 60_000),
+      sampleKline(65_000, endExclusive - 60 * 60_000),
+    ]);
+
+    const { fetchHistoricalCandlesPaginated } = await import('../../src/services/price-fetcher');
+    const rows = await fetchHistoricalCandlesPaginated('BTC', '1h', 2, endExclusive);
+
+    expect(getKlinesMock).toHaveBeenCalledWith(
+      'BTCUSDT',
+      '1h',
+      2,
+      null,
+      endExclusive - 1
+    );
+    expect(rows.map((row) => row[0])).toEqual([
+      endExclusive - 2 * 60 * 60_000,
+      endExclusive - 60 * 60_000,
+    ]);
+  });
 });

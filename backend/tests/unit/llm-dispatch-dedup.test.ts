@@ -4,6 +4,7 @@ import {
   parseActionFromStoredReason,
   analysisFromStoredDecision,
   buildDispatchOutputFromStoredDecision,
+  shouldRevalidateStoredTrade,
 } from '../../src/utils/llm-dispatch-dedup';
 
 function makeRow(overrides: Partial<TradeDecision> = {}): TradeDecision {
@@ -59,6 +60,7 @@ describe('llm-dispatch-dedup', () => {
     expect(out.decision).toBe('no_trade');
     expect(out.analysis).toBeUndefined();
     expect(out.decisionRecordId).toBe(42);
+    expect(shouldRevalidateStoredTrade(out)).toBe(false);
   });
 
   it('returns trade with execution-blocked reason for retry', () => {
@@ -71,5 +73,6 @@ describe('llm-dispatch-dedup', () => {
     expect(out.analysis?.action).toBe('sell');
     expect(out.reason).toContain('Execution blocked');
     expect(out.decisionRecordId).toBe(42);
+    expect(shouldRevalidateStoredTrade(out)).toBe(true);
   });
 });

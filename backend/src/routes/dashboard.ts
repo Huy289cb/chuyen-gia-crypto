@@ -8,7 +8,6 @@ import {
   ACCOUNT_BALANCE_TTL_MS,
 } from '../lib/read-cache';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
-import { isInternalCloseReason } from '../utils/bookkeeping-close';
 import { fetchBinanceClosedTradeRounds } from '../services/binance-trade-history.service';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
@@ -38,6 +37,10 @@ import { getGroqPrimaryModel } from '../config/groq-models';
 import { isTelegramAiEnabled } from '../config/telegram-ai';
 import { runTelegramAiQuery } from '../services/telegram/telegram-ai.service';
 import type { AiContextScope } from '../services/telegram/ai-context.builder';
+import {
+  getFullHistoryWalletMetrics,
+  isReportableClosedTrade,
+} from '../services/account-performance.service';
 const router = Router();
 
 function formatTimeInPosition(entry: Date | string | null | undefined): string {
@@ -692,14 +695,14 @@ router.get('/risk', async (_req: Request, res: Response) => {
   try {
     const riskState = await readCache.get('dashboard:risk:BTC', DASHBOARD_READ_TTL_MS, async () => {
     const policy = getRiskPolicy();
-    const accounts = await prisma.testnetAccount.findMany({
-      where: { symbol: 'BTC' },
+    const account = await prisma.testnetAccount.findFirst({
+      where: { symbol: 'BTC', method_id: 'kim_nghia' },
     });
 
-    const account = accounts[0];
     const now = new Date();
 
     const circuit = account ? await getAccountCircuitStatus(account.id) : null;
+    const fullHistory = account ? await getFullHistoryWalletMetrics(prisma, account) : null;
     const lossCooldown = account?.cooldown_until && account.cooldown_until > now;
     const precisionCooldown = account?.precision_cooldown_until && account.precision_cooldown_until > now;
     const isLocked = Boolean(lossCooldown || precisionCooldown || (circuit && !circuit.allowed));
@@ -715,13 +718,49 @@ router.get('/risk', async (_req: Request, res: Response) => {
 
     return {
       riskPerTrade: policy.riskPerTradePercent,
+      maxEffectiveRiskPerTrade: policy.maxEffectiveRiskPerTradePercent,
       dailyLossCap: dailyLossCapUsd,
       dailyLossLimitPercent: policy.dailyLossLimitPercent,
       dailyLossCurrent: dailyLossCurrent,
       maxDrawdownPercent: policy.maxDrawdownPercent,
-      drawdownPercent: circuit?.drawdownPercent ?? 0,
-      peakEquity: circuit?.peakEquity ?? 0,
+      drawdownPercent: fullHistory?.currentDrawdownPercent ?? 0,
+      maxObservedDrawdownPercent: fullHistory?.maxDrawdownPercent ?? 0,
+      peakEquity: fullHistory?.peakEquity ?? 0,
+      walletPnl: fullHistory?.walletPnl ?? 0,
+      walletReturnPercent: fullHistory?.walletReturnPercent ?? 0,
       expectancy: circuit?.expectancy ?? null,
+      expectancyScope: circuit?.scope ?? 'strategy_epoch',
+      fullHistory: fullHistory
+        ? {
+            scope: fullHistory.scope,
+            baselineBalance: fullHistory.baselineBalance,
+            currentBalance: fullHistory.currentBalance,
+            currentEquity: fullHistory.currentEquity,
+            walletPnl: fullHistory.walletPnl,
+            walletReturnPercent: fullHistory.walletReturnPercent,
+            peakEquity: fullHistory.peakEquity,
+            peakEquityAt: fullHistory.peakEquityAt,
+            currentDrawdownPercent: fullHistory.currentDrawdownPercent,
+            maxDrawdownPercent: fullHistory.maxDrawdownPercent,
+            maxDrawdownAt: fullHistory.maxDrawdownAt,
+            firstSnapshotAt: fullHistory.firstSnapshotAt,
+            lastSnapshotAt: fullHistory.lastSnapshotAt,
+            snapshotCount: fullHistory.snapshotCount,
+          }
+        : null,
+      strategyEpoch: circuit
+        ? {
+            scope: circuit.scope,
+            startsAt: circuit.epochStart,
+            peakEquity: circuit.peakEquity,
+            peakEquitySource: circuit.peakEquitySource,
+            drawdownPercent: circuit.drawdownPercent,
+            expectancySince: circuit.expectancySince,
+            expectancy: circuit.expectancy,
+            tradingAllowed: circuit.allowed,
+            circuitReason: circuit.reason,
+          }
+        : null,
       maxConsecutiveLosses: policy.maxConsecutiveLosses,
       currentStreak: account?.consecutive_losses || 0,
       currentLockState: isLocked ? 'locked' : 'unlocked',
@@ -741,6 +780,7 @@ router.get('/risk', async (_req: Request, res: Response) => {
       ok: true,
       data: {
         riskPerTrade: policy.riskPerTradePercent,
+        maxEffectiveRiskPerTrade: policy.maxEffectiveRiskPerTradePercent,
         dailyLossCap: 0,
         dailyLossLimitPercent: policy.dailyLossLimitPercent,
         dailyLossCurrent: 0,
@@ -1307,7 +1347,7 @@ router.get('/trades', async (req: Request, res: Response) => {
     });
 
     const formattedTrades = positions
-      .filter((pos) => !isInternalCloseReason(pos.close_reason))
+      .filter(isReportableClosedTrade)
       .map((pos) => ({
       id: pos.position_id,
       symbol: pos.symbol,

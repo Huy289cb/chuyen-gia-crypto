@@ -292,21 +292,35 @@ function tfConfirmsSide(state: HtfConfirmTfState, side: 'long' | 'short'): boole
 }
 
 /**
+ * When fail-closed (default on): HTF must be trend + trendDirection matching side.
+ * Legacy fail-open: non-trend HTF passes (range hole — see structure-first plan).
+ */
+export function isV3HtfSideAlignFailClosed(): boolean {
+  return process.env.V3_HTF_SIDE_ALIGN_FAIL_CLOSED !== 'false';
+}
+
+/**
  * When HTF is in trend, side must match trendDirection.
- * Non-trend HTF: pass (regime gates handle chop/range elsewhere).
+ * Fail-closed (default): non-trend / missing direction → block.
  */
 export function evaluateHtfSideAlign(input: {
   side: 'long' | 'short';
   htfTf: string;
   htf: HtfConfirmTfState;
   enabled?: boolean;
+  failClosed?: boolean;
 }): HtfSideAlignResult {
   const enabled = input.enabled ?? isV3RequireHtfSideAlign();
   if (!enabled) return { pass: true };
 
+  const failClosed = input.failClosed ?? isV3HtfSideAlignFailClosed();
   const { side, htfTf, htf } = input;
   if (htf.regime !== 'trend' || !htf.trendDirection) {
-    return { pass: true };
+    if (!failClosed) return { pass: true };
+    return {
+      pass: false,
+      reason: `blocked: ${htfTf} regime ${htf.regime ?? 'unknown'}/${htf.trendDirection ?? 'null'} — need trend+direction for ${side} (V3_HTF_SIDE_ALIGN_FAIL_CLOSED)`,
+    };
   }
   if (tfConfirmsSide(htf, side)) {
     return { pass: true, reason: `${htfTf} ${htf.trendDirection} aligns ${side}` };

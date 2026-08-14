@@ -8,13 +8,21 @@ import { getV3EntryTfPriorityRank, getV3SignalGateTimeframes } from '../config/v
 import {
   evaluateHtfTrendRequirement,
   evaluate5mEntryGuards,
+  evaluateHtfSideAlign,
   evaluateSetupGradePlaybookFilter,
   getSignalGateAllowedRegimes,
+  getV3HtfSideAlignTf,
   getV3HtfTrendAlt,
   getV3LtfAlignRegimeHtf,
   getV3RequireHtfTrend,
   isRangeEntryBlocked,
 } from '../config/v3-entry-policy';
+import {
+  evaluateStructureSidePermission,
+  getV3StructureBiasCandleLimit,
+  getV3StructureBiasTf,
+  isV3StructureBiasEnabled,
+} from '../config/v3-structure-bias-policy';
 import { resolveTestbedVariant } from '../config/testbed-variants';
 import { buildAllBreakdowns, formatBreakdownSection } from './breakdown';
 import { BacktestCooldownState } from './cooldown-simulator';
@@ -22,9 +30,14 @@ import { compareSignalGateForEntry } from '../utils/signal-gate-ranking';
 import { computePolicyCompliantStopAndTarget } from '../utils/trade-levels';
 import { computeRegimeEvidence, type MarketRegime } from '../analyzers/market-regime.analyzer';
 import { getSignalGateWindows } from '../config/signal-gate-windows';
-import { candlesUpTo, loadBacktestCandles } from './candle-loader';
-import { inferSetupTradeSide } from './signal-direction';
+import {
+  candleCloseTimestamp,
+  closedCandlesUpTo,
+  loadBacktestCandles,
+} from './candle-loader';
+import { inferSetupTradeSide } from '../utils/setup-trade-side';
 import { checkBarForExit, closePositionAt, simulatePositionExit, type OpenSimPosition } from './position-simulator';
+import { resolveBacktestMinRr } from './parity';
 import type { BacktestBlockStats, BacktestRunOptions, BacktestRunResult, BacktestTrade } from './types';
 
 function slBucket(pct: number): string {
@@ -71,10 +84,15 @@ export async function runHistoricalTestbed(
   const variant = resolveTestbedVariant(options.variant);
   const policy = getRiskPolicy();
   const minSlPct = options.minSlPct ?? policy.minSlDistancePercent;
-  const minRr = options.minRr ?? 2;
+  const minRr = resolveBacktestMinRr(options.minRr);
   const notionalUsd = options.notionalUsd ?? 2000;
   const feePctPerSide = options.feePctPerSide ?? 0.0004;
   const timeframes = [...getV3SignalGateTimeframes()];
+  const structTf = getV3StructureBiasTf();
+  const loadTfs = [...timeframes];
+  if (isV3StructureBiasEnabled() && !loadTfs.includes(structTf)) {
+    loadTfs.push(structTf);
+  }
   const entryRank = getV3EntryTfPriorityRank();
 
   const endDate = options.endDate ?? new Date();
@@ -85,10 +103,10 @@ export async function runHistoricalTestbed(
   const loaded = await loadBacktestCandles({
     symbol,
     weeks,
-    timeframes,
+    timeframes: loadTfs,
     startDate,
     endDate,
-    extraWarmupBars5m: options.warmupBars5m ?? 150,
+    extraWarmupBarsPerTf: options.warmupBarsPerTf ?? options.warmupBars5m ?? 150,
   });
 
   const candles5m = loaded.byTf['5m'] ?? [];
@@ -104,6 +122,8 @@ export async function runHistoricalTestbed(
 
   const htfTf = getV3LtfAlignRegimeHtf() ?? getV3RequireHtfTrend() ?? '1h';
   const altTf = getV3HtfTrendAlt();
+  const alignTf = getV3HtfSideAlignTf();
+  const structureLookback = getV3StructureBiasCandleLimit();
   const blocks: BacktestBlockStats = {
     signal_gate: 0,
     regime: 0,
@@ -114,9 +134,11 @@ export async function runHistoricalTestbed(
     entry_5m_guard: 0,
     grade_playbook: 0,
     cooldown: 0,
+    structure_bias: 0,
+    side_align: 0,
   };
 
-  const tradedSignals = new Set<string>();
+  const seenSignals = new Set<string>();
   const cooldown = variant.enableCooldown ? new BacktestCooldownState() : null;
 
   const trades: BacktestTrade[] = [];
@@ -125,14 +147,14 @@ export async function runHistoricalTestbed(
   let tradeId = 0;
 
   const getHtfRegime = (tf: string, ts: number): MarketRegime | null => {
-    const slice = candlesUpTo(loaded.byTf[tf] ?? [], ts);
+    const slice = closedCandlesUpTo(loaded.byTf[tf] ?? [], ts, tf);
     if (slice.length < 50) return null;
     const w = getSignalGateWindows(tf);
     return computeRegimeEvidence(slice, { regimeBars: w.regimeBars, timeframe: tf }).regime;
   };
 
   const getHtfState = (tf: string, ts: number) => {
-    const slice = candlesUpTo(loaded.byTf[tf] ?? [], ts);
+    const slice = closedCandlesUpTo(loaded.byTf[tf] ?? [], ts, tf);
     if (slice.length < 50) {
       return { regime: null as string | null, trendDirection: null as 'bullish' | 'bearish' | null };
     }
@@ -143,7 +165,7 @@ export async function runHistoricalTestbed(
 
   for (let barIdx = 0; barIdx < walkBars.length; barIdx++) {
     const bar = walkBars[barIdx];
-    const ts = bar.timestamp;
+    const ts = candleCloseTimestamp(bar, '5m');
 
     if (open) {
       if (barIdx > open.entryBarIndex) {
@@ -182,7 +204,7 @@ export async function runHistoricalTestbed(
     const evaluations: Array<{ timeframe: string; result: Awaited<ReturnType<SignalGateService['evaluate']>>; candles: typeof walkBars }> = [];
 
     for (const tf of timeframes) {
-      const slice = candlesUpTo(loaded.byTf[tf] ?? [], ts);
+      const slice = closedCandlesUpTo(loaded.byTf[tf] ?? [], ts, tf);
       if (slice.length < 50) continue;
       const result = await gate.evaluate({
         candles: slice,
@@ -199,7 +221,6 @@ export async function runHistoricalTestbed(
       continue;
     }
 
-    signalsPassed += 1;
     passing.sort((a, b) =>
       compareSignalGateForEntry(
         { timeframe: a.timeframe, result: a.result },
@@ -210,10 +231,12 @@ export async function runHistoricalTestbed(
     const pick = passing[0];
     const signalBarTs = pick.result.setupResult.evidence.lastCandleTime ?? ts;
     const signalKey = `${pick.timeframe}:${signalBarTs}`;
-    if (tradedSignals.has(signalKey)) {
+    if (seenSignals.has(signalKey)) {
       blocks.duplicate_signal += 1;
       continue;
     }
+    seenSignals.add(signalKey);
+    signalsPassed += 1;
 
     const gateRegime = pick.result.gateRegime ?? pick.result.setupResult.regime;
     if (isRangeEntryBlocked(gateRegime)) {
@@ -236,6 +259,34 @@ export async function runHistoricalTestbed(
     const side = inferSetupTradeSide(pick.result.setupResult, pick.timeframe, pick.candles);
     if (!side) {
       blocks.no_direction += 1;
+      continue;
+    }
+
+    if (isV3StructureBiasEnabled()) {
+      const structSlice = closedCandlesUpTo(
+        loaded.byTf[structTf] ?? [],
+        ts,
+        structTf,
+        structureLookback
+      );
+      const structCheck = evaluateStructureSidePermission({
+        side,
+        candles: structSlice,
+      });
+      if (!structCheck.pass) {
+        blocks.structure_bias += 1;
+        continue;
+      }
+    }
+
+    const alignState = getHtfState(alignTf, ts);
+    const sideAlign = evaluateHtfSideAlign({
+      side,
+      htfTf: alignTf,
+      htf: alignState,
+    });
+    if (!sideAlign.pass) {
+      blocks.side_align += 1;
       continue;
     }
 
@@ -294,7 +345,6 @@ export async function runHistoricalTestbed(
       feePctPerSide,
       entryBarIndex: barIdx,
     };
-    tradedSignals.add(signalKey);
   }
 
   if (open) {
@@ -377,7 +427,7 @@ export function formatTestbedReport(result: BacktestRunResult): string {
     `TFs: ${result.config.timeframes.join(', ')} | entry priority: ${result.config.entryTfPriority.join(' → ')}`,
     '',
     `Steps (5m bars): ${s.steps}`,
-    `Gate pass cycles: ${s.signalsPassed} → entries: ${s.entries}`,
+    `Unique gate-pass signals: ${s.signalsPassed} → entries: ${s.entries}`,
     `W/L: ${s.wins}/${s.losses} (${(s.winRate * 100).toFixed(1)}% WR)`,
     `Net PnL: $${s.netPnlUsd.toFixed(2)} (fees ~$${s.feesUsd.toFixed(2)})`,
     `Avg SL: ${s.avgSlPct.toFixed(3)}% | avg hold: ${s.avgBarsHeld.toFixed(1)} bars (5m)`,
@@ -387,6 +437,8 @@ export function formatTestbedReport(result: BacktestRunResult): string {
     `  signal_gate: ${result.blocks.signal_gate}`,
     `  regime: ${result.blocks.regime}`,
     `  htf: ${result.blocks.htf}`,
+    `  structure_bias: ${result.blocks.structure_bias}`,
+    `  side_align: ${result.blocks.side_align}`,
     `  entry_5m_guard: ${result.blocks.entry_5m_guard}`,
     `  grade_playbook: ${result.blocks.grade_playbook}`,
     `  cooldown: ${result.blocks.cooldown}`,

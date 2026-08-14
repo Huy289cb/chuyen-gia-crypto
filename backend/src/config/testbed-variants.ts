@@ -17,7 +17,8 @@ export interface TestbedVariant {
 export const TESTBED_VARIANTS: Record<string, TestbedVariant> = {
   baseline: {
     id: 'baseline',
-    label: 'Current env policy (no overrides)',
+    label: 'Current env policy + tiered loss-streak cooldown',
+    enableCooldown: true,
   },
   'grade-a-only': {
     id: 'grade-a-only',

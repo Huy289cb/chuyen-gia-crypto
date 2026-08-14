@@ -64,8 +64,12 @@ export async function runPendingOrderLifecycle(
       await cancelPendingOnExchangeAndDb(order, 'ttl_expired');
       result.cancelled += 1;
       result.reasons.push({ order_id: order.order_id, reason: 'ttl_expired' });
+      const ageLabel =
+        ageHours < 2 ? `${Math.round(ageHours * 60)}m` : `${ageHours.toFixed(1)}h`;
+      const ttlLabel =
+        ttlHours < 2 ? `${Math.round(ttlHours * 60)}m` : `${ttlHours.toFixed(1)}h`;
       console.log(
-        `[PendingLifecycle] TTL cancel ${order.order_id} age=${ageHours.toFixed(1)}h ttl=${ttlHours}h tf=${timeframe ?? 'default'}`
+        `[PendingLifecycle] TTL cancel ${order.order_id} age=${ageLabel} ttl=${ttlLabel} tf=${timeframe ?? 'default'}`
       );
       continue;
     }

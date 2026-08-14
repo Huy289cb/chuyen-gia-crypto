@@ -1,8 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { getOrCreateTestnetAccount } from '../repositories/testnet.repository';
-import { getAccountBalanceSummary } from '../services/account-summary.service';
-import { isInternalCloseReason } from '../utils/bookkeeping-close';
+import {
+  calculateClosedTradeMetrics,
+  getFullHistoryWalletMetrics,
+} from '../services/account-performance.service';
+import {
+  getAccountCircuitStatus,
+  type CircuitStatus,
+} from '../services/account-circuit.service';
 
 const router = Router();
 
@@ -20,17 +25,34 @@ function toPositiveInt(value: any, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function resolveAccount(_prismaClient: typeof prisma, symbol: string, method?: string) {
+export async function resolveAccount(
+  prismaClient: typeof prisma,
+  symbol: string,
+  method?: string
+) {
   if (!symbol) {
     return null;
   }
 
   const normalizedSymbol = String(symbol).toUpperCase();
-  const methodId = method ? String(method) : 'ict';
-  return getOrCreateTestnetAccount(normalizedSymbol, methodId, 100);
+  const methodId = method ? String(method) : 'kim_nghia';
+  return prismaClient.testnetAccount.findUnique({
+    where: {
+      symbol_method_id: {
+        symbol: normalizedSymbol,
+        method_id: methodId,
+      },
+    },
+  });
 }
 
-async function buildPerformanceMetrics(prismaClient: typeof prisma, account: any) {
+type CircuitLoader = (accountId: number) => Promise<CircuitStatus>;
+
+export async function buildPerformanceMetrics(
+  prismaClient: typeof prisma,
+  account: any,
+  loadCircuit: CircuitLoader = getAccountCircuitStatus
+) {
   const closedPositions = await prismaClient.testnetPosition.findMany({
     where: {
       account_id: account.id,
@@ -38,47 +60,66 @@ async function buildPerformanceMetrics(prismaClient: typeof prisma, account: any
     },
     orderBy: { close_time: 'asc' },
   });
-
-  const counted = closedPositions.filter((p) => !isInternalCloseReason(p.close_reason));
-  const winningTrades = counted.filter((position) => (position.realized_pnl || 0) > 0).length;
-  const losingTrades = counted.filter((position) => (position.realized_pnl || 0) < 0).length;
-  const balanceSummary = await getAccountBalanceSummary(account.symbol, account.method_id);
-  const realizedPnl =
-    process.env.BINANCE_ENABLED === 'true'
-      ? balanceSummary.walletPnl
-      : counted.reduce((sum, position) => sum + (position.realized_pnl || 0), 0);
-  const grossProfit = counted.reduce(
-    (sum, position) => sum + Math.max(position.realized_pnl || 0, 0),
-    0
-  );
-  const grossLoss = counted.reduce(
-    (sum, position) => sum + Math.min(position.realized_pnl || 0, 0),
-    0
-  );
-  const avgRMultiple = counted.length
-    ? counted.reduce((sum, position) => sum + (Number((position as { r_multiple?: number }).r_multiple) || 0), 0) /
-      counted.length
-    : 0;
-  const winRate = counted.length ? (winningTrades / counted.length) * 100 : 0;
-  const profitFactor = grossLoss < 0 ? grossProfit / Math.abs(grossLoss) : grossProfit > 0 ? Infinity : 0;
-  const totalReturnPercent = account.starting_balance
-    ? ((account.equity - account.starting_balance) / account.starting_balance) * 100
-    : 0;
+  const [trades, fullHistory, circuit] = await Promise.all([
+    Promise.resolve(calculateClosedTradeMetrics(closedPositions)),
+    getFullHistoryWalletMetrics(prismaClient, account),
+    loadCircuit(account.id),
+  ]);
 
   return {
     symbol: account.symbol,
-    starting_balance: account.starting_balance,
-    current_equity: account.equity,
-    total_return_percent: totalReturnPercent,
-    total_trades: counted.length,
-    winning_trades: winningTrades,
-    losing_trades: losingTrades,
-    win_rate: winRate,
-    profit_factor: Number.isFinite(profitFactor) ? profitFactor : null,
-    max_drawdown: account.max_drawdown || 0,
-    avg_r_multiple: avgRMultiple,
-    realized_pnl: realizedPnl,
-    pnl_source: process.env.BINANCE_ENABLED === 'true' ? 'wallet' : 'positions',
+    method_id: account.method_id,
+    starting_balance: fullHistory.baselineBalance,
+    current_balance: fullHistory.currentBalance,
+    current_equity: fullHistory.currentEquity,
+    total_return_percent: fullHistory.walletReturnPercent,
+    total_trades: trades.totalTrades,
+    winning_trades: trades.wins,
+    losing_trades: trades.losses,
+    breakeven_trades: trades.breakeven,
+    win_rate: trades.winRate,
+    win_rate_all_closed: trades.winRateAllClosed,
+    gross_profit: trades.grossProfit,
+    gross_loss: trades.grossLoss,
+    avg_win: trades.avgWin,
+    avg_loss: trades.avgLoss,
+    profit_factor: trades.profitFactor,
+    max_drawdown: fullHistory.maxDrawdownPercent,
+    current_drawdown: fullHistory.currentDrawdownPercent,
+    avg_r_multiple: trades.avgRMultiple,
+    realized_pnl: fullHistory.walletPnl,
+    wallet_pnl: fullHistory.walletPnl,
+    position_pnl: trades.positionPnl,
+    stored_fees: trades.storedFees,
+    pnl_gap_vs_positions: fullHistory.walletPnl - trades.positionPnl,
+    pnl_source: 'testnet_account_wallet',
+    full_history: {
+      scope: fullHistory.scope,
+      baseline_balance: fullHistory.baselineBalance,
+      current_balance: fullHistory.currentBalance,
+      current_equity: fullHistory.currentEquity,
+      wallet_pnl: fullHistory.walletPnl,
+      wallet_return_percent: fullHistory.walletReturnPercent,
+      peak_equity: fullHistory.peakEquity,
+      peak_equity_at: fullHistory.peakEquityAt,
+      current_drawdown_percent: fullHistory.currentDrawdownPercent,
+      max_drawdown_percent: fullHistory.maxDrawdownPercent,
+      max_drawdown_at: fullHistory.maxDrawdownAt,
+      first_snapshot_at: fullHistory.firstSnapshotAt,
+      last_snapshot_at: fullHistory.lastSnapshotAt,
+      snapshot_count: fullHistory.snapshotCount,
+    },
+    strategy_epoch: {
+      scope: circuit.scope,
+      starts_at: circuit.epochStart,
+      peak_equity: circuit.peakEquity,
+      peak_equity_source: circuit.peakEquitySource,
+      drawdown_percent: circuit.drawdownPercent,
+      expectancy_since: circuit.expectancySince,
+      expectancy: circuit.expectancy,
+      trading_allowed: circuit.allowed,
+      circuit_reason: circuit.reason,
+    },
   };
 }
 
@@ -148,17 +189,31 @@ router.get('/equity-curve', async (req: Request, res: Response) => {
       });
     }
 
-    const take = toPositiveInt(limit || hours, 100);
-    const snapshots = await prismaClient.accountSnapshot.findMany({
-      where: { account_id: account.id },
-      orderBy: { timestamp: 'asc' },
+    const hoursNum = toPositiveInt(hours, 0);
+    const take = toPositiveInt(limit, hoursNum || 100);
+    const snapshotsDescending = await prismaClient.testnetAccountSnapshot.findMany({
+      where: {
+        account_id: account.id,
+        ...(hoursNum > 0
+          ? { timestamp: { gte: new Date(Date.now() - hoursNum * 3_600_000) } }
+          : {}),
+      },
+      orderBy: { timestamp: 'desc' },
       take,
     });
+    const snapshots = snapshotsDescending.reverse();
 
     return res.json({
       success: true,
       data: snapshots,
-      meta: { symbol: account.symbol, count: snapshots.length, limit: take, method: method || null },
+      meta: {
+        symbol: account.symbol,
+        count: snapshots.length,
+        limit: take,
+        hours: hoursNum || null,
+        method: account.method_id,
+        source: 'testnet_account_snapshots',
+      },
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -194,8 +249,8 @@ router.get('/trades', async (req: Request, res: Response) => {
 
   try {
     const [total, positions] = await Promise.all([
-      prismaClient.position.count({ where }),
-      prismaClient.position.findMany({
+      prismaClient.testnetPosition.count({ where }),
+      prismaClient.testnetPosition.findMany({
         where,
         orderBy: { close_time: 'desc' },
         take: limitNum,
@@ -340,7 +395,7 @@ router.get('/hold-time', async (req: Request, res: Response) => {
   }
 
   try {
-    const positions = await prismaClient.position.findMany({
+    const positions = await prismaClient.testnetPosition.findMany({
       where: {
         symbol: String(symbol).toUpperCase(),
         close_time: { not: null },

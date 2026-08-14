@@ -1,6 +1,6 @@
 /**
- * OpenRouter dispatch fallback (OpenAI-compatible).
- * Uses paid Llama 4 Scout with response_format json_object.
+ * OpenRouter primary dispatch (OpenAI-compatible).
+ * Paid Scout + response_format json_object, with parse retry.
  */
 
 import {
@@ -16,11 +16,95 @@ export interface OpenRouterAnalyzeRequest {
   /** Override dispatch model (e.g. levels adapter). */
   model?: string;
   logLabel?: string;
+  /** Parse retries on bad JSON (default 3). */
+  maxParseRetries?: number;
 }
 
 const OPENROUTER_CHAT_URL =
   process.env.OPENROUTER_API_BASE_URL?.trim() ||
   'https://openrouter.ai/api/v1/chat/completions';
+
+const JSON_ONLY_NUDGE =
+  '\n\nIMPORTANT: Reply with ONLY one valid minified JSON object. No markdown fences, no commentary.';
+
+function openRouterMaxTokens(): number {
+  const n = Number(process.env.OPENROUTER_MAX_TOKENS);
+  return Number.isFinite(n) && n >= 512 ? Math.floor(n) : 4096;
+}
+
+function openRouterParseRetries(override?: number): number {
+  if (override != null && override >= 1) return Math.floor(override);
+  const n = Number(process.env.OPENROUTER_JSON_RETRIES);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 3;
+}
+
+/** Normalize OpenRouter message.content (string | multipart array). */
+export function extractOpenRouterMessageContent(data: unknown): string {
+  if (!data || typeof data !== 'object') return '';
+  const choices = (data as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return '';
+  const message = (choices[0] as { message?: unknown })?.message;
+  if (!message || typeof message !== 'object') return '';
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+          return (part as { text: string }).text;
+        }
+        return '';
+      })
+      .join('');
+  }
+  return '';
+}
+
+async function callOpenRouterOnce(params: {
+  key: string;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  temperature: number;
+}): Promise<string> {
+  const response = await fetch(OPENROUTER_CHAT_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.key}`,
+      'Content-Type': 'application/json',
+      ...getOpenRouterAppHeaders(),
+    },
+    body: JSON.stringify({
+      model: params.model,
+      messages: [
+        { role: 'system', content: params.systemPrompt },
+        { role: 'user', content: params.userPrompt },
+      ],
+      temperature: params.temperature,
+      max_tokens: openRouterMaxTokens(),
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`OpenRouter API error: ${response.status} - ${text.slice(0, 220)}`);
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`OpenRouter envelope JSON parse failed: ${text.slice(0, 120)}`);
+  }
+
+  const content = extractOpenRouterMessageContent(data);
+  if (!content.trim()) {
+    throw new Error('Empty response from OpenRouter API');
+  }
+  return content;
+}
 
 export async function analyzeViaOpenRouter(
   params: OpenRouterAnalyzeRequest
@@ -31,48 +115,51 @@ export async function analyzeViaOpenRouter(
   }
 
   const model = params.model?.trim() || getOpenRouterDispatchModel();
-  const { systemPrompt, userPrompt, temperature = 0.15 } = params;
-  const logLabel = params.logLabel?.trim() || 'Dispatch fallback';
+  const logLabel = params.logLabel?.trim() || 'Dispatch';
+  const maxAttempts = openRouterParseRetries(params.maxParseRetries);
+  let systemPrompt = params.systemPrompt;
+  let userPrompt = params.userPrompt;
+  let temperature = params.temperature ?? 0.15;
+  let lastParsePreview = '';
 
-  console.log(`[OpenRouterClient] ${logLabel} model=${model} (json_object)`);
+  console.log(
+    `[OpenRouterClient] ${logLabel} model=${model} (json_object, max_tokens=${openRouterMaxTokens()}, retries=${maxAttempts})`
+  );
 
-  const response = await fetch(OPENROUTER_CHAT_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      ...getOpenRouterAppHeaders(),
-    },
-    body: JSON.stringify({
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const content = await callOpenRouterOnce({
+      key,
       model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
+      systemPrompt,
+      userPrompt,
       temperature,
-      max_tokens: 2048,
-      response_format: { type: 'json_object' },
-    }),
-  });
+    });
+    const parsed = cleanJSONResponse(content);
+    if (parsed !== null) {
+      if (attempt > 1) {
+        console.log(`[OpenRouterClient] Parsed OK on attempt ${attempt}/${maxAttempts}`);
+      } else {
+        console.log(`[OpenRouterClient] Successfully parsed dispatch JSON from ${model}`);
+      }
+      return parsed;
+    }
 
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`OpenRouter API error: ${response.status} - ${text.slice(0, 220)}`);
+    lastParsePreview = content.slice(0, 180).replace(/\s+/g, ' ');
+    console.warn(
+      `[OpenRouterClient] Bad JSON attempt ${attempt}/${maxAttempts}: ${lastParsePreview}`
+    );
+
+    // Stricter retry: lower temp + explicit JSON-only nudge
+    temperature = 0;
+    if (!userPrompt.includes('ONLY one valid')) {
+      userPrompt = `${userPrompt}${JSON_ONLY_NUDGE}`;
+    }
+    if (!systemPrompt.includes('valid JSON object')) {
+      systemPrompt = `${systemPrompt}\nYou must respond with a single valid JSON object only.`;
+    }
   }
 
-  const data = JSON.parse(text) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data.choices?.[0]?.message?.content ?? '';
-  if (!content.trim()) {
-    throw new Error('Empty response from OpenRouter API');
-  }
-
-  const parsed = cleanJSONResponse(content);
-  if (parsed === null) {
-    throw new Error('Invalid JSON in OpenRouter response after cleaning');
-  }
-
-  console.log(`[OpenRouterClient] Successfully parsed dispatch JSON from ${model}`);
-  return parsed;
+  throw new Error(
+    `Invalid JSON in OpenRouter response after ${maxAttempts} attempts: ${lastParsePreview}`
+  );
 }

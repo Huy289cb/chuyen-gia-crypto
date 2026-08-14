@@ -24,6 +24,7 @@
     "benchmark:cerebras": "tsx scripts/benchmark-cerebras-dispatch-models.ts",
     "benchmark:openrouter": "tsx scripts/benchmark-openrouter-dispatch-models.ts",
     "smoke:llm-providers": "tsx scripts/smoke-llm-providers.ts",
+    "smoke:structure-bias": "tsx scripts/smoke-structure-bias.ts",
     "eval:pullback": "tsx scripts/eval-pullback-entry.ts",
     "eval:pullback:strict": "tsx scripts/eval-pullback-entry.ts --strict",
     "backtest:pullback": "tsx scripts/backtest-pullback-binance.ts",

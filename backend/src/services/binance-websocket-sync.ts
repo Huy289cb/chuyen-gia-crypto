@@ -57,7 +57,7 @@ export async function startBinanceWebSocketSync(): Promise<void> {
 
 async function connectWebSocket(): Promise<void> {
   listenKey = await startListenKey();
-  console.log('[BinanceWebSocketSync] Listen key created:', listenKey);
+  console.log('[BinanceWebSocketSync] Listen key created');
 
   const wsUrl = `${WS_BASE_URL}/${listenKey}`;
   ws = new WebSocket(wsUrl);

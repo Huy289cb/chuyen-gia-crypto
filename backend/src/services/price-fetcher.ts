@@ -162,18 +162,28 @@ const BINANCE_KLINES_MAX = 1000;
 
 /**
  * Fetch up to totalLimit historical klines from Binance Futures (paginated backwards).
+ * When `endTimeExclusiveMs` is provided, pagination is anchored strictly before that
+ * timestamp instead of implicitly ending at the current Binance server time.
  * Returns ascending rows: [openTime, open, high, low, close, volume, ...].
  */
 export async function fetchHistoricalCandlesPaginated(
   symbol: string,
   interval: string,
-  totalLimit: number
+  totalLimit: number,
+  endTimeExclusiveMs?: number
 ): Promise<number[][]> {
   if (totalLimit <= 0) return [];
+  if (
+    endTimeExclusiveMs != null &&
+    (!Number.isFinite(endTimeExclusiveMs) || endTimeExclusiveMs <= 0)
+  ) {
+    throw new Error(`Invalid historical candle end time: ${endTimeExclusiveMs}`);
+  }
 
   const futuresSymbol = toFuturesSymbol(symbol);
   const byOpenTime = new Map<number, number[]>();
-  let endTime: number | undefined = undefined;
+  let endTime =
+    endTimeExclusiveMs == null ? undefined : Math.max(0, Math.floor(endTimeExclusiveMs) - 1);
   const pageDelayMs = 250;
 
   while (byOpenTime.size < totalLimit) {

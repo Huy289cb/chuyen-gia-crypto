@@ -11,6 +11,11 @@ import {
 export interface RiskPolicyConfig {
   // Risk per trade
   riskPerTradePercent: number; // e.g., 0.5% - 1% of account balance
+  /**
+   * Hard ceiling after exchange min-notional/min-quantity rounding.
+   * The requested risk can be smaller than the risk of one exchange lot on a small wallet.
+   */
+  maxEffectiveRiskPerTradePercent: number;
   
   // Daily loss cap
   dailyLossLimitPercent: number; // Stop trading after X% loss/day
@@ -72,6 +77,7 @@ export interface RiskPolicyConfig {
 
 export const DEFAULT_RISK_POLICY: RiskPolicyConfig = {
   riskPerTradePercent: 0.5, // 0.5% per trade
+  maxEffectiveRiskPerTradePercent: 2, // reject a min-lot order above 2% wallet risk
   dailyLossLimitPercent: 2.0, // Stop after 2% daily loss
   maxConsecutiveLosses: 3, // Stop after 3 consecutive losses
   consecutiveLossCooldownHours: 4, // Legacy flat cooldown
@@ -116,6 +122,10 @@ export function getRiskPolicy(): RiskPolicyConfig {
 
   return {
     riskPerTradePercent: getEffectiveRiskPerTradePercent(configuredRiskPercent),
+    maxEffectiveRiskPerTradePercent: (() => {
+      const value = parseFloat(process.env.MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT || '2');
+      return Number.isFinite(value) && value > 0 ? value : 2;
+    })(),
     dailyLossLimitPercent: parseFloat(process.env.DAILY_LOSS_LIMIT_PERCENT || '2.0'),
     maxConsecutiveLosses: parseInt(process.env.MAX_CONSECUTIVE_LOSSES || '3'),
     consecutiveLossCooldownHours: parseFloat(process.env.CONSECUTIVE_LOSS_COOLDOWN_HOURS || '4'),

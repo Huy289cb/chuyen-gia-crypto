@@ -249,8 +249,8 @@ export async function executeV3Trade(
   const remainingCapacity = exposure.remainingUsd;
   const minNotional = getBinanceMinOrderNotionalUsd();
   const notionalTolerance = getNotionalTolerancePercent();
-  const riskUsd = Math.max(1, balance * (riskPolicy.riskPerTradePercent / 100));
-  const computedSizeUsd = riskUsd / slDistancePct;
+  const targetRiskUsd = balance * (riskPolicy.riskPerTradePercent / 100);
+  const computedSizeUsd = targetRiskUsd / slDistancePct;
   const sizeUsd = resolveTargetPositionNotionalUsd({
     computedUsd: computedSizeUsd,
     minNotionalUsd: minNotional,
@@ -290,6 +290,16 @@ export async function executeV3Trade(
   const normalizedSizeQty = qtyResolved.normalizedQty;
   const orderNotional = qtyResolved.orderNotional;
   const effectiveSizeUsd = orderNotional;
+  const effectiveRiskUsd = effectiveSizeUsd * slDistancePct;
+  const effectiveRiskPercent = balance > 0 ? (effectiveRiskUsd / balance) * 100 : Infinity;
+  if (effectiveRiskPercent > riskPolicy.maxEffectiveRiskPerTradePercent + 1e-9) {
+    return {
+      success: false,
+      reason:
+        `Exchange minimum would risk ${effectiveRiskPercent.toFixed(2)}% of wallet ` +
+        `(cap ${riskPolicy.maxEffectiveRiskPerTradePercent.toFixed(2)}%)`,
+    };
+  }
 
   const expectedRr =
     computeExpectedRrFromPrices(entry, stopLoss, takeProfit) ??
@@ -324,7 +334,8 @@ export async function executeV3Trade(
     binanceOrderId = String(order.orderId);
     console.log(
       `[V3TradeExecution] Binance limit order ${binanceOrderId} (${newClientOrderId}) ` +
-        `${symbol} ${timeframe} ${side} entry=${entry} sizeUsd=${effectiveSizeUsd.toFixed(2)}`
+        `${symbol} ${timeframe} ${side} entry=${entry} sizeUsd=${effectiveSizeUsd.toFixed(2)} ` +
+        `riskUsd=${effectiveRiskUsd.toFixed(4)} riskPct=${effectiveRiskPercent.toFixed(2)}`
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -342,8 +353,8 @@ export async function executeV3Trade(
     takeProfit,
     sizeUsd: effectiveSizeUsd,
     sizeQty: normalizedSizeQty,
-    riskUsd,
-    riskPercent: riskPolicy.riskPerTradePercent,
+    riskUsd: effectiveRiskUsd,
+    riskPercent: effectiveRiskPercent,
     expectedRr,
     invalidationLevel: isValidNumber(analysis.invalidation_level)
       ? analysis.invalidation_level

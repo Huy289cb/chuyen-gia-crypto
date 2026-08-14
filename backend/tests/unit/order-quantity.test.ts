@@ -41,17 +41,32 @@ describe('order-quantity', () => {
     expect(result.orderNotional).toBeCloseTo(193.14, 1);
   });
 
-  it('rejects notional far below min even with tolerance', () => {
+  it('raises a sub-minimum request to the smallest valid exchange quantity', () => {
     const result = resolveQuantityForMinNotional({
-      quantity: 0.002,
+      quantity: 50 / 64380,
       entryPrice: 64380,
-      minNotionalUsd: 200,
+      minNotionalUsd: 50,
       stepSize: 0.001,
       minQty: 0.001,
+      tolerancePercent: 15,
+    });
+    expect(result.valid).toBe(true);
+    expect(result.normalizedQty).toBe(0.001);
+    expect(result.orderNotional).toBeCloseTo(64.38, 2);
+  });
+
+  it('rejects a minimum-lot bump that exceeds the exposure cap', () => {
+    const result = resolveQuantityForMinNotional({
+      quantity: 50 / 64380,
+      entryPrice: 64380,
+      minNotionalUsd: 50,
+      stepSize: 0.001,
+      minQty: 0.001,
+      maxNotionalUsd: 50,
       tolerancePercent: 5,
     });
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain('well below minimum');
+    expect(result.reason).toContain('exceeds remaining capacity');
   });
 
   it('allows slight overrun of remaining capacity within tolerance', () => {

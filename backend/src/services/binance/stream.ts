@@ -14,7 +14,7 @@ import { endpoints } from './endpoints';
 export async function startListenKey(): Promise<string> {
   try {
     const response: any = await post(endpoints.LISTEN_KEY, {}, true);
-    console.log('[BinanceStream] Listen key created:', response.listenKey);
+    console.log('[BinanceStream] Listen key created');
     return response.listenKey;
   } catch (error: any) {
     console.error('[BinanceStream] Failed to create listen key:', error.message);
@@ -30,7 +30,7 @@ export async function startListenKey(): Promise<string> {
 export async function keepAliveListenKey(listenKey: string): Promise<any> {
   try {
     const response: any = await put(endpoints.LISTEN_KEY, { listenKey }, true);
-    console.log('[BinanceStream] Listen key kept alive:', listenKey);
+    console.log('[BinanceStream] Listen key kept alive');
     return response;
   } catch (error: any) {
     console.error('[BinanceStream] Failed to keep alive listen key:', error.message);
@@ -46,7 +46,7 @@ export async function keepAliveListenKey(listenKey: string): Promise<any> {
 export async function closeListenKey(listenKey: string): Promise<any> {
   try {
     const response: any = await del(endpoints.LISTEN_KEY, { listenKey }, true);
-    console.log('[BinanceStream] Listen key closed:', listenKey);
+    console.log('[BinanceStream] Listen key closed');
     return response;
   } catch (error: any) {
     console.error('[BinanceStream] Failed to close listen key:', error.message);

@@ -13,6 +13,16 @@ export interface StoredDecisionDispatchOutput {
   decisionRecordId?: number;
 }
 
+/**
+ * A stored trade is an LLM-result cache hit, not an execution authorization.
+ * It must pass all current live hard gates again before it can be returned.
+ */
+export function shouldRevalidateStoredTrade(
+  output: StoredDecisionDispatchOutput
+): output is StoredDecisionDispatchOutput & { decision: 'trade'; analysis: GroqAnalysis } {
+  return output.decision === 'trade' && output.analysis != null;
+}
+
 const ACTION_RE = /LLM:\s*(buy|sell|hold|long|short)\b/i;
 
 export function parseActionFromStoredReason(reason: string): 'buy' | 'sell' | 'hold' | null {

@@ -23,14 +23,14 @@ export function getBreakevenAtR(): number {
   return envFloat('PROFIT_PROTECT_BE_AT_R', 1.5);
 }
 
-/** Activate trailing when unrealized PnL % of entry reaches this. */
+/** Activate trailing when unrealized PnL % of entry reaches this. Default 2.5 (~near RR3). */
 export function getTrailActivatePct(): number {
-  return envFloat('PROFIT_PROTECT_TRAIL_ACTIVATE_PCT', 1.5);
+  return envFloat('PROFIT_PROTECT_TRAIL_ACTIVATE_PCT', 2.5);
 }
 
-/** Trail distance behind mark (percent of price). */
+/** Trail distance behind mark (percent of price). Default 0.55. */
 export function getTrailDistancePct(): number {
-  return envFloat('PROFIT_PROTECT_TRAIL_DISTANCE_PCT', 0.8);
+  return envFloat('PROFIT_PROTECT_TRAIL_DISTANCE_PCT', 0.55);
 }
 
 /** Ignore tiny SL improvements (percent of entry). */
@@ -45,10 +45,10 @@ export function getProfitProtectMinMinutes(): number {
 
 /**
  * After this many hours, if still green but below BE threshold, nudge SL to entry.
- * 0 = disabled.
+ * 0 = disabled (default — RR3 swings often need >24h; 24h BE scratched winners).
  */
 export function getTimeStopHours(): number {
-  return envInt('PROFIT_PROTECT_TIME_STOP_HOURS', 24);
+  return envInt('PROFIT_PROTECT_TIME_STOP_HOURS', 0);
 }
 
 /**

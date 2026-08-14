@@ -13,6 +13,7 @@ import { signalGateService, type SignalGateOutput } from '../services/signal-gat
 import type { UnifiedCandle } from '../services/candle.service';
 import type { MarketRegime } from '../analyzers/market-regime.analyzer';
 import { recordSchedulerRun } from '../utils/scheduler-heartbeat';
+import { closedCandlesOnly } from '../utils/closed-candles';
 
 let marketScanTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -80,15 +81,19 @@ async function scanSymbolTimeframe(
   htfRegime: MarketRegime | null
 ): Promise<void> {
   const limit = getSignalGateCandleLimit(timeframe);
-  const { candles, source } = await getCandles({
+  const { candles: fetchedCandles, source } = await getCandles({
     symbol,
     timeframe,
     limit,
     cacheToDb: true,
   });
+  // Unified/Binance timestamps are bar-open times. The current in-progress bar
+  // must not influence signal or HTF state; include it only after open+TF <= now.
+  const candles = closedCandlesOnly(fetchedCandles, timeframe);
 
   console.log(
-    `[MarketScan] Fetched ${candles.length} candles for ${symbol} ${timeframe} (source: ${source})`
+    `[MarketScan] Fetched ${fetchedCandles.length} candles (${candles.length} closed) ` +
+      `for ${symbol} ${timeframe} (source: ${source})`
   );
 
   if (candles.length < 50) {

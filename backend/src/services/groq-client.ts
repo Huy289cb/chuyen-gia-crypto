@@ -13,6 +13,10 @@ import {
   isOpenRouterDispatchFallbackEnabled,
   isOpenRouterPrimaryProvider,
 } from '../config/openrouter-models';
+import {
+  escapeControlCharsInJsonStrings as escapeControlCharsInJsonStringsImpl,
+  parseLlmJsonObject,
+} from '../utils/llm-json';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -72,124 +76,20 @@ function isDailyTokenLimitError(message = ''): boolean {
 let lastCallTime = 0;
 const MIN_CALL_INTERVAL = 2000; // 2 seconds minimum between calls
 
-// Function to clean JSON response from models that add extra text
+/** Re-export for existing unit tests / callers. */
+export const escapeControlCharsInJsonStrings = escapeControlCharsInJsonStringsImpl;
+
+/** Clean + repair LLM JSON (OpenRouter-heavy failure modes). Truncated → null. */
 export function cleanJSONResponse(rawResponse: string): GroqAnalysis | null {
-  try {
-    // Find the first { and match braces to get complete JSON object
-    const start = rawResponse.indexOf('{');
-    if (start === -1) throw new Error("Không tìm thấy JSON");
-
-    // Count structural braces only; braces inside string values are plain text.
-    let braceCount = 0;
-    let end = -1;
-    let inString = false;
-    let escaped = false;
-    for (let i = start; i < rawResponse.length; i++) {
-      const c = rawResponse[i];
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-        } else if (c === '\\') {
-          escaped = true;
-        } else if (c === '"') {
-          inString = false;
-        }
-        continue;
-      }
-
-      if (c === '"') inString = true;
-      else if (c === '{') braceCount++;
-      else if (c === '}') braceCount--;
-
-      if (braceCount === 0) {
-        end = i;
-        break;
-      }
-    }
-
-    if (end === -1) throw new Error("Không tìm thấy dấu đóng ngoặc phù hợp");
-
-    let jsonString = rawResponse.substring(start, end + 1);
-    console.log('[GroqClient] Cleaned JSON string length:', jsonString.length);
-    console.log('[GroqClient] Cleaned JSON preview:', jsonString.substring(0, 200));
-
-    // Fix common JSON syntax errors
-    jsonString = fixJSONSyntax(jsonString);
-
-    // Try to parse the cleaned JSON
-    const parsed = JSON.parse(jsonString) as GroqAnalysis;
-    return parsed;
-  } catch (e: any) {
-    console.error("Lỗi parse JSON thủ công:", e.message);
+  const parsed = parseLlmJsonObject(rawResponse);
+  if (!parsed) {
+    console.error('Lỗi parse JSON thủ công: unrecoverable or truncated');
     console.log('[GroqClient] Raw response length:', rawResponse.length);
     console.log('[GroqClient] Raw response preview:', rawResponse.substring(0, 500));
-
     return null;
   }
-}
-
-/**
- * Escape raw control chars (U+0000–U+001F) inside JSON string literals.
- * LLMs often emit real newlines/tabs in `reason` → JSON.parse throws
- * "Bad control character in string literal".
- */
-export function escapeControlCharsInJsonStrings(json: string): string {
-  let out = '';
-  let inString = false;
-  let escaped = false;
-  for (let i = 0; i < json.length; i++) {
-    const c = json[i];
-    const code = c.charCodeAt(0);
-    if (!inString) {
-      if (c === '"') inString = true;
-      out += c;
-      continue;
-    }
-    if (escaped) {
-      out += c;
-      escaped = false;
-      continue;
-    }
-    if (c === '\\') {
-      out += c;
-      escaped = true;
-      continue;
-    }
-    if (c === '"') {
-      out += c;
-      inString = false;
-      continue;
-    }
-    if (code < 0x20) {
-      if (c === '\n') out += '\\n';
-      else if (c === '\r') out += '\\r';
-      else if (c === '\t') out += '\\t';
-      else out += `\\u${code.toString(16).padStart(4, '0')}`;
-      continue;
-    }
-    out += c;
-  }
-  return out;
-}
-
-// Fix common JSON syntax errors
-function fixJSONSyntax(jsonString: string): string {
-  try {
-    // Escape raw control chars inside strings first (OpenRouter/LLM common failure)
-    jsonString = escapeControlCharsInJsonStrings(jsonString);
-
-    // Remove trailing commas before closing brackets/braces
-    jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
-
-    // Fix double commas
-    jsonString = jsonString.replace(/,,/g, ',');
-
-    console.log('[GroqClient] Applied JSON syntax fixes');
-    return jsonString;
-  } catch (e: any) {
-    console.error('[GroqClient] Error fixing JSON syntax:', e.message);
-    return jsonString;
-  }
+  console.log('[GroqClient] Cleaned JSON keys:', Object.keys(parsed).join(','));
+  return parsed as GroqAnalysis;
 }
 
 // Validate AI response for consistency and correctness
@@ -431,17 +331,10 @@ class GroqClient {
   }
 
   /**
-   * Dispatch fallback order (groq default):
-   * 1. Groq primary (Scout)
-   * 2. Cerebras gpt-oss-120b + json_object
-   * 3. OpenRouter Scout + json_object
-   * 4+ Other Groq fallbacks
-   *
-   * LLM_PROVIDER=openrouter (mainnet):
-   * 1. OpenRouter Scout
-   * 2. Groq primary
-   * 3. Cerebras
-   * 4+ Groq fallbacks
+   * Dispatch order:
+   * - LLM_PROVIDER=openrouter (mainnet): OpenRouter only (+ Cerebras if enabled).
+   *   Groq free models deprecated — do not fall through to Groq.
+   * - default groq: Groq → Cerebras → OpenRouter → Groq fallbacks
    */
   private async analyzeDispatchChain(params: GroqAnalysisRequest): Promise<GroqAnalysis> {
     const { systemPrompt, userPrompt, temperature = 0.2, maxRetries = 5 } = params;
@@ -452,25 +345,22 @@ class GroqClient {
       const openRouterPrimary = await this.tryOpenRouterDispatch(llmParams, 'Dispatch step 1');
       if (openRouterPrimary) return openRouterPrimary;
 
-      const primary = getGroqPrimaryModel();
-      console.log(`[GroqClient] Dispatch step 2: Groq primary ${primary}`);
-      const groqPrimary = await this.tryGroqModels([primary], groqParams);
-      if (groqPrimary) return groqPrimary;
-
-      const cerebrasResult = await this.tryCerebrasDispatch(llmParams, 'Dispatch step 3');
-      if (cerebrasResult) return cerebrasResult;
-    } else {
-      const primary = getGroqPrimaryModel();
-      console.log(`[GroqClient] Dispatch step 1: Groq primary ${primary}`);
-      const primaryResult = await this.tryGroqModels([primary], groqParams);
-      if (primaryResult) return primaryResult;
-
       const cerebrasResult = await this.tryCerebrasDispatch(llmParams, 'Dispatch step 2');
       if (cerebrasResult) return cerebrasResult;
 
-      const openRouterFallback = await this.tryOpenRouterDispatch(llmParams, 'Dispatch step 3');
-      if (openRouterFallback) return openRouterFallback;
+      throw new Error('OpenRouter dispatch failed (Groq skipped: LLM_PROVIDER=openrouter)');
     }
+
+    const primary = getGroqPrimaryModel();
+    console.log(`[GroqClient] Dispatch step 1: Groq primary ${primary}`);
+    const primaryResult = await this.tryGroqModels([primary], groqParams);
+    if (primaryResult) return primaryResult;
+
+    const cerebrasResult = await this.tryCerebrasDispatch(llmParams, 'Dispatch step 2');
+    if (cerebrasResult) return cerebrasResult;
+
+    const openRouterFallback = await this.tryOpenRouterDispatch(llmParams, 'Dispatch step 3');
+    if (openRouterFallback) return openRouterFallback;
 
     const groqFallbacks = getGroqDispatchFallbackModels();
     if (groqFallbacks.length > 0) {

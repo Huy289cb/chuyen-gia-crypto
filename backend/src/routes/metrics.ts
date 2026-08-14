@@ -14,6 +14,7 @@ import {
   profitFactorLabel,
   rollupExpectancyFromOutcomes,
 } from '../services/expectancy-rollup.service';
+import { getFullHistoryWalletMetrics } from '../services/account-performance.service';
 
 const router = Router();
 
@@ -29,10 +30,12 @@ router.get('/risk', async (_req: Request, res: Response) => {
       where: { symbol: 'BTC', method_id: 'kim_nghia' },
     });
     const circuit = account ? await getAccountCircuitStatus(account.id) : null;
+    const fullHistory = account ? await getFullHistoryWalletMetrics(prisma, account) : null;
 
     res.json({
       config: {
-        risk_per_trade_percent: config.riskPerTradePercent,
+        risk_per_trade_percent: policy.riskPerTradePercent,
+        max_effective_risk_per_trade_percent: policy.maxEffectiveRiskPerTradePercent,
         daily_loss_limit_percent: policy.dailyLossLimitPercent,
         max_drawdown_percent: policy.maxDrawdownPercent,
         max_consecutive_losses: config.maxConsecutiveLosses,
@@ -52,13 +55,48 @@ router.get('/risk', async (_req: Request, res: Response) => {
       },
       circuit: circuit
         ? {
+            scope: circuit.scope,
+            starts_at: circuit.epochStart,
             allowed: circuit.allowed,
             reason: circuit.reason,
             daily_loss_usd: circuit.dailyLossUsd,
             daily_loss_percent: circuit.dailyLossPercent,
             drawdown_percent: circuit.drawdownPercent,
             peak_equity: circuit.peakEquity,
+            peak_equity_source: circuit.peakEquitySource,
+            expectancy_since: circuit.expectancySince,
             expectancy: circuit.expectancy,
+          }
+        : null,
+      full_history: fullHistory
+        ? {
+            scope: fullHistory.scope,
+            baseline_balance: fullHistory.baselineBalance,
+            current_balance: fullHistory.currentBalance,
+            current_equity: fullHistory.currentEquity,
+            wallet_pnl: fullHistory.walletPnl,
+            wallet_return_percent: fullHistory.walletReturnPercent,
+            peak_equity: fullHistory.peakEquity,
+            peak_equity_at: fullHistory.peakEquityAt,
+            current_drawdown_percent: fullHistory.currentDrawdownPercent,
+            max_drawdown_percent: fullHistory.maxDrawdownPercent,
+            max_drawdown_at: fullHistory.maxDrawdownAt,
+            first_snapshot_at: fullHistory.firstSnapshotAt,
+            last_snapshot_at: fullHistory.lastSnapshotAt,
+            snapshot_count: fullHistory.snapshotCount,
+          }
+        : null,
+      strategy_epoch: circuit
+        ? {
+            scope: circuit.scope,
+            starts_at: circuit.epochStart,
+            peak_equity: circuit.peakEquity,
+            peak_equity_source: circuit.peakEquitySource,
+            drawdown_percent: circuit.drawdownPercent,
+            expectancy_since: circuit.expectancySince,
+            expectancy: circuit.expectancy,
+            trading_allowed: circuit.allowed,
+            circuit_reason: circuit.reason,
           }
         : null,
       trading_allowed: circuit ? circuit.allowed : true,
@@ -78,26 +116,53 @@ router.get('/expectancy', async (req: Request, res: Response) => {
   try {
     const n = Math.min(200, Math.max(1, parseInt(String(req.query.n || '20'), 10) || 20));
     const days = parseFloat(String(req.query.days || '0')) || 0;
-    const where =
-      days > 0
-        ? { timestamp: { gte: new Date(Date.now() - days * 86_400_000) } }
-        : {};
+    const policy = getRiskPolicy();
     const rows = await prisma.tradeOutcome.findMany({
-      where,
       orderBy: { timestamp: 'desc' },
-      take: days > 0 ? 500 : n,
       select: { realized_rr: true, realized_pnl: true, close_reason: true, timestamp: true },
     });
-    const window = days > 0 ? rows : rows.slice(0, n);
+    const requestedSince = days > 0 ? new Date(Date.now() - days * 86_400_000) : null;
+    const window = requestedSince
+      ? rows.filter((row) => row.timestamp >= requestedSince)
+      : rows.slice(0, n);
     const rollup = rollupExpectancyFromOutcomes(window);
-    const policy = getRiskPolicy();
+    const fullHistory = rollupExpectancyFromOutcomes(rows);
+    const strategyEpochRows = policy.circuitExpectancySince
+      ? rows.filter((row) => row.timestamp >= policy.circuitExpectancySince!)
+      : rows;
+    const circuitWindow = strategyEpochRows.slice(0, policy.circuitExpectancyWindow);
+    const strategyEpoch = rollupExpectancyFromOutcomes(circuitWindow);
     res.json({
+      scope: 'requested_window',
       window: days > 0 ? `last_${days}d` : `last_${n}`,
       ...rollup,
       profit_factor_label: profitFactorLabel(rollup.profitFactor, rollup.wins, rollup.losses),
       kill_armed:
-        rollup.n >= policy.circuitExpectancyWindow &&
-        rollup.sumR <= policy.circuitExpectancyMinSumR,
+        strategyEpoch.n >= policy.circuitExpectancyWindow &&
+        strategyEpoch.sumR <= policy.circuitExpectancyMinSumR,
+      full_history: {
+        scope: 'full_history',
+        ...fullHistory,
+        profit_factor_label: profitFactorLabel(
+          fullHistory.profitFactor,
+          fullHistory.wins,
+          fullHistory.losses
+        ),
+      },
+      strategy_epoch: {
+        scope: 'strategy_epoch',
+        starts_at: policy.circuitExpectancySince,
+        window_size: policy.circuitExpectancyWindow,
+        ...strategyEpoch,
+        profit_factor_label: profitFactorLabel(
+          strategyEpoch.profitFactor,
+          strategyEpoch.wins,
+          strategyEpoch.losses
+        ),
+        kill_armed:
+          strategyEpoch.n >= policy.circuitExpectancyWindow &&
+          strategyEpoch.sumR <= policy.circuitExpectancyMinSumR,
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

@@ -5,9 +5,10 @@ Offline replay of the **deterministic** parts of the V3 pipeline on 2–4 weeks 
 ## What it simulates
 
 ```
-Historical candles (5m / 15m / 1h)
+Historical candles (5m / 15m / 1h / configured structure TF)
+  → Per-TF warmup + closed-candle alignment (no unfinished HTF candle)
   → Signal Gate (same code as production)
-  → Regime + HTF trend guard (V3_REQUIRE_HTF_TREND, V3_HTF_TREND_ALT)
+  → Regime + HTF/structure guards (bounded to the production lookback)
   → Rule-based entry: close price + policy SL/TP (computePolicyCompliantStopAndTarget)
   → SL/TP fill on subsequent 5m bar high/low
 ```
@@ -17,9 +18,10 @@ Historical candles (5m / 15m / 1h)
 | Gap | Why |
 |-----|-----|
 | LLM confirm/veto | Expensive; use live testnet for that layer |
-| Limit order partial fill / TTL | Assumes fill at signal bar close |
-| Cooldown / exposure cap | Testbed variant `cooldown` simulates tiered loss-streak pause |
-| Funding fees | Optional flat fee per side only |
+| Limit placement/fill/partial fill/TTL | Assumes an immediate fill at the signal-bar close; it does not reproduce production pending-order behavior |
+| Profit-protect / dynamic exits | Does not simulate BE, trailing SL, time-stop, invalidation, partial TP, or exchange amend races; exits use fixed initial SL/TP only |
+| Full cooldown/circuit stack | Baseline mirrors tiered loss-streak cooldown, but not post-close, pending-cancel, expectancy/account, or exposure locks |
+| Funding, slippage, variable fees | Uses an optional flat fee per side only |
 
 Use this to compare **SL distance**, **TF priority**, and **gate pass rate** before changing production config.
 
@@ -33,6 +35,9 @@ npm run backtest:historical
 
 # 30 days (~4.3w) with breakdown by TF/playbook/grade/side/day/week
 npm run backtest:historical -- --days=30
+
+# Override production MIN_RR_RATIO for an explicit parity/sensitivity run
+npm run backtest:historical -- --days=30 --min-rr=3
 
 # Compare rule variants on same window
 npm run backtest:historical -- --days=30 --variant=grade-a-only
@@ -90,3 +95,9 @@ Uses the same `.env` as production for:
 - `V3_REQUIRE_HTF_TREND` / `V3_HTF_TREND_ALT`
 - `MIN_SIGNAL_GRADE` / `MIN_SIGNAL_CONFIDENCE`
 - `MIN_SL_DISTANCE_PERCENT` (overridable via CLI sweep)
+- `MIN_RR_RATIO` (overridable via `--min-rr`)
+- `V3_STRUCTURE_BIAS_TF` / `V3_STRUCTURE_BIAS_CANDLE_LIMIT`
+
+The default warmup is 150 candles **per timeframe** (rather than 150×5m of wall-clock
+history shared by every timeframe), so 1h and 4h gates are warm before the evaluated
+period begins.

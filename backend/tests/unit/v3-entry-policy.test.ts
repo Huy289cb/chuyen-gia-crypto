@@ -136,12 +136,24 @@ describe('evaluateHtfSideAlign', () => {
     expect(r.pass).toBe(true);
   });
 
-  it('passes when HTF not in trend', () => {
+  it('fail-closed blocks when HTF not in trend (default)', () => {
+    process.env.V3_HTF_SIDE_ALIGN_FAIL_CLOSED = 'true';
     const r = evaluateHtfSideAlign({
       side: 'long',
       htfTf: '1h',
       htf: { regime: 'chop', trendDirection: null },
       enabled: true,
+    });
+    expect(r.pass).toBe(false);
+  });
+
+  it('legacy fail-open when V3_HTF_SIDE_ALIGN_FAIL_CLOSED=false', () => {
+    const r = evaluateHtfSideAlign({
+      side: 'long',
+      htfTf: '1h',
+      htf: { regime: 'chop', trendDirection: null },
+      enabled: true,
+      failClosed: false,
     });
     expect(r.pass).toBe(true);
   });

@@ -1,5 +1,9 @@
 import { prisma } from '../lib/prisma';
 import { getRiskPolicy, resolveLossCooldownUntil } from '../config/risk-policy';
+import {
+  calculateClosedTradeMetrics,
+  getFullHistoryWalletMetrics,
+} from '../services/account-performance.service';
 
 /**
  * Testnet Repository
@@ -571,26 +575,60 @@ export async function getTestnetPerformanceMetrics(accountId: number): Promise<a
 
   if (!account) return null;
 
-  const winRate = account.total_trades > 0
-    ? (account.winning_trades / account.total_trades) * 100
-    : 0;
-
-  const avgWin = account.winning_trades > 0
-    ? account.realized_pnl / account.winning_trades
-    : 0;
-
-  const profitFactor = account.losing_trades > 0 && account.realized_pnl > 0
-    ? Math.abs(avgWin / (account.realized_pnl / account.losing_trades))
-    : account.realized_pnl > 0 ? Infinity : 0;
-
-  const totalReturn = ((account.current_balance - account.starting_balance) / account.starting_balance) * 100;
+  const [closedPositions, fullHistory] = await Promise.all([
+    prisma.testnetPosition.findMany({
+      where: { account_id: accountId, close_time: { not: null } },
+      select: {
+        position_id: true,
+        side: true,
+        close_reason: true,
+        realized_pnl: true,
+        entry_fee: true,
+        exit_fee: true,
+        funding_fee: true,
+      },
+    }),
+    getFullHistoryWalletMetrics(prisma, account),
+  ]);
+  const trades = calculateClosedTradeMetrics(closedPositions);
 
   return {
     ...account,
-    win_rate: winRate,
-    avg_win: avgWin,
-    profit_factor: profitFactor,
-    total_return: totalReturn,
+    total_trades: trades.totalTrades,
+    winning_trades: trades.wins,
+    losing_trades: trades.losses,
+    breakeven_trades: trades.breakeven,
+    win_rate: trades.winRate,
+    win_rate_all_closed: trades.winRateAllClosed,
+    gross_profit: trades.grossProfit,
+    gross_loss: trades.grossLoss,
+    avg_win: trades.avgWin,
+    avg_loss: trades.avgLoss,
+    profit_factor: trades.profitFactor,
+    avg_r_multiple: trades.avgRMultiple,
+    position_pnl: trades.positionPnl,
+    stored_fees: trades.storedFees,
+    wallet_pnl: fullHistory.walletPnl,
+    pnl_gap_vs_positions: fullHistory.walletPnl - trades.positionPnl,
+    total_return: fullHistory.walletReturnPercent,
+    max_drawdown: fullHistory.maxDrawdownPercent,
+    current_drawdown: fullHistory.currentDrawdownPercent,
+    full_history: {
+      scope: fullHistory.scope,
+      baseline_balance: fullHistory.baselineBalance,
+      current_balance: fullHistory.currentBalance,
+      current_equity: fullHistory.currentEquity,
+      wallet_pnl: fullHistory.walletPnl,
+      wallet_return_percent: fullHistory.walletReturnPercent,
+      peak_equity: fullHistory.peakEquity,
+      peak_equity_at: fullHistory.peakEquityAt,
+      current_drawdown_percent: fullHistory.currentDrawdownPercent,
+      max_drawdown_percent: fullHistory.maxDrawdownPercent,
+      max_drawdown_at: fullHistory.maxDrawdownAt,
+      first_snapshot_at: fullHistory.firstSnapshotAt,
+      last_snapshot_at: fullHistory.lastSnapshotAt,
+      snapshot_count: fullHistory.snapshotCount,
+    },
   };
 }
 

@@ -36,6 +36,11 @@ export interface MethodConfig {
   autoEntry: AutoEntryConfig;
 }
 
+const configuredKimNghiaMinRr = (() => {
+  const value = parseFloat(process.env.MIN_RR_RATIO || '2');
+  return Number.isFinite(value) && value > 0 ? value : 2;
+})();
+
 export const METHODS: Record<string, MethodConfig> = {
   ict: {
     methodId: 'ict',
@@ -270,11 +275,11 @@ CRITICAL SL/TP PLACEMENT:
 - For LONG: entry > current price, SL < entry, TP > entry
 - For SHORT: entry < current price, SL > entry, TP < entry
 - SL distance MUST be at least 0.4% from entry (prefer 0.4%-0.8% on 5m/15m); place SL beyond swing liquidity, not inside the wick only
-- R:R ratio should be at least 2.0 for Kim Nghia (PnL+)
+- R:R ratio should be at least ${configuredKimNghiaMinRr} for Kim Nghia (PnL+)
 - Ensure all numerical values have exactly 2 decimal places`,
     autoEntry: {
       minConfidence: Number(process.env.KIM_NGHIA_CONFIDENCE_THRESHOLD) * 100 || 80, // Read from env or default to 80
-      minRRRatio: parseFloat(process.env.MIN_RR_RATIO || '2') || 2,
+      minRRRatio: configuredKimNghiaMinRr,
       riskPerTrade: 0.08, // Reduced from 0.10 to 0.08 (8% risk per trade)
       maxPositionsPerSymbol: 6,
       maxVolumePerAccount: 2000, // Max 2k USD total volume per account (backward compatibility)

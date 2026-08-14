@@ -1,12 +1,13 @@
 /**
  * TTL and drift rules for unfilled limit pending orders (PnL+ lifecycle).
+ * Short TTL on 5m/15m — long limits fill late into dead breakouts (e.g. 128m → SL).
  */
 
 const DEFAULT_TTL_HOURS: Record<string, number> = {
-  '5m': 4,
-  '15m': 6,
-  '1h': 24,
-  '4h': 48,
+  '5m': 0.75, // 45m
+  '15m': 0.75, // 45m
+  '1h': 2,
+  '4h': 8,
 };
 
 function parseHours(envKey: string, fallback: number): number {
@@ -18,7 +19,7 @@ function parseHours(envKey: string, fallback: number): number {
 
 export function getPendingOrderTtlHours(timeframe: string | null | undefined): number {
   const tf = (timeframe ?? '').toLowerCase();
-  const maxHours = parseHours('PENDING_ORDER_TTL_MAX_HOURS', 48);
+  const maxHours = parseHours('PENDING_ORDER_TTL_MAX_HOURS', 8);
 
   if (tf === '5m') {
     return Math.min(parseHours('PENDING_ORDER_TTL_HOURS_5M', DEFAULT_TTL_HOURS['5m']), maxHours);
@@ -77,12 +78,12 @@ export function getPendingOrderReentryCooldownMinutes(): number {
 
 /**
  * After any closed position, block re-entry on either side (anti-chase / anti-flip).
- * Default 240m (4h). After a loss: POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES (default 360m / 6h).
+ * Default 90m after close/win. After a loss: POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES (default 360m / 6h).
  * Env names keep SAME_SIDE for compat; behavior is any-side.
  */
 export function getPostCloseSameSideCooldownMinutes(wasLoss: boolean): number {
   if (wasLoss) {
     return parseHours('POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES', 360);
   }
-  return parseHours('POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES', 240);
+  return parseHours('POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES', 90);
 }

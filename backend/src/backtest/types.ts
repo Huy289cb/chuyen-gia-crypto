@@ -41,6 +41,8 @@ export interface BacktestBlockStats {
   entry_5m_guard: number;
   grade_playbook: number;
   cooldown: number;
+  structure_bias: number;
+  side_align: number;
 }
 
 export interface BacktestRunOptions {
@@ -53,6 +55,9 @@ export interface BacktestRunOptions {
   minRr?: number;
   notionalUsd?: number;
   feePctPerSide?: number;
+  /** Extra closed history loaded independently for every timeframe. */
+  warmupBarsPerTf?: number;
+  /** @deprecated Use warmupBarsPerTf. */
   warmupBars5m?: number;
   /** Named variant preset (see config/testbed-variants.ts). */
   variant?: string;
