@@ -1,0 +1,14 @@
+export interface CloseWriteIdentity{close_attempt_id:string;account_id:number;position_id:string;fill_verified:boolean;bookkeeping:boolean;}
+/** Successful awaited repository call only; not proof of atomic close or exchange economic coverage. */
+export async function observePositionCloseWrite<T>(kind:'close_status'|'close_financial_update',identity:CloseWriteIdentity,input:Record<string,unknown>,write:()=>Promise<T>,publish:(data:Record<string,unknown>)=>Promise<unknown>):Promise<T>{
+ const write_started_at=new Date().toISOString();const emit=(outcome:string)=>{const data={schema:'position-close-write-v1',kind,...identity,input,write_started_at,write_returned_at:new Date().toISOString(),outcome,clock_source:'application_write_return',returned_row_verification:'not_established'};try{void publish(data).catch(()=>console.warn('[PositionCloseWrite] persistence unavailable'));}catch{console.warn('[PositionCloseWrite] persistence unavailable');}};
+ let value:T;try{value=await write();}catch(error){emit('threw');throw error;}emit('returned');return value;
+}
+export function replayPositionCloseWrite(record:unknown,asOf:number){
+ const unknown=(reason:string)=>({status:'unknown' as const,reason});if(!record||typeof record!=='object'||Array.isArray(record))return unknown('missing_receipt');const d=record as Record<string,any>,i=d.input,a=Date.parse(d.write_started_at),b=Date.parse(d.write_returned_at);
+ if(d.schema!=='position-close-write-v1'||d.clock_source!=='application_write_return'||!Number.isFinite(asOf)||!Number.isFinite(a)||!Number.isFinite(b)||a>b||b>asOf)return unknown('invalid_close_write_clock');
+ if(typeof d.close_attempt_id!=='string'||!d.close_attempt_id||typeof d.position_id!=='string'||!d.position_id||!Number.isSafeInteger(d.account_id)||d.account_id<=0||typeof d.fill_verified!=='boolean'||typeof d.bookkeeping!=='boolean'||!i||d.outcome!=='returned')return unknown('missing_identity_or_failed_write');
+ if(d.kind==='close_status'){if(i.position_id!==d.position_id||typeof i.close_price!=='number'||!Number.isFinite(i.close_price)||i.close_price<=0||typeof i.close_reason!=='string')return unknown('invalid_close_status_input');return {status:'local_close_contract_replayed' as const,account_id:d.account_id,position_id:d.position_id,kind:'close_status' as const,update:{status:'closed',close_price:i.close_price,close_reason:i.close_reason},economic_roi:null,exchange_round_coverage:'not_established' as const};}
+ if(d.kind!=='close_financial_update'||!['current_price','realized_pnl','entry_fee','exit_fee','funding_fee','unrealized_pnl'].every(k=>typeof i[k]==='number'&&Number.isFinite(i[k])))return unknown('missing_financial_update');
+ return {status:'local_close_contract_replayed' as const,account_id:d.account_id,position_id:d.position_id,kind:'close_financial_update' as const,update:i,economic_roi:null,exchange_round_coverage:'not_established' as const};
+}

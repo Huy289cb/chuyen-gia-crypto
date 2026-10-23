@@ -1,3 +1,4 @@
+import { parseBinanceIncomeJson } from '../../utils/binance-income-json';
 /**
  * Binance Futures HTTP Client
  * 
@@ -32,6 +33,16 @@ interface BinanceApiError extends Error {
   binanceCode?: number;
   retriable?: boolean;
   nonRetriable?: boolean;
+  retryAfterMs?: number;
+}
+
+/** Opt-in response handling for the portfolio broker; legacy callers keep their behavior. */
+export interface BinanceRequestOptions {
+  transformResponse?: (raw: unknown) => unknown;
+  quietErrors?: boolean;
+  executionOwner?: string;
+  /** Per HTTP attempt, including connection setup. Omitted callers retain the legacy 30s timeout. */
+  timeoutMs?: number;
 }
 
 function isOrderEndpoint(path: string): boolean {
@@ -66,8 +77,14 @@ function createBinanceApiError(code: number, msg: string, path: string): Binance
  * @param {boolean} signed - Whether to sign the request
  * @returns {Promise<object>} Response data
  */
-export async function request(method: string, path: string, params: any = {}, signed: boolean = false): Promise<any> {
-  assertBinanceMutationAllowed(method, path);
+export async function request(method: string, path: string, params: any = {}, signed: boolean = false, options: BinanceRequestOptions = {}): Promise<any> {
+  if (options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs)
+    || options.timeoutMs < 1 || options.timeoutMs > 2147483647)) {
+    const error = new TypeError('Invalid Binance request timeout.') as BinanceApiError;
+    error.retriable = false;
+    throw error;
+  }
+  assertBinanceMutationAllowed(method, path, options.executionOwner);
 
   const timestamp = Date.now();
 
@@ -86,6 +103,12 @@ export async function request(method: string, path: string, params: any = {}, si
 
   const url = `${config.BASE_URL}${path}?${queryParams}`;
 
+  // Axios's socket timeout alone may not bound DNS/TLS setup. An explicit abort
+  // bounds the complete HTTP attempt; callers still reconcile ambiguous writes.
+  const abortController = options.timeoutMs === undefined ? undefined : new AbortController();
+  const timeout = abortController
+    ? setTimeout(() => abortController.abort(), options.timeoutMs) : undefined;
+
   try {
     const response = await axios({
       method,
@@ -94,7 +117,10 @@ export async function request(method: string, path: string, params: any = {}, si
         'X-MBX-APIKEY': config.API_KEY,
         'Content-Type': 'application/json',
       },
-      timeout: 30000,
+      timeout: options.timeoutMs ?? 30000,
+      ...(abortController ? { signal: abortController.signal } : {}),
+      ...(options.transformResponse ? { transformResponse: [options.transformResponse] }
+        : path === '/fapi/v1/income' ? { transformResponse: [parseBinanceIncomeJson] } : {}),
     });
 
     return response.data;
@@ -103,6 +129,13 @@ export async function request(method: string, path: string, params: any = {}, si
       // Binance API error
       const { code, msg } = error.response.data;
       const apiError = createBinanceApiError(code, msg, path);
+      if (code === -1003 || error.response.status === 418 || error.response.status === 429) {
+        const headerDelay = Number(error.response.headers?.['retry-after']) * 1000;
+        const bannedUntil = Number(String(msg).match(/banned until (\d+)/)?.[1]);
+        apiError.retryAfterMs = Math.max(Number.isFinite(headerDelay) ? headerDelay : 0,
+          Number.isFinite(bannedUntil) ? bannedUntil - Date.now() + 1000 : 0, 60_000);
+      }
+      if (options.quietErrors) throw apiError;
       
       // Handle specific error codes that are expected/normal
       if (code === -1021) {
@@ -139,16 +172,18 @@ export async function request(method: string, path: string, params: any = {}, si
       throw apiError;
     } else if (error.request) {
       // Request made but no response
-      console.error('[BinanceClient] No response from server');
+      if (!options.quietErrors) console.error('[BinanceClient] No response from server');
       const requestError = new Error('No response from Binance server') as BinanceApiError;
       requestError.retriable = true;
       throw requestError;
     } else {
       // Request setup error
-      console.error('[BinanceClient] Request setup error:', error.message);
+      if (!options.quietErrors) console.error('[BinanceClient] Request setup error:', error.message);
       error.retriable = false;
       throw error;
     }
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 
@@ -160,12 +195,12 @@ export async function request(method: string, path: string, params: any = {}, si
  * @param {boolean} signed - Whether to sign the request
  * @returns {Promise<object>} Response data
  */
-export async function requestWithRetry(method: string, path: string, params: any = {}, signed: boolean = false): Promise<any> {
+export async function requestWithRetry(method: string, path: string, params: any = {}, signed: boolean = false, options: BinanceRequestOptions = {}): Promise<any> {
   let lastError: any;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await request(method, path, params, signed);
+      return await request(method, path, params, signed, options);
     } catch (error: any) {
       lastError = error;
 
@@ -175,7 +210,7 @@ export async function requestWithRetry(method: string, path: string, params: any
       
       if (attempt < MAX_RETRIES) {
         const errorType = error.retriable ? 'transient' : 'unknown';
-        console.warn(`[BinanceClient] Request failed (${errorType}, attempt ${attempt}/${MAX_RETRIES}), retrying in ${RETRY_DELAY_MS}ms...`);
+        if (!options.quietErrors) console.warn(`[BinanceClient] Request failed (${errorType}, attempt ${attempt}/${MAX_RETRIES}), retrying in ${RETRY_DELAY_MS}ms...`);
         await delay(RETRY_DELAY_MS);
       }
     }

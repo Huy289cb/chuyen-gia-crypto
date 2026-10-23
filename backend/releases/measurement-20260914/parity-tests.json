@@ -1,0 +1,10 @@
+{
+  "checks": 56,
+  "syntaxAndDependencyClosure": true,
+  "executorControlAstEquivalent": true,
+  "quantityCases": 30,
+  "executorCases": 10,
+  "funnelCases": 12,
+  "exchangeAndDbMocked": true,
+  "liveOrdersSent": 0
+}

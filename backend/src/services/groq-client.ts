@@ -1,3 +1,4 @@
+import { fetchWithLlmTelemetry } from './llm-telemetry.service';
 /**
  * Groq API Client Wrapper (TypeScript)
  * Handles API calls with retry logic and error handling
@@ -25,6 +26,8 @@ export interface GroqAnalysisRequest {
   userPrompt: string;
   temperature?: number;
   maxRetries?: number;
+  /** Per-request structured contract; omitted for the existing generic dispatch. */
+  responseFormat?: 'json_object' | 'json_schema';
   /** If set, only these models are tried (in order). Saves cost for auxiliary calls (e.g. levels adapter). */
   preferredModels?: string[];
 }
@@ -136,7 +139,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithLlmTelemetry(url, {
       ...options,
       signal: controller.signal
     });
@@ -208,6 +211,7 @@ class GroqClient {
         const currentModel = modelsToTry[modelIndex];
         console.log(`[GroqClient] Trying model: ${currentModel}`);
 
+        const isGptOss = currentModel.startsWith('openai/gpt-oss-');
         const requestBody = {
           model: currentModel,
           messages: [
@@ -215,7 +219,11 @@ class GroqClient {
             { role: 'user', content: userPrompt },
           ],
           temperature,
-          max_tokens: 1024,
+          max_completion_tokens: 4096,
+          response_format: { type: 'json_object' },
+          ...(isGptOss
+            ? { reasoning_effort: 'low', include_reasoning: false }
+            : {}),
         };
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -299,7 +307,7 @@ class GroqClient {
   }
 
   private async tryOpenRouterDispatch(
-    params: Pick<GroqAnalysisRequest, 'systemPrompt' | 'userPrompt' | 'temperature'>,
+    params: Pick<GroqAnalysisRequest, 'systemPrompt' | 'userPrompt' | 'temperature' | 'responseFormat'>,
     stepLabel: string
   ): Promise<GroqAnalysis | null> {
     if (!isOpenRouterDispatchFallbackEnabled()) return null;
@@ -332,23 +340,27 @@ class GroqClient {
 
   /**
    * Dispatch order:
-   * - LLM_PROVIDER=openrouter (mainnet): OpenRouter only (+ Cerebras if enabled).
-   *   Groq free models deprecated — do not fall through to Groq.
+   * - LLM_PROVIDER=openrouter (mainnet): OpenRouter Scout → Groq production
+   *   models → Cerebras (optional last resort).
    * - default groq: Groq → Cerebras → OpenRouter → Groq fallbacks
    */
   private async analyzeDispatchChain(params: GroqAnalysisRequest): Promise<GroqAnalysis> {
     const { systemPrompt, userPrompt, temperature = 0.2, maxRetries = 5 } = params;
     const groqParams = { systemPrompt, userPrompt, temperature, maxRetries };
-    const llmParams = { systemPrompt, userPrompt, temperature };
+    const llmParams = { systemPrompt, userPrompt, temperature,
+      ...(params.responseFormat?{responseFormat:params.responseFormat}:{}) };
 
     if (isOpenRouterPrimaryProvider()) {
       const openRouterPrimary = await this.tryOpenRouterDispatch(llmParams, 'Dispatch step 1');
       if (openRouterPrimary) return openRouterPrimary;
 
-      const cerebrasResult = await this.tryCerebrasDispatch(llmParams, 'Dispatch step 2');
+      const groqFallback = await this.tryGroqModels(getGroqModelChain(), groqParams);
+      if (groqFallback) return groqFallback;
+
+      const cerebrasResult = await this.tryCerebrasDispatch(llmParams, 'Dispatch step 3');
       if (cerebrasResult) return cerebrasResult;
 
-      throw new Error('OpenRouter dispatch failed (Groq skipped: LLM_PROVIDER=openrouter)');
+      throw new Error('OpenRouter primary and Groq fallback both failed');
     }
 
     const primary = getGroqPrimaryModel();
@@ -445,6 +457,7 @@ class GroqClient {
         const currentModel = modelsToTry[modelIndex];
         console.log(`[GroqOps] Trying model: ${currentModel}`);
 
+        const isGptOss = currentModel.startsWith('openai/gpt-oss-');
         const requestBody = {
           model: currentModel,
           messages: [
@@ -452,7 +465,10 @@ class GroqClient {
             { role: 'user', content: userPrompt },
           ],
           temperature,
-          max_tokens: maxTokens,
+          max_completion_tokens: maxTokens,
+          ...(isGptOss
+            ? { reasoning_effort: 'low', include_reasoning: false }
+            : {}),
         };
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {

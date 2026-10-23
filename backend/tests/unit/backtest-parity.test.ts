@@ -28,4 +28,13 @@ describe('historical testbed production parity', () => {
   it('enables tiered loss cooldown in the baseline parity variant', () => {
     expect(resolveTestbedVariant('baseline').enableCooldown).toBe(true);
   });
+
+  it('keeps the controlled range relaxation bounded to liquidity sweeps', () => {
+    const variant = resolveTestbedVariant('relax-b70-range-sweep');
+    expect(variant.minConfidence).toBe(0.7);
+    expect(variant.allowedRegimes).toEqual(['trend', 'range']);
+    expect(variant.rangeAllowedPlaybooks).toEqual(['liquidity_sweep_reclaim']);
+    expect(variant.structureLongRequireBos).toBeUndefined();
+    expect(variant.structureShortRequireBos).toBeUndefined();
+  });
 });

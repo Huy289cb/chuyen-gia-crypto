@@ -1,0 +1,31 @@
+{
+  "createdAt": "2026-09-07T15:17:23.080631+00:00",
+  "status": "reviewed_candidate_waiting_final_checks",
+  "liveEnvChanges": {
+    "V3_ADAPTIVE_SETUP_MODE": "live",
+    "V3_RANGE_SWEEP_RETEST_REQUIRE_BOS": "false",
+    "V3_RANGE_SWEEP_RR": "1.5",
+    "V3_RANGE_SWEEP_LONG_5M_ONLY": "true",
+    "V3_RANGE_SWEEP_REQUIRE_TARGET_ROOM": "false"
+  },
+  "unchangedRiskCapUsd": 1,
+  "selectedPolicy": "BTC long 5m A/B liquidity sweep -> reclaim -> later directional retest, fresh 1h range, 4h bull/transition; LLM confirm/veto; one position and existing loss/circuit guards",
+  "criteria": "Positive native net after fee/slippage/funding in both 180-day historical periods; increased opportunities and positive combined fixed-stream result under base/stress costs. No claim of statistically proven edge or exact live portfolio backtest.",
+  "rejected": [
+    "broader core pullback 0.5%",
+    "short range retests",
+    "aligned micro breakout RR3",
+    "new range-edge rejection without sweep",
+    "mandatory target-room rule at RR1.5",
+    "RR2 target-room variant has worse recent contribution and combined drawdown"
+  ],
+  "files": [
+    "config/adaptive-setup-policy",
+    "utils/adaptive-retest-dispatch",
+    "utils/range-target-room",
+    "utils/trade-levels",
+    "services/groq-dispatch.service",
+    "services/transition-breakout-retest.service",
+    "schedulers/llm-dispatch.scheduler"
+  ]
+}

@@ -1,0 +1,1361 @@
+[
+  {
+    "name": "flat_below_opening_minimum",
+    "input": {
+      "weights": {
+        "A": ".02"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "0"
+      },
+      "orders": [],
+      "pre_equity": "100",
+      "estimated_post_equity": "100",
+      "gross": "0",
+      "tracking_error_usd": "2.00",
+      "net_deviation_usd": "2.00",
+      "target_net_usd": "2.00",
+      "actual_net_usd": "0",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0E-8",
+      "objective_usd": "4.00",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "retained_inventory_below_opening_minimum",
+    "input": {
+      "weights": {
+        "A": ".1"
+      },
+      "positions": {
+        "A": "1"
+      },
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "20"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "1"
+      },
+      "orders": [],
+      "pre_equity": "100",
+      "estimated_post_equity": "100",
+      "gross": "10",
+      "tracking_error_usd": "0.0",
+      "net_deviation_usd": "0.0",
+      "target_net_usd": "10.0",
+      "actual_net_usd": "10",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0.00699900",
+      "objective_usd": "0.0",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "reduction_below_opening_minimum",
+    "input": {
+      "weights": {
+        "A": ".1"
+      },
+      "positions": {
+        "A": "2"
+      },
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "50"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "1"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "-1",
+          "reduceOnly": true,
+          "referencePrice": "10",
+          "fillPrice": "9.9980",
+          "fee": "0.00499900"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.99300100",
+      "gross": "10",
+      "tracking_error_usd": "0.0",
+      "net_deviation_usd": "0.0",
+      "target_net_usd": "10.0",
+      "actual_net_usd": "10",
+      "immediate_cost_usd": "0.00699900",
+      "close_reserve_usd": "0.00699900",
+      "objective_usd": "0.00699900",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "flip_close_then_open",
+    "input": {
+      "weights": {
+        "A": "-.3",
+        "B": ".2"
+      },
+      "positions": {
+        "A": "2",
+        "B": "-2"
+      },
+      "equity": "100",
+      "marks": {
+        "A": "10",
+        "B": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "B": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "-3",
+        "B": "2"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "-2",
+          "reduceOnly": true,
+          "referencePrice": "10",
+          "fillPrice": "9.9980",
+          "fee": "0.00999800"
+        },
+        {
+          "symbol": "B",
+          "quantity": "2",
+          "reduceOnly": true,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.01000200"
+        },
+        {
+          "symbol": "A",
+          "quantity": "-3",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "9.9980",
+          "fee": "0.01499700"
+        },
+        {
+          "symbol": "B",
+          "quantity": "2",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.01000200"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.93700100",
+      "gross": "50",
+      "tracking_error_usd": "0.0",
+      "net_deviation_usd": "0.0",
+      "target_net_usd": "-10.0",
+      "actual_net_usd": "-10",
+      "immediate_cost_usd": "0.06299900",
+      "close_reserve_usd": "0.03500100",
+      "objective_usd": "0.06299900",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "off_step_inventory_retained",
+    "input": {
+      "weights": {
+        "A": ".105"
+      },
+      "positions": {
+        "A": "1.05"
+      },
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": ".1",
+          "minQty": ".1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "1.05"
+      },
+      "orders": [],
+      "pre_equity": "100",
+      "estimated_post_equity": "100",
+      "gross": "10.50",
+      "tracking_error_usd": "0.000",
+      "net_deviation_usd": "0.000",
+      "target_net_usd": "10.500",
+      "actual_net_usd": "10.50",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0.0073489500",
+      "objective_usd": "0.000",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "off_step_inventory_delta_lattice",
+    "input": {
+      "weights": {
+        "A": ".005"
+      },
+      "positions": {
+        "A": "1.05"
+      },
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": ".1",
+          "minQty": ".1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "0.05"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "-1.00",
+          "reduceOnly": true,
+          "referencePrice": "10",
+          "fillPrice": "9.9980",
+          "fee": "0.0049990000"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.9930010000",
+      "gross": "0.50",
+      "tracking_error_usd": "0.000",
+      "net_deviation_usd": "0.000",
+      "target_net_usd": "0.500",
+      "actual_net_usd": "0.50",
+      "immediate_cost_usd": "0.0069990000",
+      "close_reserve_usd": "0.0003499500",
+      "objective_usd": "0.0069990000",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "market_lot_overrides_lot_size",
+    "input": {
+      "weights": {
+        "A": ".3"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": ".01",
+          "minQty": ".01",
+          "maxQty": "1000",
+          "minNotional": "5",
+          "marketStepSize": "1",
+          "marketMinQty": "1",
+          "marketMaxQty": "50"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "3"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "3",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.01500300"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.97899700",
+      "gross": "30",
+      "tracking_error_usd": "0.0",
+      "net_deviation_usd": "0.0",
+      "target_net_usd": "30.0",
+      "actual_net_usd": "30",
+      "immediate_cost_usd": "0.02100300",
+      "close_reserve_usd": "0.02099700",
+      "objective_usd": "0.02100300",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "post_cost_gross_cap_repair",
+    "input": {
+      "weights": {
+        "A": "4",
+        "B": "4"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10",
+        "B": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "B": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0007",
+      "slippageBps": "5",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "1",
+        "B": "40"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "1",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0050",
+          "fee": "0.00700350"
+        },
+        {
+          "symbol": "B",
+          "quantity": "40",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0050",
+          "fee": "0.28014000"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.50785650",
+      "gross": "410",
+      "tracking_error_usd": "390",
+      "net_deviation_usd": "390",
+      "target_net_usd": "800",
+      "actual_net_usd": "410",
+      "immediate_cost_usd": "0.49214350",
+      "close_reserve_usd": "0.49185650",
+      "objective_usd": "780.49214350",
+      "iterations": 1
+    }
+  },
+  {
+    "name": "source_gross12_is_projected_not_clipped",
+    "input": {
+      "weights": {
+        "A": "2.4",
+        "B": "2.4",
+        "C": "2.4",
+        "D": "2.4",
+        "E": "2.4"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "C": "10",
+        "E": "10",
+        "A": "10",
+        "B": "10",
+        "D": "10"
+      },
+      "filters": {
+        "C": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "E": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "B": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "D": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "1",
+        "B": "1",
+        "C": "24",
+        "D": "24",
+        "E": "24"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "1",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.00500100"
+        },
+        {
+          "symbol": "B",
+          "quantity": "1",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.00500100"
+        },
+        {
+          "symbol": "C",
+          "quantity": "24",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.12002400"
+        },
+        {
+          "symbol": "D",
+          "quantity": "24",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.12002400"
+        },
+        {
+          "symbol": "E",
+          "quantity": "24",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.12002400"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.48192600",
+      "gross": "740",
+      "tracking_error_usd": "460.0",
+      "net_deviation_usd": "460.0",
+      "target_net_usd": "1200.0",
+      "actual_net_usd": "740",
+      "immediate_cost_usd": "0.51807400",
+      "close_reserve_usd": "0.51792600",
+      "objective_usd": "920.51807400",
+      "iterations": 4
+    }
+  },
+  {
+    "name": "balanced_source_net_zero",
+    "input": {
+      "weights": {
+        "A": ".6",
+        "B": "-.6"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10",
+        "B": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "B": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "6",
+        "B": "-6"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "6",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.03000600"
+        },
+        {
+          "symbol": "B",
+          "quantity": "-6",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "9.9980",
+          "fee": "0.02999400"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.91600000",
+      "gross": "120",
+      "tracking_error_usd": "0.0",
+      "net_deviation_usd": "0.0",
+      "target_net_usd": "0.0",
+      "actual_net_usd": "0",
+      "immediate_cost_usd": "0.08400000",
+      "close_reserve_usd": "0.08400000",
+      "objective_usd": "0.08400000",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "long_cash_source_net_is_not_zero",
+    "input": {
+      "weights": {
+        "A": ".6",
+        "B": ".6"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10",
+        "B": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "B": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "6",
+        "B": "6"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "6",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.03000600"
+        },
+        {
+          "symbol": "B",
+          "quantity": "6",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.03000600"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.91598800",
+      "gross": "120",
+      "tracking_error_usd": "0.0",
+      "net_deviation_usd": "0.0",
+      "target_net_usd": "120.0",
+      "actual_net_usd": "120",
+      "immediate_cost_usd": "0.08401200",
+      "close_reserve_usd": "0.08398800",
+      "objective_usd": "0.08401200",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "strict_daily_boundary_equal_no_safe_portfolio",
+    "input": {
+      "weights": {
+        "A": ".1"
+      },
+      "positions": {},
+      "equity": "91.1",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": false,
+      "reason": "NO_FEASIBLE_SHARED_RESERVATION",
+      "quantities": {
+        "A": "0"
+      },
+      "orders": [],
+      "pre_equity": "91.1",
+      "estimated_post_equity": "91.1",
+      "gross": "0",
+      "tracking_error_usd": "9.11",
+      "net_deviation_usd": "9.11",
+      "target_net_usd": "9.11",
+      "actual_net_usd": "0",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0E-8",
+      "objective_usd": "18.22",
+      "iterations": 1
+    }
+  },
+  {
+    "name": "strict_daily_boundary_above_only_flat_safe",
+    "input": {
+      "weights": {
+        "A": ".1"
+      },
+      "positions": {},
+      "equity": "91.10000000000000000000000000000000001",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "0"
+      },
+      "orders": [],
+      "pre_equity": "91.10000000000000000000000000000000001",
+      "estimated_post_equity": "91.10000000000000000000000000000000001",
+      "gross": "0",
+      "tracking_error_usd": "9.110000000000000000000000000000000001",
+      "net_deviation_usd": "9.110000000000000000000000000000000001",
+      "target_net_usd": "9.110000000000000000000000000000000001",
+      "actual_net_usd": "0",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0E-8",
+      "objective_usd": "18.220000000000000000000000000000000002",
+      "iterations": 1
+    }
+  },
+  {
+    "name": "daily_reservation_after_close_cost",
+    "input": {
+      "weights": {
+        "A": ".5"
+      },
+      "positions": {},
+      "equity": "91.2",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "5"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "5",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.02500500"
+        }
+      ],
+      "pre_equity": "91.2",
+      "estimated_post_equity": "91.16499500",
+      "gross": "50",
+      "tracking_error_usd": "4.40",
+      "net_deviation_usd": "4.40",
+      "target_net_usd": "45.60",
+      "actual_net_usd": "50",
+      "immediate_cost_usd": "0.03500500",
+      "close_reserve_usd": "0.03499500",
+      "objective_usd": "8.83500500",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "reduction_cost_can_make_all_plans_infeasible",
+    "input": {
+      "weights": {
+        "A": "0"
+      },
+      "positions": {
+        "A": "2"
+      },
+      "equity": "91.1001",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": false,
+      "reason": "NO_FEASIBLE_SHARED_RESERVATION",
+      "quantities": {
+        "A": "2"
+      },
+      "orders": [],
+      "pre_equity": "91.1001",
+      "estimated_post_equity": "91.1001",
+      "gross": "20",
+      "tracking_error_usd": "20.0000",
+      "net_deviation_usd": "20.0000",
+      "target_net_usd": "0.0000",
+      "actual_net_usd": "20",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0.01399800",
+      "objective_usd": "40.0000",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "reference_mark_difference_and_cost_credit",
+    "input": {
+      "weights": {
+        "A": ".5",
+        "B": "-.3"
+      },
+      "positions": {
+        "A": "2",
+        "B": "-1"
+      },
+      "equity": "100",
+      "marks": {
+        "A": "10",
+        "B": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "B": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1",
+      "references": {
+        "A": "9.9",
+        "B": "10.1"
+      }
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "5",
+        "B": "-3"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "3",
+          "reduceOnly": false,
+          "referencePrice": "9.9",
+          "fillPrice": "9.90198",
+          "fee": "0.014852970"
+        },
+        {
+          "symbol": "B",
+          "quantity": "-2",
+          "reduceOnly": false,
+          "referencePrice": "10.1",
+          "fillPrice": "10.09798",
+          "fee": "0.010097980"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "100.465069050",
+      "gross": "80",
+      "tracking_error_usd": "0.0",
+      "net_deviation_usd": "0.0",
+      "target_net_usd": "20.0",
+      "actual_net_usd": "20",
+      "immediate_cost_usd": "-0.465069050",
+      "close_reserve_usd": "0.855858080",
+      "objective_usd": "0.0",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "net_cashflow_adjusted_day_anchor",
+    "input": {
+      "weights": {
+        "A": ".5"
+      },
+      "positions": {},
+      "equity": "101.2",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1",
+      "dayNetCashflow": "10"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "5"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "5",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.02500500"
+        }
+      ],
+      "pre_equity": "101.2",
+      "estimated_post_equity": "101.16499500",
+      "gross": "50",
+      "tracking_error_usd": "0.60",
+      "net_deviation_usd": "0.60",
+      "target_net_usd": "50.60",
+      "actual_net_usd": "50",
+      "immediate_cost_usd": "0.03500500",
+      "close_reserve_usd": "0.03499500",
+      "objective_usd": "1.23500500",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "gross_cap_exact_equality_retained",
+    "input": {
+      "weights": {
+        "A": "8"
+      },
+      "positions": {
+        "A": "80"
+      },
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": "0",
+      "slippageBps": "0",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "80"
+      },
+      "orders": [],
+      "pre_equity": "100",
+      "estimated_post_equity": "100",
+      "gross": "800",
+      "tracking_error_usd": "0",
+      "net_deviation_usd": "0",
+      "target_net_usd": "800",
+      "actual_net_usd": "800",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0",
+      "objective_usd": "0",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "margin_reservation_binding",
+    "input": {
+      "weights": {
+        "A": "8"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "2",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "1"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "1",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.00500100"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.99299900",
+      "gross": "10",
+      "tracking_error_usd": "790",
+      "net_deviation_usd": "790",
+      "target_net_usd": "800",
+      "actual_net_usd": "10",
+      "immediate_cost_usd": "0.00700100",
+      "close_reserve_usd": "0.00699900",
+      "objective_usd": "1580.00700100",
+      "iterations": 1
+    }
+  },
+  {
+    "name": "deterministic_symbol_quantity_ties",
+    "input": {
+      "weights": {
+        "B": ".15",
+        "A": ".15"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10",
+        "B": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        },
+        "B": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "1000",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": "0",
+      "slippageBps": "0",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "2",
+        "B": "1"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "2",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10",
+          "fee": "0"
+        },
+        {
+          "symbol": "B",
+          "quantity": "1",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10",
+          "fee": "0"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "100",
+      "gross": "30",
+      "tracking_error_usd": "10.00",
+      "net_deviation_usd": "0.00",
+      "target_net_usd": "30.00",
+      "actual_net_usd": "30",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0",
+      "objective_usd": "10.00",
+      "iterations": 1
+    }
+  },
+  {
+    "name": "opening_ticket_maximum",
+    "input": {
+      "weights": {
+        "A": "5"
+      },
+      "positions": {},
+      "equity": "100",
+      "marks": {
+        "A": "10"
+      },
+      "filters": {
+        "A": {
+          "stepSize": "1",
+          "minQty": "1",
+          "maxQty": "3",
+          "minNotional": "5"
+        }
+      },
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {
+        "A": "3"
+      },
+      "orders": [
+        {
+          "symbol": "A",
+          "quantity": "3",
+          "reduceOnly": false,
+          "referencePrice": "10",
+          "fillPrice": "10.0020",
+          "fee": "0.01500300"
+        }
+      ],
+      "pre_equity": "100",
+      "estimated_post_equity": "99.97899700",
+      "gross": "30",
+      "tracking_error_usd": "470",
+      "net_deviation_usd": "470",
+      "target_net_usd": "500",
+      "actual_net_usd": "30",
+      "immediate_cost_usd": "0.02100300",
+      "close_reserve_usd": "0.02099700",
+      "objective_usd": "940.02100300",
+      "iterations": 0
+    }
+  },
+  {
+    "name": "empty_portfolio",
+    "input": {
+      "weights": {},
+      "positions": {},
+      "equity": "100",
+      "marks": {},
+      "filters": {},
+      "grossCap": "8",
+      "feeRate": ".0005",
+      "slippageBps": "2",
+      "leverage": "10",
+      "dayAnchor": "100",
+      "dailyLossBudget": "10",
+      "closeBuffer": "1.1"
+    },
+    "expected": {
+      "feasible": true,
+      "reason": "FEASIBLE_STATIC_PROJECTION",
+      "quantities": {},
+      "orders": [],
+      "pre_equity": "100",
+      "estimated_post_equity": "100",
+      "gross": "0",
+      "tracking_error_usd": "0",
+      "net_deviation_usd": "0",
+      "target_net_usd": "0",
+      "actual_net_usd": "0",
+      "immediate_cost_usd": "0",
+      "close_reserve_usd": "0",
+      "objective_usd": "0",
+      "iterations": 0
+    }
+  }
+]

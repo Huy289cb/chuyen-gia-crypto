@@ -133,9 +133,9 @@ export async function getSymbolFilters(symbol: string): Promise<{
 export async function normalizeQuantityForSymbol(
   symbol: string,
   quantity: number
-): Promise<ReturnType<typeof evaluateNormalizedQuantity>> {
+): Promise<ReturnType<typeof evaluateNormalizedQuantity> & { tickSize?: number }> {
   const filters = await getSymbolFilters(symbol);
-  return evaluateNormalizedQuantity(quantity, filters);
+  return { ...evaluateNormalizedQuantity(quantity, filters), tickSize: filters.tickSize };
 }
 
 function assertValidNormalizedQuantity(

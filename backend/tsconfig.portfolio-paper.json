@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": "./dist-portfolio-paper-candidate", "declaration": false, "declarationMap": false },
+  "include": ["src/portfolio/**/*.ts", "src/routes/portfolio-paper.ts", "src/config/cors.ts"]
+}

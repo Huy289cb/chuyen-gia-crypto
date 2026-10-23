@@ -1,0 +1,10 @@
+import {it,expect} from 'vitest';
+import {composeTraceAdmission} from '../../src/utils/trace-admission-composition';
+import {evaluateEntryPriceLevels as levels,evaluateEntryStopFloor as floor} from '../../src/utils/entry-price-feasibility';
+const t=Date.now(),enc=(value:number)=>({status:'finite',value});
+function row(id:number,stage:string,stop=99,attempt='a'){return {id,timestamp:new Date(t).toISOString(),event_type:'entry_trace',event_data:{trace_id:'t',stage:'entry_price_feasibility_evaluated',feasibility:{schema:'entry-price-feasibility-v1',stage,feasibility_attempt_id:attempt,symbol:'BTC',method_id:'kim_nghia',side:'long',observed_at:new Date(t).toISOString(),entry:enc(100),stop_loss:enc(stop),take_profit:enc(110),min_distance_percent:enc(.008),decision:stage==='price_levels'?levels('long',100,stop,110):floor(100,stop,.008)}}};}
+const run=(rows:any[])=>composeTraceAdmission(rows,t).traces[0];
+it('joins passing observations without final admission',()=>{const x=run([row(1,'price_levels'),row(2,'stop_floor')]);expect(x.price_feasibility).toHaveLength(2);expect(x.unknown).toEqual([]);expect(x.final_admission).toBeNull();});
+it('detects downstream after price veto and identity conflict',()=>{expect(run([row(1,'price_levels',101),row(2,'stop_floor',101)]).unknown).toContain('downstream_after_price_veto');expect(run([row(1,'price_levels'),row(2,'stop_floor',99,'b')]).unknown).toContain('price_floor_input_conflict');});
+it('rejects duplicate and orphan stages',()=>{expect(run([row(1,'price_levels'),row(2,'price_levels')]).unknown).toContain('ambiguous_early_price_feasibility');expect(run([row(1,'stop_floor')]).unknown).toContain('floor_without_price_levels');});
+it('detects downstream quantity after floor veto',()=>{expect(run([row(1,'price_levels',99.5),row(2,'stop_floor',99.5),{id:3,timestamp:new Date(t).toISOString(),event_type:'entry_trace',event_data:{trace_id:'t',stage:'quantity_checked',side:'long',entry:100,stop_loss:99.5}}]).unknown).toContain('downstream_after_floor_veto');});

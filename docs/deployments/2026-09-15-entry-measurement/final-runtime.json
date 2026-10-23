@@ -1,0 +1,20 @@
+{
+  "targetMatchesBaseline": false,
+  "targetMatchesRelease": true,
+  "activeProcesses": [
+    {
+      "pid": 2052984,
+      "entrypoint": [
+        "node /home/ubuntu/chuyen-gia-crypto/backend/dist/server.js"
+      ]
+    },
+    {
+      "pid": 2052991,
+      "entrypoint": [
+        "node /home/ubuntu/chuyen-gia-crypto/backend/dist/worker.js"
+      ]
+    }
+  ],
+  "stopped": false,
+  "mutationPerformed": false
+}

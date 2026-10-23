@@ -11,6 +11,11 @@ export function inferSetupTradeSide(
   timeframe: string,
   candles: CandleData[]
 ): TradeSide | null {
+  if(setup.confidenceKind==='rule_quality'&&['h1_acceptance_retest','h2_range_sweep_reclaim'].includes(setup.playbookKey??'')){
+    const evidence=setup.evidence.playbooks.find(p=>p.playbook===setup.playbookKey&&p.detected);
+    const side=evidence?.metrics.side;
+    return side==='long'||side==='short'?side:null;
+  }
   if (setup.playbookKey === 'breakout_volume') {
     const windows = getSignalGateWindows(timeframe);
     const br = analyzeBreakoutVolume(candles, { windowBars: windows.breakoutBars });

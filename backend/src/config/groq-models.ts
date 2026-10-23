@@ -1,42 +1,57 @@
 /**
- * Groq model IDs — centralized (Llama 4 Scout deprecated 2026-07-17).
+ * Groq model IDs — centralized.
  * @see https://console.groq.com/docs/models
+ * @see https://console.groq.com/docs/deprecations
  */
 
-/** Best dispatch JSON reliability in production so far; switch before 2026-07-17. */
+/** Historical export kept for scripts/import compatibility; retired on 2026-07-17. */
 export const GROQ_MODEL_SCOUT = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-/** Default dispatch primary while Scout is still available. */
-export const GROQ_MODEL_PRIMARY_DEFAULT = GROQ_MODEL_SCOUT;
+/** Production JSON model recommended by Groq after the Llama/Qwen retirements. */
+export const GROQ_MODEL_PRIMARY_DEFAULT = 'openai/gpt-oss-120b';
 
-/** Post-Scout primary candidate (set via env after deprecation). */
-export const GROQ_MODEL_POST_SCOUT_PRIMARY = 'llama-3.3-70b-versatile';
+/** Cheap production model for short auxiliary JSON calls. */
+export const GROQ_MODEL_AUXILIARY_DEFAULT = 'openai/gpt-oss-20b';
 
-/** Fallback chain when primary fails (JSON reliability + rate limits). No gpt-oss here — empty body on long dispatch prompts. */
-export const GROQ_MODEL_FALLBACKS_DEFAULT = [
-  'llama-3.3-70b-versatile',
+/** Kept as a non-retired comparison candidate for existing benchmark callers. */
+export const GROQ_MODEL_POST_SCOUT_PRIMARY = GROQ_MODEL_PRIMARY_DEFAULT;
+
+/** Production fallback only; preview models are not part of the default live chain. */
+export const GROQ_MODEL_FALLBACKS_DEFAULT = [GROQ_MODEL_AUXILIARY_DEFAULT] as const;
+
+/** IDs that now return model_not_found for free/developer accounts. */
+export const GROQ_RETIRED_MODEL_IDS = new Set([
+  GROQ_MODEL_SCOUT,
+  'meta-llama/llama-4-scout',
   'qwen/qwen3-32b',
-  'qwen/qwen3.6-27b',
   'llama-3.1-8b-instant',
-] as const;
+  'llama-3.3-70b-versatile',
+]);
 
 /** Default for short SL/TP repair JSON (gpt-oss works on small prompts). */
 export const GROQ_MODEL_LEVELS_ADAPTER_DEFAULT = 'openai/gpt-oss-120b';
 
 /** Models to compare in scripts/benchmark-groq-dispatch-models.ts */
 export const GROQ_DISPATCH_BENCHMARK_MODELS = [
-  GROQ_MODEL_SCOUT,
-  GROQ_MODEL_POST_SCOUT_PRIMARY,
-  'qwen/qwen3-32b',
+  GROQ_MODEL_PRIMARY_DEFAULT,
+  GROQ_MODEL_AUXILIARY_DEFAULT,
   'qwen/qwen3.6-27b',
 ] as const;
 
+function isUsableGroqModel(model: string | undefined): model is string {
+  const normalized = model?.trim();
+  return Boolean(normalized) && !GROQ_RETIRED_MODEL_IDS.has(normalized as string);
+}
+
+function dedupe(models: string[]): string[] {
+  return [...new Set(models)];
+}
+
 export function getGroqPrimaryModel(): string {
-  return (
+  const configured =
     process.env.GROQ_MODEL_PRIMARY?.trim() ||
-    process.env.GROQ_MODEL?.trim() ||
-    GROQ_MODEL_PRIMARY_DEFAULT
-  );
+    process.env.GROQ_MODEL?.trim();
+  return isUsableGroqModel(configured) ? configured : GROQ_MODEL_PRIMARY_DEFAULT;
 }
 
 export function parseGroqFallbackModels(): string[] {
@@ -47,33 +62,43 @@ export function parseGroqFallbackModels(): string[] {
   return raw
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(isUsableGroqModel);
 }
 
 /** Groq fallbacks only (excludes primary Scout). */
 export function getGroqDispatchFallbackModels(): string[] {
   const primary = getGroqPrimaryModel();
-  return parseGroqFallbackModels().filter((m) => m !== primary);
+  const configured = parseGroqFallbackModels().filter((m) => m !== primary);
+  return configured.length > 0
+    ? configured
+    : GROQ_MODEL_FALLBACKS_DEFAULT.filter((m) => m !== primary);
 }
 
 /** Primary first, then fallbacks (deduped). */
 export function getGroqModelChain(): string[] {
   const primary = getGroqPrimaryModel();
-  return [primary, ...getGroqDispatchFallbackModels()];
+  return dedupe([primary, ...getGroqDispatchFallbackModels()]);
 }
 
 export function getGroqLevelsAdapterModel(): string {
-  return (
-    process.env.GROQ_MODEL_LEVELS_ADAPTER?.trim() ||
-    GROQ_MODEL_LEVELS_ADAPTER_DEFAULT
-  );
+  const configured = process.env.GROQ_MODEL_LEVELS_ADAPTER?.trim();
+  return isUsableGroqModel(configured) ? configured : GROQ_MODEL_LEVELS_ADAPTER_DEFAULT;
 }
 
 export function getGroqTelegramAiModel(): string {
-  return process.env.TELEGRAM_AI_MODEL?.trim() || getGroqPrimaryModel();
+  const configured = process.env.TELEGRAM_AI_MODEL?.trim();
+  return isUsableGroqModel(configured) ? configured : getGroqPrimaryModel();
 }
 
 /** Short chain for auxiliary JSON calls (flip eval, etc.). */
 export function getGroqAuxiliaryModelChain(limit = 2): string[] {
-  return getGroqModelChain().slice(0, Math.max(1, limit));
+  const configured = process.env.GROQ_MODEL_AUXILIARY?.trim();
+  const auxiliary = isUsableGroqModel(configured)
+    ? configured
+    : GROQ_MODEL_AUXILIARY_DEFAULT;
+  return dedupe([
+    auxiliary,
+    GROQ_MODEL_PRIMARY_DEFAULT,
+    ...getGroqModelChain(),
+  ]).slice(0, Math.max(1, limit));
 }

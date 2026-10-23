@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkMinSlDistance,
   computePolicyCompliantStopAndTarget,
+  computeExpectedRrFromPrices,
 } from '../../src/utils/trade-levels';
 
 /** Production 9 Jul: LLM levels at exactly 0.80% blocked by raw float compare. */
@@ -31,6 +32,19 @@ describe('checkMinSlDistance', () => {
 });
 
 describe('computePolicyCompliantStopAndTarget', () => {
+  it('never rounds a generated target below the executor minimum RR for BTC', () => {
+    for (const action of ['buy', 'sell'] as const) {
+      for (const entry of [79425, 79152.2, 69379.4, 62320.17]) {
+        for (const minRr of [1.5, 2, 3]) {
+          const levels = computePolicyCompliantStopAndTarget({ action, entry, minSlPct: .008, minRr })!;
+          expect(computeExpectedRrFromPrices(entry, levels.stopLoss, levels.takeProfit)! + 1e-9)
+            .toBeGreaterThanOrEqual(minRr);
+          expect(checkMinSlDistance(entry, levels.stopLoss, .008).ok).toBe(true);
+        }
+      }
+    }
+  });
+
   it('policy SL meets min after cent rounding', () => {
     const minPct = 0.008;
     const long = computePolicyCompliantStopAndTarget({

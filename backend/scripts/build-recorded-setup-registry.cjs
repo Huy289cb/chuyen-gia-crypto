@@ -1,0 +1,11 @@
+const fs=require('node:fs'),crypto=require('node:crypto');
+require('tsx/cjs');
+const {buildSetupRegistry}=require('../src/utils/setup-registry.ts');
+const [input,cutoff,out]=process.argv.slice(2);
+if(!out)throw Error('Usage: INPUT_EXPORT ISO_CUTOFF NEW_REPORT');
+const bytes=fs.readFileSync(input),source=JSON.parse(bytes);
+if(!Array.isArray(source.events))throw Error('missing_events');
+const report=buildSetupRegistry(source.events,Date.parse(cutoff));
+report.input_sha256=crypto.createHash('sha256').update(bytes).digest('hex');
+fs.writeFileSync(out,JSON.stringify(report,null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({coverage:report.coverage,setups:report.setups.length}));

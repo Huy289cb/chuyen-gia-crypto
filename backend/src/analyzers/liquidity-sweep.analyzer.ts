@@ -1,3 +1,4 @@
+import { formatSetupNumber } from '../utils/setup-number-format';
 /**
  * Liquidity Sweep Analyzer
  */
@@ -15,7 +16,7 @@ export interface LiquiditySweepResult {
 }
 
 function fmt(n: number, d = 2): string {
-  return n.toLocaleString('en-US', { maximumFractionDigits: d });
+  return formatSetupNumber(n, d);
 }
 
 export interface LiquiditySweepOptions {
@@ -73,6 +74,11 @@ export function analyzeLiquiditySweep(
 
   const metrics: PlaybookEvidence['metrics'] = {
     ...baseMetrics,
+    detectorVersion: 'liquidity_sweep_v1',
+    anchorHighOpenTime: recentCandles.slice(0, -1).find((c) => c.high === highestHigh)?.timestamp ?? null,
+    anchorLowOpenTime: recentCandles.slice(0, -1).find((c) => c.low === lowestLow)?.timestamp ?? null,
+    anchorWindowEndOpenTime: recentCandles.at(-2)?.timestamp ?? null,
+    detectionOpenTime: currentCandle.timestamp,
     priorHigh19: highestHigh,
     priorLow19: lowestLow,
     lastOpen: currentCandle.open,

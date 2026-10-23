@@ -58,3 +58,8 @@ export function getTimeStopHours(): number {
 export function getBreakevenFeeBufferPct(): number {
   return envFloat('PROFIT_PROTECT_BE_FEE_BUFFER_PCT', 0.08);
 }
+
+/** Research-tested cash-cost floor; explicit opt-in until portfolio validation is sufficient. */
+export function isCostAwareBreakevenEnabled(): boolean {
+  return process.env.PROFIT_PROTECT_COST_AWARE_BE === 'true';
+}

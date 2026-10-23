@@ -11,9 +11,12 @@ import {
   getTrailActivatePct,
   getTrailDistancePct,
   isProfitProtectEnabled,
+  isCostAwareBreakevenEnabled,
 } from '../config/profit-protect-policy';
 import { computeProfitProtectSl } from '../utils/profit-protect-sl';
 import { amendProtectiveStopLoss } from './amend-protective-sl.service';
+import {cashBreakevenSl} from '../utils/breakeven-sl';
+import {getRiskPolicy} from '../config/risk-policy';
 
 /** Remember original risk distance so R multiples stay valid after BE move. */
 const initialRiskByPosition = new Map<string, number>();
@@ -50,6 +53,8 @@ export interface ProfitProtectPosition {
   size_qty: number;
   entry_time: Date;
   binance_sl_order_id?: string | null;
+  entry_fee?: number;
+  funding_fee?: number;
 }
 
 export async function maybeApplyProfitProtectSl(
@@ -72,6 +77,16 @@ export async function maybeApplyProfitProtectSl(
     side
   );
 
+  const costAware=isCostAwareBreakevenEnabled();
+  const riskPolicy=getRiskPolicy(),quantity=Math.abs(position.size_qty);
+  const feeFraction=riskPolicy.maxFeePercent/200;
+  const entryReserve=Math.max(Number(position.entry_fee??0),position.entry_price*quantity*feeFraction);
+  const fundingReserve=Math.max(0,Number(position.funding_fee??0));
+  const supportedSymbol=position.symbol.toUpperCase().replace(/USDT$/,'')==='BTC';
+  const cashSl=supportedSymbol?cashBreakevenSl({side,entry:position.entry_price,quantity,entryCostsUsd:entryReserve,
+    fundingPaidUsd:fundingReserve,exitFeeFraction:feeFraction,exitSlippageFraction:riskPolicy.maxSlippagePercent/100,tickSize:.1}):null;
+  if(costAware&&cashSl===null)return {applied:false,reason:'cash breakeven cost inputs unavailable'};
+
   const plan = computeProfitProtectSl({
     side,
     entry: position.entry_price,
@@ -86,6 +101,7 @@ export async function maybeApplyProfitProtectSl(
     minAgeMinutes: getProfitProtectMinMinutes(),
     timeStopHours: getTimeStopHours(),
     beFeeBufferPct: getBreakevenFeeBufferPct(),
+    cashBreakevenSl:costAware?cashSl!:undefined,
   });
 
   if (plan.action === 'none') {
@@ -102,6 +118,14 @@ export async function maybeApplyProfitProtectSl(
     meta: {
       unrealized_pct: plan.unrealizedPct,
       r_multiple: plan.rMultiple,
+      cash_breakeven_enabled:costAware,
+      cash_breakeven_sl:cashSl,
+      entry_cost_reserve_usd:entryReserve,
+      funding_reserve_usd:fundingReserve,
+      exit_fee_fraction:feeFraction,
+      exit_slippage_reserve_fraction:riskPolicy.maxSlippagePercent/100,
+      estimated_net_at_stop_usd:supportedSymbol?(side==='long'?1:-1)*(plan.newSl-position.entry_price)*quantity-entryReserve-fundingReserve-
+        plan.newSl*quantity*feeFraction-position.entry_price*quantity*riskPolicy.maxSlippagePercent/100:null,
     },
   });
 

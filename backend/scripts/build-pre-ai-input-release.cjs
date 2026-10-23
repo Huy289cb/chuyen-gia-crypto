@@ -1,0 +1,23 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),ts=require('typescript'),cp=require('node:child_process');
+const [baseArg,outArg]=process.argv.slice(2);if(!baseArg||!outArg)throw Error('BASE NEW_PACKAGE');
+const base=path.resolve(baseArg),out=path.resolve(outArg);if(fs.existsSync(out))throw Error('package_exists');
+const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+const inv=root=>Object.fromEntries(fs.readdirSync(root,{recursive:true,withFileTypes:true}).filter(e=>e.isFile()).map(e=>{const f=path.join(e.parentPath||e.path,e.name);return[path.relative(root,f),hash(fs.readFileSync(f))];}).sort(([a],[b])=>a.localeCompare(b)));
+const root=path.resolve(__dirname,'..'),source=fs.readFileSync(path.join(root,'src/services/groq-dispatch.service.ts'),'utf8');
+const rel='services/groq-dispatch.service.js',original=fs.readFileSync(path.join(base,rel),'utf8');
+const start="        await (0, entry_trace_1.recordEntryStage)('feasibility_before_ai'",end="        await (0, entry_trace_1.recordEntryStage)('pre_ai_passed'";
+const a=original.indexOf(start),b=original.indexOf(end,a),sa=source.indexOf('    // Freeze the exact diagnostic inputs'),sb=source.indexOf("    await recordEntryStage('pre_ai_passed'",sa);
+if([a,b,sa,sb].some(n=>n<0)||original.indexOf(start,a+1)!==-1)throw Error('ambiguous_stage');
+let replacement=ts.transpileModule(source.slice(sa,sb),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+for(const [from,to]of Object.entries({recordEntryStage:'entry_trace_1.recordEntryStage',observeEntryFeasibility:'entry_feasibility_observation_1.observeEntryFeasibility',getV3StructureBiasTf:'v3_structure_bias_policy_1.getV3StructureBiasTf',getRiskPolicy:'risk_policy_1.getRiskPolicy',getMethodConfig:'methods_1.getMethodConfig',getClosedCandleFinalizationGraceMs:'closed_candles_1.getClosedCandleFinalizationGraceMs'}))replacement=replacement.replace(new RegExp('\\b'+from+'(?=\\()','g'),to);
+const patched=original.slice(0,a)+replacement+original.slice(b);if(patched.slice(0,a)!==original.slice(0,a)||patched.slice(a+replacement.length)!==original.slice(b))throw Error('outside_stage_changed');
+const helper='utils/entry-feasibility-observation.js',oldHelper=fs.readFileSync(path.join(base,helper),'utf8');let newHelper=oldHelper;
+for(const text of ['input.candles, input.timeframe, input.asOf','input.structureCandles, input.structureTimeframe ?? \'4h\', input.asOf']){const old=text+');';if(newHelper.split(old).length!==2)throw Error('ambiguous_closed_candle_call');newHelper=newHelper.replace(old,text+', input.graceMs);');}
+fs.mkdirSync(out,{recursive:true});for(const variant of ['baseline','release'])fs.cpSync(base,path.join(out,variant),{recursive:true});
+fs.writeFileSync(path.join(out,'release',rel),patched);fs.writeFileSync(path.join(out,'release',helper),newHelper);
+const baseline=inv(path.join(out,'baseline')),release=inv(path.join(out,'release')),changedFiles=Object.keys(release).filter(p=>baseline[p]!==release[p]);if(changedFiles.length!==2)throw Error('unexpected_overlay');
+for(const file of changedFiles)cp.execFileSync(process.execPath,['--check',path.join(out,'release',file)]);
+const sourceHashes=Object.fromEntries(['src/services/groq-dispatch.service.ts','src/utils/entry-feasibility-observation.ts','scripts/assess-canonical-baseline.cjs'].map(file=>[file,hash(fs.readFileSync(path.join(root,file)))]));
+fs.writeFileSync(path.join(out,'manifest.json'),JSON.stringify({baseline,release,changedFiles,sourceHashes,outsidePatchByteParity:true,runtimeDeployed:false,environmentChanges:false,scope:'Existing pre-AI diagnostic input capture; no strategy gate change'},null,2)+'\n',{flag:'wx',mode:0o600});
+console.log(JSON.stringify({changedFiles,totalFiles:Object.keys(release).length,outsidePatchByteParity:true,runtimeDeployed:false}));

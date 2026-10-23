@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-09-08T13:58:55.459Z",
+  "guard": {
+    "allowed": true,
+    "reason": "Account trade guard passed",
+    "remainingDailyRiskUsd": 2.7502142790000033
+  },
+  "balance": 33.59964603,
+  "perTradeMaxRiskUsd": 1.0079893809,
+  "dailyLossLimitPercent": 10,
+  "postCloseMinutes": 60,
+  "postLossMinutes": 60,
+  "fixedUsdCap": null
+}

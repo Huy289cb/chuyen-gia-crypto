@@ -1,0 +1,1 @@
+{"version":3,"file":"setup-trade-side.d.ts","sourceRoot":"","sources":["../../src/utils/setup-trade-side.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,UAAU,EAAE,MAAM,kCAAkC,CAAC;AAKpF,MAAM,MAAM,SAAS,GAAG,MAAM,GAAG,OAAO,CAAC;AAEzC,8DAA8D;AAC9D,wBAAgB,mBAAmB,CACjC,KAAK,EAAE,eAAe,EACtB,SAAS,EAAE,MAAM,EACjB,OAAO,EAAE,UAAU,EAAE,GACpB,SAAS,GAAG,IAAI,CAuBlB"}

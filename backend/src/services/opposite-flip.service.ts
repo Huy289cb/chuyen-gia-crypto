@@ -1,3 +1,4 @@
+import {withProviderPurpose} from '../utils/provider-purpose-context';
 /**
  * When a new LLM entry opposes open Binance exposure, evaluate early close (flip) via Groq.
  */
@@ -63,14 +64,14 @@ async function evaluateFlipWithGroq(input: OppositeFlipInput, held: {
   ].join('\n');
 
   try {
-    const content = await groq.completeText({
+    const content = await withProviderPurpose('opposite_flip', () => groq.completeText({
       systemPrompt,
       userPrompt,
       temperature: 0.15,
       maxRetries: 1,
       maxTokens: 256,
       preferredModels: getGroqAuxiliaryModelChain(2),
-    });
+    }));
     const start = content.indexOf('{');
     const end = content.lastIndexOf('}');
     if (start === -1 || end <= start) return null;

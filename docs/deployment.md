@@ -1,4 +1,10 @@
+# Portfolio paper release — 14/10/2026
+
+[Release mới](research/2026-10-14-futures-momentum-paper-implementation.md) đã thêm module/router riêng vào API VPS và PM2 `crypto-portfolio-paper`, không rebuild/rollout toàn bộ dirty workspace hoặc restart worker legacy. Shared core/runtime/testbed100u/fixed10ICT; trang backend `/api/portfolio-paper/view` dùng ngay. `backend/ecosystem.portfolio-paper.config.cjs` không cần credentials/private clients. `.env`/DB không đổi; Next page có source nhưng chưa publish Vercel. Chính sách cũ 1h/10%/3% dưới đây không áp cho portfolio mới; xem policy hiện hành.
+
 # Deployment
+
+> **Trước khi triển khai:** [Chính sách rủi ro đã được người dùng chốt](runtime-risk-policy.md) — cooldown **1h**, ngày **10%**, mỗi lệnh **3% số dư**, cap USD để rỗng. Không áp dụng lại mức cũ từ default hoặc báo cáo lịch sử.
 
 ## Database (PostgreSQL)
 
@@ -117,7 +123,7 @@ Plan: `docs/plan/telegram-ai-qa.md`
 
 ```bash
 TELEGRAM_AI_ENABLED=true
-TELEGRAM_AI_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+TELEGRAM_AI_MODEL=openai/gpt-oss-120b
 TELEGRAM_AI_MAX_TOKENS=2048
 TELEGRAM_AI_RATE_LIMIT_PER_USER_HOUR=5
 TELEGRAM_AI_RATE_LIMIT_PER_CHAT_DAY=30
@@ -163,10 +169,12 @@ Details: [pnl-backfill.md](./pnl-backfill.md). Pending limit lifecycle env: [pen
 
 ### LLM dispatch providers (V3 trading)
 
-Thứ tự: **Groq Scout → Cerebras gpt-oss → OpenRouter Scout → Groq fallbacks**. Chi tiết: [llm-dispatch-providers.md](./llm-dispatch-providers.md).
+Thứ tự: **Groq GPT-OSS 120B → Cerebras gpt-oss → OpenRouter Scout → Groq GPT-OSS 20B**. Chi tiết: [llm-dispatch-providers.md](./llm-dispatch-providers.md).
 
 ```bash
-GROQ_MODEL_PRIMARY=meta-llama/llama-4-scout-17b-16e-instruct
+GROQ_MODEL_PRIMARY=openai/gpt-oss-120b
+GROQ_MODEL_FALLBACKS=openai/gpt-oss-20b
+GROQ_MODEL_AUXILIARY=openai/gpt-oss-20b
 GROQ_API_KEY_1=...
 GROQ_API_KEY_2=...
 CEREBRAS_API_KEY=...

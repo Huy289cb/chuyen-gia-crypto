@@ -1,0 +1,12 @@
+{
+  "verifiedAt": "2026-09-08T13:57:12.387Z",
+  "passed": true,
+  "usingDeployedModules": true,
+  "cooldownHours": 1,
+  "dailyLossLimitPercent": 10,
+  "maxEffectiveRiskPerTradePercent": 3,
+  "maxEffectiveRiskPerTradeUsd": null,
+  "exampleBalance": 33.59964603,
+  "exampleCapUsd": 1.0079893809,
+  "minimumBtcLotRisk": 0.78
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"testnet-sync.d.ts","sourceRoot":"","sources":["../../src/services/testnet-sync.ts"],"names":[],"mappings":"AAmBA,MAAM,WAAW,cAAc;IAC7B,KAAK,EAAE,MAAM,CAAC;IACd,IAAI,EAAE,MAAM,CAAC;IACb,GAAG,EAAE,MAAM,CAAC;CACb;AAyJD,wBAAsB,oBAAoB,CAAC,MAAM,EAAE,MAAM,EAAE,MAAM,EAAE,cAAc,GAAG,OAAO,CAAC,IAAI,CAAC,CAShG"}

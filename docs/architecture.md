@@ -186,20 +186,20 @@ The system is designed to support multiple trading methods running in parallel. 
   - Account Snapshots: Every 5 minutes (`*/5 * * * *`)
   - Daily Maintenance: 3 AM daily (`0 3 * * *`)
 - **LLM dispatch (trading)** — xem [llm-dispatch-providers.md](./llm-dispatch-providers.md):
-  - Step 1: Groq `meta-llama/llama-4-scout-17b-16e-instruct` (primary)
+  - Step 1: Groq `openai/gpt-oss-120b` (primary)
   - Step 2: Cerebras `gpt-oss-120b` + `json_object`
   - Step 3: OpenRouter `meta-llama/llama-4-scout` (paid) + `json_object`
-  - Step 4+: Groq fallbacks: `llama-3.3-70b-versatile`, `qwen/qwen3-32b`, `qwen/qwen3.6-27b`, `llama-3.1-8b-instant`
+  - Step 4+: Groq fallback: `openai/gpt-oss-20b`
   - Levels adapter (riêng): `openai/gpt-oss-120b` on `GROQ_API_KEY_2`
   - JSON Parsing: `cleanJSONResponse()` handles malformed JSON
 - **CORS**: Whitelist-based configuration via ALLOWED_ORIGINS
 
 ### Multi-Method Analysis Engine (LLM dispatch)
-- **Provider chain** (dispatch only): Groq Scout → Cerebras gpt-oss → OpenRouter Scout → Groq fallbacks — [llm-dispatch-providers.md](./llm-dispatch-providers.md)
+- **Provider chain** (dispatch only): Groq GPT-OSS 120B → Cerebras gpt-oss → OpenRouter Scout → Groq GPT-OSS 20B — [llm-dispatch-providers.md](./llm-dispatch-providers.md)
 - **Groq models**:
-  - Primary: `meta-llama/llama-4-scout-17b-16e-instruct`
-  - Fallbacks: `llama-3.3-70b-versatile`, `qwen/qwen3-32b`, `qwen/qwen3.6-27b`, `llama-3.1-8b-instant`
-  - Not in dispatch chain: `openai/gpt-oss-120b` on Groq (empty body on long prompts; levels adapter only)
+  - Primary: `openai/gpt-oss-120b`
+  - Fallback/auxiliary: `openai/gpt-oss-20b`
+  - Retired Groq IDs are filtered centrally before requests.
 - **Input**: Current price + multi-timeframe price history + OHLC candle data (for Kim Nghia method)
 - **Output**: Structured JSON (all text in Vietnamese):
   

@@ -72,11 +72,20 @@ export function isBinanceTradingMutation(method: string, path: string): boolean 
     path === '/fapi/v1/leverage' ||
     path === '/fapi/v1/marginType' ||
     path === '/fapi/v1/positionSide/dual'
+    || path === '/fapi/v1/positionMargin'
+    || path === '/fapi/v1/multiAssetsMargin'
+    || path === '/fapi/v1/allOpenAlgoOrders'
+    || path === '/fapi/v1/countdownCancelAll'
   );
 }
 
-export function assertBinanceMutationAllowed(method: string, path: string): void {
-  if (!isBinanceMainnet() || !isBinanceTradingMutation(method, path)) return;
+export function assertBinanceMutationAllowed(method: string, path: string, executionOwner?: string): void {
+  if (!isBinanceTradingMutation(method, path)) return;
+  const owner = process.env.PORTFOLIO_EXECUTION_OWNER?.trim();
+  if (owner && executionOwner !== owner) {
+    throw new Error('Exchange mutation blocked: this account is assigned to a different execution owner');
+  }
+  if (!isBinanceMainnet()) return;
   if (isMainnetLiveTradingEnabled()) return;
 
   throw new Error(

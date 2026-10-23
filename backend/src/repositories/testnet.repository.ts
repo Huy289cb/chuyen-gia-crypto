@@ -1,3 +1,8 @@
+import { journalSetupWave } from '../utils/setup-wave-journal';
+import { buildPrecisionResetUpdate } from '../utils/precision-reset-update';
+import { buildRepositoryBalanceUpdate, buildRepositoryStatsUpdate } from '../utils/repository-account-update';
+import { randomUUID } from 'node:crypto';
+import { tracedEvent } from '../utils/entry-trace';
 import { prisma } from '../lib/prisma';
 import { getRiskPolicy, resolveLossCooldownUntil } from '../config/risk-policy';
 import {
@@ -131,12 +136,7 @@ export async function updateTestnetAccountBalance(
 ): Promise<void> {
   await prisma.testnetAccount.update({
     where: { id: accountId },
-    data: {
-      current_balance: newBalance,
-      equity: newBalance,
-      realized_pnl: { increment: pnl },
-      updated_at: new Date(),
-    },
+    data: buildRepositoryBalanceUpdate(newBalance, pnl, new Date()),
   });
 }
 
@@ -230,14 +230,7 @@ export async function updateTestnetAccountStats(
 
   await prisma.testnetAccount.update({
     where: { id: accountId },
-    data: {
-      total_trades: { increment: 1 },
-      winning_trades: { increment: isWin ? 1 : 0 },
-      losing_trades: { increment: isWin ? 0 : 1 },
-      consecutive_losses: isWin ? 0 : { increment: 1 },
-      last_trade_time: now,
-      updated_at: now,
-    },
+    data: buildRepositoryStatsUpdate(isWin, now),
   });
 }
 
@@ -286,12 +279,23 @@ export async function setTestnetAccountCooldown(
   accountId: number,
   cooldownUntil: Date
 ): Promise<void> {
+  const recordedUntil = Number.isFinite(cooldownUntil.getTime()) ? cooldownUntil.toISOString() : null;
+  const evidence = {
+    schema: 'account-cooldown-set-v1', account_id: accountId,
+    cooldown_attempt_id: randomUUID(),
+    input: { cooldown_until: recordedUntil },
+    update: { cooldown_until: recordedUntil },
+    write_started_at: new Date().toISOString(),
+  };
   await prisma.testnetAccount.update({
     where: { id: accountId },
-    data: {
-      cooldown_until: cooldownUntil,
-    },
+    data: { cooldown_until: cooldownUntil },
   });
+  const appliedAt = new Date().toISOString();
+  void import('../utils/account-wallet-journal').then(module => module.persistAccountWalletObservation(
+    { ...evidence, applied_at: appliedAt, applied_clock_source: 'db_update_return' },
+    'account_cooldown_set_applied'))
+    .catch(() => console.warn('[TestnetRepository] Cooldown journal unavailable'));
 }
 
 /**
@@ -483,6 +487,74 @@ export async function recordPipelineEvent(
   }
 }
 
+/** Persist high-volume observability events without Telegram side effects. */
+export async function recordSilentPipelineEvent(
+  eventType: string,
+  eventData?: Record<string, unknown>
+): Promise<number | null> {
+  try {
+    const account = await getOrCreateTestnetAccount('BTC', 'kim_nghia', 10000);
+    const positionId = await ensurePipelineEventPosition(account.id);
+    const observedAt = Date.now();
+    const event = await prisma.$transaction(async tx => {
+      const data = await journalSetupWave(tx, positionId, tracedEvent(eventData), observedAt);
+      return tx.testnetTradeEvent.create({data: {position_id: positionId, event_type: eventType,
+        event_data: JSON.stringify(data), timestamp: new Date(observedAt)}});
+    });
+    return event.id;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[PipelineEvent] Failed to record silent ${eventType}: ${msg}`);
+    return null;
+  }
+}
+
+/** Restart-safe dedup for JSON observations keyed by a stable bar/candidate key. */
+export async function hasSilentPipelineEventKey(
+  eventType: string,
+  jsonField: 'bar_key' | 'candidate_key' | 'observation_key',
+  key: string
+): Promise<boolean> {
+  const needle = `\"${jsonField}\":${JSON.stringify(key)}`;
+  const row = await prisma.testnetTradeEvent.findFirst({
+    where: {
+      position_id: PIPELINE_EVENT_POSITION_ID,
+      event_type: eventType,
+      event_data: { contains: needle },
+    },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+export async function getSilentPipelineEvents(
+  eventTypes: string[],
+  since: Date
+): Promise<Array<{ id: number; event_type: string; event_data: Record<string, unknown>; timestamp: Date }>> {
+  const rows = await prisma.testnetTradeEvent.findMany({
+    where: {
+      position_id: PIPELINE_EVENT_POSITION_ID,
+      event_type: { in: eventTypes },
+      timestamp: { gte: since },
+    },
+    orderBy: { timestamp: 'asc' },
+    take: 10_000,
+    select: { id: true, event_type: true, event_data: true, timestamp: true },
+  });
+  return rows.flatMap((row) => {
+    try {
+      return [{
+        id: row.id,
+        event_type: row.event_type,
+        event_data: JSON.parse(row.event_data || '{}') as Record<string, unknown>,
+        timestamp: row.timestamp,
+      }];
+    } catch {
+      return [];
+    }
+  });
+}
+
 /**
  * Record testnet trade event (requires valid testnet_positions.position_id).
  */
@@ -495,7 +567,7 @@ export async function recordTestnetTradeEvent(
     data: {
       position_id: positionId,
       event_type: eventType,
-      event_data: eventData ? JSON.stringify(eventData) : null,
+      event_data: JSON.stringify(tracedEvent(eventData)),
       timestamp: new Date(),
     },
   });
@@ -860,15 +932,15 @@ export async function updatePrecisionError(
 export async function resetPrecisionErrorTracking(accountId: number): Promise<any> {
   const now = new Date();
 
-  return prisma.testnetAccount.update({
-    where: { id: accountId },
-    data: {
-      precision_error_count: 0,
-      precision_cooldown_until: null,
-      last_precision_error_time: null,
-      last_precision_error_code: null,
-      last_precision_error_message: null,
-      updated_at: now,
-    },
-  });
+  const update = buildPrecisionResetUpdate(now);
+  const evidence = { schema: 'account-precision-reset-v1', account_id: accountId,
+    precision_attempt_id: randomUUID(), input: { updated_at: now.toISOString() },
+    update: { ...update, updated_at: now.toISOString() }, write_started_at: now.toISOString() };
+  const account = await prisma.testnetAccount.update({ where: { id: accountId }, data: update });
+  const appliedAt = new Date().toISOString();
+  void import('../utils/account-wallet-journal').then(module => module.persistAccountWalletObservation(
+    { ...evidence, applied_at: appliedAt, applied_clock_source: 'db_update_return' },
+    'account_precision_reset_applied'))
+    .catch(() => console.warn('[TestnetRepository] Precision reset journal unavailable'));
+  return account;
 }

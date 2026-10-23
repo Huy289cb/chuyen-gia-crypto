@@ -1,0 +1,17 @@
+const assert=require('assert/strict');
+const {features,detect}=require('./screen-new-signals.cjs');
+const bars=Array.from({length:100},(_,i)=>({timestamp:Date.UTC(2026,0,1)+i*900000,open:100+i,close:100+i,high:101+i,low:99+i,volume:10+i}));
+const full=features(bars);
+assert.deepEqual(features(bars.slice(0,70)),full.slice(0,70));
+assert.equal(full[96].vwap,(bars[96].high+bars[96].low+bars[96].close)/3);
+const rows=Array.from({length:52},()=>({open:100,close:102,low:101,high:103,e20:100,e50:99,day:1,timestamp:90000000,vwap:101,lower:90,upper:110}));
+rows[51]={...rows[51],low:99,close:102};
+assert.equal(detect('ema_pullback',rows,51,{close:110,e20:105,e50:100}),'long');
+assert.equal(detect('ema_pullback',rows,51,{close:90,e20:95,e50:100}),null);
+rows[50]={...rows[50],close:100,vwap:101};
+rows[51]={...rows[51],close:102,vwap:101,timestamp:91000000};
+assert.equal(detect('vwap_reclaim',rows,51,{close:110,e20:105,e50:100}),'long');
+rows[51].day=2;
+assert.equal(detect('vwap_reclaim',rows,51,{close:110,e20:105,e50:100}),null);
+assert.equal(detect('ema_pullback',rows,10,{close:110,e20:105,e50:100}),null);
+console.log('PASS: causal indicator prefixes, UTC VWAP reset, EMA direction, VWAP recross, no cross-day signal, warmup');

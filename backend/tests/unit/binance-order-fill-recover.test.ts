@@ -1,14 +1,19 @@
+import {replayRecordedMaterializationGate} from '../../src/utils/recorded-materialization-gate';
+import { prisma } from '../../src/lib/prisma';
+import { placeProtectiveOrdersForPosition } from '../../src/services/protective-order.service';
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 const mockUpdatePending = vi.hoisted(() => vi.fn());
 const mockExecutePending = vi.hoisted(() => vi.fn());
 const mockCreatePosition = vi.hoisted(() => vi.fn());
 const mockFindByBinanceId = vi.hoisted(() => vi.fn());
+const mockRecordSilent = vi.hoisted(() => vi.fn());
 const mockRecordEvent = vi.hoisted(() => vi.fn());
 const mockFindFirstPosition = vi.hoisted(() => vi.fn());
 const mockFindUniquePosition = vi.hoisted(() => vi.fn());
 const mockFetchActiveBinancePositions = vi.hoisted(() => vi.fn());
 const getOrder = vi.hoisted(() => vi.fn());
+const cancelOrder = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/repositories/testnet.repository', () => ({
   updateTestnetPendingOrder: mockUpdatePending,
@@ -17,6 +22,7 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
   findTestnetPositionByBinanceOrderId: mockFindByBinanceId,
   getTestnetPendingOrderByBinanceId: vi.fn(),
   recordTestnetTradeEvent: mockRecordEvent,
+  recordSilentPipelineEvent: mockRecordSilent,
   PIPELINE_EVENT_POSITION_ID: 'pipeline',
 }));
 
@@ -49,11 +55,13 @@ vi.mock('../../src/services/binance-exposure.service', () => ({
 
 vi.mock('../../src/services/binance/trading', () => ({
   getOrder: (...args: unknown[]) => getOrder(...args),
+  cancelOrder: (...args: unknown[]) => cancelOrder(...args),
 }));
 
 import {
   RECOVERY_FILL_MAX_AGE_MS,
   recoverPendingOrderFromBinance,
+  materializePositionFromPendingFill,
 } from '../../src/services/binance-order-fill.service';
 
 describe('recoverPendingOrderFromBinance — sync rules', () => {
@@ -84,10 +92,34 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
     mockExecutePending.mockResolvedValue(undefined);
     mockUpdatePending.mockResolvedValue(undefined);
     mockFetchActiveBinancePositions.mockResolvedValue([]);
+    cancelOrder.mockReset();
+    cancelOrder.mockResolvedValue({ status: 'CANCELED' });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('serializes simultaneous websocket and polling materialization for the same fill', async () => {
+    let stored: { position_id: string } | null = null;
+    mockFindByBinanceId.mockImplementation(async () => stored);
+    mockCreatePosition.mockImplementation(async position => { await Promise.resolve(); stored = { position_id: position.positionId }; });
+    mockFetchActiveBinancePositions.mockResolvedValue([{ symbol: 'BTC', side: 'long', positionAmt: 0.001, entryPrice: 64000 }]);
+    const results = await Promise.all([
+      materializePositionFromPendingFill(baseOrder, 0.001, 64000, now),
+      materializePositionFromPendingFill(baseOrder, 0.001, 64000, now),
+    ]);
+    expect(results[0]).toMatch(/^pos_/);
+    expect(results[1]).toBe(results[0]);
+    expect(mockCreatePosition).toHaveBeenCalledOnce();
+  });
+
+  it('releases serialization after creation fails so reconciliation can retry', async () => {
+    mockCreatePosition.mockRejectedValueOnce(new Error('DB unavailable'));
+    mockFetchActiveBinancePositions.mockResolvedValue([{ symbol: 'BTC', side: 'long', positionAmt: 0.001, entryPrice: 64000 }]);
+    await expect(materializePositionFromPendingFill(baseOrder, 0.001, 64000, now)).rejects.toThrow('DB unavailable');
+    expect(await materializePositionFromPendingFill(baseOrder, 0.001, 64000, now)).toMatch(/^pos_/);
+    expect(mockCreatePosition).toHaveBeenCalledTimes(2);
   });
 
   it('returns failed when binance_order_id missing', async () => {
@@ -115,6 +147,72 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
     expect(await recoverPendingOrderFromBinance(baseOrder)).toBe('cancelled');
     expect(mockUpdatePending).toHaveBeenCalledWith('v3_test', { status: 'canceled' });
     expect(mockCreatePosition).not.toHaveBeenCalled();
+  });
+
+  it.each(['CANCELED', 'EXPIRED', 'REJECTED'])('recovers executed exposure after terminal %s', async status => {
+    getOrder.mockResolvedValue({ status, executedQty: 0.001,
+      cummulativeQuoteQty: 64, price: 64000, updateTime: now - 60_000 });
+    mockFetchActiveBinancePositions.mockResolvedValue([{ symbol: 'BTC', symbolUsdt: 'BTCUSDT',
+      side: 'long', positionAmt: 0.001, entryPrice: 64000, markPrice: 64010, rawPositionSide: 'BOTH' }]);
+    mockFindUniquePosition.mockResolvedValueOnce({ position_id: 'recovered', size_qty: 0.001 });
+    expect(await recoverPendingOrderFromBinance(baseOrder)).toBe('filled');
+    expect(mockCreatePosition).toHaveBeenCalledWith(expect.objectContaining({ sizeQty: 0.001, entryPrice: 64000 }));
+    expect(mockExecutePending).toHaveBeenCalledOnce();
+    expect(placeProtectiveOrdersForPosition).toHaveBeenCalledWith(expect.objectContaining({ size_qty: 0.001 }));
+    expect(mockUpdatePending).not.toHaveBeenCalled();
+  });
+
+  it('does not reopen stale cancelled partial exposure when Binance is flat', async () => {
+    getOrder.mockResolvedValue({ status: 'CANCELED', executedQty: 0.001,
+      cummulativeQuoteQty: 64, price: 64000, updateTime: now - RECOVERY_FILL_MAX_AGE_MS - 1000 });
+    expect(await recoverPendingOrderFromBinance(baseOrder)).toBe('stale_skipped');
+    expect(mockCreatePosition).not.toHaveBeenCalled();
+    expect(mockUpdatePending).toHaveBeenCalledWith('v3_test', expect.objectContaining({
+      status: 'executed_historical', executed_size_qty: 0.001 }));
+  });
+
+  it.each(['CANCELED', 'FILLED'])('seals partial remainder and protects final cumulative quantity after %s race', async status => {
+    getOrder.mockResolvedValueOnce({ orderId: 999, symbol: 'BTCUSDT', status: 'PARTIALLY_FILLED', executedQty: 0.001 });
+    getOrder.mockResolvedValueOnce({ orderId: 999, symbol: 'BTCUSDT', status, executedQty: 0.002,
+      cummulativeQuoteQty: 128, price: 64000, updateTime: now });
+    if (status === 'FILLED') cancelOrder.mockRejectedValueOnce(new Error('Already filled'));
+    mockFetchActiveBinancePositions.mockResolvedValue([{ symbol: 'BTC', symbolUsdt: 'BTCUSDT',
+      side: 'long', positionAmt: 0.002, entryPrice: 64000, markPrice: 64010, rawPositionSide: 'BOTH' }]);
+    mockFindUniquePosition.mockResolvedValueOnce({ position_id: 'recovered', size_qty: 0.002 });
+    expect(await recoverPendingOrderFromBinance(baseOrder)).toBe('filled');
+    expect(mockRecordSilent).toHaveBeenCalledWith('partial_fill_requery',expect.objectContaining({
+      schema:'partial-fill-requery-v1',exchange_order_id:'999',
+      initial:expect.objectContaining({executedQty:.001,status:'PARTIALLY_FILLED'}),
+      final:expect.objectContaining({executedQty:.002,status}),
+    }));
+    expect(cancelOrder).toHaveBeenCalledWith('BTCUSDT', 999);
+    expect(getOrder).toHaveBeenCalledTimes(2);
+    expect(mockCreatePosition).toHaveBeenCalledWith(expect.objectContaining({ sizeQty: 0.002 }));
+    expect(placeProtectiveOrdersForPosition).toHaveBeenCalledWith(expect.objectContaining({ size_qty: 0.002 }));
+    expect(mockUpdatePending).not.toHaveBeenCalled();
+  });
+
+  it('keeps occupancy unchanged when cancellation failed and partial entry remains open', async () => {
+    getOrder.mockResolvedValue({ orderId: 999, symbol: 'BTCUSDT', status: 'PARTIALLY_FILLED', executedQty: 0.001 });
+    cancelOrder.mockRejectedValueOnce(new Error('timeout'));
+    expect(await recoverPendingOrderFromBinance(baseOrder)).toBe('unchanged');
+    expect(mockUpdatePending).not.toHaveBeenCalled();
+    expect(mockCreatePosition).not.toHaveBeenCalled();
+    expect(mockExecutePending).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { orderId: 999, symbol: 'BTCUSDT', executedQty: 0.0005 },
+    { orderId: 1000, symbol: 'BTCUSDT', executedQty: 0.001 },
+    { orderId: 999, symbol: 'ETHUSDT', executedQty: 0.001 },
+    { orderId: 999, symbol: 'BTCUSDT', executedQty: NaN },
+  ])('does not release or materialize from inconsistent final partial evidence %j', async final => {
+    getOrder.mockResolvedValueOnce({ orderId: 999, symbol: 'BTCUSDT', status: 'PARTIALLY_FILLED', executedQty: 0.001 });
+    getOrder.mockResolvedValueOnce({ status: 'CANCELED', ...final });
+    expect(await recoverPendingOrderFromBinance(baseOrder)).toBe('failed');
+    expect(mockUpdatePending).not.toHaveBeenCalled();
+    expect(mockCreatePosition).not.toHaveBeenCalled();
+    expect(mockExecutePending).not.toHaveBeenCalled();
   });
 
   it('stale_skipped: FILLED older than 15min → executed_historical, no position', async () => {
@@ -173,6 +271,10 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
       })
     );
     expect(mockExecutePending).toHaveBeenCalledWith('v3_test', expect.stringMatching(/^pos_/));
+    const gateRows=mockRecordSilent.mock.calls.filter(c=>c[0]==='materialization_gate_evaluated').map(c=>c[1]);
+    expect(gateRows.map(r=>r.stage)).toEqual(['price','exposure_quantity']);
+    expect(new Set(gateRows.map(r=>r.materialization_attempt_id)).size).toBe(1);
+    for(const row of gateRows)expect(replayRecordedMaterializationGate(JSON.parse(JSON.stringify(row)),Date.now())).toMatchObject({status:'evaluated',matches_recorded:true});
     expect(mockUpdatePending).not.toHaveBeenCalledWith(
       'v3_test',
       expect.objectContaining({ status: 'executed_historical' })
@@ -191,7 +293,10 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
     expect(mockCreatePosition).not.toHaveBeenCalled();
   });
 
-  it('fresh FILLED: materializes position when no open row exists', async () => {
+  it('fresh FILLED: materializes position and restores durable trace without an in-memory dispatch', async () => {
+    vi.mocked(prisma.testnetTradeEvent.findMany).mockResolvedValueOnce([{event_data:JSON.stringify({
+      order_id:'v3_test',decision_id:997,trace_id:'persisted-trace',observation_key:'BTC:15m:bar',code_hash:'build',
+    })} as any]);
     getOrder.mockResolvedValue({
       status: 'FILLED',
       executedQty: 0.0115,
@@ -216,6 +321,12 @@ describe('recoverPendingOrderFromBinance — sync rules', () => {
     expect(outcome).toBe('filled');
     expect(mockCreatePosition).toHaveBeenCalledOnce();
     expect(mockExecutePending).toHaveBeenCalled();
+    expect(prisma.testnetTradeEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where:expect.objectContaining({event_type:'pending_order_linked',event_data:{contains:'"order_id":"v3_test"'}}),take:1,
+    }));
+    expect(mockRecordEvent).toHaveBeenCalledWith(expect.any(String),'entry_order_filled',expect.objectContaining({
+      trace_id:'persisted-trace',decision_id:997,observation_key:'BTC:15m:bar',linkage_status:'linked',code_hash:'build',
+    }));
     expect(mockUpdatePending).not.toHaveBeenCalledWith(
       'v3_test',
       expect.objectContaining({ status: 'executed_historical' })

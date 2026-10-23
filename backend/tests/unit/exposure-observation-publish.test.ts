@@ -1,0 +1,3 @@
+import {it,expect,vi} from 'vitest';import {publishExposureObservation as publish} from '../../src/utils/exposure-observation-publish';
+it('does not await pending journals and forwards exact input',()=>{const data={input:{a:1}},spy=vi.fn(()=>new Promise(()=>{}));expect(publish(data,spy)).toBeUndefined();expect(spy).toHaveBeenCalledWith(data);});
+it('contains synchronous and asynchronous journal failures',async()=>{const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});try{expect(()=>publish({},()=>{throw Error('sync')})).not.toThrow();publish({},async()=>{throw Error('async')});await Promise.resolve();expect(warn).toHaveBeenCalledTimes(2)}finally{warn.mockRestore()}});

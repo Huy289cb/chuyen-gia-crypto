@@ -1,0 +1,26 @@
+{
+  "deployedAt": "2026-09-15T04:03:33.097702+00:00",
+  "package": "/home/ubuntu/chuyen-gia-crypto/backend/releases/measurement-20260914",
+  "changedFiles": [
+    "repositories/testnet.repository.js",
+    "routes/metrics.js",
+    "schedulers/llm-dispatch.scheduler.js",
+    "services/binance-order-fill.service.js",
+    "services/entry-gate-funnel.service.js",
+    "services/groq-dispatch.service.js",
+    "services/llm-telemetry.service.js",
+    "services/memory.service.js",
+    "services/transition-breakout-retest.service.js",
+    "services/v3-trade-execution.service.js",
+    "utils/entry-feasibility-observation.js",
+    "utils/entry-trace-audit.js",
+    "utils/entry-trace.js",
+    "utils/order-quantity.js",
+    "utils/plan-feasibility.js",
+    "utils/retest-feasibility.js"
+  ],
+  "environmentChanged": false,
+  "strategyRulesChanged": false,
+  "rollback": "/home/ubuntu/chuyen-gia-crypto/backend/releases/measurement-20260914/baseline",
+  "authorization": "User continue after reviewed measurement package and controlled deployment next step"
+}

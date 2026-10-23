@@ -36,10 +36,10 @@ async function main() {
   });
   console.log(`structure candles: ${structCandles.length} (${structSrc})`);
 
-  for (const side of ['long', 'short'] as const) {
-    const r = evaluateStructureSidePermission({ side, candles: structCandles });
-    console.log(`structure ${side}:`, { pass: r.pass, bias: r.bias, reason: r.reason });
-  }
+  const longStruct = evaluateStructureSidePermission({ side: 'long', candles: structCandles });
+  const shortStruct = evaluateStructureSidePermission({ side: 'short', candles: structCandles });
+  console.log(`structure long:`, { pass: longStruct.pass, bias: longStruct.bias, reason: longStruct.reason });
+  console.log(`structure short:`, { pass: shortStruct.pass, bias: shortStruct.bias, reason: shortStruct.reason });
 
   const { candles: alignCandles } = await getCandles({
     symbol,
@@ -51,10 +51,12 @@ async function main() {
   console.log(`HTF ${alignTf}:`, { regime: ev.regime, trendDirection: ev.trendDirection });
 
   for (const side of ['long', 'short'] as const) {
+    const struct = side === 'long' ? longStruct : shortStruct;
     const a = evaluateHtfSideAlign({
       side,
       htfTf: alignTf,
       htf: { regime: ev.regime, trendDirection: ev.trendDirection },
+      structureBias: struct.bias,
     });
     console.log(`side_align ${side}:`, { pass: a.pass, reason: a.reason });
   }

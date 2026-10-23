@@ -1,0 +1,59 @@
+[
+  {
+    "type": "llm_provider_request",
+    "time": "2026-09-14T00:31:00.967",
+    "data": {
+      "request_id": "1789345860959-3539716-gscmswvnphe",
+      "provider": "openrouter.ai",
+      "model": "meta-llama/llama-4-scout"
+    }
+  },
+  {
+    "type": "llm_provider_result",
+    "time": "2026-09-14T00:31:01.947",
+    "data": {
+      "request_id": "1789345860959-3539716-gscmswvnphe",
+      "provider": "openrouter.ai",
+      "model": "meta-llama/llama-4-scout",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 949
+    }
+  },
+  {
+    "type": "llm_provider_request",
+    "time": "2026-09-14T00:31:10.323",
+    "data": {
+      "request_id": "1789345870319-3539716-dhngdy2ao0u",
+      "provider": "openrouter.ai",
+      "model": "meta-llama/llama-4-scout"
+    }
+  },
+  {
+    "type": "llm_provider_result",
+    "time": "2026-09-14T00:31:10.55",
+    "data": {
+      "request_id": "1789345870319-3539716-dhngdy2ao0u",
+      "provider": "openrouter.ai",
+      "model": "meta-llama/llama-4-scout",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 227
+    }
+  },
+  {
+    "type": "execution_blocked",
+    "time": "2026-09-14T00:31:14.466",
+    "data": {
+      "symbol": "BTC",
+      "timeframe": "15m",
+      "reason": "Risk engine blocked: SL distance 0.66% below min 0.80%",
+      "phase": "pre_execution",
+      "action": "sell",
+      "entry": 76442.3,
+      "stop_loss": 76950,
+      "take_profit": 75900,
+      "decision_id": 997
+    }
+  }
+]

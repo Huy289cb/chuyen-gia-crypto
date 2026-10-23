@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {
@@ -58,6 +58,28 @@ describe('canRunLlmDispatchForSymbol', () => {
       current_balance: 10000,
     } as never);
     vi.mocked(prisma.testnetTradeEvent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.testnetPosition.findFirst).mockResolvedValue(null);
+  });
+
+  afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
+
+  it('defers dispatch while executor post-loss cooldown remains, then admits at expiry', async () => {
+    vi.useFakeTimers();
+    const closedAt = Date.parse('2026-09-08T05:00:00Z');
+    vi.setSystemTime(closedAt + 4 * 3600_000);
+    vi.stubEnv('POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES', '360');
+    vi.mocked(prisma.testnetPosition.findFirst).mockResolvedValue({
+      close_time: new Date(closedAt), realized_pnl: -0.6775, side: 'long',
+    } as never);
+    vi.mocked(isV3ScaleInEnabled).mockReturnValue(false);
+    vi.mocked(getActiveTestnetPositions).mockResolvedValue([]);
+    vi.mocked(getBlockingTestnetPendingOrders).mockResolvedValue([]);
+    const blocked = await canRunLlmDispatchForSymbol('BTC');
+    expect(blocked).toEqual({ allowed: false,
+      reason: 'post-close cooldown 120m after loss (360m window, last long)' });
+    expect(getBlockingTestnetPendingOrders).not.toHaveBeenCalled();
+    vi.setSystemTime(closedAt + 6 * 3600_000);
+    expect(await canRunLlmDispatchForSymbol('BTC')).toEqual({ allowed: true, reason: 'ok' });
   });
 
   it('allows scale-in when open position under cap', async () => {

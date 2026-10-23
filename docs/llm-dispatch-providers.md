@@ -1,6 +1,6 @@
 # LLM Dispatch Providers
 
-**Cập nhật:** 2026-06-26  
+**Cập nhật:** 2026-08-29
 **Code:** `groq-client.ts`, `groq-dispatch.service.ts`, `config/groq-models.ts`, `cerebras-client.ts`, `openrouter-client.ts`
 
 Tài liệu này mô tả thứ tự gọi LLM cho **trading dispatch** (Kim Nghia / V3). Khác với Telegram AI Q&A (`completeText`) và levels adapter (`preferredModels`).
@@ -9,34 +9,40 @@ Tài liệu này mô tả thứ tự gọi LLM cho **trading dispatch** (Kim Ngh
 
 ## Thứ tự fallback (production)
 
-Khi `preferredModels` **không** được set (dispatch chính), `GroqClient.analyze()` chạy theo thứ tự:
+Khi `preferredModels` **không** được set và `LLM_PROVIDER=groq`,
+`GroqClient.analyze()` chạy theo thứ tự:
 
 | Bước | Provider | Model | Ghi chú |
 |------|----------|-------|---------|
-| 1 | **Groq** | `meta-llama/llama-4-scout-17b-16e-instruct` | Primary; thử hết `GROQ_API_KEY_1`, `GROQ_API_KEY_2`, `GROQ_API_KEY` |
+| 1 | **Groq** | `openai/gpt-oss-120b` | Primary; JSON mode; thử hết `GROQ_API_KEY_1`, `GROQ_API_KEY_2`, `GROQ_API_KEY` |
 | 2 | **Cerebras** | `gpt-oss-120b` | `response_format: json_object` **bắt buộc** |
 | 3 | **OpenRouter** | `meta-llama/llama-4-scout` (paid) | `json_object`; không dùng variant `:free` |
-| 4+ | **Groq** | 70B → Qwen3-32B → Qwen3.6-27B → 8B | Chỉ các model trong `GROQ_MODEL_FALLBACKS` |
+| 4+ | **Groq** | `openai/gpt-oss-20b` | Production fallback trong `GROQ_MODEL_FALLBACKS` |
 
 ```
-Groq Scout (all keys)
+Groq GPT-OSS 120B (all keys)
        ↓ fail
 Cerebras gpt-oss-120b + json_object
        ↓ fail
 OpenRouter Scout paid + json_object
        ↓ fail
-Groq fallbacks (all keys, từng model)
+Groq GPT-OSS 20B fallback (all keys)
 ```
+
+Với `LLM_PROVIDER=openrouter`, dispatch chính chạy OpenRouter Scout trước, sau đó
+Groq production (`openai/gpt-oss-120b` → `openai/gpt-oss-20b`) nếu OpenRouter lỗi.
+Cerebras, khi được bật, chỉ là phương án cuối. Các auxiliary call như pending review
+vẫn dùng chuỗi Groq production riêng ở dưới.
 
 Log mẫu:
 
 ```
-[GroqClient] Dispatch step 1: Groq primary meta-llama/llama-4-scout-17b-16e-instruct
+[GroqClient] Dispatch step 1: Groq primary openai/gpt-oss-120b
 [GroqClient] Dispatch step 2: Cerebras gpt-oss fallback
 [CerebrasClient] Dispatch fallback model=gpt-oss-120b (json_object)
 [GroqClient] Dispatch step 3: OpenRouter Scout fallback
 [OpenRouterClient] Dispatch fallback model=meta-llama/llama-4-scout (json_object)
-[GroqClient] Dispatch step 4+: Groq fallbacks (llama-3.3-70b-versatile, ...)
+[GroqClient] Dispatch step 4+: Groq fallbacks (openai/gpt-oss-20b)
 ```
 
 ---
@@ -46,7 +52,7 @@ Log mẫu:
 | Use case | Hành vi |
 |----------|---------|
 | **Levels adapter** | Chỉ Groq + `GROQ_API_KEY_2` + `GROQ_MODEL_LEVELS_ADAPTER` (`openai/gpt-oss-120b` trên Groq) |
-| **Opposite flip / auxiliary** | `preferredModels` → chỉ Groq, không Cerebras/OpenRouter |
+| **Pending review / auxiliary** | Groq `openai/gpt-oss-20b` → `openai/gpt-oss-120b`, không Cerebras/OpenRouter |
 | **Telegram `/ai`** | `completeText()` — Groq only, không parse JSON dispatch |
 
 ---
@@ -57,8 +63,9 @@ Log mẫu:
 # --- Groq (bước 1 + 4+) ---
 GROQ_API_KEY_1=gsk_...
 GROQ_API_KEY_2=gsk_...
-GROQ_MODEL_PRIMARY=meta-llama/llama-4-scout-17b-16e-instruct
-# GROQ_MODEL_FALLBACKS=llama-3.3-70b-versatile,qwen/qwen3-32b,qwen/qwen3.6-27b,llama-3.1-8b-instant
+GROQ_MODEL_PRIMARY=openai/gpt-oss-120b
+# GROQ_MODEL_FALLBACKS=openai/gpt-oss-20b
+# GROQ_MODEL_AUXILIARY=openai/gpt-oss-20b
 
 # Levels adapter (riêng, không trong chain trên)
 # GROQ_LEVELS_ADAPTER_ENABLED=true
@@ -85,12 +92,13 @@ Sau đổi env trên VPS: `pm2 reload ecosystem.config.cjs --update-env`.
 
 | Provider | Vai trò | Ghi chú vận hành |
 |----------|---------|------------------|
-| **Groq Scout** | Primary | Nhanh nhất (~2s); deprecated trên Groq **2026-07-17** — chuẩn bị đổi primary |
+| **Groq GPT-OSS 120B** | Primary | Production model; bật JSON mode và low reasoning cho dispatch |
 | **Cerebras gpt-oss** | Fallback #2 | Free tier ~5 RPM / 30K TPM; đủ nếu chỉ fallback thỉnh thoảng |
 | **OpenRouter Scout** | Fallback #3 | Paid ~$0.10–0.25/M input; trial credits có thể gọi được chưa nạp tiền; hết credit → `402` |
-| **Groq 70B/Qwen** | Fallback cuối | `gpt-oss` **không** nằm trong Groq dispatch chain — empty body trên prompt dài |
+| **Groq GPT-OSS 20B** | Fallback/auxiliary | Production model nhẹ hơn; JSON mode cho response có cấu trúc |
 
-**Không dùng:** OpenRouter `:free` models trong production (upstream 429 không ổn định).
+Các ID Groq Llama 3.1/3.3, Llama 4 Scout và Qwen3-32B cũ bị lọc trước khi gửi request.
+Không dùng OpenRouter `:free` models trong production (upstream 429 không ổn định).
 
 ---
 

@@ -12,7 +12,7 @@ export interface RegimeEvidence {
 }
 
 export interface PlaybookEvidence {
-  playbook: 'liquidity_sweep' | 'breakout_volume';
+  playbook: 'liquidity_sweep' | 'breakout_volume' | 'h1_acceptance_retest' | 'h2_range_sweep_reclaim';
   detected: boolean;
   grade: 'A' | 'B' | 'C' | 'D';
   summary: string;

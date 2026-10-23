@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertCircle, Clock, Sun, Moon, BookOpen, FlaskConical } from 'lucide-react';
 import { getTimeSince, cn } from '@/lib/utils';
 import { useTheme } from '../components/ThemeProvider';
 import { APP_VERSION } from '@/lib/version';
@@ -92,6 +92,15 @@ export function Header({ onRefresh, isLoading, lastDashboardUpdate }: HeaderProp
             >
               <BookOpen className="w-4 h-4" />
               <span className="text-sm font-medium">Rules</span>
+            </Link>
+            <Link
+              href="/futures-paper"
+              aria-current={pathname === '/futures-paper' ? 'page' : undefined}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-surface-1 hover:bg-surface-2 border border-border-default text-foreground-secondary hover:text-foreground transition-colors"
+              title="Danh mục Futures mô phỏng"
+            >
+              <FlaskConical className="w-4 h-4" aria-hidden />
+              <span className="text-xs sm:text-sm font-medium">Paper</span>
             </Link>
           </div>
 

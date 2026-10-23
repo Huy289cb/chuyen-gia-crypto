@@ -111,6 +111,23 @@ describe('analyzeViaOpenRouter', () => {
     expect(body.max_tokens).toBe(4096);
   });
 
+  it('can request strict trade JSON schema for providers that reject json_object', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        bias: 'neutral', action: 'hold', confidence: 70, suggested_entry: null,
+        suggested_stop_loss: null, suggested_take_profit: null, expected_rr: null,
+        invalidation_level: null, reason_summary: 'uncertain',
+      }) } }] }),
+    });
+    await analyzeViaOpenRouter({ systemPrompt: 'sys', userPrompt: 'user', responseFormat: 'json_schema' });
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(body.response_format.type).toBe('json_schema');
+    expect(body.response_format.json_schema.strict).toBe(true);
+    expect(body.response_format.json_schema.schema.additionalProperties).toBe(false);
+    expect(body.provider).toEqual({ require_parameters: true });
+  });
+
   it('repairs unquoted keys from model content without retry', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

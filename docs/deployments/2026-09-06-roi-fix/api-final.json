@@ -1,0 +1,465 @@
+{
+  "/health": {
+    "status": "ok",
+    "timestamp": "2026-09-07T08:16:11.181Z",
+    "uptime": 17772.113254307
+  },
+  "/api/metrics/costs": {
+    "limits": {
+      "max_spread_percent": 0.05,
+      "max_slippage_percent": 0.1,
+      "max_fee_percent": 0.1,
+      "max_total_cost_percent": 0.25
+    },
+    "source": "verified_exchange_rounds",
+    "coverage": {
+      "verified": 36,
+      "observed": 36
+    },
+    "recent_costs": [
+      {
+        "position_id": "pos_1787590870913_j2tu56",
+        "closed_at": "2026-08-24T17:22:34.825Z",
+        "verified": true,
+        "entry_fee": 0.03939335,
+        "exit_fee": 0.03922719,
+        "funding_cost": 0,
+        "total_cost": 0.07862054,
+        "cost_percent": 0.09945672359266287,
+        "net_pnl": -0.41092054
+      },
+      {
+        "position_id": "pos_1787536868910_kidesz",
+        "closed_at": "2026-08-24T02:35:14.203Z",
+        "verified": true,
+        "entry_fee": 0.03845415,
+        "exit_fee": 0.0387554,
+        "funding_cost": 0,
+        "total_cost": 0.07720955,
+        "cost_percent": 0.10041689968656115,
+        "net_pnl": -0.67970955
+      },
+      {
+        "position_id": "pos_1787346993931_hgrupv",
+        "closed_at": "2026-08-22T05:11:03.107Z",
+        "verified": true,
+        "entry_fee": 0.01552,
+        "exit_fee": 0.0383506,
+        "funding_cost": 0.0078309,
+        "total_cost": 0.0617015,
+        "cost_percent": 0.07951224226804122,
+        "net_pnl": -0.9605015
+      },
+      {
+        "position_id": "pos_1787294193082_mjxrtu",
+        "closed_at": "2026-08-21T08:26:09.166Z",
+        "verified": true,
+        "entry_fee": 0.0377887,
+        "exit_fee": 0.0386971,
+        "funding_cost": 0.00443718,
+        "total_cost": 0.08092297999999999,
+        "cost_percent": 0.10704097883597881,
+        "net_pnl": 1.73587702
+      },
+      {
+        "position_id": "pos_1787268959923_uc9esx",
+        "closed_at": "2026-08-21T01:31:43.015Z",
+        "verified": true,
+        "entry_fee": 0.01463,
+        "exit_fee": 0.03746475,
+        "funding_cost": 0.00362365,
+        "total_cost": 0.055718399999999994,
+        "cost_percent": 0.07617006151742992,
+        "net_pnl": 1.7237816
+      },
+      {
+        "position_id": "pos_1787173258349_y06sad",
+        "closed_at": "2026-08-20T08:09:20.580Z",
+        "verified": true,
+        "entry_fee": 0.0138,
+        "exit_fee": 0.035351,
+        "funding_cost": 0.01367494,
+        "total_cost": 0.06282594,
+        "cost_percent": 0.09105208695652173,
+        "net_pnl": 1.63917406
+      },
+      {
+        "position_id": "pos_1787018475280_rxj2wm",
+        "closed_at": "2026-08-18T14:24:14.133Z",
+        "verified": true,
+        "entry_fee": 0.012835,
+        "exit_fee": 0.03234999,
+        "funding_cost": -0.00322138,
+        "total_cost": 0.04196361,
+        "cost_percent": 0.06538934164394235,
+        "net_pnl": -0.5669636100000001
+      },
+      {
+        "position_id": "pos_1786538185728_a0r9ki",
+        "closed_at": "2026-08-12T14:02:54.714Z",
+        "verified": true,
+        "entry_fee": 0.0961749,
+        "exit_fee": 0.09544725,
+        "funding_cost": 0,
+        "total_cost": 0.19162215,
+        "cost_percent": 0.09956983632112236,
+        "net_pnl": -1.64692215
+      },
+      {
+        "position_id": "pos_1786454341137_pcs20k",
+        "closed_at": "2026-08-11T14:52:04.649Z",
+        "verified": true,
+        "entry_fee": 0.03855,
+        "exit_fee": 0.09563775,
+        "funding_cost": 0,
+        "total_cost": 0.13418775,
+        "cost_percent": 0.06961750972762645,
+        "net_pnl": -1.60868775
+      },
+      {
+        "position_id": "pos_1786314174865_eikyad",
+        "closed_at": "2026-08-10T13:34:49.948Z",
+        "verified": true,
+        "entry_fee": 0.03914999,
+        "exit_fee": 0.09708525,
+        "funding_cost": 0.03005391,
+        "total_cost": 0.16628915,
+        "cost_percent": 0.08494975734355044,
+        "net_pnl": -1.74578915
+      },
+      {
+        "position_id": "pos_1786202453213_dcmbzv",
+        "closed_at": "2026-08-09T20:10:17.159Z",
+        "verified": true,
+        "entry_fee": 0.03903,
+        "exit_fee": 0.09765284999999999,
+        "funding_cost": 0.04669464,
+        "total_cost": 0.18337749,
+        "cost_percent": 0.09396745580322828,
+        "net_pnl": -0.02767748999999999
+      },
+      {
+        "position_id": "pos_1786022715761_hgxasy",
+        "closed_at": "2026-08-07T14:05:02.243Z",
+        "verified": true,
+        "entry_fee": 0.03849,
+        "exit_fee": 0.09721514999999999,
+        "funding_cost": 0.02187375,
+        "total_cost": 0.1575789,
+        "cost_percent": 0.08188043647700702,
+        "net_pnl": 1.8227211
+      },
+      {
+        "position_id": "pos_1785937006613_golj8k",
+        "closed_at": "2026-08-06T02:20:19.283Z",
+        "verified": true,
+        "entry_fee": 0.03834,
+        "exit_fee": 0.09659279999999999,
+        "funding_cost": 0.0179541,
+        "total_cost": 0.1528869,
+        "cost_percent": 0.07975320813771518,
+        "net_pnl": 1.3327131
+      },
+      {
+        "position_id": "pos_1785729375221_m5sv7r",
+        "closed_at": "2026-08-03T08:21:19.551Z",
+        "verified": true,
+        "entry_fee": 0.09434264999999999,
+        "exit_fee": 0.09362745,
+        "funding_cost": 0.01194987,
+        "total_cost": 0.19991996999999997,
+        "cost_percent": 0.10590787729686947,
+        "net_pnl": -1.63031997
+      },
+      {
+        "position_id": "pos_1785650474051_xc5rqs",
+        "closed_at": "2026-08-02T21:56:01.251Z",
+        "verified": true,
+        "entry_fee": 0.09514515,
+        "exit_fee": 0.09534464999999999,
+        "funding_cost": 0.03161294,
+        "total_cost": 0.22210274,
+        "cost_percent": 0.11668123982138166,
+        "net_pnl": 0.17689726
+      },
+      {
+        "position_id": "pos_1785600373345_tx16vp",
+        "closed_at": "2026-08-01T18:58:10.530Z",
+        "verified": true,
+        "entry_fee": 0.09443610000000001,
+        "exit_fee": 0.09379785,
+        "funding_cost": 0,
+        "total_cost": 0.18823395,
+        "cost_percent": 0.09967378872120733,
+        "net_pnl": 1.08826605
+      },
+      {
+        "position_id": "pos_1785461760824_s92i93",
+        "closed_at": "2026-07-31T01:55:15.513Z",
+        "verified": true,
+        "entry_fee": 0.039,
+        "exit_fee": 0.096666,
+        "funding_cost": 0,
+        "total_cost": 0.135666,
+        "cost_percent": 0.0695723076923077,
+        "net_pnl": -1.803666
+      },
+      {
+        "position_id": "pos_1785246526161_r0kx9q",
+        "closed_at": "2026-07-28T14:19:00.382Z",
+        "verified": true,
+        "entry_fee": 0.037689,
+        "exit_fee": 0.09446925000000002,
+        "funding_cost": 0,
+        "total_cost": 0.13215825000000003,
+        "cost_percent": 0.0701309400620871,
+        "net_pnl": 0.36134175
+      },
+      {
+        "position_id": "pos_1785156096914_biv88u",
+        "closed_at": "2026-07-27T13:39:16.585Z",
+        "verified": true,
+        "entry_fee": 0.097488,
+        "exit_fee": 0.0981735,
+        "funding_cost": 0,
+        "total_cost": 0.1956615,
+        "cost_percent": 0.10046287738755393,
+        "net_pnl": -1.5666615
+      },
+      {
+        "position_id": "pos_1785108006887_tq7o7v",
+        "closed_at": "2026-07-27T12:33:41.149Z",
+        "verified": true,
+        "entry_fee": 0.03921,
+        "exit_fee": 0.09723824999999998,
+        "funding_cost": 0.02467519,
+        "total_cost": 0.16112344,
+        "cost_percent": 0.08218487120632492,
+        "net_pnl": -1.73462344
+      },
+      {
+        "position_id": "pos_1785002787837_sijq1f",
+        "closed_at": "2026-07-26T13:03:29.807Z",
+        "verified": true,
+        "entry_fee": 0.09646875,
+        "exit_fee": 0.0966015,
+        "funding_cost": 0.01884342,
+        "total_cost": 0.21191367,
+        "cost_percent": 0.10977139083139081,
+        "net_pnl": 0.05358633000000002
+      },
+      {
+        "position_id": "pos_1784898686275_cts1ca",
+        "closed_at": "2026-07-25T17:48:00.978Z",
+        "verified": true,
+        "entry_fee": 0.09658335,
+        "exit_fee": 0.09647624999999999,
+        "funding_cost": -0.03479768,
+        "total_cost": 0.15826192,
+        "cost_percent": 0.08194779244355865,
+        "net_pnl": 0.05593808000000002
+      },
+      {
+        "position_id": "pos_1784864037153_tto9oy",
+        "closed_at": "2026-07-24T08:25:45.506Z",
+        "verified": true,
+        "entry_fee": 0.03914999,
+        "exit_fee": 0.097953,
+        "funding_cost": 0.01011315,
+        "total_cost": 0.14721614,
+        "cost_percent": 0.07520620178799489,
+        "net_pnl": 0.008783860000000006
+      },
+      {
+        "position_id": "pos_1784776568909_jnf3wj",
+        "closed_at": "2026-07-23T12:42:15.374Z",
+        "verified": true,
+        "entry_fee": 0.09836339999999999,
+        "exit_fee": 0.09763784999999998,
+        "funding_cost": 0.00053174,
+        "total_cost": 0.19653298999999996,
+        "cost_percent": 0.09984910328710052,
+        "net_pnl": -1.64763299
+      },
+      {
+        "position_id": "pos_1784738798647_x40bga",
+        "closed_at": "2026-07-22T18:32:42.571Z",
+        "verified": true,
+        "entry_fee": 0.09935235,
+        "exit_fee": 0.0985959,
+        "funding_cost": 0,
+        "total_cost": 0.19794825,
+        "cost_percent": 0.0995949501215829,
+        "net_pnl": -1.71084825
+      },
+      {
+        "position_id": "pos_1784658307122_mq7b9r",
+        "closed_at": "2026-07-22T12:56:56.498Z",
+        "verified": true,
+        "entry_fee": 0.03971406,
+        "exit_fee": 0.0983013,
+        "funding_cost": 0.01859553,
+        "total_cost": 0.15661089,
+        "cost_percent": 0.07886924177482735,
+        "net_pnl": -2.12431089
+      },
+      {
+        "position_id": "pos_1784643787068_qo2z1i",
+        "closed_at": "2026-07-21T17:47:01.300Z",
+        "verified": true,
+        "entry_fee": 0.03999,
+        "exit_fee": 0.09918,
+        "funding_cost": 0.00378696,
+        "total_cost": 0.14295696000000002,
+        "cost_percent": 0.07149635408852215,
+        "net_pnl": -1.73295696
+      },
+      {
+        "position_id": "pos_1784614205909_23m2hy",
+        "closed_at": "2026-07-21T13:54:51.310Z",
+        "verified": true,
+        "entry_fee": 0.03939,
+        "exit_fee": 0.1000734,
+        "funding_cost": 0.01771867,
+        "total_cost": 0.15718207,
+        "cost_percent": 0.07980810865701955,
+        "net_pnl": 3.03961793
+      },
+      {
+        "position_id": "pos_1784506846625_s12gq3",
+        "closed_at": "2026-07-20T00:52:19.303Z",
+        "verified": true,
+        "entry_fee": 0.03897,
+        "exit_fee": 0.096645,
+        "funding_cost": 0,
+        "total_cost": 0.13561499999999999,
+        "cost_percent": 0.0695996920708237,
+        "net_pnl": -1.695615
+      },
+      {
+        "position_id": "pos_1784396939553_c47uar",
+        "closed_at": "2026-07-19T11:56:01.165Z",
+        "verified": true,
+        "entry_fee": 0.03864936,
+        "exit_fee": 0.09662250000000001,
+        "funding_cost": 0.01419032,
+        "total_cost": 0.14946218000000003,
+        "cost_percent": 0.07734264163753295,
+        "net_pnl": -0.15126217
+      },
+      {
+        "position_id": "pos_1784267379847_h6fsuc",
+        "closed_at": "2026-07-17T14:08:44.110Z",
+        "verified": true,
+        "entry_fee": 0.0377226,
+        "exit_fee": 0.0950685,
+        "funding_cost": -0.00286335,
+        "total_cost": 0.12992775,
+        "cost_percent": 0.06888589333715069,
+        "net_pnl": -1.65392775
+      },
+      {
+        "position_id": "pos_1784036646989_rhgsdw",
+        "closed_at": "2026-07-17T05:40:38.083Z",
+        "verified": true,
+        "entry_fee": 0.03822216,
+        "exit_fee": 0.094407,
+        "funding_cost": 0.104243,
+        "total_cost": 0.23687216,
+        "cost_percent": 0.12394493665454803,
+        "net_pnl": -2.53367216
+      },
+      {
+        "position_id": "pos_1784007396076_ddd0jv",
+        "closed_at": "2026-07-14T12:46:29.765Z",
+        "verified": true,
+        "entry_fee": 0.037668,
+        "exit_fee": 0.09571575,
+        "funding_cost": 0.00654498,
+        "total_cost": 0.13992873,
+        "cost_percent": 0.07429581076776043,
+        "net_pnl": 2.95157127
+      },
+      {
+        "position_id": "pos_1783951045955_7sfcqm",
+        "closed_at": "2026-07-13T13:57:26.358Z",
+        "verified": true,
+        "entry_fee": 0.0934293,
+        "exit_fee": 0.09346890000000002,
+        "funding_cost": 0,
+        "total_cost": 0.18689820000000001,
+        "cost_percent": 0.10020008041817452,
+        "net_pnl": -0.26609817
+      },
+      {
+        "position_id": "pos_1783950869306_8nbpav",
+        "closed_at": "2026-07-13T13:54:26.777Z",
+        "verified": true,
+        "entry_fee": 0.03735,
+        "exit_fee": 0.0933606,
+        "funding_cost": 0,
+        "total_cost": 0.1307106,
+        "cost_percent": 0.06999228915662652,
+        "net_pnl": -0.1019106
+      },
+      {
+        "position_id": "pos_1783784790177_uz1y7a",
+        "closed_at": "2026-07-13T03:11:44.778Z",
+        "verified": true,
+        "entry_fee": 0.1920546,
+        "exit_fee": 0.1887669,
+        "funding_cost": -0.09297607,
+        "total_cost": 0.28784542999999996,
+        "cost_percent": 0.07493843677787461,
+        "net_pnl": 6.28755457
+      }
+    ],
+    "total_trades": 36,
+    "avg_cost_percent": 0.08692037123087802,
+    "timestamp": "2026-09-07T08:16:12.497Z"
+  },
+  "/api/dashboard/balance?symbol=BTC": {
+    "ok": true,
+    "success": true,
+    "data": {
+      "isInitialized": true,
+      "totalBalance": 34.27714639,
+      "availableBalance": 34.27714639,
+      "equity": 34.27714639,
+      "usedMargin": 0,
+      "freeMargin": 34.27714639,
+      "dailyPnL": 0,
+      "weeklyPnL": 0,
+      "walletPnl": -5.722853610000001,
+      "binanceRealizedPnl": -0.27719995999999825,
+      "dbPositionPnlSum": -5.72285361,
+      "dbPositionPnlGap": -1.7763568394002505e-15,
+      "positionTradingPnlGap": 0,
+      "walletIncomeGap": -1.7763568394002505e-15,
+      "dbPositionPnlTrusted": true,
+      "pnlSource": "wallet",
+      "totalFees": 5.170563290000001,
+      "fundingFees": 0.27509036,
+      "startingBalance": 40
+    }
+  },
+  "/api/dashboard/llm": {
+    "ok": true,
+    "data": {
+      "callsToday": 0,
+      "callsSource": "provider_request_events",
+      "decisionCountToday": 0,
+      "lastDecisionAt": "2026-09-06T03:46:05.241Z",
+      "lastCall": null,
+      "lastEngagedSummary": "no_trade",
+      "lastDecision": "no_trade",
+      "lastTimeframe": "5m",
+      "modelName": "meta-llama/llama-4-scout",
+      "promptVersion": "v3",
+      "responseStatus": "no_trade",
+      "invalidJsonCount": 0,
+      "noTradeCount": 0,
+      "skippedCallCount": 7
+    }
+  }
+}

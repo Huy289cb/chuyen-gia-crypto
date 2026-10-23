@@ -1,3 +1,4 @@
+import type { RegimeEvidence } from '../analyzers/setup-gate.types';
 /**
  * Signal Gate Service
  * Determines whether to proceed to LLM analysis based on setup quality
@@ -16,6 +17,9 @@ import { regimeForGatePass, shouldBypassRegimeForBreakout } from '../config/v3-r
 import { formatSignalGateBlockReason } from '../utils/signal-gate-format';
 import { generateCandleHash } from '../utils/candle-hash';
 import type { MarketRegime } from '../analyzers/market-regime.analyzer';
+import {analyzeCausalSetupGate,causalScoringEnabled} from '../analyzers/causal-setup-gate.analyzer';
+import type {CausalPlanContract} from '../utils/causal-plan-contract';
+import type {CausalPlanEvidence} from '../utils/causal-plan-evidence';
 
 export interface SignalGateConfig {
   minGrade: 'A' | 'B' | 'C' | 'D';
@@ -36,6 +40,8 @@ export interface SignalGateOutput {
 }
 
 export interface SignalGateEvaluateInput extends SetupGateInput {
+  causalPlan?: CausalPlanContract;
+  causalEvidence?: CausalPlanEvidence;
   /** HTF regime from earlier scan in same cycle (e.g. 1h trend for 5m/15m). */
   htfRegime?: MarketRegime | null;
 }
@@ -92,8 +98,10 @@ const defaultConfig: SignalGateConfig = {
 export class SignalGateService {
   private config: SignalGateConfig;
 
-  constructor(config?: Partial<SignalGateConfig>) {
+  constructor(config?: Partial<SignalGateConfig>, private readonly researchRegime?: (input: SetupGateInput) => RegimeEvidence) {
     this.config = { ...defaultConfig, ...config };
+    // Research models must not read/write the shared production signal cache.
+    if (researchRegime && this.config.enableDuplicateFilter) throw new Error('research_regime_requires_isolated_cache');
   }
 
   /**
@@ -101,9 +109,11 @@ export class SignalGateService {
    */
   async evaluate(input: SignalGateEvaluateInput): Promise<SignalGateOutput> {
     const { candles, symbol, timeframe, htfRegime } = input;
+    const causal=!!input.causalPlan&&causalScoringEnabled();
+    const useCache=this.config.enableDuplicateFilter&&!input.causalPlan;
 
     // Clean expired cache
-    if (this.config.enableDuplicateFilter) {
+    if (useCache) {
       cleanExpiredCache();
     }
 
@@ -112,7 +122,7 @@ export class SignalGateService {
     const cacheKey = generateCacheKey(symbol, timeframe, candleHash);
 
     // Check cache for duplicate signal
-    if (this.config.enableDuplicateFilter) {
+    if (useCache) {
       const cached = signalCache.get(cacheKey);
       if (cached) {
         // Use proper evaluation logic for the cached result
@@ -141,10 +151,14 @@ export class SignalGateService {
     }
 
     // Analyze setup
-    const setupResult = await analyzeSetupGate(input);
+    const setupResult = causal
+      ? analyzeCausalSetupGate(input,input.causalPlan!,input.causalEvidence,Date.now())
+      : this.researchRegime
+      ? await analyzeSetupGate(input, this.researchRegime(input))
+      : await analyzeSetupGate(input);
 
     // Cache the result
-    if (this.config.enableDuplicateFilter) {
+    if (useCache) {
       signalCache.set(cacheKey, {
         timestamp: Date.now(),
         result: setupResult

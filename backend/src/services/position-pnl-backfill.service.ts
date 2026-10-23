@@ -1,3 +1,6 @@
+import { encodeBackfillRow } from '../utils/backfill-row-evidence';
+import { randomUUID } from 'node:crypto';
+import { buildBackfillAccountStatistics } from '../utils/backfill-account-statistics';
 /**
  * Backfill close_price / realized_pnl / trade_outcomes for historical DB rows.
  */
@@ -8,7 +11,6 @@ import {
   PIPELINE_EVENT_POSITION_ID,
   updateTestnetPosition,
 } from '../repositories/testnet.repository';
-import { isInternalCloseReason } from '../utils/bookkeeping-close';
 import {
   recordTradeOutcomeOnClose,
   type CloseOutcomeContext,
@@ -61,7 +63,7 @@ function needsBackfill(position: {
   close_price: number | null;
   realized_pnl: number;
 }): boolean {
-  const pnlMissing = Math.abs(position.realized_pnl) < 0.01;
+  const pnlMissing = !Number.isFinite(position.realized_pnl);
   const priceMissing = position.close_price == null || position.close_price <= 0;
   return pnlMissing || priceMissing;
 }
@@ -168,6 +170,13 @@ export async function backfillClosedPositionPnl(
 /**
  * Recompute account trade counters from closed positions (after batch backfill).
  */
+function publishBackfillAccountWrite(evidence: Record<string, unknown>, appliedAt: string): void {
+  void import('../utils/account-wallet-journal').then(module => module.persistAccountWalletObservation(
+    { ...evidence, applied_at: appliedAt, applied_clock_source: 'db_update_return' },
+    'account_backfill_statistics_applied'))
+    .catch(() => console.warn('[PnlBackfill] Account write journal unavailable'));
+}
+
 export async function recomputeTestnetAccountTradeStats(accountId: number): Promise<void> {
   const closed = await prisma.testnetPosition.findMany({
     where: {
@@ -179,40 +188,32 @@ export async function recomputeTestnetAccountTradeStats(accountId: number): Prom
     },
   });
 
-  let wins = 0;
-  let losses = 0;
-  let totalRealized = 0;
+  const { statistics, totalRealized } = buildBackfillAccountStatistics(closed);
 
-  const counted = closed.filter((p) => !isInternalCloseReason(p.close_reason));
-
-  for (const p of counted) {
-    const pnl = Number(p.realized_pnl) || 0;
-    totalRealized += pnl;
-    if (pnl > 0.01) wins += 1;
-    else if (pnl < -0.01) losses += 1;
-  }
-
-  await prisma.testnetAccount.update({
-    where: { id: accountId },
-    data: {
-      total_trades: counted.length,
-      winning_trades: wins,
-      losing_trades: losses,
-      updated_at: new Date(),
-    },
-  });
+  const selectedRows = closed.map(encodeBackfillRow);
+  const updatedAt = new Date();
+  const update = { ...statistics, updated_at: updatedAt };
+  const evidence = { schema: 'account-backfill-statistics-v2', account_id: accountId,
+    backfill_attempt_id: randomUUID(), kind: 'trade_statistics_overwrite',
+    input: { positions: selectedRows }, update: { ...update, updated_at: updatedAt.toISOString() },
+    write_started_at: updatedAt.toISOString() };
+  await prisma.testnetAccount.update({ where: { id: accountId }, data: update });
+  const appliedAt = new Date().toISOString();
+  publishBackfillAccountWrite(evidence, appliedAt);
 
   if (process.env.BINANCE_ENABLED === 'true') {
     const { reconcileTestnetWalletFromBinance } = await import('./wallet-reconcile.service');
     await reconcileTestnetWalletFromBinance(accountId);
   } else {
-    await prisma.testnetAccount.update({
-      where: { id: accountId },
-      data: {
-        realized_pnl: totalRealized,
-        updated_at: new Date(),
-      },
-    });
+    const updatedAt = new Date();
+    const update = { realized_pnl: totalRealized, updated_at: updatedAt };
+    const evidence = { schema: 'account-backfill-statistics-v2', account_id: accountId,
+      backfill_attempt_id: randomUUID(), kind: 'paper_realized_overwrite',
+      input: { positions: selectedRows, binance_enabled: false },
+      update: { ...update, updated_at: updatedAt.toISOString() }, write_started_at: updatedAt.toISOString() };
+    await prisma.testnetAccount.update({ where: { id: accountId }, data: update });
+    const appliedAt = new Date().toISOString();
+    publishBackfillAccountWrite(evidence, appliedAt);
   }
 }
 

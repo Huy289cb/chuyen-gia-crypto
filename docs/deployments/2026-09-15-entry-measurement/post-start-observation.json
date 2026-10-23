@@ -1,0 +1,434 @@
+{
+  "checkedAt": "2026-09-15T04:06:18.456Z",
+  "since": "2026-09-15T04:03:33.097Z",
+  "truncated": false,
+  "malformed": 0,
+  "heartbeats": [
+    {
+      "name": "MarketScan",
+      "last_run": "2026-09-15T04:03:33.166Z",
+      "updated_at": "2026-09-15T04:03:33.461Z"
+    },
+    {
+      "name": "PendingOrderLifecycle",
+      "last_run": "2026-09-15T04:05:00.383Z",
+      "updated_at": "2026-09-15T04:05:00.396Z"
+    },
+    {
+      "name": "LLMDispatch",
+      "last_run": "2026-09-15T04:06:00.577Z",
+      "updated_at": "2026-09-15T04:06:00.579Z"
+    },
+    {
+      "name": "PositionMonitor",
+      "last_run": "2026-09-15T04:06:00.579Z",
+      "updated_at": "2026-09-15T04:06:00.580Z"
+    }
+  ],
+  "activePositions": 0,
+  "blockingPending": 0,
+  "audit": {
+    "traceCount": 0,
+    "unlinkedRequests": 0,
+    "unlinkedFills": 0,
+    "unknownProviderCosts": 0,
+    "knownProviderCostUsd": 0,
+    "retest": {
+      "paired": 0,
+      "becameGeometryFeasible": 0,
+      "unavailable": 0,
+      "pnlMeasured": false
+    },
+    "traces": [],
+    "limitations": [
+      "Counts apply only to supplied events; historical missing links are not reconstructed by proximity.",
+      "Repeated requests, bars and retest observations are not independent trades.",
+      "Unknown provider costs cannot be treated as zero for ROI."
+    ]
+  },
+  "funnel": [
+    {
+      "id": 3930,
+      "timestamp": "2026-09-15T04:05:06.385Z",
+      "schema_version": 1,
+      "measurement_version": 2,
+      "diagnostic_gates": {
+        "signal_gate": {
+          "status": "block",
+          "reason": "Grade D dưới ngưỡng B · Setup: Không có setup A/B — xem chi tiết playbook bên dưới · Giá 77,710.4 · 99 nến · TF 5m | Regime RANGE: RANGE (mặc định): trend 0.02%, biến động 0.38%, biên 1.54% |   (biến động 0.38%, trend 0.02%, biên 50n 1.54%) | Liquidity sweep: không — H 77,712.9 ≤ đỉnh 19n 78,223.3 (chưa quét buy-side); L 77,631.7 ≥ đáy 19n 77,622 (chưa quét se… · Regime: range",
+          "observed": {
+            "grade": "D",
+            "confidence": 0,
+            "local_regime": "range",
+            "gate_regime": "range"
+          }
+        },
+        "direction": {
+          "status": "unavailable",
+          "reason": "playbook direction unavailable"
+        },
+        "regime": {
+          "status": "block",
+          "reason": "gate regime range"
+        },
+        "grade_playbook": {
+          "status": "block",
+          "reason": "grade D below min B"
+        },
+        "structure": {
+          "status": "not_applicable",
+          "reason": "requires a directional setup"
+        },
+        "htf_trend": {
+          "status": "block",
+          "reason": "HTF 1h regime range !== trend (V3_REQUIRE_HTF_TREND)",
+          "observed": {
+            "primary_tf": "1h",
+            "primary_regime": "range",
+            "alt_tf": "15m",
+            "alt_regime": "range"
+          }
+        },
+        "side_align": {
+          "status": "not_applicable",
+          "reason": "requires a directional setup"
+        },
+        "entry_5m_guard": {
+          "status": "not_applicable",
+          "reason": "requires a directional setup"
+        },
+        "funding": {
+          "status": "not_applicable",
+          "reason": "funding requires side"
+        },
+        "pullback_proxy": {
+          "status": "not_applicable",
+          "reason": "pullback requires side"
+        },
+        "account_eligibility": {
+          "status": "pass",
+          "reason": "ok"
+        }
+      },
+      "diagnostic_blocks": [
+        "signal_gate",
+        "direction",
+        "regime",
+        "grade_playbook",
+        "htf_trend"
+      ],
+      "legacy_control_fields_preserved": true,
+      "classification": "no_setup",
+      "pre_ai_proxy_pass": false,
+      "post_ai_proxy_blocks": [
+        "grade_playbook",
+        "htf_trend",
+        "side_align",
+        "entry_5m_guard"
+      ],
+      "feasibility": {
+        "version": "entry-feasibility-v1",
+        "role": "diagnostic_only",
+        "asOf": 1789445105980,
+        "minSlFraction": 0.008,
+        "minRr": 3,
+        "structureStrength": 2,
+        "structureTimeframe": "4h",
+        "entrySource": "closed_bar_proxy",
+        "status": "no_setup",
+        "geometry": null
+      },
+      "observation_key": "BTC:5m:kim_nghia:bar:v2:1789444800000",
+      "bar_key": "bar:v2:1789444800000",
+      "symbol": "BTC",
+      "timeframe": "5m",
+      "evaluated_at": "2026-09-15T04:05:06.377Z",
+      "grade": "D",
+      "confidence": 0,
+      "playbook": "unknown",
+      "side": null,
+      "local_regime": "range",
+      "gate_regime": "range",
+      "first_block": "signal_gate",
+      "all_blocks": [
+        "signal_gate",
+        "direction",
+        "regime",
+        "grade_playbook",
+        "structure",
+        "htf_trend",
+        "side_align",
+        "entry_5m_guard"
+      ],
+      "would_pass_pre_llm": false,
+      "structure_bias": null,
+      "structure_detail": null,
+      "breakout_metrics": {
+        "windowCandles": 48,
+        "consolidationBars": 43,
+        "resistance": 78223.3,
+        "support": 77670.2,
+        "rangeWidth": 553.1000000000058,
+        "lastClose": 77710.4,
+        "lastVolume": 252.553,
+        "avgVolume25": 472.1473720930233,
+        "volumeRatio": 0.53,
+        "minVolumeRatio": 1.5,
+        "bullishBreak": false,
+        "bearishBreak": false
+      },
+      "gates": {
+        "signal_gate": {
+          "status": "block",
+          "reason": "Grade D dưới ngưỡng B · Setup: Không có setup A/B — xem chi tiết playbook bên dưới · Giá 77,710.4 · 99 nến · TF 5m | Regime RANGE: RANGE (mặc định): trend 0.02%, biến động 0.38%, biên 1.54% |   (biến động 0.38%, trend 0.02%, biên 50n 1.54%) | Liquidity sweep: không — H 77,712.9 ≤ đỉnh 19n 78,223.3 (chưa quét buy-side); L 77,631.7 ≥ đáy 19n 77,622 (chưa quét se… · Regime: range",
+          "observed": {
+            "grade": "D",
+            "confidence": 0,
+            "local_regime": "range",
+            "gate_regime": "range"
+          }
+        },
+        "direction": {
+          "status": "block",
+          "reason": "playbook direction unavailable"
+        },
+        "regime": {
+          "status": "block",
+          "reason": "gate regime range"
+        },
+        "grade_playbook": {
+          "status": "block",
+          "reason": "grade D below min B"
+        },
+        "structure": {
+          "status": "block",
+          "reason": "structure cannot evaluate without side"
+        },
+        "htf_trend": {
+          "status": "block",
+          "reason": "HTF 1h regime range !== trend (V3_REQUIRE_HTF_TREND)",
+          "observed": {
+            "primary_tf": "1h",
+            "primary_regime": "range",
+            "alt_tf": "15m",
+            "alt_regime": "range"
+          }
+        },
+        "side_align": {
+          "status": "block",
+          "reason": "side align cannot evaluate without side"
+        },
+        "entry_5m_guard": {
+          "status": "block",
+          "reason": "5m guard cannot evaluate without side"
+        },
+        "funding": {
+          "status": "not_applicable",
+          "reason": "funding requires side"
+        },
+        "pullback_proxy": {
+          "status": "not_applicable",
+          "reason": "pullback requires side"
+        },
+        "account_eligibility": {
+          "status": "pass",
+          "reason": "ok"
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": 3930,
+      "timestamp": "2026-09-15T04:05:06.385Z",
+      "event_type": "gate_funnel_shadow",
+      "event_data": {
+        "schema_version": 1,
+        "measurement_version": 2,
+        "diagnostic_gates": {
+          "signal_gate": {
+            "status": "block",
+            "reason": "Grade D dưới ngưỡng B · Setup: Không có setup A/B — xem chi tiết playbook bên dưới · Giá 77,710.4 · 99 nến · TF 5m | Regime RANGE: RANGE (mặc định): trend 0.02%, biến động 0.38%, biên 1.54% |   (biến động 0.38%, trend 0.02%, biên 50n 1.54%) | Liquidity sweep: không — H 77,712.9 ≤ đỉnh 19n 78,223.3 (chưa quét buy-side); L 77,631.7 ≥ đáy 19n 77,622 (chưa quét se… · Regime: range",
+            "observed": {
+              "grade": "D",
+              "confidence": 0,
+              "local_regime": "range",
+              "gate_regime": "range"
+            }
+          },
+          "direction": {
+            "status": "unavailable",
+            "reason": "playbook direction unavailable"
+          },
+          "regime": {
+            "status": "block",
+            "reason": "gate regime range"
+          },
+          "grade_playbook": {
+            "status": "block",
+            "reason": "grade D below min B"
+          },
+          "structure": {
+            "status": "not_applicable",
+            "reason": "requires a directional setup"
+          },
+          "htf_trend": {
+            "status": "block",
+            "reason": "HTF 1h regime range !== trend (V3_REQUIRE_HTF_TREND)",
+            "observed": {
+              "primary_tf": "1h",
+              "primary_regime": "range",
+              "alt_tf": "15m",
+              "alt_regime": "range"
+            }
+          },
+          "side_align": {
+            "status": "not_applicable",
+            "reason": "requires a directional setup"
+          },
+          "entry_5m_guard": {
+            "status": "not_applicable",
+            "reason": "requires a directional setup"
+          },
+          "funding": {
+            "status": "not_applicable",
+            "reason": "funding requires side"
+          },
+          "pullback_proxy": {
+            "status": "not_applicable",
+            "reason": "pullback requires side"
+          },
+          "account_eligibility": {
+            "status": "pass",
+            "reason": "ok"
+          }
+        },
+        "diagnostic_blocks": [
+          "signal_gate",
+          "direction",
+          "regime",
+          "grade_playbook",
+          "htf_trend"
+        ],
+        "legacy_control_fields_preserved": true,
+        "classification": "no_setup",
+        "pre_ai_proxy_pass": false,
+        "post_ai_proxy_blocks": [
+          "grade_playbook",
+          "htf_trend",
+          "side_align",
+          "entry_5m_guard"
+        ],
+        "feasibility": {
+          "version": "entry-feasibility-v1",
+          "role": "diagnostic_only",
+          "asOf": 1789445105980,
+          "minSlFraction": 0.008,
+          "minRr": 3,
+          "structureStrength": 2,
+          "structureTimeframe": "4h",
+          "entrySource": "closed_bar_proxy",
+          "status": "no_setup",
+          "geometry": null
+        },
+        "observation_key": "BTC:5m:kim_nghia:bar:v2:1789444800000",
+        "bar_key": "bar:v2:1789444800000",
+        "symbol": "BTC",
+        "timeframe": "5m",
+        "evaluated_at": "2026-09-15T04:05:06.377Z",
+        "grade": "D",
+        "confidence": 0,
+        "playbook": "unknown",
+        "side": null,
+        "local_regime": "range",
+        "gate_regime": "range",
+        "first_block": "signal_gate",
+        "all_blocks": [
+          "signal_gate",
+          "direction",
+          "regime",
+          "grade_playbook",
+          "structure",
+          "htf_trend",
+          "side_align",
+          "entry_5m_guard"
+        ],
+        "would_pass_pre_llm": false,
+        "structure_bias": null,
+        "structure_detail": null,
+        "breakout_metrics": {
+          "windowCandles": 48,
+          "consolidationBars": 43,
+          "resistance": 78223.3,
+          "support": 77670.2,
+          "rangeWidth": 553.1000000000058,
+          "lastClose": 77710.4,
+          "lastVolume": 252.553,
+          "avgVolume25": 472.1473720930233,
+          "volumeRatio": 0.53,
+          "minVolumeRatio": 1.5,
+          "bullishBreak": false,
+          "bearishBreak": false
+        },
+        "gates": {
+          "signal_gate": {
+            "status": "block",
+            "reason": "Grade D dưới ngưỡng B · Setup: Không có setup A/B — xem chi tiết playbook bên dưới · Giá 77,710.4 · 99 nến · TF 5m | Regime RANGE: RANGE (mặc định): trend 0.02%, biến động 0.38%, biên 1.54% |   (biến động 0.38%, trend 0.02%, biên 50n 1.54%) | Liquidity sweep: không — H 77,712.9 ≤ đỉnh 19n 78,223.3 (chưa quét buy-side); L 77,631.7 ≥ đáy 19n 77,622 (chưa quét se… · Regime: range",
+            "observed": {
+              "grade": "D",
+              "confidence": 0,
+              "local_regime": "range",
+              "gate_regime": "range"
+            }
+          },
+          "direction": {
+            "status": "block",
+            "reason": "playbook direction unavailable"
+          },
+          "regime": {
+            "status": "block",
+            "reason": "gate regime range"
+          },
+          "grade_playbook": {
+            "status": "block",
+            "reason": "grade D below min B"
+          },
+          "structure": {
+            "status": "block",
+            "reason": "structure cannot evaluate without side"
+          },
+          "htf_trend": {
+            "status": "block",
+            "reason": "HTF 1h regime range !== trend (V3_REQUIRE_HTF_TREND)",
+            "observed": {
+              "primary_tf": "1h",
+              "primary_regime": "range",
+              "alt_tf": "15m",
+              "alt_regime": "range"
+            }
+          },
+          "side_align": {
+            "status": "block",
+            "reason": "side align cannot evaluate without side"
+          },
+          "entry_5m_guard": {
+            "status": "block",
+            "reason": "5m guard cannot evaluate without side"
+          },
+          "funding": {
+            "status": "not_applicable",
+            "reason": "funding requires side"
+          },
+          "pullback_proxy": {
+            "status": "not_applicable",
+            "reason": "pullback requires side"
+          },
+          "account_eligibility": {
+            "status": "pass",
+            "reason": "ok"
+          }
+        }
+      }
+    }
+  ]
+}

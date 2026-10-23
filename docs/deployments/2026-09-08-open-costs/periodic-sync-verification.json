@@ -1,0 +1,15 @@
+{
+  "verifiedAt": "2026-09-08T02:56:06.346896+00:00",
+  "workerPid": 3348814,
+  "workerAlive": true,
+  "automaticFiveMinuteCycleVerified": true,
+  "accountSnapshot": {
+    "wallet": 34.25772102,
+    "equity": 34.046218,
+    "updated_at": "2026-09-08T02:55:00.203"
+  },
+  "entryFeeReconcile": "startup corrected metadata; periodic cycle did not debit the wallet again",
+  "positionId": "pos_1788819091345_x4bmxu",
+  "goalStatus": "active",
+  "externalDependency": "first live range position remains open; no realized range outcome yet"
+}

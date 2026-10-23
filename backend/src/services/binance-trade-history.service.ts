@@ -3,6 +3,8 @@
  */
 
 import { getUserTrades } from './binance/trading';
+import { reconstructExchangeRounds, type ExchangeFill as UserTradeRow } from '../utils/exchange-rounds';
+import { fetchBinanceIncomeRows } from './binance-income.service';
 
 export interface BinanceTradeRound {
   id: string;
@@ -16,29 +18,10 @@ export interface BinanceTradeRound {
   closeReason: string;
   status: 'closed';
   closedAt: string;
+  openedAt?: string;
+  fundingFee?: number;
+  netPnl?: number;
 }
-
-interface RoundBuilder {
-  side: 'long' | 'short';
-  entryValue: number;
-  entryQty: number;
-  exitValue: number;
-  exitQty: number;
-  pnl: number;
-  fee: number;
-  openTime: number;
-  closeTime: number;
-}
-
-type UserTradeRow = {
-  side: string;
-  price: number;
-  qty: number;
-  commission: number;
-  realizedPnl: number;
-  time: number;
-  orderId: number | string;
-};
 
 function pairSymbol(symbol: string): string {
   const base = symbol.toUpperCase().replace(/USDT$/i, '');
@@ -48,92 +31,91 @@ function pairSymbol(symbol: string): string {
 // Below Binance BTCUSDT min lot (0.001). Rounds smaller than this come from
 // over-closing by a hair / float drift, not real positions — drop them.
 const DUST_QTY = 5e-4;
+const USER_TRADES_LOOKBACK_MS = 90 * 24 * 3600 * 1000;
+// Binance limits Account Trade List queries to a seven-day time range and,
+// when no time range is supplied, returns only the latest seven days. Query
+// explicit, non-overlapping windows so an idle week does not erase the latest
+// loss streak or make the dashboard history look empty.
+const USER_TRADES_WINDOW_MS = 7 * 24 * 3600 * 1000;
+const USER_TRADES_CACHE_TTL_MS = 60_000;
 
-/**
- * Aggregate chronological fills into closed position rounds (ONE_WAY).
- *
- * Rounds are delimited by Binance's per-fill realizedPnl, NOT by a running net
- * position: a fill with realizedPnl == 0 opens/adds; a fill with realizedPnl != 0
- * reduces/closes. A new round begins when an opening fill appears after the
- * current round has already had a closing fill. This avoids phantom rounds from
- * accumulated quantity drift when entry/exit fills don't cancel exactly.
- */
-export function aggregateUserTradesToRounds(
-  trades: UserTradeRow[],
-  symbol: string
-): BinanceTradeRound[] {
-  const sorted = [...trades].sort((a, b) => a.time - b.time);
-  const rounds: BinanceTradeRound[] = [];
-  let current: RoundBuilder | null = null;
-  let seenClose = false;
+type CachedRounds = {
+  expiresAt: number;
+  rounds: BinanceTradeRound[];
+};
 
-  const finalize = (builder: RoundBuilder): BinanceTradeRound => {
-    const entryPrice = builder.entryQty > 0 ? builder.entryValue / builder.entryQty : 0;
-    const closePrice = builder.exitQty > 0 ? builder.exitValue / builder.exitQty : entryPrice;
-    const quantity = builder.entryQty > 0 ? builder.entryQty : builder.exitQty;
-    return {
-      id: `binance_${builder.closeTime}_${builder.side}`,
-      symbol: symbol.toUpperCase().replace(/USDT$/i, ''),
-      side: builder.side,
-      entryPrice: entryPrice > 0 ? entryPrice : closePrice,
-      closePrice,
-      quantity,
-      fee: Math.abs(builder.fee),
-      realizedPnL: builder.pnl,
-      closeReason: 'binance_fills',
-      status: 'closed',
-      closedAt: new Date(builder.closeTime).toISOString(),
+const roundsCache = new Map<string, CachedRounds>();
+
+export interface BinanceTradeHistoryFetchOptions {
+  nowMs?: number;
+  lookbackMs?: number;
+  cacheTtlMs?: number;
+}
+
+function userTradeDedupKey(trade: UserTradeRow): string {
+  if (trade.tradeId != null) return `trade:${String(trade.tradeId)}`;
+  return [
+    'fill',
+    trade.orderId,
+    trade.time,
+    trade.side,
+    trade.price,
+    trade.qty,
+    trade.realizedPnl,
+    trade.commission,
+  ].join(':');
+}
+
+export async function fetchUserTradesByTimeWindows(
+  symbolUsdt: string,
+  nowMs: number,
+  lookbackMs = USER_TRADES_LOOKBACK_MS
+): Promise<UserTradeRow[]> {
+  const cutoffExclusive = nowMs - lookbackMs;
+  const unique = new Map<string, UserTradeRow>();
+  let windowEnd = nowMs;
+
+  while (windowEnd > cutoffExclusive) {
+    // Both endpoints are inclusive. Subtract one millisecond so the requested
+    // span never exceeds Binance's seven-day maximum, then advance backwards
+    // without overlapping the adjacent window.
+    const windowStart = Math.max(cutoffExclusive + 1, windowEnd - USER_TRADES_WINDOW_MS + 1);
+    const fetchCompleteWindow = async (startTime: number, endTime: number): Promise<void> => {
+      const batch = await getUserTrades(symbolUsdt, { limit: 1000, startTime, endTime }) as UserTradeRow[];
+      if (batch.length >= 1000) {
+        // Subdivision avoids losing fills sharing a timestamp. If one ms is saturated,
+        // fail explicitly instead of returning an incomplete accounting result.
+        if (startTime >= endTime) throw new Error('userTrades saturated within one millisecond');
+        const mid = Math.floor((startTime + endTime) / 2);
+        await fetchCompleteWindow(startTime, mid);
+        await fetchCompleteWindow(mid + 1, endTime);
+        return;
+      }
+      for (const trade of batch) {
+        if (trade.time >= startTime && trade.time <= endTime) unique.set(userTradeDedupKey(trade), trade);
+      }
     };
-  };
-
-  const newBuilder = (side: 'long' | 'short', time: number): RoundBuilder => ({
-    side,
-    entryValue: 0,
-    entryQty: 0,
-    exitValue: 0,
-    exitQty: 0,
-    pnl: 0,
-    fee: 0,
-    openTime: time,
-    closeTime: time,
-  });
-
-  for (const t of sorted) {
-    const dir: 'long' | 'short' = t.side.toUpperCase() === 'BUY' ? 'long' : 'short';
-    const reducing = Math.abs(t.realizedPnl) > 1e-9;
-
-    if (!current) {
-      // First fill: if it reduces, the opening leg is outside the window, so the
-      // position side is opposite the reducing fill's direction.
-      current = newBuilder(reducing ? (dir === 'long' ? 'short' : 'long') : dir, t.time);
-      seenClose = false;
-    } else if (!reducing && seenClose) {
-      // Opening fill after the current round already closed → previous round done.
-      rounds.push(finalize(current));
-      current = newBuilder(dir, t.time);
-      seenClose = false;
-    }
-
-    current.fee += Math.abs(t.commission);
-    current.closeTime = t.time;
-
-    if (reducing) {
-      current.pnl += t.realizedPnl;
-      current.exitValue += t.price * Math.abs(t.qty);
-      current.exitQty += Math.abs(t.qty);
-      seenClose = true;
-    } else {
-      current.entryValue += t.price * Math.abs(t.qty);
-      current.entryQty += Math.abs(t.qty);
-    }
+    await fetchCompleteWindow(windowStart, windowEnd);
+    windowEnd = windowStart - 1;
   }
 
-  // A trailing round with no closing fill is the still-open position — exclude it.
-  if (current && seenClose) {
-    rounds.push(finalize(current));
-  }
+  return [...unique.values()].sort((a, b) => a.time - b.time);
+}
 
-  return rounds.filter((r) => r.quantity >= DUST_QTY).reverse();
+export function clearBinanceTradeHistoryCacheForTests(): void {
+  roundsCache.clear();
+}
+
+/** Only completed, flat-to-flat rounds belong in the closed history. */
+export function aggregateUserTradesToRounds(trades: UserTradeRow[], symbol: string): BinanceTradeRound[] {
+  return reconstructExchangeRounds(trades).filter(r => r.quantity >= DUST_QTY).map(r => ({
+    id: `binance_${r.closeTime}_${r.side}`,
+    symbol: symbol.toUpperCase().replace(/USDT$/i, ''), side: r.side,
+    entryPrice: r.entryPrice, closePrice: r.closePrice, quantity: r.quantity,
+    fee: r.entryFee + r.exitFee, realizedPnL: r.grossPnl,
+    closeReason: 'binance_fills', status: 'closed' as const,
+    closedAt: new Date(r.closeTime).toISOString(), openedAt: new Date(r.entryTime).toISOString(),
+  })).reverse();
 }
 
 export interface BinanceLossStreak {
@@ -149,8 +131,8 @@ export function computeLossStreakFromRounds(rounds: BinanceTradeRound[]): Binanc
   let lastLossTime = 0;
 
   for (const r of rounds) {
-    const net = r.realizedPnL - Math.abs(r.fee);
-    if (net < 0) {
+    const net = r.netPnl ?? r.realizedPnL - r.fee - (r.fundingFee ?? 0);
+    if (net < -0.01) {
       consecutiveLosses += 1;
       if (lastLossTime === 0) lastLossTime = new Date(r.closedAt).getTime();
     } else {
@@ -176,22 +158,38 @@ export async function getBinanceLossStreak(
 
 export async function fetchBinanceClosedTradeRounds(
   symbol: string,
-  limit = 20
+  limit = 20,
+  options: BinanceTradeHistoryFetchOptions = {}
 ): Promise<BinanceTradeRound[]> {
   if (process.env.BINANCE_ENABLED !== 'true') {
     return [];
   }
 
   const symbolUsdt = pairSymbol(symbol);
-  const lookbackMs = 90 * 24 * 3600 * 1000;
-  const cutoff = Date.now() - lookbackMs;
+  const nowMs = options.nowMs ?? Date.now();
+  const lookbackMs = options.lookbackMs ?? USER_TRADES_LOOKBACK_MS;
+  const cacheTtlMs = options.cacheTtlMs ?? USER_TRADES_CACHE_TTL_MS;
+  const cacheKey = `${symbolUsdt}:${lookbackMs}`;
+  const cached = roundsCache.get(cacheKey);
+  if (cached && cached.expiresAt > nowMs) return cached.rounds.slice(0, limit);
 
-  // Demo/testnet userTrades often returns [] when startTime is set — fetch recent fills
-  // without time filter, then apply lookback on aggregated closed rounds.
-  const raw = await getUserTrades(symbolUsdt, { limit: 1000 });
-
-  const rounds = aggregateUserTradesToRounds(raw as UserTradeRow[], symbol).filter(
+  const cutoff = nowMs - lookbackMs;
+  const raw = await fetchUserTradesByTimeWindows(symbolUsdt, nowMs, lookbackMs);
+  const rounds = aggregateUserTradesToRounds(raw, symbol).filter(
     (r) => new Date(r.closedAt).getTime() >= cutoff
   );
+
+  const income = await fetchBinanceIncomeRows({ symbol, startTime: cutoff, endTime: nowMs });
+  for (const r of rounds) {
+    r.fundingFee = -income.filter(row => row.incomeType === 'FUNDING_FEE' &&
+      row.time >= Date.parse(r.openedAt!) && row.time <= Date.parse(r.closedAt))
+      .reduce((sum, row) => sum + Number(row.income), 0);
+    r.netPnl = r.realizedPnL - r.fee - r.fundingFee;
+  }
+
+  roundsCache.set(cacheKey, {
+    expiresAt: nowMs + Math.max(0, cacheTtlMs),
+    rounds,
+  });
   return rounds.slice(0, limit);
 }

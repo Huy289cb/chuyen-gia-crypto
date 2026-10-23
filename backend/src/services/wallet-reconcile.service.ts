@@ -3,12 +3,13 @@
  */
 
 import { prisma } from '../lib/prisma';
+import { buildWalletReconcileUpdate } from '../utils/wallet-reconcile-update';
+import { randomUUID } from 'node:crypto';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 import {
   fetchBinanceBalanceSnapshot,
 } from './binance-balance-sync.service';
 import {
-  deriveWalletBaseline,
   fetchBinanceIncomeSummary,
   type BinanceIncomeSummary,
 } from './binance-income.service';
@@ -31,17 +32,11 @@ export interface WalletReconcileResult {
   incomeRows: number;
 }
 
-function sumClosedPositionPnl(
-  rows: Array<{ realized_pnl: number | null }>
-): number {
-  return rows.reduce((sum, row) => sum + (Number(row.realized_pnl) || 0), 0);
-}
-
 /**
  * Reconcile account stats from Binance wallet + income API.
  *
- * starting_balance := wallet - (realized + commission + funding)
- * so wallet - starting_balance ≈ net trading PnL on Binance.
+ * Preserve capital baseline. Closed position PnL is NET of signed costs.
+ * Report wallet/income discrepancies; never silently redefine capital to hide them.
  */
 export async function reconcileTestnetWalletFromBinance(
   accountId: number
@@ -64,7 +59,7 @@ export async function reconcileTestnetWalletFromBinance(
   }
   const income = await fetchBinanceIncomeSummary();
 
-  const newStartingBalance = deriveWalletBaseline(snap.walletBalance, income);
+  const newStartingBalance = account.starting_balance;
   const previousStartingBalance = account.starting_balance;
   const previousRealizedPnl = account.realized_pnl;
 
@@ -76,23 +71,23 @@ export async function reconcileTestnetWalletFromBinance(
       side: { notIn: ['NONE', 'none'] },
       size_qty: { gt: 0 },
     },
-    select: { realized_pnl: true },
+    select: { realized_pnl: true, entry_fee: true, exit_fee: true, funding_fee: true },
   });
-  const positionRealizedSum = sumClosedPositionPnl(closedPositions);
+  const accountUpdate = buildWalletReconcileUpdate(newStartingBalance, snap, closedPositions, new Date());
+  const positionRealizedSum = accountUpdate.realized_pnl;
+  const recordedUpdate = JSON.parse(JSON.stringify({schema:'wallet-reconcile-update-v1',reconcile_attempt_id:randomUUID(),account_id:accountId,
+    input:{starting_balance:newStartingBalance,snapshot:{walletBalance:snap.walletBalance,equity:snap.equity,unrealizedPnl:snap.unrealizedPnl},positions:closedPositions},
+    update:accountUpdate,source:'normalized_wallet_and_local_closed_positions'}));
 
   await prisma.testnetAccount.update({
     where: { id: accountId },
-    data: {
-      starting_balance: newStartingBalance,
-      current_balance: snap.walletBalance,
-      equity: snap.equity,
-      unrealized_pnl: snap.unrealizedPnl,
-      realized_pnl: income.realizedPnl,
-      accumulated_trading_fees: Math.abs(income.commission),
-      accumulated_funding_fee: Math.abs(income.fundingFee),
-      updated_at: new Date(),
-    },
+    data: accountUpdate,
   });
+
+  const appliedAt = new Date().toISOString();
+  void import('../utils/account-wallet-journal').then(module => module.persistAccountWalletObservation(
+    {...recordedUpdate,applied_at:appliedAt},'account_wallet_reconcile_applied'))
+    .catch(() => console.warn('[WalletReconcile] Account reconciliation journal persistence failed'));
 
   const walletDelta = snap.walletBalance - newStartingBalance;
   const gapAfterFix = walletDelta - income.netTradingPnl;

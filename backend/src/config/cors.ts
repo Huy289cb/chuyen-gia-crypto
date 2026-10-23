@@ -1,5 +1,6 @@
 import cors from 'cors';
 import type { CorsOptions } from 'cors';
+import type { Request, Response, NextFunction } from 'express';
 
 /**
  * Production-ready CORS configuration
@@ -76,7 +77,21 @@ const corsOptions: CorsOptions = {
 };
 
 // Create and export the CORS middleware
-export const corsMiddleware = cors(corsOptions);
+const allowlistedCorsMiddleware = cors(corsOptions);
+
+/** The backend-served paper page may POST to its own origin without changing other API origins. */
+export function isPaperSameOrigin(req: Pick<Request, 'path' | 'protocol' | 'get'>): boolean {
+  if (req.path !== '/api/portfolio-paper' && !req.path.startsWith('/api/portfolio-paper/')) return false;
+  const origin = req.get('origin');
+  const host = req.get('host');
+  if (!origin || !host || !['http', 'https'].includes(req.protocol)) return false;
+  return origin === `${req.protocol}://${host}`;
+}
+
+export function corsMiddleware(req: Request, res: Response, next: NextFunction): void {
+  if (isPaperSameOrigin(req)) { next(); return; }
+  allowlistedCorsMiddleware(req, res, next);
+}
 
 // Export helper function for testing
 export const isOriginAllowed = (origin: string | undefined): boolean => {

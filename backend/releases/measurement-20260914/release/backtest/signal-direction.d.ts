@@ -1,0 +1,3 @@
+/** @deprecated import from ../utils/setup-trade-side */
+export { inferSetupTradeSide, type TradeSide } from '../utils/setup-trade-side';
+//# sourceMappingURL=signal-direction.d.ts.map

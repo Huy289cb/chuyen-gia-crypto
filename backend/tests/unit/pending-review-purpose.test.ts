@@ -1,0 +1,17 @@
+import {it,expect,vi,beforeEach} from 'vitest';
+import {currentProviderPurpose as current,withProviderPurpose as withPurpose} from '../../src/utils/provider-purpose-context';
+const mocks=vi.hoisted(()=>({analyze:vi.fn(),orders:vi.fn()}));
+vi.mock('../../src/lib/prisma',()=>({prisma:{testnetPendingOrder:{findMany:mocks.orders}}}));
+vi.mock('../../src/repositories/market.repository',()=>({getLatestPrice:async()=>({price:100})}));
+vi.mock('../../src/services/groq-client',()=>({createGroqClient:()=>({analyze:mocks.analyze})}));
+vi.mock('../../src/config/groq-models',()=>({getGroqAuxiliaryModelChain:()=>['test']}));
+vi.mock('../../src/services/memory.service',()=>({memoryService:{formatRecentReflectionsForPrompt:async()=>''}}));
+vi.mock('../../src/config/pending-order-policy',()=>({isPendingOrderReviewEnabled:()=>true,getPendingOrderTtlHours:()=>2,getPendingOrderReviewMinConfidence:()=>.85}));
+vi.mock('../../src/services/pending-order-actions',()=>({resolveTimeframeForPendingOrder:async()=> '5m'}));
+vi.mock('../../src/utils/pending-order-decisions',()=>({parsePendingOrderDecisions:()=>[],applyPendingOrderDecisions:vi.fn()}));
+vi.mock('../../src/schedulers/market-scan.scheduler',()=>({getScanResult:()=>null}));
+import {runPendingOrderReview as run} from '../../src/services/pending-order-review.service';
+beforeEach(()=>{vi.clearAllMocks();mocks.orders.mockResolvedValue([{order_id:'o',side:'long',entry_price:99,stop_loss:98,take_profit:101,size_usd:50,created_at:new Date()}]);});
+it('labels actual review call and restores inherited purpose on success',async()=>{mocks.analyze.mockImplementationOnce(async()=>{expect(current()).toBe('pending_review');return {};});await withPurpose('dispatch',async()=>{expect((await run()).llmCalled).toBe(true);expect(current()).toBe('dispatch');});expect(current()).toBeNull();});
+it('restores context when provider throws and preserves review failure outcome',async()=>{mocks.analyze.mockImplementationOnce(async()=>{expect(current()).toBe('pending_review');throw Error('test network failure');});const log=vi.spyOn(console,'error').mockImplementation(()=>{});try{await withPurpose('dispatch',async()=>{expect(await run()).toMatchObject({reviewed:1,llmCalled:true,cancelled:0});expect(current()).toBe('dispatch');});expect(current()).toBeNull();}finally{log.mockRestore();}});
+it('does not invoke provider on empty pending inventory',async()=>{mocks.orders.mockResolvedValueOnce([]);expect((await run()).llmCalled).toBe(false);expect(mocks.analyze).not.toHaveBeenCalled();});

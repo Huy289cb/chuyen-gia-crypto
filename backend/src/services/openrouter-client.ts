@@ -1,6 +1,7 @@
+import { fetchWithLlmTelemetry } from './llm-telemetry.service';
 /**
  * OpenRouter primary dispatch (OpenAI-compatible).
- * Paid Scout + response_format json_object, with parse retry.
+ * OpenRouter dispatch with JSON response enforcement and parse retry.
  */
 
 import {
@@ -18,6 +19,8 @@ export interface OpenRouterAnalyzeRequest {
   logLabel?: string;
   /** Parse retries on bad JSON (default 3). */
   maxParseRetries?: number;
+  /** Structured schema is opt-in until shadow evaluation completes. */
+  responseFormat?: 'json_object' | 'json_schema';
 }
 
 const OPENROUTER_CHAT_URL =
@@ -26,6 +29,28 @@ const OPENROUTER_CHAT_URL =
 
 const JSON_ONLY_NUDGE =
   '\n\nIMPORTANT: Reply with ONLY one valid minified JSON object. No markdown fences, no commentary.';
+
+const TRADE_ANALYSIS_SCHEMA = {
+  name: 'trade_analysis',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      bias: { type: 'string', enum: ['bullish', 'bearish', 'neutral'] },
+      action: { type: 'string', enum: ['buy', 'sell', 'hold'] },
+      confidence: { type: 'number', minimum: 0, maximum: 100 },
+      suggested_entry: { type: ['number', 'null'] },
+      suggested_stop_loss: { type: ['number', 'null'] },
+      suggested_take_profit: { type: ['number', 'null'] },
+      expected_rr: { type: ['number', 'null'] },
+      invalidation_level: { type: ['number', 'null'] },
+      reason_summary: { type: 'string' },
+    },
+    required: ['bias', 'action', 'confidence', 'suggested_entry', 'suggested_stop_loss',
+      'suggested_take_profit', 'expected_rr', 'invalidation_level', 'reason_summary'],
+    additionalProperties: false,
+  },
+} as const;
 
 function openRouterMaxTokens(): number {
   const n = Number(process.env.OPENROUTER_MAX_TOKENS);
@@ -67,8 +92,9 @@ async function callOpenRouterOnce(params: {
   systemPrompt: string;
   userPrompt: string;
   temperature: number;
+  responseFormat: 'json_object' | 'json_schema';
 }): Promise<string> {
-  const response = await fetch(OPENROUTER_CHAT_URL, {
+  const response = await fetchWithLlmTelemetry(OPENROUTER_CHAT_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${params.key}`,
@@ -83,7 +109,12 @@ async function callOpenRouterOnce(params: {
       ],
       temperature: params.temperature,
       max_tokens: openRouterMaxTokens(),
-      response_format: { type: 'json_object' },
+      ...(params.responseFormat === 'json_schema'
+        ? { provider: { require_parameters: true } }
+        : {}),
+      response_format: params.responseFormat === 'json_schema'
+        ? { type: 'json_schema', json_schema: TRADE_ANALYSIS_SCHEMA }
+        : { type: 'json_object' },
     }),
   });
 
@@ -117,13 +148,14 @@ export async function analyzeViaOpenRouter(
   const model = params.model?.trim() || getOpenRouterDispatchModel();
   const logLabel = params.logLabel?.trim() || 'Dispatch';
   const maxAttempts = openRouterParseRetries(params.maxParseRetries);
+  const responseFormat = params.responseFormat ?? 'json_object';
   let systemPrompt = params.systemPrompt;
   let userPrompt = params.userPrompt;
   let temperature = params.temperature ?? 0.15;
   let lastParsePreview = '';
 
   console.log(
-    `[OpenRouterClient] ${logLabel} model=${model} (json_object, max_tokens=${openRouterMaxTokens()}, retries=${maxAttempts})`
+    `[OpenRouterClient] ${logLabel} model=${model} (${responseFormat}, max_tokens=${openRouterMaxTokens()}, retries=${maxAttempts})`
   );
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -133,6 +165,7 @@ export async function analyzeViaOpenRouter(
       systemPrompt,
       userPrompt,
       temperature,
+      responseFormat,
     });
     const parsed = cleanJSONResponse(content);
     if (parsed !== null) {

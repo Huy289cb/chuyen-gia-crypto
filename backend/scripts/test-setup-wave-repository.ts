@@ -1,0 +1,43 @@
+import { PrismaClient } from '@prisma/client';
+const {createProductionPortfolioRuntime}=require('./production-portfolio-runtime.cjs');
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import cp from 'node:child_process';
+const output=process.argv[2];if(!output||fs.existsSync(output))throw Error('NEW_OUTPUT_DIRECTORY');
+const url=new URL(process.env.ROI_ATOMIC_TEST_DATABASE_URL??'');
+if(url.hostname!=='127.0.0.1'||url.port!=='55439'||url.pathname!=='/crypto_reset_test')throw Error('isolated_database_required');
+url.searchParams.set('schema','engine_'+path.basename(output).replace(/[^a-zA-Z0-9_]/g,'_'));
+fs.mkdirSync(output);const setupEnv={...process.env,DATABASE_URL:url.toString()};for(const key of ['NODE_CHANNEL_FD','NODE_CHANNEL_SERIALIZATION_MODE','NODE_UNIQUE_ID'])delete setupEnv[key];const setup=cp.spawnSync(path.resolve('backend/node_modules/.bin/prisma'),['db','push','--skip-generate'],{cwd:path.resolve('backend'),env:setupEnv,encoding:'utf8',timeout:60000});if(setup.status!==0){fs.writeFileSync(path.join(output,'setup-failure.json'),JSON.stringify({status:setup.status,signal:setup.signal,error:setup.error?.message,stderr:setup.stderr.replace(/postgres(?:ql)?:\/\/[^\s]+/g,'[redacted-database-url]')},null,2));throw Error('schema_setup_failed:'+setup.status+':'+setup.signal);}
+const db=new PrismaClient({datasources:{db:{url:url.toString()}}});
+const runtimeRoot=path.resolve(process.argv[3]??'');if(!process.argv[3]||runtimeRoot===path.resolve('backend/dist'))throw Error('isolated_runtime_required');
+const proof: Record<string,unknown>={schema:'setup-wave-journal-proof-v1',fixture:true,production_touched:false,independent_opportunities:null};
+async function main(){
+ const base=Date.parse('2025-02-01T00:00:00Z'),position='pipeline_v3_kim_nghia';
+ const account=await db.testnetAccount.create({data:{symbol:'BTC',method_id:'kim_nghia',starting_balance:31.47744546,current_balance:31.47744546,equity:31.47744546}});
+ await db.testnetPosition.create({data:{position_id:position,account_id:account.id,symbol:'BTC',side:'NONE',entry_price:0,stop_loss:0,take_profit:0,size_usd:0,size_qty:0,risk_usd:0,risk_percent:0,expected_rr:0,status:'closed'}});
+ const identity=(id:string,tf:string,highOpen:number,lowOpen:number,known:number,high=102000)=>({schema:'setup-anchor-identity-v1',status:'known',setup_id:id.repeat(64),wave_id:null,anchor_evidence:{symbol:'BTC',side:'long',timeframe:tf,high,low:100000,high_open:highOpen,low_open:lowOpen},anchor_known_at:known,detection_known_at:known});
+ let clock=base+7200000;
+ const runtime=createProductionPortfolioRuntime({runtimeRoot,database:db,environment:{},externalAdapters:{},initialClock:clock,readClock:()=>clock});
+ const repository=runtime.load('repositories/testnet.repository');
+ const persist=async(i:unknown,at:number)=>{clock=at;const id=await repository.recordSilentPipelineEvent('fixture_observation',{setup_identity:i});await runtime.flush();if(id===null)throw Error('repository_rejected');const row=await db.testnetTradeEvent.findUniqueOrThrow({where:{id}});return JSON.parse(row.event_data!);};
+ const parent=await persist(identity('a','1h',base,base+3600000,base+7200000),base+7200000);
+ assert.equal((parent.setup_identity as any).wave_id,null);
+ const child=identity('b','5m',base+600000,base+3900000,base+7205000);
+ const linked=await persist(child,base+7205000);assert.equal((linked.wave_association as any).status,'linked');
+ const repeated=await persist(child,base+7800000);assert.equal((repeated.setup_identity as any).wave_id,(linked.setup_identity as any).wave_id);
+ const different=await persist(identity('c','5m',base+600000,base+3900000,base+7800000,103000),base+7800000);
+ assert.equal((different.setup_identity as any).wave_id,null);
+ const before=await db.testnetTradeEvent.count();await assert.rejects(persist(identity('d','5m',base,base,base+9000000),base+8000000),/repository_rejected/);assert.equal(await db.testnetTradeEvent.count(),before);
+ await Promise.all([persist(child,base+8100000),persist(child,base+8100000)]);
+ const registry=await db.testnetTradeEvent.findMany({where:{event_type:'setup_anchor_first_observed'}});assert.equal(registry.length,3);
+ // No process cache: a new DB client reconstructs the association from durable events.
+ const restarted=createProductionPortfolioRuntime({runtimeRoot,database:db,environment:{},externalAdapters:{},initialClock:base+8200000});
+ const id=await restarted.load('repositories/testnet.repository').recordSilentPipelineEvent('restart_observation',{setup_identity:child});await restarted.flush();assert(id!==null);const row=await db.testnetTradeEvent.findUniqueOrThrow({where:{id}});assert.equal(JSON.parse(row.event_data!).setup_identity.wave_id,linked.setup_identity.wave_id);
+ const realTransaction=db.$transaction.bind(db);
+ const failureDb=new Proxy(db,{get(target,key){if(key==='$transaction')return (fn:any)=>realTransaction((tx:any)=>fn(new Proxy(tx,{get(t,k){if(k==='testnetTradeEvent')return new Proxy(t[k],{get(model,method){if(method==='create')return (args:any)=>{if(args.data.event_type==='atomic_failure_observation')throw Error('injected_observation_failure');return model.create(args);};return typeof model[method]==='function'?model[method].bind(model):model[method];}});return typeof t[k]==='function'?t[k].bind(t):t[k];}})));const value=(target as any)[key];return typeof value==='function'?value.bind(target):value;}});
+ const failRuntime=createProductionPortfolioRuntime({runtimeRoot,database:failureDb,environment:{},externalAdapters:{},initialClock:base+8400000});const beforeFailure=await db.testnetTradeEvent.count();const failed=await failRuntime.load('repositories/testnet.repository').recordSilentPipelineEvent('atomic_failure_observation',{setup_identity:identity('e','5m',base+600000,base+3900000,base+8400000,104000)});await failRuntime.flush();assert.equal(failed,null);assert.equal(await db.testnetTradeEvent.count(),beforeFailure);
+ proof.runtime_diagnostics=runtime.diagnostics();proof.restart_diagnostics=restarted.diagnostics();proof.atomic_failure_diagnostics=failRuntime.diagnostics();proof.runtime_root=runtimeRoot;
+ proof.passed=true;proof.checks=['verified_parent_child','repeat_same_wave','different_boundaries_unknown','future_evidence_no_write','concurrent_idempotent_registry','restart_durable_wave','atomic_registry_observation_rollback'];proof.registry=registry;proof.events=await db.testnetTradeEvent.findMany();
+}
+main().catch(e=>{proof.passed=false;proof.failure=e.message;process.exitCode=1}).finally(async()=>{await db.$disconnect();fs.writeFileSync(path.join(output,'proof.json'),JSON.stringify(proof,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({passed:proof.passed,failure:proof.failure}));});

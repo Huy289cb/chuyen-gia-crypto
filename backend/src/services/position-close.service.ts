@@ -1,3 +1,7 @@
+import {commitAtomicVerifiedClose} from '../utils/atomic-verified-close';
+import {randomUUID} from 'node:crypto';
+import {observePositionCloseWrite} from '../utils/position-close-write-observation';
+import { buildCloseAccountUpdate, shouldUpdateClosedAccount } from '../utils/close-account-update';
 /**
  * Close local testnet positions and optionally mirror closes on Binance.
  */
@@ -95,6 +99,7 @@ export async function closeLocalPosition(
     entry_price: number;
     entry_time?: Date;
     size_qty: number;
+    partial_closed?: number;
     stop_loss?: number;
     take_profit?: number;
     expected_rr?: number;
@@ -148,6 +153,9 @@ export async function closeLocalPosition(
   let fillSource: string | undefined;
   let fillTradeIds: number[] = [];
   let fillCloseQty = qty;
+  let entryFee = position.entry_fee ?? 0;
+  let exitFee = position.exit_fee ?? 0;
+  let fundingFee = position.funding_fee ?? 0;
 
   if (isBookkeepingClose) {
     finalCloseReason = 'reconciliation_bookkeeping';
@@ -160,14 +168,19 @@ export async function closeLocalPosition(
       closeTime: new Date(),
       entryOrderId: position.binance_order_id ?? null,
       sizeQty: position.size_qty,
+      partialReduction: position.partial_closed === 1,
       entryPrice: position.entry_price,
       fallbackClosePrice: closePrice,
+      onEvidence: evidence => {
+        void Promise.resolve().then(() => recordTestnetTradeEvent(position.position_id, 'close_round_query_observed', evidence as Record<string, unknown>))
+          .catch(() => console.warn('[PositionClose] Round query journal persistence failed'));
+      },
     });
 
     finalClosePrice = fill.verified ? fill.closePrice : closePrice;
     realizedPnl = fill.verified
       ? fill.realizedPnl
-      : calculatePnl(position.side, position.entry_price, finalClosePrice, qty);
+      : process.env.BINANCE_ENABLED === 'true' ? 0 : calculatePnl(position.side, position.entry_price, finalClosePrice, qty);
     finalCloseReason = fill.verified
       ? resolveVerifiedCloseReason(closeReason, eventMeta, position)
       : closeReason;
@@ -175,56 +188,70 @@ export async function closeLocalPosition(
     fillSource = fill.source;
     fillTradeIds = fill.tradeIds;
     fillCloseQty = fill.closeQty || qty;
+    if (fill.verified) {
+      entryFee = fill.entryFee ?? 0; exitFee = fill.exitFee ?? 0; fundingFee = fill.fundingFee ?? 0;
+    }
   }
 
-  await closeTestnetPosition(position.position_id, finalClosePrice, finalCloseReason);
-  await updateTestnetPosition(position.position_id, {
+  if (fillVerified && !isBookkeepingClose) {
+    const committed = await commitAtomicVerifiedClose(prisma, {
+      positionId: position.position_id, accountId: position.account_id,
+      closePrice: finalClosePrice, closeReason: finalCloseReason, realizedPnl,
+      entryFee, exitFee, fundingFee,
+      walletAuthoritative: process.env.BINANCE_ENABLED === 'true',
+    });
+    if (committed.status !== 'committed') return 0;
+    void Promise.resolve().then(() => recordTestnetTradeEvent(position.position_id,
+      'atomic_verified_close_committed', committed.receipt))
+      .catch(() => console.warn('[PositionClose] Atomic close journal persistence failed'));
+  } else {
+  const closeWriteIdentity = { close_attempt_id: randomUUID(), account_id: position.account_id,
+    position_id: position.position_id, fill_verified: fillVerified, bookkeeping: isBookkeepingClose };
+  const publishCloseWrite = (data: Record<string, unknown>) => recordTestnetTradeEvent(position.position_id, 'position_close_write_observed', data);
+  await observePositionCloseWrite('close_status', closeWriteIdentity,
+    { position_id: position.position_id, close_price: finalClosePrice, close_reason: finalCloseReason },
+    () => closeTestnetPosition(position.position_id, finalClosePrice, finalCloseReason), publishCloseWrite);
+  const closeFinancialInput = {
     current_price: finalClosePrice,
     realized_pnl: realizedPnl,
+    entry_fee: entryFee, exit_fee: exitFee, funding_fee: fundingFee,
     unrealized_pnl: 0,
-  });
+  };
+  await observePositionCloseWrite('close_financial_update', closeWriteIdentity, closeFinancialInput,
+    () => updateTestnetPosition(position.position_id, closeFinancialInput), publishCloseWrite);
 
-  if (!isBookkeepingClose) {
-    const isWin = realizedPnl > 0;
-    const isLoss = realizedPnl < 0;
-    const accountUpdate: {
-      current_balance?: number;
-      equity?: number;
-      unrealized_pnl: number;
-      realized_pnl?: { increment: number };
-      total_trades?: { increment: number };
-      winning_trades?: { increment: number };
-      losing_trades?: { increment: number };
-      consecutive_losses?: number | { increment: number };
-      last_trade_time: Date;
-      updated_at: Date;
-    } = {
-      unrealized_pnl: 0,
-      last_trade_time: new Date(),
-      updated_at: new Date(),
-    };
+  if (shouldUpdateClosedAccount(isBookkeepingClose, fillVerified, process.env.BINANCE_ENABLED === 'true')) {
+    const walletAuthoritative = position.partial_closed === 1 && process.env.BINANCE_ENABLED === 'true';
+    const accountUpdate = buildCloseAccountUpdate({ walletAuthoritative, balance: position.account.current_balance, realizedPnl,
+      lastTradeTime: new Date(), updatedAt: new Date() });
 
-    // Breakeven (PnL=0) is not a win or loss for streak/cooldown — only real PnL moves stats.
-    if (isWin || isLoss) {
-      const localBalance = position.account.current_balance + realizedPnl;
-      accountUpdate.current_balance = localBalance;
-      accountUpdate.equity = localBalance;
-      accountUpdate.realized_pnl = { increment: realizedPnl };
-      accountUpdate.total_trades = { increment: 1 };
-      accountUpdate.winning_trades = { increment: isWin ? 1 : 0 };
-      accountUpdate.losing_trades = { increment: isLoss ? 1 : 0 };
-      accountUpdate.consecutive_losses = isWin ? 0 : { increment: 1 };
-    }
-
+    const recordedAccountUpdate = JSON.parse(JSON.stringify({
+      schema: 'close-account-update-v1', account_id: position.account_id,
+      input: { balance: position.account.current_balance, realized_pnl: realizedPnl,
+        bookkeeping: isBookkeepingClose, fill_verified: fillVerified, binance_enabled: process.env.BINANCE_ENABLED === 'true', wallet_authoritative: walletAuthoritative,
+        last_trade_time: accountUpdate.last_trade_time.toISOString(), updated_at: accountUpdate.updated_at.toISOString() },
+      update: accountUpdate,
+    }));
     await prisma.testnetAccount.update({
       where: { id: position.account_id },
       data: accountUpdate,
     });
+    // Capture DB return time before scheduling telemetry or starting wallet sync.
+    const accountAppliedAt = new Date().toISOString();
+    // Record successful local DB write only; subsequent wallet sync is separate evidence.
+    void Promise.resolve().then(() => recordTestnetTradeEvent(position.position_id, 'close_account_update_applied',
+      { ...recordedAccountUpdate, applied_at: accountAppliedAt, applied_clock_source: 'db_update_return' }))
+      .catch(() => console.warn('[PositionClose] Account update journal persistence failed'));
+  }
+
   }
 
   if (process.env.BINANCE_ENABLED === 'true') {
     try {
-      await syncTestnetAccountFromBinance(position.account_id);
+      await syncTestnetAccountFromBinance(position.account_id, evidence => {
+        void Promise.resolve().then(() => recordTestnetTradeEvent(position.position_id, 'wallet_sync_observed', evidence))
+          .catch(() => console.warn('[PositionClose] Wallet sync journal persistence failed'));
+      });
     } catch (syncErr: unknown) {
       const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
       console.warn(`[PositionClose] Binance balance sync before notify failed: ${msg}`);
@@ -258,7 +285,7 @@ export async function closeLocalPosition(
       (isBookkeepingClose ? ' [bookkeeping]' : ` fill=${fillSource ?? 'n/a'} verified=${fillVerified}`)
   );
 
-  if (isBookkeepingClose) {
+  if (isBookkeepingClose || (process.env.BINANCE_ENABLED === 'true' && !fillVerified)) {
     return realizedPnl;
   }
 
@@ -273,9 +300,9 @@ export async function closeLocalPosition(
     take_profit: position.take_profit ?? position.entry_price,
     expected_rr: position.expected_rr ?? 0,
     risk_usd: position.risk_usd ?? 0,
-    entry_fee: position.entry_fee,
-    exit_fee: position.exit_fee,
-    funding_fee: position.funding_fee,
+    entry_fee: entryFee,
+    exit_fee: exitFee,
+    funding_fee: fundingFee,
     close_reason: finalCloseReason,
     decision_id:
       typeof eventMeta?.decision_id === 'number' ? eventMeta.decision_id : undefined,

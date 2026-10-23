@@ -1,7 +1,7 @@
 /** OpenRouter dispatch fallback configuration (no service imports). */
 
-/** Paid Scout on OpenRouter (not the :free variant). */
-export const OPENROUTER_MODEL_SCOUT_DEFAULT = 'meta-llama/llama-4-scout';
+/** JSON-capable paid model verified against the configured OpenRouter account. */
+export const OPENROUTER_MODEL_SCOUT_DEFAULT = 'qwen/qwen3-30b-a3b-instruct-2507';
 
 export type LlmProvider = 'groq' | 'openrouter';
 
@@ -23,6 +23,13 @@ export function isOpenRouterDispatchFallbackEnabled(): boolean {
 
 export function getOpenRouterDispatchModel(): string {
   return process.env.OPENROUTER_DISPATCH_MODEL?.trim() || OPENROUTER_MODEL_SCOUT_DEFAULT;
+}
+
+/** Optional no-execution challenger. Empty or equal to primary disables it. */
+export function getOpenRouterShadowModel(): string | null {
+  const model = process.env.OPENROUTER_SHADOW_MODEL?.trim();
+  if (!model || model === getOpenRouterDispatchModel()) return null;
+  return model;
 }
 
 export function getOpenRouterLevelsAdapterModel(): string {

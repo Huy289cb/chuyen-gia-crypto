@@ -1,0 +1,1 @@
+{"version":3,"file":"position-mark-persist.d.ts","sourceRoot":"","sources":["../../src/utils/position-mark-persist.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAQH,wBAAgB,yBAAyB,CACvC,UAAU,EAAE,MAAM,EAClB,SAAS,EAAE,MAAM,EACjB,UAAU,EAAE,MAAM,EAClB,aAAa,EAAE,MAAM,EACrB,gBAAgB,EAAE,MAAM,EACxB,KAAK,UAAQ,GACZ,OAAO,CAaT;AAED,wBAAgB,yBAAyB,CAAC,UAAU,EAAE,MAAM,GAAG,IAAI,CAElE"}

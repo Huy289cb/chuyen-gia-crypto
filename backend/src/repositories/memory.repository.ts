@@ -234,3 +234,8 @@ export async function getAllPlaybookStats(symbol: string) {
     orderBy: { total_trades: 'desc' }
   });
 }
+
+/** Outcome IDs and decision IDs are separate sequences. */
+export async function getTradeOutcomeById(id: number) {
+  return prisma.tradeOutcome.findUnique({ where: { id } });
+}

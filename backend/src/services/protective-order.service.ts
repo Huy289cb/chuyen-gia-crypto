@@ -1,3 +1,7 @@
+import { isPastStopLoss, isPastTakeProfit, tpInvalidForMark, evaluateProtectiveAction, slTpInvalidForMark } from '../utils/protective-action';
+import type { SlTpLevels } from '../utils/protective-action';
+export { isPastStopLoss, isPastTakeProfit, tpInvalidForMark, evaluateProtectiveAction } from '../utils/protective-action';
+export type { SlTpLevels, ProtectiveAction } from '../utils/protective-action';
 /**
  * P1.6 — Protective orders: recompute SL/TP from actual fill, handle -2021, emergency close.
  */
@@ -12,16 +16,9 @@ import {
 } from './position-close.service';
 import { notifyAlert } from './telegram/telegram-notify.service';
 
-export interface SlTpLevels {
-  stop_loss: number;
-  take_profit: number;
-}
 
-export type ProtectiveAction =
-  | 'place_sl_tp'
-  | 'close_at_market_loss'
-  | 'close_at_market_profit'
-  | 'recompute_and_place';
+
+
 
 export type ProtectivePlacementOutcome = 'ok' | 'partial' | 'closed' | 'skipped';
 
@@ -30,55 +27,16 @@ const PROTECTIVE_MARK_MOVE_THRESHOLD = 0.005;
 
 const protectiveRetryState = new Map<string, { failedAt: number; markAtFail: number }>();
 
-export function isPastStopLoss(
-  side: 'long' | 'short',
-  stop_loss: number,
-  mark: number
-): boolean {
-  if (!Number.isFinite(mark) || mark <= 0) return false;
-  return side === 'long' ? mark <= stop_loss : mark >= stop_loss;
-}
 
-export function isPastTakeProfit(
-  side: 'long' | 'short',
-  take_profit: number,
-  mark: number
-): boolean {
-  if (!Number.isFinite(mark) || mark <= 0) return false;
-  return side === 'long' ? mark >= take_profit : mark <= take_profit;
-}
 
-export function tpInvalidForMark(side: string, take_profit: number, mark: number): boolean {
-  const s = side.toLowerCase();
-  if (s === 'short') return take_profit >= mark;
-  return take_profit <= mark;
-}
+
+
+
 
 /**
  * Decide protective action from planned/recomputed levels vs current mark.
  */
-export function evaluateProtectiveAction(params: {
-  side: 'long' | 'short';
-  stop_loss: number;
-  take_profit: number;
-  mark: number;
-  levels?: SlTpLevels;
-}): ProtectiveAction {
-  const { side, stop_loss, take_profit, mark, levels } = params;
-  if (!Number.isFinite(mark) || mark <= 0) return 'place_sl_tp';
 
-  const sl = levels?.stop_loss ?? stop_loss;
-  const tp = levels?.take_profit ?? take_profit;
-
-  if (isPastStopLoss(side, sl, mark)) return 'close_at_market_loss';
-  if (isPastTakeProfit(side, tp, mark)) return 'close_at_market_profit';
-
-  if (slTpInvalidForMark(side, sl, mark) || tpInvalidForMark(side, tp, mark)) {
-    return 'recompute_and_place';
-  }
-
-  return 'place_sl_tp';
-}
 
 function shouldSkipProtectiveRetry(positionId: string, mark: number): boolean {
   const state = protectiveRetryState.get(positionId);
@@ -166,15 +124,7 @@ export function recomputeSlTpFromFill(params: {
   return { stop_loss, take_profit };
 }
 
-function slTpInvalidForMark(
-  side: string,
-  stop_loss: number,
-  mark: number
-): boolean {
-  const s = side.toLowerCase();
-  if (s === 'short') return stop_loss <= mark;
-  return stop_loss >= mark;
-}
+
 
 function pairSymbol(symbol: string): string {
   return `${symbol.toUpperCase().replace(/USDT$/i, '')}USDT`;
@@ -192,7 +142,7 @@ export function extractOpenAlgoOrderIds(orders: unknown): Set<string> {
   return ids;
 }
 
-/** Fetch live algo order ids; empty set on failure (treat DB ids as stale). */
+/** An unavailable order list must never be interpreted as canceled protection. */
 export async function fetchOpenAlgoOrderIds(symbol: string): Promise<Set<string>> {
   try {
     const { getOpenAlgoOrders } = await import('./binanceClient');
@@ -201,7 +151,7 @@ export async function fetchOpenAlgoOrderIds(symbol: string): Promise<Set<string>
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.warn(`[ProtectiveOrder] openAlgoOrders fetch failed for ${symbol}: ${msg}`);
-    return new Set();
+    throw error;
   }
 }
 
@@ -218,6 +168,7 @@ export async function reconcileStaleProtectiveOrderIds(position: {
   binance_tp_order_id: string | null;
   clearedSl: boolean;
   clearedTp: boolean;
+  repairBlocked?: 'flat' | 'unknown';
 }> {
   const slId = position.binance_sl_order_id ? String(position.binance_sl_order_id) : null;
   const tpId = position.binance_tp_order_id ? String(position.binance_tp_order_id) : null;
@@ -231,7 +182,22 @@ export async function reconcileStaleProtectiveOrderIds(position: {
     };
   }
 
-  const openIds = await fetchOpenAlgoOrderIds(position.symbol);
+  const unchanged = {binance_sl_order_id:slId,binance_tp_order_id:tpId,clearedSl:false,clearedTp:false};
+  let openIds: Set<string>;
+  try { openIds = await fetchOpenAlgoOrderIds(position.symbol); }
+  catch { return {...unchanged,repairBlocked:'unknown'}; }
+  if ((slId && !openIds.has(slId)) || (tpId && !openIds.has(tpId))) {
+    // A triggered stop disappears from open orders before local close reconciliation.
+    // Query authoritative positionRisk, without the demo user-trades fallback.
+    try {
+      const {getPositionRisk}=await import('./binance/account');
+      const rows=await getPositionRisk(pairSymbol(position.symbol));
+      if (!Array.isArray(rows)) return {...unchanged,repairBlocked:'unknown'};
+      const matching=rows.filter(r=>r.symbol===pairSymbol(position.symbol));
+      if (!matching.length || matching.some(r=>!Number.isFinite(r.positionAmt))) return {...unchanged,repairBlocked:'unknown'};
+      if (matching.every(r=>Number(r.positionAmt)===0)) return {...unchanged,repairBlocked:'flat'};
+    } catch { return {...unchanged,repairBlocked:'unknown'}; }
+  }
   let clearedSl = false;
   let clearedTp = false;
   let newSlId = slId;
@@ -266,6 +232,30 @@ export async function reconcileStaleProtectiveOrderIds(position: {
   };
 }
 
+/** Record local receipt of the exchange response without delaying protective placement. */
+function recordProtectiveAcknowledgement(
+  positionId: string, symbol: string, side: string, quantity: number,
+  protectionType: 'stop_loss' | 'take_profit', triggerPrice: number,
+  requestStartedAt: number, response: any
+): void {
+  const receivedAt = Date.now();
+  const data = {
+    acknowledgement_schema: 'client-receipt-v1',
+    algo_contract_evidence: response.algo_contract_evidence ?? null,
+    symbol, side, protection_type: protectionType,
+    binance_order_id: response.orderId == null ? null : String(response.orderId),
+    executed_qty: quantity, trigger_price: triggerPrice,
+    request_started_at: new Date(requestStartedAt).toISOString(),
+    acknowledgement_received_at: new Date(receivedAt).toISOString(),
+    timestamp: new Date(receivedAt).toISOString(),
+    exchange_status: response.status ?? null,
+    working_type: response.workingType ?? null,
+    acknowledgement_data_status: response.orderId == null ? 'missing_order_id' : 'observed',
+  };
+  void Promise.resolve().then(() => recordTestnetTradeEvent(positionId, 'protective_order_acknowledged', data))
+    .catch(() => console.warn(`[ProtectiveOrder] Acknowledgement journal failed for ${positionId}`));
+}
+
 async function placeSlTpOnBinance(
   positionId: string,
   symbol: string,
@@ -295,6 +285,7 @@ async function placeSlTpOnBinance(
 
   if (!opts?.skipSl) {
   try {
+    const requestStartedAt = Date.now();
     const slOrder = await placeStopLossOrder(
       client,
       symbolUsdt,
@@ -306,6 +297,8 @@ async function placeSlTpOnBinance(
       null
     );
     slId = String(slOrder.orderId);
+    recordProtectiveAcknowledgement(positionId, symbolUsdt, closeSide, executedQty,
+      'stop_loss', levels.stop_loss, requestStartedAt, slOrder);
   } catch (error: unknown) {
     slError = error instanceof Error ? error.message : String(error);
   }
@@ -313,6 +306,7 @@ async function placeSlTpOnBinance(
 
   if (!opts?.skipTp) {
   try {
+    const requestStartedAt = Date.now();
     const tpOrder = await placeTakeProfitOrder(
       client,
       symbolUsdt,
@@ -324,6 +318,8 @@ async function placeSlTpOnBinance(
       null
     );
     tpId = String(tpOrder.orderId);
+    recordProtectiveAcknowledgement(positionId, symbolUsdt, closeSide, executedQty,
+      'take_profit', levels.take_profit, requestStartedAt, tpOrder);
   } catch (error: unknown) {
     tpError = error instanceof Error ? error.message : String(error);
   }
@@ -385,6 +381,7 @@ export async function placeProtectiveOrdersForPosition(position: {
   account?: { current_balance?: number };
 }): Promise<ProtectivePlacementOutcome> {
   const reconciled = await reconcileStaleProtectiveOrderIds(position);
+  if (reconciled.repairBlocked) return reconciled.repairBlocked==='flat'?'skipped':'partial';
   position = {
     ...position,
     binance_sl_order_id: reconciled.binance_sl_order_id,
@@ -400,11 +397,14 @@ export async function placeProtectiveOrdersForPosition(position: {
 
   const side = position.side.toLowerCase() === 'short' ? 'short' : 'long';
   let mark = 0;
+  let markStatus: 'observed' | 'missing' | 'failed' = 'missing';
   try {
     const { fetchBinanceNetPosition } = await import('./binance-exposure.service');
     const live = await fetchBinanceNetPosition(position.symbol);
     mark = live?.markPrice ?? 0;
+    if (Number.isFinite(mark) && mark > 0) markStatus = 'observed';
   } catch {
+    markStatus = 'failed';
     /* proceed */
   }
 
@@ -415,12 +415,27 @@ export async function placeProtectiveOrdersForPosition(position: {
     return 'skipped';
   }
 
+  // Capture by value before asynchronous persistence; telemetry must not block protection.
+  const recordAction = (stage: 'planned' | 'recomputed', decision: string, levels?: SlTpLevels) => {
+    const finite = (value: number) => Number.isFinite(value) ? value : null;
+    const data = {
+      schema: 'protective-action-v1', stage, mark_status: markStatus,
+      observed_at: new Date().toISOString(),
+      input: { side, stop_loss: finite(position.stop_loss), take_profit: finite(position.take_profit),
+        mark: finite(mark), ...(levels ? { levels: { stop_loss: finite(levels.stop_loss), take_profit: finite(levels.take_profit) } } : {}) },
+      decision,
+    };
+    void Promise.resolve().then(() => recordTestnetTradeEvent(position.position_id, 'protective_action_evaluated', data))
+      .catch(() => console.warn('[ProtectiveOrder] Action journal persistence failed'));
+  };
+
   const plannedAction = evaluateProtectiveAction({
     side,
     stop_loss: position.stop_loss,
     take_profit: position.take_profit,
     mark,
   });
+  recordAction('planned', plannedAction);
   if (plannedAction === 'close_at_market_loss') {
     const closed = await marketCloseFromProtective(
       position,
@@ -482,6 +497,7 @@ export async function placeProtectiveOrdersForPosition(position: {
     mark,
     levels,
   });
+  recordAction('recomputed', levelAction, levels);
   if (levelAction === 'close_at_market_loss') {
     const closed = await marketCloseFromProtective(
       position,

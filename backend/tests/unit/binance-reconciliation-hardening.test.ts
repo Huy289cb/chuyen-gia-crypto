@@ -66,7 +66,9 @@ vi.mock('../../src/services/position-close.service', () => ({
 }));
 
 import { prisma } from '../../src/lib/prisma';
-import { getTestnetPositions, updateTestnetPosition } from '../../src/repositories/testnet.repository';
+import { getTestnetPositions, updateTestnetPosition, getTestnetPendingOrders } from '../../src/repositories/testnet.repository';
+import { getOpenOrders } from '../../src/services/binanceClient';
+import { recoverPendingOrderFromBinance } from '../../src/services/binance-order-fill.service';
 import { fetchActiveBinancePositions } from '../../src/services/binance-exposure.service';
 import { performStartupReconciliation } from '../../src/services/binance-reconciliation';
 
@@ -127,6 +129,18 @@ describe('binance-reconciliation hardening', () => {
     expect(fetchActiveBinancePositions).toHaveBeenCalledWith(undefined, {
       allowUserTradesFallback: false,
     });
+  });
+
+  it('recovers partially filled local rows even while their remainder is in open orders', async () => {
+    const partial = { order_id: 'partial', symbol: 'BTC', binance_order_id: '999', status: 'partially_filled' };
+    vi.mocked(getTestnetPendingOrders).mockImplementation(async filters => filters.status === 'partially_filled' ? [partial] as any : []);
+    vi.mocked(getOpenOrders).mockResolvedValue([{ orderId: 999, status: 'PARTIALLY_FILLED', symbol: 'BTCUSDT' }] as any);
+    vi.mocked(recoverPendingOrderFromBinance).mockResolvedValue('filled');
+    await performStartupReconciliation();
+    expect(getTestnetPendingOrders).toHaveBeenCalledWith({ status: 'partially_filled' });
+    expect(recoverPendingOrderFromBinance).toHaveBeenCalledWith(partial);
+    vi.mocked(getTestnetPendingOrders).mockResolvedValue([]);
+    vi.mocked(getOpenOrders).mockResolvedValue([]);
   });
 
   it('bookkeeping-closes phantom when positionRisk flat even if userTrades would show exposure', async () => {

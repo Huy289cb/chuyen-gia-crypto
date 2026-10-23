@@ -26,7 +26,8 @@ export function formatGateFailureReason(
     return `Grade ${setupResult.grade} dưới ngưỡng ${config.minGrade}`;
   }
   if (!confidencePass) {
-    return `Confidence ${(setupResult.confidence * 100).toFixed(0)}% dưới ngưỡng ${(config.minConfidence * 100).toFixed(0)}%`;
+    const label=setupResult.confidenceKind==='rule_quality'?'Rule quality score':'Confidence';
+    return `${label} ${(setupResult.confidence * 100).toFixed(0)}% dưới ngưỡng ${(config.minConfidence * 100).toFixed(0)}%`;
   }
   if (!regimePass) {
     const localNote =
@@ -67,7 +68,7 @@ function formatTimeframeBlock(row: SignalGateTimeframeRow, config: SignalGateCon
   const gate = formatGateFailureReason(output, config);
 
   const header = output.pass
-    ? `• ${timeframe}: PASS · grade ${s.grade} · conf ${(s.confidence * 100).toFixed(0)}% · ${s.regime}${s.playbookKey ? ` · ${s.playbookKey}` : ''}`
+    ? `• ${timeframe}: PASS · grade ${s.grade} · ${s.confidenceKind==='rule_quality'?'quality':'conf'} ${(s.confidence * 100).toFixed(0)}% · ${s.regime}${s.playbookKey ? ` · ${s.playbookKey}` : ''}`
     : `• ${timeframe}: BLOCK · grade ${s.grade} · ${s.regime}${gate ? ` (${gate})` : ''}`;
 
   const detail = s.detailReason?.trim();

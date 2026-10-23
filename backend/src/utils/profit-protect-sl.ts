@@ -22,6 +22,8 @@ export interface ProfitProtectInput {
   timeStopHours: number;
   /** Move BE into profit by this % of entry (fee cover). Default 0. */
   beFeeBufferPct?: number;
+  /** Optional cash-cost floor, already rounded in the favorable direction. Does not change activation. */
+  cashBreakevenSl?: number;
 }
 
 export interface ProfitProtectResult {
@@ -93,14 +95,19 @@ export function computeProfitProtectSl(input: ProfitProtectInput): ProfitProtect
   let candidate = currentSl;
   let action: ProfitProtectResult['action'] = 'none';
   let reason = 'no tighten';
-  const beSl = feeAwareBreakevenSl(side, entry, beFeeBufferPct);
+  const fixedBeSl = feeAwareBreakevenSl(side, entry, beFeeBufferPct);
+  if(input.cashBreakevenSl!==undefined&&(!Number.isFinite(input.cashBreakevenSl)||input.cashBreakevenSl<=0)){
+    return none('invalid cash breakeven SL',unrealizedPct,rMultiple);
+  }
+  const beSl = input.cashBreakevenSl===undefined?fixedBeSl:
+    side==='long'?Math.max(fixedBeSl,input.cashBreakevenSl):Math.min(fixedBeSl,input.cashBreakevenSl);
 
   // 1) Breakeven at ≥ N R
   if (beAtR > 0 && rMultiple >= beAtR) {
     if (isTighter(side, beSl, candidate)) {
       candidate = beSl;
       action = 'breakeven';
-      reason = `breakeven+fee ${beFeeBufferPct}% at ${rMultiple.toFixed(2)}R (threshold ${beAtR}R)`;
+      reason = `breakeven+fee ${beFeeBufferPct}%${input.cashBreakevenSl===undefined?'':` cash-cost SL ${beSl}`} at ${rMultiple.toFixed(2)}R (threshold ${beAtR}R)`;
     }
   }
 

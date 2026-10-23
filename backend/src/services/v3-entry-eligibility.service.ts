@@ -1,3 +1,8 @@
+import { evaluatePendingCancelCooldown, evaluatePostCloseCooldown, snapshotPendingCancelInputs } from '../utils/entry-history-cooldown-evaluation';
+import { randomUUID } from 'node:crypto';
+import { recordEntryStage } from '../utils/entry-trace';
+import { publishExposureObservation } from '../utils/exposure-observation-publish';
+import { evaluateSymbolExposure } from '../utils/symbol-exposure-evaluation';
 /**
  * Shared entry eligibility for LLM dispatch and V3 execution (scale-in within exposure cap).
  */
@@ -38,56 +43,37 @@ export async function getSymbolExposureSnapshot(
   symbol: string,
   methodId = 'kim_nghia'
 ): Promise<SymbolExposureSnapshot> {
+  const read_started_at = new Date().toISOString();
   const [openPositions, pendingOrders, account] = await Promise.all([
     getActiveTestnetPositions({ symbol, methodId }),
     getBlockingTestnetPendingOrders({ symbol, methodId }),
     getOrCreateTestnetAccount(symbol, methodId, 10000),
   ]);
 
+  const read_returned_at = new Date().toISOString();
   const balance = Number(account.current_balance ?? account.equity ?? 10000);
   const riskPolicy = getRiskPolicy();
   const maxExposureUsd = resolveMaxTotalExposureUsd(balance, riskPolicy.maxTotalExposureUsd);
 
-  const openUsd = openPositions.reduce(
-    (sum, p) => sum + Math.abs(Number(p.size_usd) || 0),
-    0
-  );
-  const pendingUsd = pendingOrders.reduce(
-    (sum, o) => sum + Math.abs(Number(o.size_usd) || 0),
-    0
-  );
-  const totalUsd = openUsd + pendingUsd;
-
-  const openSides = [
-    ...new Set(
-      openPositions
-        .map((p) => String(p.side).toLowerCase())
-        .filter((s): s is LocalSide => s === 'long' || s === 'short')
-    ),
-  ];
-  const pendingSides = [
-    ...new Set(
-      pendingOrders
-        .map((o) => String(o.side).toLowerCase())
-        .filter((s): s is LocalSide => s === 'long' || s === 'short')
-    ),
-  ];
-
-  return {
-    openUsd,
-    pendingUsd,
-    totalUsd,
-    maxExposureUsd,
-    remainingUsd: Math.max(0, maxExposureUsd - totalUsd),
-    openSides,
-    pendingSides,
-  };
+  const exposure = evaluateSymbolExposure(openPositions, pendingOrders, maxExposureUsd);
+  publishExposureObservation({
+    input: { schema: 'symbol-exposure-read-v1', read_id: randomUUID(), symbol, method_id: methodId,
+      read_started_at, read_returned_at, observed_at: new Date().toISOString(),
+      account_id: account.id, balance_input: account.current_balance ?? account.equity ?? null,
+      max_exposure_usd: maxExposureUsd,
+      open_positions: openPositions.map(p => ({ position_id: p.position_id, side: p.side, status: p.status, size_usd: p.size_usd })),
+      pending_orders: pendingOrders.map(o => ({ order_id: o.order_id, side: o.side, status: o.status, size_usd: o.size_usd })),
+      read_atomicity: 'parallel_repository_reads_not_joint_snapshot' },
+    decision: exposure,
+  }, data => recordEntryStage('symbol_exposure_evaluated', data));
+  return exposure;
 }
 
 async function hasRecentPendingCancelCooldown(symbol: string): Promise<string | null> {
   const cooldownMin = getPendingOrderReentryCooldownMinutes();
   if (!(cooldownMin > 0)) return null;
   const since = new Date(Date.now() - cooldownMin * 60_000);
+  const read_started_at = new Date().toISOString();
   const events = await prisma.testnetTradeEvent.findMany({
     where: {
       position_id: PIPELINE_EVENT_POSITION_ID,
@@ -98,23 +84,13 @@ async function hasRecentPendingCancelCooldown(symbol: string): Promise<string | 
     take: 20,
     select: { event_data: true, timestamp: true },
   });
-  const sym = symbol.toUpperCase();
-  for (const ev of events) {
-    if (!ev.event_data) {
-      // BTC-only production: treat unscoped cancel as blocking.
-      return `pending re-entry cooldown ${cooldownMin}m after cancel`;
-    }
-    try {
-      const data = JSON.parse(ev.event_data) as { symbol?: string; order_id?: string };
-      if (!data.symbol || String(data.symbol).toUpperCase().replace(/USDT$/i, '') === sym) {
-        const ago = Math.ceil((Date.now() - ev.timestamp.getTime()) / 60_000);
-        return `pending re-entry cooldown ${cooldownMin}m after cancel (${ago}m ago)`;
-      }
-    } catch {
-      return `pending re-entry cooldown ${cooldownMin}m after cancel`;
-    }
-  }
-  return null;
+  const read_returned_at = new Date().toISOString();
+  const decision_at = Date.now();
+  const decision = evaluatePendingCancelCooldown(symbol, cooldownMin, events, () => decision_at);
+  publishExposureObservation({input:{schema:'entry-history-cooldown-read-v1',kind:'pending_cancel',read_id:randomUUID(),symbol,
+    cooldown_min:cooldownMin,query_since:since.toISOString(),query_limit:20,read_started_at,read_returned_at,decision_at,
+    events:snapshotPendingCancelInputs(events)},decision}, data=>recordEntryStage('entry_history_cooldown_evaluated',data));
+  return decision;
 }
 
 /**
@@ -132,6 +108,7 @@ export async function assertSameSidePostCloseCooldown(
 
   const since = new Date(Date.now() - lookbackMin * 60_000);
   const sym = symbol.toUpperCase().replace(/USDT$/i, '');
+  const read_started_at = new Date().toISOString();
   const recent = await prisma.testnetPosition.findFirst({
     where: {
       symbol: sym,
@@ -142,20 +119,25 @@ export async function assertSameSidePostCloseCooldown(
     orderBy: { close_time: 'desc' },
     select: { close_time: true, realized_pnl: true, position_id: true, side: true },
   });
-  if (!recent?.close_time) return null;
+  const read_returned_at = new Date().toISOString();
+  if (!recent?.close_time) {
+    publishExposureObservation({input:{schema:'entry-history-cooldown-read-v1',kind:'post_close',read_id:randomUUID(),symbol:sym,method_id:methodId,
+      cooldown_min:lookbackMin,query_since:since.toISOString(),read_started_at,read_returned_at,decision_at:Date.now(),recent:null},decision:null},
+      data=>recordEntryStage('entry_history_cooldown_evaluated',data));
+    return null;
+  }
 
   const wasLoss = (recent.realized_pnl ?? 0) < -0.01;
   const cooldownMin = getPostCloseSameSideCooldownMinutes(wasLoss);
   if (!(cooldownMin > 0)) return null;
 
-  const elapsedMin = (Date.now() - recent.close_time.getTime()) / 60_000;
-  if (elapsedMin >= cooldownMin) return null;
-
-  const left = Math.ceil(cooldownMin - elapsedMin);
-  return (
-    `post-close cooldown ${left}m after ${wasLoss ? 'loss' : 'close'} ` +
-    `(${cooldownMin}m window, last ${recent.side})`
-  );
+  const decision_at = Date.now();
+  const decision = evaluatePostCloseCooldown({ close_time: recent.close_time, side: recent.side }, wasLoss, cooldownMin, () => decision_at);
+  publishExposureObservation({input:{schema:'entry-history-cooldown-read-v1',kind:'post_close',read_id:randomUUID(),symbol:sym,method_id:methodId,
+    cooldown_min:cooldownMin,query_since:since.toISOString(),read_started_at,read_returned_at,decision_at,
+    recent:{position_id:recent.position_id,side:recent.side,close_time:recent.close_time.toISOString(),realized_pnl:recent.realized_pnl}},decision},
+    data=>recordEntryStage('entry_history_cooldown_evaluated',data));
+  return decision;
 }
 
 export async function canRunLlmDispatchForSymbol(
@@ -170,6 +152,14 @@ export async function canRunLlmDispatchForSymbol(
     if (!guard.allowed) {
       return { allowed: false, reason: guard.reason };
     }
+  }
+
+  // This legacy-named guard blocks either side. Check before the scheduler
+  // consumes a durable retest claim or pays for an LLM review; execution still
+  // rechecks it to cover a position closing between admission and submission.
+  const postCloseCooldown = await assertSameSidePostCloseCooldown(symbol, 'long', methodId);
+  if (postCloseCooldown) {
+    return { allowed: false, reason: postCloseCooldown };
   }
 
   const blockingPending = await getBlockingTestnetPendingOrders({ symbol, methodId });

@@ -1,0 +1,21 @@
+const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert/strict'),ts=require('typescript'),crypto=require('crypto'),{PrismaClient}=require('@prisma/client');
+const url=process.env.DATABASE_URL;if(!url||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!=='55439'||new URL(url).pathname!=='/crypto_reset_test')throw Error('Refusing non-isolated DB');
+const db=new PrismaClient({datasources:{db:{url}}}),reader=new PrismaClient({datasources:{db:{url}}}),dist=path.resolve(__dirname,'../dist');
+function load(file,deps){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src',file),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{module:m,exports:m.exports,require:id=>{assert.ok(id in deps,id);return deps[id];}});return m.exports;}
+(async()=>{
+ const exists=await db.$queryRaw`SELECT to_regclass('public.provider_request_journal')::text AS name`;if(exists[0].name!==null)throw Error('Expected fresh isolated provider journal');
+ await db.$transaction(async tx=>{for(const statement of fs.readFileSync(path.join(__dirname,'../sql/provider-request-journal-v1.sql'),'utf8').split(';').filter(s=>s.trim()))await tx.$executeRawUnsafe(statement);});
+ const helper=load('utils/provider-journal-record.ts',{}),repo=load('repositories/provider-journal.repository.ts',{'../lib/prisma':{prisma:db},'../utils/provider-journal-record':helper});
+ const request_id='isolated-'+crypto.randomUUID(),data={request_id,provider:'example.invalid',model:'fixture',trace_id:null,provider_purpose:'telegram',cost_usd:null,cost_status:'unknown'};
+ await repo.insertProviderJournalEvent('llm_provider_request',data);await repo.insertProviderJournalEvent('llm_provider_result',{...data,cost_usd:.01,cost_status:'reported'});
+ const rows=()=>reader.$queryRaw`SELECT request_id,event_type,metadata,recorded_at FROM public.provider_request_journal WHERE request_id=${request_id} ORDER BY event_type`;
+ const before=await rows();assert.equal(before.length,2);
+ const routes=new Map(),deps={express:{Router:()=>({get(){},post:(p,fn)=>routes.set(p,fn)})},'../lib/prisma':{prisma:db},'../repositories/testnet.repository':{},'../services/position-mark':{}};
+ const m={exports:{}};vm.runInNewContext(fs.readFileSync(path.join(dist,'routes/testnet.js'),'utf8'),{module:m,exports:m.exports,Date,process,console:{log(){},error(){}},require:id=>id in deps?deps[id]:id==='node:crypto'?crypto:require(path.resolve(dist,'routes',id))});
+ const a=await db.testnetAccount.create({data:{symbol:'BTC',method_id:'provider_reset_'+crypto.randomUUID(),starting_balance:30,current_balance:29,equity:29}});
+ const id='provider-proof-'+crypto.randomUUID();await db.testnetPosition.create({data:{account_id:a.id,position_id:id,symbol:'BTC',side:'long',entry_price:100,stop_loss:99,take_profit:102,size_usd:100,size_qty:1,risk_usd:1,risk_percent:1,expected_rr:2,status:'closed'}});await db.testnetTradeEvent.create({data:{position_id:id,event_type:'fixture'}});
+ const call=async()=>{const res={code:200,status(n){this.code=n;return this;},json(body){this.body=body;return this;}};await routes.get('/reset/:accountId')({params:{accountId:String(a.id)},prisma:db},res);assert.equal(res.code,200);assert.equal(res.body.success,true);};
+ await call();assert.equal(await db.testnetPosition.count({where:{account_id:a.id}}),0);assert.equal(await db.testnetTradeEvent.count({where:{position_id:id}}),0);assert.deepEqual(await rows(),before);
+ await call();assert.deepEqual(await rows(),before);await db.testnetAccount.delete({where:{id:a.id}});assert.deepEqual(await rows(),before);
+ fs.writeFileSync(process.argv[2],JSON.stringify({passed:true,isolatedDatabase:true,committedProviderRows:2,independentReaderVerified:true,actualDeployedResetHandler:true,resets:2,accountDeletionPreservesRows:true,productionTouched:false,requestId:request_id,limits:'Isolated schema/source repository plus actual deployed reset route. No live telemetry wiring, crash recovery or complete provider cost coverage proof.'},null,2),{flag:'wx',mode:0o600});console.log('Committed provider rows survive two actual resets and account deletion');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>Promise.all([db.$disconnect(),reader.$disconnect()]));

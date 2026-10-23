@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const source=fs.readFileSync(require('path').join(__dirname,'run-canonical-portfolio-replay.cjs'),'utf8');
+const start=source.indexOf('function assessBaselineInputBundle('),end=source.indexOf('// END baseline bundle assessment',start);assert(start>=0&&end>start);
+const check=vm.runInNewContext('('+source.slice(start,end)+')');
+const telemetry={since:'2026-10-03T06:12:20.859Z',through:'2026-10-04T06:12:20.859Z'},seed={known_at:telemetry.since},provider={schema:'independent-provider-export-v1',source_table:'public.provider_request_journal',...telemetry};
+assert.equal(check(telemetry,provider,seed).status,'temporally_aligned_only');
+assert(check(telemetry,provider,{known_at:telemetry.through}).reasons.includes('initial_seed_does_not_precede_window'));
+assert(check(telemetry,{...provider,through:telemetry.since},seed).reasons.includes('provider_window_does_not_cover_telemetry'));
+assert(check(telemetry,{...provider,source_table:'fixture'},seed).reasons.includes('provider_production_source_not_established'));
+assert(check(telemetry,null,null).reasons.includes('missing_initial_seed'));
+assert(check({...telemetry,since:'invalid'},provider,seed).reasons.includes('invalid_telemetry_window'));
+assert.equal(check(telemetry,provider,seed).economic_roi,null);
+console.log(JSON.stringify({actualRunnerFunctionChecks:7,temporallyAlignedDoesNotMeanComplete:true}));

@@ -1,0 +1,5 @@
+import {it,expect} from 'vitest';import {evaluateLossStreakCooldown as evaluate,replayLossStreakCooldown as replay} from '../../src/utils/loss-streak-cooldown-decision';
+const base={consecutiveLosses:2,lastLossTime:1000,minStreak:2,untilMs:3601000,checkedAtMs:1000,remainingAtMs:1001};
+it('preserves active cooldown reason with separate clocks',()=>{expect(evaluate(base)).toEqual({allowed:false,reason:'Binance loss streak 2 — cooldown 1.0h remaining (until 1970-01-01T01:00:01.000Z)'});expect(replay(base)).toMatchObject({status:'evaluated',history_coverage:'not_established'});});
+it('allows expired/exact-boundary and below-threshold/fallback paths',()=>{for(const i of [{...base,checkedAtMs:3601000,remainingAtMs:null},{...base,consecutiveLosses:1,untilMs:null,checkedAtMs:null,remainingAtMs:null},{...base,lastLossTime:0,untilMs:null,checkedAtMs:null,remainingAtMs:null}])expect(evaluate(i).allowed).toBe(true);});
+it('does not pretend unknown resolved clocks or invalid numbers are valid replay',()=>{expect(replay({...base,remainingAtMs:null}).status).toBe('unknown');expect(replay({...base,untilMs:NaN}).status).toBe('unknown');});

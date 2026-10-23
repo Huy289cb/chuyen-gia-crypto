@@ -14,6 +14,7 @@ import {
 import {
   findLocalOrderForBinanceEvent,
   materializePositionFromPendingFill,
+  recoverPendingOrderFromBinance,
   resolveFillAvgPrice,
   resolveFillQty,
 } from './binance-order-fill.service';
@@ -133,6 +134,13 @@ export async function handleOrderTradeUpdate(event: any): Promise<void> {
     return;
   }
 
+  // Cancellation/expiry terminates the unfilled remainder, not the executed exposure.
+  if (localOrder && orderType === 'LIMIT' &&
+      ['CANCELED', 'EXPIRED', 'REJECTED'].includes(orderStatus) &&
+      Number.isFinite(executedQty) && executedQty > 0) {
+    await handleOrderFilled(localOrder, order, executedQty, eventTime);
+    return;
+  }
   switch (orderStatus) {
     case 'NEW':
       console.log(`[BinanceWebSocketSync] Order NEW: ${binanceOrderId}`);
@@ -200,6 +208,7 @@ async function handlePartialFill(
   eventTime: number
 ): Promise<void> {
   if (!localOrder) return;
+  if (isPendingOrderTerminal(localOrder.status)) return;
 
   const price =
     avgPrice > 0 ? avgPrice : Number(localOrder.entry_price) || 0;
@@ -225,6 +234,8 @@ async function handlePartialFill(
     suppress_telegram: true,
     timestamp: new Date(eventTime).toISOString(),
   });
+  // Shared polling recovery cancels/seals the remainder and reads cumulative final quantity.
+  await recoverPendingOrderFromBinance({ ...localOrder, status: 'partially_filled' });
 }
 
 async function handleOrderFilled(

@@ -1,7 +1,8 @@
+import { formatSetupNumber } from './setup-number-format';
 import type { SetupGateEvidence } from '../analyzers/setup-gate.types';
 
 function fmtPrice(n: number): string {
-  return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return formatSetupNumber(n);
 }
 
 /** Multi-line Vietnamese explanation for Telegram / dashboard */
@@ -21,8 +22,8 @@ export function formatSetupGateDetail(evidence: SetupGateEvidence): string {
   }
 
   for (const pb of playbooks) {
-    const label =
-      pb.playbook === 'liquidity_sweep' ? 'Liquidity sweep' : 'Breakout + volume';
+    const label = {liquidity_sweep:'Liquidity sweep',breakout_volume:'Breakout + volume',
+      h1_acceptance_retest:'H1 acceptance/retest',h2_range_sweep_reclaim:'H2 range sweep/reclaim'}[pb.playbook];
     if (pb.detected) {
       lines.push(`${label}: có · grade ${pb.grade} — ${pb.summary}`);
     } else {
@@ -37,7 +38,7 @@ export function formatSetupGateDetail(evidence: SetupGateEvidence): string {
 export function formatSetupGateSummary(evidence: SetupGateEvidence): string {
   const pb = evidence.playbooks
     .map((p) => {
-      const tag = p.playbook === 'liquidity_sweep' ? 'LS' : 'BO';
+      const tag = {liquidity_sweep:'LS',breakout_volume:'BO',h1_acceptance_retest:'H1',h2_range_sweep_reclaim:'H2'}[p.playbook];
       return p.detected ? `${tag}:${p.grade}` : `${tag}:—`;
     })
     .join(' ');

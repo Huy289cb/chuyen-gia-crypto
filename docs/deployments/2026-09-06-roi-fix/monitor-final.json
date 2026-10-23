@@ -1,0 +1,49 @@
+{
+  "checked_at": "2026-09-07T08:16:02.013318+00:00",
+  "alerts": [],
+  "processes": {
+    "crypto-api": {
+      "status": "online",
+      "pids": [
+        2946840
+      ]
+    },
+    "crypto-worker": {
+      "status": "online",
+      "pids": [
+        2946841
+      ]
+    }
+  },
+  "db": {
+    "heartbeats": [
+      {
+        "name": "PendingOrderLifecycle",
+        "age_seconds": 61.597845
+      },
+      {
+        "name": "PositionMonitor",
+        "age_seconds": 61.582845
+      },
+      {
+        "name": "MarketScan",
+        "age_seconds": 56.583845
+      },
+      {
+        "name": "LLMDispatch",
+        "age_seconds": 2.302845
+      }
+    ],
+    "account": {
+      "balance": 34.27714639,
+      "baseline": 40,
+      "net_pnl": -5.72285361,
+      "trades": 36
+    },
+    "open_positions": 0,
+    "ledger_verified": 36,
+    "closed_positions": 36,
+    "adaptive_candidates": 0,
+    "provider_calls": 0
+  }
+}

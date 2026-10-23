@@ -4,6 +4,7 @@ const mockUpdateTestnetPendingOrder = vi.hoisted(() => vi.fn());
 const mockRecordPipelineEvent = vi.hoisted(() => vi.fn());
 const mockFindLocalOrderForBinanceEvent = vi.hoisted(() => vi.fn());
 const mockMaterializePositionFromPendingFill = vi.hoisted(() => vi.fn());
+const mockRecoverPendingOrder = vi.hoisted(() => vi.fn());
 const mockCloseOpenPositionFromBinanceFill = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/repositories/testnet.repository', () => ({
@@ -14,6 +15,7 @@ vi.mock('../../src/repositories/testnet.repository', () => ({
 vi.mock('../../src/services/binance-order-fill.service', () => ({
   findLocalOrderForBinanceEvent: mockFindLocalOrderForBinanceEvent,
   materializePositionFromPendingFill: mockMaterializePositionFromPendingFill,
+  recoverPendingOrderFromBinance: mockRecoverPendingOrder,
   resolveFillAvgPrice: (order: { ap?: string; L?: string }, _qty: number, fallback = 0) =>
     Number(order.ap ?? order.L ?? fallback),
   resolveFillQty: (order: { z?: string; l?: string }, fallback = 0) =>
@@ -89,6 +91,20 @@ describe('binance websocket trade events', () => {
         suppress_telegram: true,
       })
     );
+  });
+
+  it.each(['CANCELED','EXPIRED','REJECTED'])('materializes the executed part of a terminal LIMIT %s',async status=>{
+    await handleOrderTradeUpdate({E:Date.parse('2026-10-02T04:00:00Z'),o:{i:12345,X:status,s:'BTCUSDT',o:'LIMIT',z:'0.0005',ap:'61020',c:'client_pending_1'}});
+    expect(mockMaterializePositionFromPendingFill).toHaveBeenCalledWith(expect.objectContaining({order_id:'pending_1'}),.0005,61020,Date.parse('2026-10-02T04:00:00Z'));
+    expect(mockUpdateTestnetPendingOrder).not.toHaveBeenCalled();
+  });
+
+  it('routes active partial fill through shared remainder recovery after recording observed quantity', async () => {
+    await handleOrderTradeUpdate({ E: Date.now(), o: { i: 12345, X: 'PARTIALLY_FILLED', s: 'BTCUSDT', o: 'LIMIT', z: '0.001', ap: '61020' } });
+    expect(mockUpdateTestnetPendingOrder).toHaveBeenCalledWith('pending_1', expect.objectContaining({ status: 'partially_filled', executed_size_qty: 0.001 }));
+    expect(mockRecoverPendingOrder).toHaveBeenCalledWith(expect.objectContaining({ order_id: 'pending_1', status: 'partially_filled' }));
+    expect(mockMaterializePositionFromPendingFill).not.toHaveBeenCalled();
+    expect(mockUpdateTestnetPendingOrder.mock.invocationCallOrder[0]).toBeLessThan(mockRecoverPendingOrder.mock.invocationCallOrder[0]);
   });
 
   it('records unlinked algo fills on the pipeline anchor instead of position id "unknown"', async () => {

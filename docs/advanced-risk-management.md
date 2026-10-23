@@ -1,5 +1,7 @@
 # Advanced Risk Management
 
+> **Tài liệu thiết kế lịch sử, không phải cấu hình vận hành.** Các mức ngày5%/cooldown và schema ví dụ bên dưới không thay thế [chính sách hiện hành: 1h / 10% / 3%](runtime-risk-policy.md).
+
 This document outlines the design and implementation guide for advanced risk management features to be implemented in future phases.
 
 ---

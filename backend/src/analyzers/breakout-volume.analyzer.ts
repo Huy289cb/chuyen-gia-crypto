@@ -1,3 +1,4 @@
+import { formatSetupNumber } from '../utils/setup-number-format';
 /**
  * Breakout + Volume Analyzer
  */
@@ -15,7 +16,7 @@ export interface BreakoutVolumeResult {
 }
 
 function fmt(n: number, d = 2): string {
-  return n.toLocaleString('en-US', { maximumFractionDigits: d });
+  return formatSetupNumber(n, d);
 }
 
 export interface BreakoutVolumeOptions {
@@ -59,6 +60,11 @@ export function analyzeBreakoutVolume(
   const minVolRatio = 1.5;
 
   const metrics: PlaybookEvidence['metrics'] = {
+    detectorVersion: 'breakout_volume_v1',
+    anchorHighOpenTime: consolidationCandles.find((c) => c.high === resistance)?.timestamp ?? null,
+    anchorLowOpenTime: consolidationCandles.find((c) => c.low === support)?.timestamp ?? null,
+    anchorWindowEndOpenTime: consolidationCandles.at(-1)?.timestamp ?? null,
+    detectionOpenTime: currentCandle.timestamp,
     windowCandles: windowBars,
     consolidationBars: consolidationCandles.length,
     resistance,

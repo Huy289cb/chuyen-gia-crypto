@@ -9,6 +9,21 @@ export interface TestbedVariant {
   minConfidence?: number;
   gradeBMinConfidence?: number;
   gradeBAllowedPlaybooks?: string[];
+  allowedRegimes?: Array<'trend' | 'range' | 'chop'>;
+  blockRangeEntries?: boolean;
+  /** Allow range candidates to skip the generic HTF-regime=trend gate. */
+  skipHtfTrendForRange?: boolean;
+  /** Optional extra allowlist applied only when the candidate regime is range/chop. */
+  rangeAllowedPlaybooks?: string[];
+  structureBiasEnabled?: boolean;
+  structureShortRequireBos?: boolean;
+  structureLongRequireBos?: boolean;
+  requireHtfSideAlign?: boolean;
+  htfSideAlignFailClosed?: boolean;
+  requirePullback?: boolean;
+  pullbackMaxAbovePct?: number;
+  breakoutPullbackMaxAbovePct?: number;
+  pullbackMaxBelowPct?: number;
   block5mWhen1hRange?: boolean;
   require5mHtfConfirm?: boolean;
   enableCooldown?: boolean;
@@ -31,6 +46,121 @@ export const TESTBED_VARIANTS: Record<string, TestbedVariant> = {
     minGrade: 'B',
     gradeBMinConfidence: 0.85,
     gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+  },
+  'relax-b70-trend-sweep': {
+    id: 'relax-b70-trend-sweep',
+    label: 'B=0.70 sweep only; trend + structure/BOS + pullback unchanged',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    enableCooldown: true,
+  },
+  'relax-b70-trend-both': {
+    id: 'relax-b70-trend-both',
+    label: 'B=0.70 sweep+breakout; trend + structure/BOS + pullback unchanged',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim', 'breakout_volume'],
+    enableCooldown: true,
+  },
+  'relax-b70-trend-breakout': {
+    id: 'relax-b70-trend-breakout',
+    label: 'B=0.70 breakout only; trend + structure/BOS + pullback unchanged',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['breakout_volume'],
+    enableCooldown: true,
+  },
+  'relax-b70-no-bos': {
+    id: 'relax-b70-no-bos',
+    label: 'B=0.70 sweep; trend + directional structure, BOS not required',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    structureShortRequireBos: false,
+    structureLongRequireBos: false,
+    enableCooldown: true,
+  },
+  'relax-b70-range-sweep': {
+    id: 'relax-b70-range-sweep',
+    label: 'B=0.70 sweep; range allowed only for sweep; structure/BOS retained',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    allowedRegimes: ['trend', 'range'],
+    blockRangeEntries: false,
+    skipHtfTrendForRange: true,
+    rangeAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    enableCooldown: true,
+  },
+  'relax-b70-range-no-bos': {
+    id: 'relax-b70-range-no-bos',
+    label: 'B=0.70 range sweep; directional structure retained, BOS not required',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    allowedRegimes: ['trend', 'range'],
+    blockRangeEntries: false,
+    skipHtfTrendForRange: true,
+    rangeAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    structureShortRequireBos: false,
+    structureLongRequireBos: false,
+    enableCooldown: true,
+  },
+  'relax-b70-range-pb050': {
+    id: 'relax-b70-range-pb050',
+    label: 'B=0.70 range sweep; BOS retained; pullback chase band widened to 0.50%',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    allowedRegimes: ['trend', 'range'],
+    blockRangeEntries: false,
+    skipHtfTrendForRange: true,
+    rangeAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    pullbackMaxAbovePct: 0.5,
+    breakoutPullbackMaxAbovePct: 0.5,
+    enableCooldown: true,
+  },
+  'relax-b70-range-no-bos-pb050': {
+    id: 'relax-b70-range-no-bos-pb050',
+    label: 'B=0.70 range sweep; no BOS; pullback chase band 0.50%',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    allowedRegimes: ['trend', 'range'],
+    blockRangeEntries: false,
+    skipHtfTrendForRange: true,
+    rangeAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    structureShortRequireBos: false,
+    structureLongRequireBos: false,
+    pullbackMaxAbovePct: 0.5,
+    breakoutPullbackMaxAbovePct: 0.5,
+    enableCooldown: true,
+  },
+  'relax-b70-range-both-no-bos-pb050': {
+    id: 'relax-b70-range-both-no-bos-pb050',
+    label: 'Upper screen: B range sweep+breakout; no BOS; pullback band 0.50%',
+    minGrade: 'B',
+    minConfidence: 0.7,
+    gradeBMinConfidence: 0.7,
+    gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim', 'breakout_volume'],
+    allowedRegimes: ['trend', 'range'],
+    blockRangeEntries: false,
+    skipHtfTrendForRange: true,
+    rangeAllowedPlaybooks: ['liquidity_sweep_reclaim', 'breakout_volume'],
+    structureShortRequireBos: false,
+    structureLongRequireBos: false,
+    pullbackMaxAbovePct: 0.5,
+    breakoutPullbackMaxAbovePct: 0.5,
+    enableCooldown: true,
   },
   'block-5m-range': {
     id: 'block-5m-range',

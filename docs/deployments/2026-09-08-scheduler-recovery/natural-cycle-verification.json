@@ -1,0 +1,17 @@
+{
+  "verifiedAt": "2026-09-08T08:49:41.760406+00:00",
+  "automaticMarketScanCycle": "2026-09-08 15:45 ICT",
+  "startCount": 1,
+  "completionCount": 1,
+  "lines": [
+    "2026-09-08T15:45:06: [MarketScan] Starting market scan",
+    "2026-09-08T15:45:07: [MarketScan] Fetched 100 candles (99 closed) for BTC 1h (source: binance)",
+    "2026-09-08T15:45:07: [MarketScan] BTC 1h: BLOCK (duplicate) - Duplicate signal - using cached result",
+    "2026-09-08T15:45:08: [MarketScan] Fetched 100 candles (99 closed) for BTC 5m (source: binance)",
+    "2026-09-08T15:45:09: [MarketScan] BTC 5m: BLOCK - Grade D d\u01b0\u1edbi ng\u01b0\u1ee1ng B \u00b7 Setup: Kh\u00f4ng c\u00f3 setup A/B \u2014 xem chi ti\u1ebft playbook b\u00ean d\u01b0\u1edbi \u00b7 Gi\u00e1 78,509.9 \u00b7 99 n\u1ebfn \u00b7 TF 5m | Regime RANGE: RANGE (m\u1eb7c \u0111\u1ecbnh): trend 0.01%, bi\u1ebfn \u0111\u1ed9ng 0.28%, bi\u00ean 1.26% |   (bi\u1ebfn \u0111\u1ed9ng 0.28%, trend 0.01%, bi\u00ean 50n 1.26%) | Liquidity sweep: kh\u00f4ng \u2014 H 78,525.9 \u2264 \u0111\u1ec9nh 19n 78,850 (ch\u01b0a qu\u00e9t buy-side); L 78,479.3 \u2265 \u0111\u00e1y 19n 78,133 (ch\u01b0a qu\u00e9t sell\u2026 \u00b7 Regime: range",
+    "2026-09-08T15:45:10: [MarketScan] Fetched 100 candles (99 closed) for BTC 15m (source: binance)",
+    "2026-09-08T15:45:10: [MarketScan] BTC 15m: BLOCK - Grade D d\u01b0\u1edbi ng\u01b0\u1ee1ng B \u00b7 Setup: Kh\u00f4ng c\u00f3 setup A/B \u2014 xem chi ti\u1ebft playbook b\u00ean d\u01b0\u1edbi \u00b7 Gi\u00e1 78,509.9 \u00b7 99 n\u1ebfn \u00b7 TF 15m | Regime RANGE: RANGE (m\u1eb7c \u0111\u1ecbnh): trend 0.02%, bi\u1ebfn \u0111\u1ed9ng 0.41%, bi\u00ean 1.70% |   (bi\u1ebfn \u0111\u1ed9ng 0.41%, trend 0.02%, bi\u00ean 50n 1.70%) | Liquidity sweep: kh\u00f4ng \u2014 H 78,540.8 \u2264 \u0111\u1ec9nh 19n 78,925 (ch\u01b0a qu\u00e9t buy-side); L 78,418.8 \u2265 \u0111\u00e1y 19n 78,133 (ch\u01b0a qu\u00e9t sel\u2026 \u00b7 Regime: range",
+    "2026-09-08T15:45:17: [MarketScan] Market scan completed"
+  ],
+  "note": "Natural timer cycle; missed-tick and duplicate cases covered separately by integration tests."
+}

@@ -67,14 +67,14 @@ async function runPriceSyncJob() {
       const priceMoved =
         prevPrice == null ||
         Math.abs(item.price - prevPrice) / Math.max(Math.abs(prevPrice), 1e-9) >= 0.0001;
-      lastTickerPrice.set(item.coin, item.price);
-
       if (priceMoved) {
         await saveLatestPrice({
           coin: item.coin,
           price: item.price,
           volume24h: item.volume,
         });
+        // Compare future ticks with the last successful write, including retries after failures.
+        lastTickerPrice.set(item.coin, item.price);
       }
 
       const lastHist = lastPriceHistoryAt.get(item.coin) ?? 0;
@@ -178,7 +178,8 @@ export async function startWorkerScheduler(): Promise<void> {
   // Pending limit TTL / drift — every 5 min (also runs at start of LLM dispatch)
   startPendingOrderScheduler();
 
-  if (workerConfig.enableTestnetSync && process.env.BINANCE_ENABLED === 'true') {
+  // Exchange wallet/income sync must remain active when legacy simulated fills are disabled.
+  if (process.env.BINANCE_ENABLED === 'true') {
     const balanceSyncTask = cron.schedule('*/5 * * * *', () => {
       void syncAllTestnetAccountsFromBinance();
     });

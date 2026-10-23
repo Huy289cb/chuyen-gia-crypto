@@ -11,7 +11,7 @@ import { prisma } from '../src/lib/prisma';
 import { runClosedPositionPnlReconcile } from '../src/services/position-pnl-reconcile.service';
 
 async function main(): Promise<void> {
-  const dryRun = process.argv.includes('--dry-run');
+  const dryRun = !process.argv.includes('--apply');
   const symbol = process.env.RECONCILE_SYMBOL ?? 'BTC';
   const methodId = process.env.RECONCILE_METHOD_ID ?? 'kim_nghia';
 

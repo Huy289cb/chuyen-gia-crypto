@@ -1,0 +1,17 @@
+'use strict';
+const fs=require('fs'),path=require('path'),crypto=require('crypto');
+function assess(manifest,result){
+ const network=result.network_receipts??[],cached=result.provider_receipt_replay?.used??[];const inventoryMissing=!Array.isArray(result.network_receipts)||(/exact_recorded|exact_receipts/.test(manifest.provider_mode??'')&&!Array.isArray(result.provider_receipt_replay?.used));
+ const knownCost=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0;
+ const costs=[...network.map(r=>r.response?.usage?.cost),...cached.map(r=>r.reported_cost)];
+ const missing=costs.filter(c=>!knownCost(c)).length+(result.provider_requests?.length??0);
+ const economicAi=missing||inventoryMissing?null:costs.reduce((a,c)=>a+c,0);
+ const wallet=result.exchange?.wallet,equity=result.exchange?.equity;
+ const observedDelta=Number.isFinite(equity)&&Number.isFinite(manifest.capital)?equity-manifest.capital:null;
+ const observedEconomicNet=observedDelta!==null&&economicAi!==null?observedDelta-economicAi:null;
+ const completed=result.status==='integration_window_completed';
+ const filledEntries=Array.isArray(result.exchange?.orders)?result.exchange.orders.filter(o=>o.intent==='OPEN'&&o.status==='FILLED').length:null;
+ return {schema:'historical-baseline-assessment-v1',status:completed?'modeled_window_completed_gates_unproven':'incomplete_registered_window',registered_window:{start:manifest.start,end:manifest.end},terminal_run_status:result.status,capital:manifest.capital,observed_wallet:wallet??null,observed_marked_equity:equity??null,observed_equity_delta:observedDelta,economic_provider_cost_usd:economicAi,new_reported_billing_cost_usd:result.new_reported_provider_cost_usd??null,provider_cost_inventory_complete:!inventoryMissing,unpriced_provider_requests:inventoryMissing?null:missing,observed_modeled_economic_net:observedEconomicNet,modeled_roi_base:completed&&observedEconomicNet!==null?observedEconomicNet/manifest.capital:null,roi_stress:null,observed_entry_fills:filledEntries,independent_entry_fills:null,fill_uplift:null,open_quantity:result.exchange?.quantity??null,gates:{F:'partial',P:'partial',E:'not_open',confirmation:'not_started',shadow:'not_started',rollout:'not_started'},limitations:['Development data already used; not independent confirmation','Full touch fills; partial fills and queue uncertainty unmodeled','Market/gap fill assumptions and stress portfolio rerun not verified','Trade-bar mark proxy and settled-rate funding proxy','Setup/wave independent opportunity lineage not established','Completed modeled window alone does not prove live parity or ROI target'],failure:result.failure??null};
+}
+module.exports={assess};
+if(require.main===module){const [dir,out]=process.argv.slice(2);if(!dir||!out||fs.existsSync(out))throw Error('TERMINAL_RUN_DIR NEW_REPORT');const files=['manifest.json','result.json'];for(const f of files)if(!fs.existsSync(path.join(dir,f)))throw Error('terminal_result_not_available');const manifest=JSON.parse(fs.readFileSync(path.join(dir,files[0]))),result=JSON.parse(fs.readFileSync(path.join(dir,files[1])));if(result.status==='running')throw Error('result_not_terminal');const report=assess(manifest,result);report.artifact_hashes=Object.fromEntries(files.map(f=>[f,crypto.createHash('sha256').update(fs.readFileSync(path.join(dir,f))).digest('hex')]));fs.writeFileSync(out,JSON.stringify(report,null,2)+'\n',{flag:'wx',mode:0o600});console.log(JSON.stringify({status:report.status,roi_base:report.modeled_roi_base,roi_stress:report.roi_stress}));}

@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-09-08T02:53:30.229284+00:00",
+  "pids": {
+    "crypto-api": 3348808,
+    "crypto-worker": 3348814
+  },
+  "javascriptHashesVerified": 177,
+  "testsPassed": 24,
+  "buildExitCode": 0,
+  "protectedOrdersUnchanged": true,
+  "verifiedEntryFeeUsd": 0.01583375,
+  "walletMatchesExchange": true,
+  "walletUsd": 34.25772102,
+  "riskCapUsd": 1,
+  "legacySimulatedFillsEnabled": false,
+  "rangeMode": "live",
+  "positionStillOpen": true,
+  "goalStatus": "active",
+  "previousGoalTurnClassification": "progress: first actual filled range trade verified",
+  "currentTurnClassification": "progress: deployed fee metadata reconciliation and restored periodic exchange wallet sync",
+  "unverifiedRequirement": "Positive realized net ROI of the new policy; there are no closed range trades yet."
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"binance-income-json.js","sourceRoot":"","sources":["../../src/utils/binance-income-json.ts"],"names":[],"mappings":";;AACA,wDAGC;AAJD,sFAAsF;AACtF,SAAgB,sBAAsB,CAAC,GAAY;IACjD,IAAI,OAAO,GAAG,KAAK,QAAQ;QAAE,OAAO,GAAG,CAAC;IACxC,OAAO,IAAI,CAAC,KAAK,CAAC,GAAG,CAAC,OAAO,CAAC,oCAAoC,EAAE,QAAQ,CAAC,CAAC,CAAC;AACjF,CAAC"}

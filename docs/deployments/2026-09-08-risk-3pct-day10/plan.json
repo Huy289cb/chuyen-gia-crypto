@@ -1,0 +1,20 @@
+{
+  "userRequest": "cooldown 1h, max ng\u00e0y 10%, max 1 l\u1ec7nh 3%",
+  "updates": {
+    "MAX_EFFECTIVE_RISK_PER_TRADE_USD": "",
+    "MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT": "3",
+    "DAILY_LOSS_LIMIT_PERCENT": "10",
+    "POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES": "60",
+    "POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES": "60",
+    "CONSECUTIVE_LOSS_COOLDOWN_HOURS": "1",
+    "LOSS_COOLDOWN_TIER2_HOURS": "1",
+    "LOSS_COOLDOWN_TIER3_HOURS": "1",
+    "LOSS_COOLDOWN_TIER3_UNTIL_UTC_DAY": "false",
+    "CIRCUIT_EXPECTANCY_COOLDOWN_HOURS": "1",
+    "PENDING_ORDER_REENTRY_COOLDOWN_MINUTES": "60"
+  },
+  "riskMode": "wallet_percent_including_fees_and_slippage_reserve",
+  "fixedUsdCapReplaced": true,
+  "sizingTargetPercentUnchanged": 0.5,
+  "codeChanges": false
+}

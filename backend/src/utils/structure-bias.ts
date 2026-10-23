@@ -104,3 +104,29 @@ export function classifyStructureBias(
     reason: `mixed swings (H ${h0.toFixed(1)}→${h1.toFixed(1)}, L ${l0.toFixed(1)}→${l1.toFixed(1)})`,
   };
 }
+
+/**
+ * Bearish BOS: last close below prior swing low (l0).
+ * LH+LL alone is often a pullback wick — short needs confirmed break, not reclaim.
+ */
+export function hasBearishStructureBreak(
+  detail: Pick<StructureBiasResult, 'swingLows'>,
+  lastClose: number
+): boolean {
+  if (detail.swingLows.length < 2) return false;
+  const priorLow = detail.swingLows[0];
+  return Number.isFinite(lastClose) && Number.isFinite(priorLow) && lastClose < priorLow;
+}
+
+/**
+ * Bullish BOS: last close above prior swing high (h0).
+ * HH+HL alone is often a relief rally in bear — long needs confirmed break, not reject.
+ */
+export function hasBullishStructureBreak(
+  detail: Pick<StructureBiasResult, 'swingHighs'>,
+  lastClose: number
+): boolean {
+  if (detail.swingHighs.length < 2) return false;
+  const priorHigh = detail.swingHighs[0];
+  return Number.isFinite(lastClose) && Number.isFinite(priorHigh) && lastClose > priorHigh;
+}

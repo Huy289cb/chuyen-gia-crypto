@@ -1,0 +1,22 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const pkg=path.resolve(process.argv[2]),m=JSON.parse(fs.readFileSync(path.join(pkg,'manifest.json'))),now=Date.parse('2026-10-02T13:35:00Z');
+assert.deepEqual(m.changedFiles,['services/wallet-reconcile.service.js','utils/account-wallet-journal.js','utils/recorded-wallet-reconcile.js','utils/wallet-reconcile-update.js']);
+for(const variant of ['baseline','release'])for(const [file,hash]of Object.entries(m[variant]))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(pkg,variant,file))).digest('hex'),hash);
+async function run(variant,c){
+ const writes=[],calls=[],events=[],exports={},file=path.join(pkg,variant,'services/wallet-reconcile.service.js');
+ const mocks={'node:crypto':{randomUUID:()=> '00000000-0000-4000-8000-000000000001'},'../utils/account-wallet-journal':{persistAccountWalletObservation:async(e,type)=>{events.push({e,type});if(c.journal==='failed')throw Error('journal');if(c.journal==='pending')return new Promise(()=>{});}},
+ '../lib/prisma':{prisma:{testnetAccount:{findUnique:async()=>{calls.push('account');return c.missing?null:{starting_balance:c.balance??30,realized_pnl:0};},update:async arg=>{calls.push('update');if(c.dbFailure)throw Error('db');writes.push(arg);}},testnetPosition:{findMany:async()=>{calls.push('positions');return c.positions??[];}}}},
+ '../repositories/testnet.repository':{PIPELINE_EVENT_POSITION_ID:'pipeline_v3_kim_nghia'},'./binance-balance-sync.service':{fetchBinanceBalanceSnapshot:async()=>{calls.push('wallet');if(c.walletFailure)throw Error('wallet');return {walletBalance:31,equity:32,unrealizedPnl:1};}},'./binance-income.service':{fetchBinanceIncomeSummary:async()=>{calls.push('income');if(c.incomeFailure)throw Error('income');return {netTradingPnl:1,realizedPnl:1,transferNet:0,commission:0,fundingFee:0,rowCount:1};}},'./binance-account-health.service':{isBinanceDemoMetadataUnavailableError:()=>false}};
+ const fixedDate=class extends Date{constructor(...args){super(...(args.length?args:[now]));}};
+ vm.runInNewContext(fs.readFileSync(file,'utf8'),{exports,require:id=>{if(Object.hasOwn(mocks,id))return mocks[id];if(id.startsWith('../utils/'))return require(path.resolve(path.dirname(file),id+'.js'));throw Error('unmocked '+id);},Date:fixedDate,console:{log(){},warn(){}}},{filename:file});
+ let result,error;try{result=await exports.reconcileTestnetWalletFromBinance(1);}catch(e){error=e.message;}
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();const json=v=>v===undefined?undefined:JSON.parse(JSON.stringify(v));return {result:json(result),error,writes:json(writes),calls,events:json(events)};
+}
+(async()=>{let cases=0,payloads=0;
+const positions=[[],[{realized_pnl:null,entry_fee:0,exit_fee:0,funding_fee:0}],[{realized_pnl:-2,entry_fee:.1,exit_fee:.2,funding_fee:-.03}],[{realized_pnl:1,entry_fee:.05,exit_fee:.02,funding_fee:.03},{realized_pnl:-.01,entry_fee:.01,exit_fee:.01,funding_fee:-.02}]];
+const scenarios=positions.flatMap(p=>[0,30,100].map(balance=>({positions:p,balance}))).concat([{missing:true},{walletFailure:true},{incomeFailure:true},{dbFailure:true},{journal:'failed'},{journal:'pending'}]);
+for(const c of scenarios){const b=await run('baseline',c),r=await run('release',c);assert.deepEqual(r.result,b.result);assert.equal(r.error,b.error);assert.deepEqual(r.writes,b.writes);assert.deepEqual(r.calls,b.calls);assert.equal(r.events.length,r.writes.length);
+ for(const {e,type}of r.events){assert.equal(type,'account_wallet_reconcile_applied');assert.equal(e.reconcile_attempt_id,'00000000-0000-4000-8000-000000000001');const replay=require(path.join(pkg,'release/utils/recorded-wallet-reconcile.js')).replayRecordedWalletReconcile(e,now,now);assert.equal(replay.status,'evaluated');assert.equal(replay.matches_recorded,true);payloads++;}cases++;
+}
+const report={allHashesVerified:true,compiledServiceScenarios:cases,exactResultsWritesQueriesErrorsMatch:true,recordedPayloadReplays:payloads,failedWritesNoAppliedJournal:true,rejectedPendingJournalsNonblocking:true,liveQueriesOrWrites:0,limits:'Mocked full reconciliation service only; no actual DB event/asset/income/portfolio proof.'};fs.writeFileSync(path.join(pkg,'compiled-tests.json'),JSON.stringify(report,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(report));
+})().catch(e=>{console.error(e);process.exitCode=1;});

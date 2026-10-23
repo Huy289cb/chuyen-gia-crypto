@@ -1,3 +1,5 @@
+import { buildWalletSyncUpdate } from '../utils/wallet-sync-update';
+import { randomUUID } from 'node:crypto';
 /**
  * Sync testnet account balances from Binance Futures account API (source of truth).
  */
@@ -34,8 +36,17 @@ export async function fetchBinanceBalanceSnapshot(): Promise<BinanceBalanceSnaps
  * On demo-fapi, balance/account often return -1109 — returns null and keeps local ledger.
  */
 export async function syncTestnetAccountFromBinance(
-  accountId: number
+  accountId: number,
+  onEvidence?: (evidence: Record<string, unknown>) => void
 ): Promise<BinanceBalanceSnapshot | null> {
+  const requestedAt = new Date().toISOString();
+  const syncAttemptId = randomUUID();
+  const emit = (evidence: Record<string, unknown>) => {
+    const captured = JSON.parse(JSON.stringify({schema:'wallet-sync-v1',sync_attempt_id:syncAttemptId,account_id:accountId,requested_at:requestedAt,...evidence}));
+    void import('../utils/account-wallet-journal').then(module => module.persistAccountWalletObservation(captured))
+      .catch(() => console.warn('[BinanceBalanceSync] Account wallet journal persistence failed'));
+    try { onEvidence?.(JSON.parse(JSON.stringify(captured))); } catch { /* optional observer */ }
+  };
   let snap: BinanceBalanceSnapshot;
   try {
     snap = await fetchBinanceBalanceSnapshot();
@@ -44,20 +55,19 @@ export async function syncTestnetAccountFromBinance(
       console.warn(
         `[BinanceBalanceSync] account=${accountId} demo metadata unavailable (-1109); using local ledger`
       );
+      emit({status:'metadata_unavailable',received_at:new Date().toISOString()});
       return null;
     }
+    emit({status:'query_failed',received_at:new Date().toISOString()});
     throw error;
   }
 
-  await prisma.testnetAccount.update({
-    where: { id: accountId },
-    data: {
-      current_balance: snap.walletBalance,
-      equity: snap.equity,
-      unrealized_pnl: snap.unrealizedPnl,
-      updated_at: new Date(),
-    },
-  });
+  const receivedAt = new Date().toISOString();
+  const update = buildWalletSyncUpdate(snap, new Date());
+  await prisma.testnetAccount.update({where:{id:accountId},data:update});
+  emit({status:'applied',received_at:receivedAt,applied_at:new Date().toISOString(),
+    source:'normalized_account_api',snapshot:{walletBalance:snap.walletBalance,equity:snap.equity,unrealizedPnl:snap.unrealizedPnl},
+    update:JSON.parse(JSON.stringify(update))});
 
   console.log(
     `[BinanceBalanceSync] account=${accountId} wallet=${snap.walletBalance.toFixed(2)} equity=${snap.equity.toFixed(2)} uPnL=${snap.unrealizedPnl.toFixed(2)}`
@@ -116,6 +126,8 @@ export async function syncAllTestnetAccountsFromBinance(): Promise<void> {
   for (const account of accounts) {
     try {
       await syncTestnetAccountFromBinance(account.id);
+      const { reconcileOpenEntryFees } = await import('./open-entry-fee-reconcile.service');
+      await reconcileOpenEntryFees(account.id);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.warn(
@@ -129,7 +141,9 @@ export async function syncAllTestnetAccountsFromBinance(): Promise<void> {
     lastWalletReconcileAt = now;
     try {
       const { reconcileTestnetWalletFromBinance } = await import('./wallet-reconcile.service');
+      const { runClosedPositionPnlReconcile } = await import('./position-pnl-reconcile.service');
       for (const account of accounts) {
+        await runClosedPositionPnlReconcile({ symbol: account.symbol, methodId: account.method_id, dryRun: false, recentOnly: true });
         await reconcileTestnetWalletFromBinance(account.id);
       }
     } catch (error: unknown) {

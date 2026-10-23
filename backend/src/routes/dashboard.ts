@@ -9,6 +9,7 @@ import {
 } from '../lib/read-cache';
 import { PIPELINE_EVENT_POSITION_ID } from '../repositories/testnet.repository';
 import { fetchBinanceClosedTradeRounds } from '../services/binance-trade-history.service';
+import { estimateNextCronHint } from '../utils/cron-next-run';
 import { validateSafetyRequirements } from '../config/app';
 import { getRiskPolicy } from '../config/risk-policy';
 import { getAccountCircuitStatus } from '../services/account-circuit.service';
@@ -31,9 +32,11 @@ import {
   inferWorkerActivityStatus,
 } from '../utils/scheduler-heartbeat';
 import { compareSignalGateEvaluations } from '../utils/signal-gate-ranking';
+import { closedCandlesOnly } from '../utils/closed-candles';
 import { calculatePnlPercent } from '../services/position-mark';
 import { getAccountBalanceSummary, getLiveOpenPositionLines, getLivePendingOrderLines } from '../services/account-summary.service';
 import { getGroqPrimaryModel } from '../config/groq-models';
+import { isOpenRouterPrimaryProvider, getOpenRouterDispatchModel } from '../config/openrouter-models';
 import { isTelegramAiEnabled } from '../config/telegram-ai';
 import { runTelegramAiQuery } from '../services/telegram/telegram-ai.service';
 import type { AiContextScope } from '../services/telegram/ai-context.builder';
@@ -130,38 +133,6 @@ function formatRelativeAgo(ts: Date | null): string {
 function inferSchedulerStatus(last: Date | null, staleAfterMs: number): string {
   if (!last) return 'idle';
   return Date.now() - last.getTime() < staleAfterMs ? 'running' : 'idle';
-}
-
-/** Rough next-fire hint for step or comma-minute crons (matches worker v3). */
-function estimateNextCronHint(last: Date | null, cronExpr: string): string {
-  if (!last) return '—';
-  const part = cronExpr.trim().split(/\s+/)[0] || '';
-  const stepMatch = part.match(/^\*\/(\d+)$/);
-  if (stepMatch) {
-    const stepMs = parseInt(stepMatch[1], 10) * 60_000;
-    const elapsed = Date.now() - last.getTime();
-    const until = Math.max(0, stepMs - (elapsed % stepMs || stepMs));
-    const untilMin = Math.ceil(until / 60_000);
-    if (untilMin <= 1) return 'within 1 min';
-    return `~${untilMin} min`;
-  }
-
-  const minutes = part
-    .split(',')
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !Number.isNaN(n));
-  if (minutes.length > 0) {
-    const now = new Date();
-    const currentMin = now.getUTCMinutes();
-    const sorted = [...minutes].sort((a, b) => a - b);
-    const nextInHour = sorted.find((m) => m > currentMin);
-    const minsUntil =
-      nextInHour !== undefined ? nextInHour - currentMin : 60 - currentMin + sorted[0];
-    if (minsUntil <= 1) return 'within 1 min';
-    return `~${minsUntil} min`;
-  }
-
-  return '—';
 }
 
 function toReasonCodes(reason: string | null | undefined): string[] {
@@ -537,11 +508,12 @@ async function buildLiveSignalGateView(symbol: string) {
   let htfRegime: MarketRegime | null = null;
 
   for (const timeframe of scanOrder) {
-    const { candles } = await getCandles({
+    const { candles: fetchedCandles } = await getCandles({
       symbol,
       timeframe,
       limit: getSignalGateCandleLimit(timeframe),
     });
+    const candles = closedCandlesOnly(fetchedCandles, timeframe);
     if (candles.length < 50) continue;
     const lastTs = candles[candles.length - 1]?.timestamp;
     if (lastTs) {
@@ -654,6 +626,7 @@ router.get('/signals', async (req: Request, res: Response) => {
         OR: [
           { reason: { startsWith: 'Signal gate:' } },
           { reason: { startsWith: 'Signal gate blocked:' } },
+          { reason: { startsWith: 'Pre-LLM' } },
         ],
       },
       orderBy: { timestamp: 'desc' },
@@ -719,6 +692,8 @@ router.get('/risk', async (_req: Request, res: Response) => {
     return {
       riskPerTrade: policy.riskPerTradePercent,
       maxEffectiveRiskPerTrade: policy.maxEffectiveRiskPerTradePercent,
+      maxEffectiveRiskPerTradeUsd: policy.maxEffectiveRiskPerTradeUsd ?? null,
+      effectiveRiskCapMode: policy.maxEffectiveRiskPerTradeUsd ? 'usd' : 'percent',
       dailyLossCap: dailyLossCapUsd,
       dailyLossLimitPercent: policy.dailyLossLimitPercent,
       dailyLossCurrent: dailyLossCurrent,
@@ -781,6 +756,8 @@ router.get('/risk', async (_req: Request, res: Response) => {
       data: {
         riskPerTrade: policy.riskPerTradePercent,
         maxEffectiveRiskPerTrade: policy.maxEffectiveRiskPerTradePercent,
+      maxEffectiveRiskPerTradeUsd: policy.maxEffectiveRiskPerTradeUsd ?? null,
+      effectiveRiskCapMode: policy.maxEffectiveRiskPerTradeUsd ? 'usd' : 'percent',
         dailyLossCap: 0,
         dailyLossLimitPercent: policy.dailyLossLimitPercent,
         dailyLossCurrent: 0,
@@ -818,7 +795,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
 
     for (const d of decisionsToday) {
       const r = d.reason || '';
-      if (isSignalGateOnlyReason(r)) {
+      if (isSignalGateOnlyReason(r) || r.startsWith('Pre-LLM')) {
         skippedCallCount += 1;
         continue;
       }
@@ -836,6 +813,7 @@ router.get('/llm', async (_req: Request, res: Response) => {
         NOT: [
           { reason: { startsWith: 'Signal gate:' } },
           { reason: { startsWith: 'Signal gate blocked:' } },
+          { reason: { startsWith: 'Pre-LLM' } },
         ],
       },
       orderBy: { timestamp: 'desc' },
@@ -859,7 +837,13 @@ router.get('/llm', async (_req: Request, res: Response) => {
       select: { raw_answer: true },
     });
 
-    const modelName = getGroqPrimaryModel();
+    const requests = await prisma.testnetTradeEvent.findMany({
+      where: { event_type: 'llm_provider_request', timestamp: { gte: startUtc } },
+      orderBy: { timestamp: 'desc' }, select: { timestamp: true, event_data: true },
+    });
+    let actualModel: string | null = null;
+    try { actualModel = requests[0]?.event_data ? JSON.parse(requests[0].event_data).model : null; } catch { /* metadata only */ }
+    const modelName = actualModel ?? (isOpenRouterPrimaryProvider() ? getOpenRouterDispatchModel() : getGroqPrimaryModel());
     const promptVersion = process.env.PROMPT_VERSION || 'v3';
 
     let responseStatus = 'none';
@@ -876,8 +860,11 @@ router.get('/llm', async (_req: Request, res: Response) => {
     }
 
     return {
-      callsToday: llmEngagedCount,
-      lastCall: lastCallTs ? lastCallTs.toISOString() : null,
+      callsToday: requests.length,
+      callsSource: 'provider_request_events',
+      decisionCountToday: llmEngagedCount,
+      lastDecisionAt: lastCallTs ? lastCallTs.toISOString() : null,
+      lastCall: requests[0]?.timestamp.toISOString() ?? null,
       lastEngagedSummary,
       lastDecision: lastLlmDecision?.decision ?? null,
       lastTimeframe: lastLlmDecision?.timeframe ?? null,
@@ -1320,7 +1307,8 @@ router.get('/trades', async (req: Request, res: Response) => {
     if (process.env.BINANCE_ENABLED === 'true' && sym) {
       try {
         const rounds = await fetchBinanceClosedTradeRounds(sym, take);
-        res.json({ ok: true, data: rounds });
+        res.json({ ok: true, data: rounds.map(r => ({ ...r, grossRealizedPnL: r.realizedPnL,
+          realizedPnL: r.netPnl ?? r.realizedPnL - r.fee - (r.fundingFee ?? 0), pnlBasis: 'net_after_fees_and_funding' })) });
         return;
       } catch (binanceErr: unknown) {
         const msg = binanceErr instanceof Error ? binanceErr.message : String(binanceErr);

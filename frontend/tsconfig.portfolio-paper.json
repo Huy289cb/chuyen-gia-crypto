@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false, "plugins": [], "allowJs": false },
+  "include": ["next-env.d.ts", "app/futures-paper/page.tsx", "app/components/FuturesPortfolioPaperPanel.tsx", "app/layout/Header.tsx"],
+  "exclude": ["node_modules", ".next", "e2e-runner"]
+}

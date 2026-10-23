@@ -73,7 +73,8 @@ export function computePolicyCompliantStopAndTarget(input: {
     const stopLoss = Math.floor(entry * (1 - minSlPct) * 100) / 100;
     const risk = entry - stopLoss;
     if (risk <= 0) return null;
-    const takeProfit = Math.round((entry + risk * minRr) * 100) / 100;
+    // Round outward: nearest-cent rounding can make the executor reject RR1.49999 < RR1.5.
+    const takeProfit = Math.ceil((entry + risk * minRr) * 100) / 100;
     if (takeProfit <= entry) return null;
     return { stopLoss, takeProfit };
   }
@@ -81,7 +82,7 @@ export function computePolicyCompliantStopAndTarget(input: {
   const stopLoss = Math.ceil(entry * (1 + minSlPct) * 100) / 100;
   const risk = stopLoss - entry;
   if (risk <= 0) return null;
-  const takeProfit = Math.round((entry - risk * minRr) * 100) / 100;
+  const takeProfit = Math.floor((entry - risk * minRr) * 100) / 100;
   if (takeProfit >= entry) return null;
   return { stopLoss, takeProfit };
 }

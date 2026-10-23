@@ -1,0 +1,48 @@
+{
+  "verifiedAt": "2026-09-07T08:11:54.750161+00:00",
+  "buildFiles": 175,
+  "buildMismatches": [],
+  "processes": [
+    {
+      "name": "crypto-api",
+      "pid": 2946840,
+      "status": "online",
+      "restarts": 0,
+      "controls": {
+        "V3_ADAPTIVE_SETUP_MODE": "shadow",
+        "MINIMUM_LOT_STOP_NORMALIZATION_ENABLED": "false",
+        "V3_ADAPTIVE_FEE_PCT_PER_SIDE": "0.0005",
+        "V3_PULLBACK_MAX_ABOVE_PCT": "0.25",
+        "MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT": "2",
+        "MIN_SL_DISTANCE_PERCENT": "0.008"
+      }
+    },
+    {
+      "name": "crypto-worker",
+      "pid": 2946841,
+      "status": "online",
+      "restarts": 0,
+      "controls": {
+        "V3_ADAPTIVE_SETUP_MODE": "shadow",
+        "MINIMUM_LOT_STOP_NORMALIZATION_ENABLED": "false",
+        "V3_ADAPTIVE_FEE_PCT_PER_SIDE": "0.0005",
+        "V3_PULLBACK_MAX_ABOVE_PCT": "0.25",
+        "MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT": "2",
+        "MIN_SL_DISTANCE_PERCENT": "0.008"
+      }
+    }
+  ],
+  "completedMarketScans": 59,
+  "completedLlmDispatchCycles": 59,
+  "cycleSamples": {
+    "market_completed": [
+      "2026-09-07T15:05:05: [MarketScan] Market scan completed",
+      "2026-09-07T15:10:06: [MarketScan] Market scan completed"
+    ],
+    "dispatch_completed": [
+      "2026-09-07T15:06:00: [LLMDispatch] LLM dispatch completed",
+      "2026-09-07T15:11:04: [LLMDispatch] LLM dispatch completed"
+    ]
+  },
+  "criticalErrorsAfterDeploy": []
+}

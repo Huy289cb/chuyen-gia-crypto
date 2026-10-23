@@ -1,0 +1,12 @@
+'use strict';
+const cp=require('node:child_process'),fs=require('node:fs'),path=require('node:path');
+const arm=process.argv[2];if(!['baseline','candidate'].includes(arm))throw Error('registered_arm_required');
+const c=JSON.parse(cp.execFileSync('docker',['inspect','roi-close-atomic-test-20261003'],{encoding:'utf8'}))[0];
+const e=Object.fromEntries(c.Config.Env.map(s=>{const i=s.indexOf('=');return[s.slice(0,i),s.slice(i+1)]}));
+if(c.NetworkSettings.Ports['5432/tcp'][0].HostPort!=='55439'||c.NetworkSettings.Ports['5432/tcp'][0].HostIp!=='127.0.0.1')throw Error('isolated_only');
+const url=`postgresql://${encodeURIComponent(e.POSTGRES_USER)}:${encodeURIComponent(e.POSTGRES_PASSWORD)}@127.0.0.1:55439/crypto_reset_test`,audit='docs/audits/2026-10-07-matched-causal-portfolio';
+const log=fs.openSync(path.join(audit,arm+'-run.log'),'wx',0o600);
+const child=cp.spawn(process.execPath,['backend/scripts/run-causal-range-scheduler-integration.cjs',audit+'/'+arm+'-run','2025-02-01T00:00:05Z','2025-03-01T00:00:05Z','hybrid',audit+'/provider-receipts.json','docs/audits/2026-10-07-h2-permission-boundary/workflow-schema-probe/runtime',audit+'/policy.json','checkpoints',audit+'/'+arm+'-experiment.json'],{env:{...process.env,ROI_ATOMIC_TEST_DATABASE_URL:url},stdio:['ignore',log,log]});
+fs.closeSync(log);fs.writeFileSync(path.join(audit,arm+'-process.json'),JSON.stringify({pid:child.pid,arm,started_at:Date.now(),status:'spawned_not_completion_evidence'},null,2),{flag:'wx'});
+console.log(JSON.stringify({arm,pid:child.pid}));child.on('exit',(code,signal)=>{fs.writeFileSync(path.join(audit,arm+'-process-terminal.json'),JSON.stringify({pid:child.pid,exit_code:code,signal,ended_at:Date.now()},null,2));console.log(JSON.stringify({arm,exit_code:code,signal}));process.exitCode=code??1;});
+process.on('SIGTERM',()=>child.kill('SIGTERM'));

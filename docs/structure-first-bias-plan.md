@@ -116,7 +116,7 @@ Execute
 |------|--------|
 | Side-align fail-closed | If HTF not `trend` **or** `trendDirection` null → **do not** auto-pass for entries (or require structure bias + SMA stack agree) |
 | Playbook ↔ side | LLM `buy`/`sell` must match BO `direction` / LS `sweepType`; mismatch → `no_trade` |
-| Breakout bypass | Disable or gate behind structure=`bull` when longing (`V3_BREAKOUT_REGIME_BYPASS`) |
+| Breakout bypass | Grade A breakout may pass range; **structure still blocks wrong side** |
 | Would block wave? | **Yes** — range fail-open + unconstrained LLM buy |
 
 ### Phase C — Real learning: per-side expectancy — **after A lives**
@@ -150,9 +150,9 @@ V3_STRUCTURE_BIAS_TF=4h
 
 # Phase B (tighten existing)
 V3_REQUIRE_HTF_SIDE_ALIGN=true
-V3_HTF_SIDE_ALIGN_FAIL_CLOSED=true   # new: no pass when HTF not trend
+V3_HTF_SIDE_ALIGN_FAIL_CLOSED=true   # range/chop veto only if structure is transition
 V3_REQUIRE_PLAYBOOK_SIDE_MATCH=true  # new
-V3_BREAKOUT_REGIME_BYPASS=false      # or structure-gated
+V3_BREAKOUT_REGIME_BYPASS=true       # Grade A breakout; structure gates side
 
 # Phase C
 CIRCUIT_EXPECTANCY_PER_SIDE=true

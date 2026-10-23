@@ -5,6 +5,8 @@ vi.mock('../../src/services/binance/trading', () => ({
   getUserTrades: vi.fn(),
 }));
 
+vi.mock('../../src/services/binance-income.service', () => ({ fetchBinanceIncomeRows: vi.fn().mockResolvedValue([]) }));
+
 import { getUserTrades } from '../../src/services/binance/trading';
 
 describe('binance-fill-pnl qty match', () => {
@@ -15,19 +17,16 @@ describe('binance-fill-pnl qty match', () => {
 
   it('rejects verified PnL when aggregated close qty mismatches position size', async () => {
     vi.mocked(getUserTrades).mockResolvedValue([
-      { orderId: 1, side: 'SELL', qty: 0.0112, price: 62940, commission: 0, realizedPnl: 0, time: 1 },
-      { orderId: 2, side: 'BUY', qty: 0.0112, price: 66178, commission: 0, realizedPnl: 0, time: 2 },
-      { orderId: 3, side: 'BUY', qty: 0.0112, price: 67120, commission: 0, realizedPnl: 0, time: 3 },
-      { orderId: 4, side: 'BUY', qty: 0.0112, price: 66733, commission: 0, realizedPnl: 0, time: 4 },
-      { orderId: 5, side: 'BUY', qty: 0.0111, price: 66464, commission: 0, realizedPnl: 0, time: 5 },
-    ] as never);
+      { tradeId: 1, orderId: 1, side: 'SELL', qty: 0.02, price: 100, commission: 0.01, realizedPnl: 0, time: 1000 },
+      { tradeId: 2, orderId: 2, side: 'BUY', qty: 0.02, price: 110, commission: 0.01, realizedPnl: -0.2, time: 2000 },
+    ]);
 
     const fill = await resolveClosePnlFromUserTrades({
       symbol: 'BTC',
       side: 'short',
-      entryTime: new Date('2026-06-15T06:29:52.781Z'),
-      closeTime: new Date('2026-06-16T14:45:13.465Z'),
-      entryOrderId: '15002026111',
+      entryTime: new Date(1000),
+      closeTime: new Date(2000),
+      entryOrderId: '1',
       sizeQty: 0.0112,
       entryPrice: 62940,
       fallbackClosePrice: 66464,

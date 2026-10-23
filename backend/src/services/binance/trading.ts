@@ -1,3 +1,4 @@
+import { captureAlgoContractEvidence } from '../../utils/algo-contract-evidence';
 /**
  * Binance Futures Trading Module
  * 
@@ -168,6 +169,7 @@ export async function placeStopMarketOrder(params: StopMarketOrderParams): Promi
     console.log(`[BinanceTrading] Stop-market algo order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 
     return {
+      algo_contract_evidence: captureAlgoContractEvidence(requestParams, response),
       orderId: response.orderId || response.algoId,
       clientOrderId: response.clientOrderId || response.clientAlgoId,
       symbol: response.symbol,
@@ -233,6 +235,7 @@ export async function placeTakeProfitMarketOrder(params: TakeProfitMarketOrderPa
     console.log(`[BinanceTrading] Take-profit-market algo order placed: ${params.side} ${params.quantity} ${params.symbol} @ ${params.stopPrice}${params.positionSide ? ` (positionSide: ${params.positionSide})` : ''}`);
 
     return {
+      algo_contract_evidence: captureAlgoContractEvidence(requestParams, response),
       orderId: response.orderId || response.algoId,
       clientOrderId: response.clientOrderId || response.clientAlgoId,
       symbol: response.symbol,
@@ -444,6 +447,7 @@ export async function cancelOrder(symbol: string, orderId: number, origClientOrd
       clientOrderId: response.clientOrderId,
       symbol: response.symbol,
       status: response.status,
+      executedQty: response.executedQty,
     };
   } catch (error: any) {
     console.error('[BinanceTrading] Failed to cancel order:', error.message);
@@ -496,7 +500,8 @@ export async function getOrder(symbol: string, orderId: number, origClientOrderI
       price: parseFloat(response.price),
       origQty: parseFloat(response.origQty),
       executedQty: parseFloat(response.executedQty),
-      cummulativeQuoteQty: parseFloat(response.cummulativeQuoteQty),
+      cummulativeQuoteQty: parseFloat(response.cumQuote ?? response.cummulativeQuoteQty),
+      avgPrice: parseFloat(response.avgPrice),
       status: response.status,
       timeInForce: response.timeInForce,
       transactTime: response.transactTime,
@@ -573,6 +578,7 @@ export interface GetUserTradesOptions {
   limit?: number;
   startTime?: number;
   endTime?: number;
+  fromId?: number;
 }
 
 /**
@@ -591,10 +597,12 @@ export async function getUserTrades(
     };
     if (opts.startTime != null) params.startTime = String(opts.startTime);
     if (opts.endTime != null) params.endTime = String(opts.endTime);
+    if (opts.fromId != null) params.fromId = String(opts.fromId);
 
     const response: any = await get(endpoints.USER_TRADES, params, true);
 
     return response.map((trade: any) => ({
+      tradeId: trade.id,
       orderId: trade.orderId,
       symbol: trade.symbol,
       side: trade.side,

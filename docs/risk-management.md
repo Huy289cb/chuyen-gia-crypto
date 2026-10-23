@@ -1,5 +1,7 @@
 # ICT-Based Risk Management
 
+> **Cấu hình BTC hiện hành:** [cooldown1h, ngày10%, tối đa mỗi lệnh3%](runtime-risk-policy.md). Các nguyên lý/ví dụ ICT bên dưới là tài liệu lịch sử; không dùng chúng để ghi đè cấu hình đã chốt.
+
 ## Overview
 
 This document explains the risk management principles based on Inner Circle Trader (ICT) Smart Money Concepts implemented in the paper trading system.
@@ -8,8 +10,9 @@ This document explains the risk management principles based on Inner Circle Trad
 
 ### 1. Risk Per Trade
 
-**Recommended**: 1-2% of account balance per trade
-**Implementation**: 1% (configurable via `RISK_PER_TRADE_PERCENT`)
+**BTC runtime maximum**: 3% of current balance including fee/slippage reserves (`MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT=3`, fixed USD cap empty).
+**Sizing target**: 0.5% (`RISK_PER_TRADE_PERCENT=0.5`), distinct from the maximum.
+**Daily budget**: 10% of day-start equity. See [the canonical policy](runtime-risk-policy.md).
 
 **Rationale**:
 - Small enough to survive drawdowns
@@ -184,19 +187,7 @@ For auto-entry, the system checks alignment on **main timeframes only**:
 
 ## Cooldown System
 
-### Trigger Conditions
-
-- **3 consecutive losing trades** → Enter cooldown
-- **Any winning trade** → Reset cooldown
-
-### Cooldown Duration
-
-- **4 hours** (configurable via `COOLDOWN_HOURS=4`)
-
-### Purpose
-
-- Prevents emotional trading after losses
-- Allows market conditions to potentially change
+Cooldown giao dịch hiện tại là **60 phút** sau đóng lệnh/lỗ, cho các tầng chuỗi thua, cooldown expectancy và chờ vào lại sau hủy lệnh. Thời gian và các khóa môi trường chính xác nằm trong [chính sách vận hành](runtime-risk-policy.md). Không áp dụng lại `COOLDOWN_HOURS=4` hoặc các giá trị thiết kế lịch sử.
 
 ## Balance Validation (NEW - v1.2.0)
 

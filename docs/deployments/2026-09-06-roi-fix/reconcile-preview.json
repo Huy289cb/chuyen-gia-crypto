@@ -1,0 +1,296 @@
+{
+  "scanned": 36,
+  "updated": 36,
+  "verified": 36,
+  "dry_run": true,
+  "results": [
+    {
+      "position_id": "pos_1783784790177_uz1y7a",
+      "skipped": false,
+      "old_pnl": 6.3866331,
+      "verified": true,
+      "new_pnl": 6.28755457,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1783950869306_8nbpav",
+      "skipped": false,
+      "old_pnl": 0,
+      "verified": true,
+      "new_pnl": -0.1019106,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1783951045955_7sfcqm",
+      "skipped": false,
+      "old_pnl": -0.17266887,
+      "verified": true,
+      "new_pnl": -0.26609817,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784007396076_ddd0jv",
+      "skipped": false,
+      "old_pnl": 2.99578425,
+      "verified": true,
+      "new_pnl": 2.9515712699999996,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784036646989_rhgsdw",
+      "skipped": false,
+      "old_pnl": -2.391207,
+      "verified": true,
+      "new_pnl": -2.53367216,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784267379847_h6fsuc",
+      "skipped": false,
+      "old_pnl": -1.6190685,
+      "verified": true,
+      "new_pnl": -1.65392775,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784396939553_c47uar",
+      "skipped": false,
+      "old_pnl": -0.09842249,
+      "verified": true,
+      "new_pnl": -0.15126217000000003,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784506846625_s12gq3",
+      "skipped": false,
+      "old_pnl": -1.656645,
+      "verified": true,
+      "new_pnl": -1.695615,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784614205909_23m2hy",
+      "skipped": false,
+      "old_pnl": 3.0967266,
+      "verified": true,
+      "new_pnl": 3.0396179300000004,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784643787068_qo2z1i",
+      "skipped": false,
+      "old_pnl": -1.68918,
+      "verified": true,
+      "new_pnl": -1.73295696,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784658307122_mq7b9r",
+      "skipped": false,
+      "old_pnl": -2.0660013,
+      "verified": true,
+      "new_pnl": -2.12431089,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784738798647_x40bga",
+      "skipped": false,
+      "old_pnl": -1.6114959,
+      "verified": true,
+      "new_pnl": -1.71084825,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784776568909_jnf3wj",
+      "skipped": false,
+      "old_pnl": -1.54873785,
+      "verified": true,
+      "new_pnl": -1.64763299,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784864037153_tto9oy",
+      "skipped": false,
+      "old_pnl": 0.058047,
+      "verified": true,
+      "new_pnl": 0.008783860000000006,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1784898686275_cts1ca",
+      "skipped": false,
+      "old_pnl": 0.11772375,
+      "verified": true,
+      "new_pnl": 0.05593808000000002,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785002787837_sijq1f",
+      "skipped": false,
+      "old_pnl": 0.1688985,
+      "verified": true,
+      "new_pnl": 0.053586330000000015,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785108006887_tq7o7v",
+      "skipped": false,
+      "old_pnl": -1.67073825,
+      "verified": true,
+      "new_pnl": -1.7346234399999998,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785156096914_biv88u",
+      "skipped": false,
+      "old_pnl": -1.4691735,
+      "verified": true,
+      "new_pnl": -1.5666615,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785246526161_r0kx9q",
+      "skipped": false,
+      "old_pnl": 0.4952999999999956,
+      "verified": true,
+      "new_pnl": 0.36134174999999996,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785461760824_s92i93",
+      "skipped": false,
+      "old_pnl": -1.764666,
+      "verified": true,
+      "new_pnl": -1.8036659999999998,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785600373345_tx16vp",
+      "skipped": false,
+      "old_pnl": 1.18270215,
+      "verified": true,
+      "new_pnl": 1.0882660499999999,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785650474051_xc5rqs",
+      "skipped": false,
+      "old_pnl": 0.30365535,
+      "verified": true,
+      "new_pnl": 0.17689726000000003,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785729375221_m5sv7r",
+      "skipped": false,
+      "old_pnl": -1.52402745,
+      "verified": true,
+      "new_pnl": -1.63031997,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1785937006613_golj8k",
+      "skipped": false,
+      "old_pnl": 1.3890072,
+      "verified": true,
+      "new_pnl": 1.3327130999999999,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1786022715761_hgxasy",
+      "skipped": false,
+      "old_pnl": 1.88308485,
+      "verified": true,
+      "new_pnl": 1.8227211,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1786202453213_dcmbzv",
+      "skipped": false,
+      "old_pnl": 0.05804715000000001,
+      "verified": true,
+      "new_pnl": -0.027677489999999985,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1786314174865_eikyad",
+      "skipped": false,
+      "old_pnl": -1.67658525,
+      "verified": true,
+      "new_pnl": -1.7457891499999998,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1786454341137_pcs20k",
+      "skipped": false,
+      "old_pnl": -1.57013775,
+      "verified": true,
+      "new_pnl": -1.60868775,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1786538185728_a0r9ki",
+      "skipped": false,
+      "old_pnl": -1.55074725,
+      "verified": true,
+      "new_pnl": -1.6469221500000002,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1787018475280_rxj2wm",
+      "skipped": false,
+      "old_pnl": -0.5573499900000001,
+      "verified": true,
+      "new_pnl": -0.5669636100000001,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1787173258349_y06sad",
+      "skipped": false,
+      "old_pnl": 1.666649,
+      "verified": true,
+      "new_pnl": 1.63917406,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1787268959923_uc9esx",
+      "skipped": false,
+      "old_pnl": 1.74203525,
+      "verified": true,
+      "new_pnl": 1.7237816000000001,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1787294193082_mjxrtu",
+      "skipped": false,
+      "old_pnl": 1.7781029,
+      "verified": true,
+      "new_pnl": 1.73587702,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1787346993931_hgrupv",
+      "skipped": false,
+      "old_pnl": -0.9371506000000001,
+      "verified": true,
+      "new_pnl": -0.9605015,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1787536868910_kidesz",
+      "skipped": false,
+      "old_pnl": -0.6412554,
+      "verified": true,
+      "new_pnl": -0.67970955,
+      "reason": "dry_run"
+    },
+    {
+      "position_id": "pos_1787590870913_j2tu56",
+      "skipped": false,
+      "old_pnl": -0.37152719,
+      "verified": true,
+      "new_pnl": -0.41092054,
+      "reason": "dry_run"
+    }
+  ]
+}

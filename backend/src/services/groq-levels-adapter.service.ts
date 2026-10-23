@@ -1,7 +1,8 @@
+import {withProviderPurpose} from '../utils/provider-purpose-context';
 /**
  * Secondary Groq pass (GROQ_API_KEY_2):
- * - Min SL fail → widen SL + TP (`tryRepairLevelsWithSecondaryKey`).
- * - SL OK but R:R low → adjust TP only (`tryRepairTpForMinRrWithSecondaryKey`, Step 5b).
+ * - Min SL fail → repair only within the original structural target.
+ * - Fixed entry/SL with insufficient R:R cannot be repaired by extending that target.
  * Invoked only when GROQ_LEVELS_ADAPTER_ENABLED=true and key 2 is set.
  */
 
@@ -105,6 +106,12 @@ function validateAndMergeRepairedLevels(input: {
     return null;
   }
 
+  const originalTp = Number(analysis.suggested_take_profit);
+  if (!Number.isFinite(originalTp) || (action === 'buy' ? nTp > originalTp : nTp < originalTp)) {
+    console.warn('[LevelsAdapter] Repair would extend target beyond the original structural target');
+    return null;
+  }
+
   const slCheck = checkMinSlDistance(entry, nSl, minSlPct);
   if (!slCheck.ok) {
     console.warn(
@@ -185,6 +192,8 @@ ${
       : 'SHORT — stop_loss strictly ABOVE entry; take_profit strictly BELOW entry.'
   }
 Entry FIXED at ${input.entry} — do not output entry.
+Original structural TP bound: ${input.tp}.
+${isLong ? 'Do not raise take_profit above' : 'Do not lower take_profit below'} ${input.tp}; do not extend the original target to manufacture R:R.
 
 Distance rule (server rejects tighter stops):
   |entry - suggested_stop_loss| / entry >= ${input.minSlPct}  (${minSlLabel}%).
@@ -287,6 +296,11 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
   if (checkMinSlDistance(entry, sl0, minSlPct).ok) return null;
 
   const minRr = getMethodConfig(input.methodId).autoEntry.minRRRatio;
+  const floor = computePolicyCompliantStopAndTarget({ action, entry, minSlPct, minRr });
+  if (!floor || (action === 'buy' ? tp0 + 1e-9 < floor.takeProfit : tp0 - 1e-9 > floor.takeProfit)) {
+    console.warn('[LevelsAdapter] Original structural target cannot support the minimum SL and R:R; skipping repair');
+    return null;
+  }
   const { systemPrompt, userPrompt } = buildAdapterPrompts({
     symbol: input.symbol,
     timeframe: input.timeframe,
@@ -300,11 +314,11 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
 
   let raw: GroqAnalysis | null;
   try {
-    raw = await callLevelsAdapterLLM({
+    raw = await withProviderPurpose('levels_repair', () => callLevelsAdapterLLM({
       systemPrompt,
       userPrompt,
       temperature: 0.12,
-    });
+    }));
   } catch (e: unknown) {
     console.warn('[LevelsAdapter] adapter call failed:', e instanceof Error ? e.message : e);
     return null;
@@ -323,7 +337,7 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
       ? String((raw as { adjustment_note?: string }).adjustment_note).slice(0, 120)
       : 'levels widened to meet policy';
 
-  let repaired = validateAndMergeRepairedLevels({
+  const repaired = validateAndMergeRepairedLevels({
     action,
     entry,
     sl: nSl,
@@ -335,26 +349,6 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
     note: llmNote,
   });
 
-  if (!repaired) {
-    const policy = computePolicyCompliantStopAndTarget({ action, entry, minSlPct, minRr });
-    if (policy) {
-      console.warn(
-        `[LevelsAdapter] key2 SL/TP failed policy — applying deterministic widen (entry=${entry})`
-      );
-      repaired = validateAndMergeRepairedLevels({
-        action,
-        entry,
-        sl: policy.stopLoss,
-        tp: policy.takeProfit,
-        minSlPct,
-        minRr,
-        analysis: input.analysis,
-        auditTag: 'policy-math',
-        note: `SL/TP from min ${(minSlPct * 100).toFixed(2)}% + R:R ${minRr} (LLM key2 was insufficient)`,
-      });
-    }
-  }
-
   if (!repaired) return null;
 
   console.log(
@@ -364,8 +358,8 @@ export async function tryRepairLevelsWithSecondaryKey(input: {
 }
 
 /**
- * When SL passes min distance but price-derived R:R is below method minimum, ask key2 for a new TP only.
- * SL from primary analysis is preserved.
+ * Compatibility entrypoint: fixed entry/SL and an insufficient original target
+ * cannot meet minimum R:R without extending that target. Keep no_trade without an LLM call.
  */
 export async function tryRepairTpForMinRrWithSecondaryKey(input: {
   symbol: string;
@@ -378,7 +372,6 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
   const actionRaw = String(input.analysis.action || '').toLowerCase();
   if (actionRaw !== 'buy' && actionRaw !== 'sell') return null;
 
-  const action = actionRaw as 'buy' | 'sell';
   const entry = Number(input.analysis.suggested_entry);
   const sl0 = Number(input.analysis.suggested_stop_loss);
   const tp0 = Number(input.analysis.suggested_take_profit);
@@ -391,89 +384,6 @@ export async function tryRepairTpForMinRrWithSecondaryKey(input: {
   const curRr = computeExpectedRrFromPrices(entry, sl0, tp0);
   if (curRr == null || curRr + 1e-9 >= minRr) return null;
 
-  const { systemPrompt, userPrompt } = buildRrOnlyTpAdapterPrompts({
-    symbol: input.symbol,
-    timeframe: input.timeframe,
-    action,
-    entry,
-    sl: sl0,
-    tp: tp0,
-    minSlPct,
-    minRr,
-    currentRr: curRr,
-  });
-
-  const raw = await callLevelsAdapterLLM({
-    systemPrompt,
-    userPrompt,
-    temperature: 0.12,
-  });
-  if (!raw) return null;
-
-  const nTp = Number(raw.suggested_take_profit);
-  if (!Number.isFinite(nTp)) {
-    console.warn('[LevelsAdapter:RR] Non-numeric TP from adapter');
-    return null;
-  }
-
-  if (action === 'buy') {
-    if (!(nTp > entry)) {
-      console.warn('[LevelsAdapter:RR] LONG: TP must be above entry');
-      return null;
-    }
-  } else if (!(nTp < entry)) {
-    console.warn('[LevelsAdapter:RR] SHORT: TP must be below entry');
-    return null;
-  }
-
-  const slCheck = checkMinSlDistance(entry, sl0, minSlPct);
-  if (!slCheck.ok) {
-    console.warn('[LevelsAdapter:RR] SL invariant broken (should not happen)');
-    return null;
-  }
-
-  let finalTp = nTp;
-  let rr = computeExpectedRrFromPrices(entry, sl0, finalTp);
-  if (rr == null || rr + 1e-9 < minRr) {
-    const policyTp = computeMinTakeProfitForRr({
-      action,
-      entry,
-      stopLoss: sl0,
-      minRr,
-    });
-    if (policyTp != null) {
-      console.warn(`[LevelsAdapter:RR] key2 TP insufficient — applying policy_min_tp=${policyTp}`);
-      finalTp = policyTp;
-      rr = computeExpectedRrFromPrices(entry, sl0, finalTp);
-    }
-  }
-
-  if (rr == null || rr + 1e-9 < minRr) {
-    console.warn(`[LevelsAdapter:RR] R:R still insufficient: ${rr == null ? 'null' : rr.toFixed(2)} < ${minRr}`);
-    return null;
-  }
-
-  const note =
-    typeof (raw as { adjustment_note?: string }).adjustment_note === 'string'
-      ? String((raw as { adjustment_note?: string }).adjustment_note).slice(0, 220)
-      : 'TP adjusted to meet min R:R';
-
-  const merged: GroqAnalysis = {
-    ...input.analysis,
-    suggested_stop_loss: Math.round(sl0 * 100) / 100,
-    suggested_take_profit: Math.round(finalTp * 100) / 100,
-    reason_summary: [
-      input.analysis.reason_summary,
-      `[LevelsAdapter:key2:rr-tp] ${note}`,
-    ]
-      .filter(Boolean)
-      .join(' · ')
-      .slice(0, 500),
-  };
-
-  const { analysis: withRr } = reconcileExpectedRr(merged);
-  console.log(
-    `[LevelsAdapter:RR] OK ${input.symbol} ${input.timeframe} ${action} SL fixed=${withRr.suggested_stop_loss} TP ${tp0}→${withRr.suggested_take_profit} rr≈${withRr.expected_rr}`
-  );
-  return withRr;
+  console.warn('[LevelsAdapter:RR] Fixed entry/SL cannot reach minimum R:R within the original structural target; skipping repair');
+  return null;
 }

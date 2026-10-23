@@ -21,12 +21,20 @@
     "v3:reset-5m": "tsx scripts/v3-reset-for-5m.ts",
     "v3:backfill-ohlcv": "tsx scripts/v3-backfill-ohlcv.ts",
     "backtest:historical": "tsx scripts/run-historical-testbed.ts",
+    "paper:momentum:testbed": "tsx scripts/run-momentum-paper-testbed.ts",
+    "paper:momentum:build": "tsc -p tsconfig.portfolio-paper.json",
+    "study:rr-variants": "tsx scripts/study-rr-variants.ts",
+    "research:ict": "tsx scripts/backtest-ict-implementation.ts && tsx scripts/verify-ict-implementation.ts",
     "benchmark:cerebras": "tsx scripts/benchmark-cerebras-dispatch-models.ts",
     "benchmark:openrouter": "tsx scripts/benchmark-openrouter-dispatch-models.ts",
     "smoke:llm-providers": "tsx scripts/smoke-llm-providers.ts",
     "smoke:structure-bias": "tsx scripts/smoke-structure-bias.ts",
     "eval:pullback": "tsx scripts/eval-pullback-entry.ts",
     "eval:pullback:strict": "tsx scripts/eval-pullback-entry.ts --strict",
+    "eval:entry-relaxation": "tsx scripts/eval-entry-relaxation.ts",
+    "eval:adaptive-setups": "tsx scripts/eval-adaptive-setups.ts",
+    "optimize:adaptive-setups": "tsx scripts/optimize-adaptive-setups.ts",
+    "eval:minimum-lot-stop": "tsx scripts/eval-minimum-lot-stop-band.ts",
     "backtest:pullback": "tsx scripts/backtest-pullback-binance.ts",
     "backtest:rr-sweep": "tsx scripts/backtest-rr-sweep.ts",
     "backtest:tf-stack": "tsx scripts/backtest-tf-stack.ts",
@@ -38,7 +46,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "tsx scripts/migrate-sqlite-to-postgres.ts"
+    "prisma:seed": "tsx scripts/migrate-sqlite-to-postgres.ts",
+    "research:core-ablation": "tsx scripts/backtest-core-ablation.ts"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.18",
@@ -49,7 +58,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
-    "openai": "^4.52.0"
+    "openai": "^4.52.0",
+    "ws": "8.20.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

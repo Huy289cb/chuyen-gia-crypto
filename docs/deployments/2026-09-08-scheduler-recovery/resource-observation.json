@@ -1,0 +1,17 @@
+{
+  "observedAt": "2026-09-08T08:40:18.277536+00:00",
+  "memoryMb": 956,
+  "swapUsedApproxMb": 1022,
+  "vmstatOneSecondSamples": [
+    {
+      "stealPercent": 54,
+      "ioWaitPercent": 35
+    },
+    {
+      "stealPercent": 54,
+      "ioWaitPercent": 29
+    }
+  ],
+  "interpretation": "Both guest memory paging and hypervisor CPU contention observed; missed cron risk is operational. Samples do not establish a long-run host average.",
+  "heavyWorkPolicy": "Sequential low-priority offline jobs; finish compiler before research."
+}

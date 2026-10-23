@@ -1,0 +1,6 @@
+const fs=require('fs'),cp=require('child_process'),path=require('path');
+const keys=['MAX_EFFECTIVE_RISK_PER_TRADE_USD','MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT','DAILY_LOSS_LIMIT_PERCENT','POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES','POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES','PENDING_ORDER_REENTRY_COOLDOWN_MINUTES','CONSECUTIVE_LOSS_COOLDOWN_HOURS','LOSS_COOLDOWN_TIER2_HOURS','LOSS_COOLDOWN_TIER3_HOURS','LOSS_COOLDOWN_TIER3_UNTIL_UTC_DAY','CIRCUIT_EXPECTANCY_COOLDOWN_HOURS'];
+const expected=['','3','10','60','60','60','1','1','1','false','1'];
+const apps=JSON.parse(cp.execFileSync('pm2',['jlist'],{encoding:'utf8'})).filter(p=>['crypto-api','crypto-worker','crypto-post-exit'].includes(p.name));
+const rows=apps.map(p=>{const proc=Object.fromEntries(fs.readFileSync('/proc/'+p.pid+'/environ','utf8').split('\0').filter(Boolean).map(s=>{const i=s.indexOf('=');return [s.slice(0,i),s.slice(i+1)]}));const env=Object.fromEntries(keys.map(k=>[k,proc[k]??null]));return {name:p.name,pid:p.pid,status:p.pm2_env.status,env,policyPass:keys.every((k,i)=>env[k]===expected[i])}});
+console.log(JSON.stringify({checkedAt:new Date().toISOString(),apps:rows},null,2));if(rows.some(p=>!p.policyPass||p.status!=='online'))process.exitCode=1;

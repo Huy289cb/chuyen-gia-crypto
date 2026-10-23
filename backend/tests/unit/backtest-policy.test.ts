@@ -137,4 +137,38 @@ describe('grade playbook filter', () => {
     });
     expect(r.pass).toBe(false);
   });
+
+  it('grade B analyzer confidence 0.70 passes only when the B floor is 0.70 or lower', () => {
+    const pass = evaluateSetupGradePlaybookFilter({
+      grade: 'B',
+      confidence: 0.7,
+      playbookKey: 'liquidity_sweep_reclaim',
+      minGrade: 'B',
+      gradeBMinConfidence: 0.7,
+      gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    });
+    const blocked = evaluateSetupGradePlaybookFilter({
+      grade: 'B',
+      confidence: 0.7,
+      playbookKey: 'liquidity_sweep_reclaim',
+      minGrade: 'B',
+      gradeBMinConfidence: 0.85,
+      gradeBAllowedPlaybooks: ['liquidity_sweep_reclaim'],
+    });
+
+    expect(pass.pass).toBe(true);
+    expect(blocked.pass).toBe(false);
+  });
+
+  it('grade B liquidity_sweep_reclaim passes when listed with breakout in allowlist', () => {
+    const r = evaluateSetupGradePlaybookFilter({
+      grade: 'B',
+      confidence: 0.72,
+      playbookKey: 'liquidity_sweep_reclaim',
+      minGrade: 'B',
+      gradeBMinConfidence: 0.7,
+      gradeBAllowedPlaybooks: ['breakout_volume', 'liquidity_sweep_reclaim'],
+    });
+    expect(r.pass).toBe(true);
+  });
 });

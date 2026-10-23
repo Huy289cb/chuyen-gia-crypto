@@ -5,12 +5,24 @@
 
 import {
   classifyStructureBias,
+  hasBearishStructureBreak,
+  hasBullishStructureBreak,
   type StructureBias,
   type StructureBiasResult,
   type StructureCandle,
 } from '../utils/structure-bias';
 
 export type { StructureBias, StructureBiasResult };
+
+/** Short needs LH+LL + BOS (close below prior swing low). Default on. */
+export function isV3StructureShortRequireBos(): boolean {
+  return process.env.V3_STRUCTURE_SHORT_REQUIRE_BOS !== 'false';
+}
+
+/** Long needs HH+HL + BOS (close above prior swing high). Default on — mirror short. */
+export function isV3StructureLongRequireBos(): boolean {
+  return process.env.V3_STRUCTURE_LONG_REQUIRE_BOS !== 'false';
+}
 
 export function isV3StructureBiasEnabled(): boolean {
   return process.env.V3_STRUCTURE_BIAS_ENABLED !== 'false';
@@ -39,13 +51,16 @@ export interface StructureSidePermission {
 }
 
 /**
- * bull → long only; bear → short only; transition → flat.
+ * bull → long only (+BOS); bear → short only (+BOS); transition → flat.
+ * Short: block LH+LL reclaim (Aug-24). Long: block HH+HL relief in bear (Aug 8–12 mirror).
  */
 export function evaluateStructureSidePermission(input: {
   side: 'long' | 'short';
   candles: StructureCandle[];
   enabled?: boolean;
   strength?: number;
+  shortRequireBos?: boolean;
+  longRequireBos?: boolean;
 }): StructureSidePermission {
   const enabled = input.enabled ?? isV3StructureBiasEnabled();
   if (!enabled) {
@@ -56,6 +71,8 @@ export function evaluateStructureSidePermission(input: {
     strength: input.strength ?? getV3StructureBiasStrength(),
   });
   const { bias } = detail;
+  const last = input.candles[input.candles.length - 1];
+  const lastClose = last?.close ?? (input.side === 'short' ? last?.low : last?.high);
 
   if (bias === 'transition') {
     return {
@@ -66,9 +83,37 @@ export function evaluateStructureSidePermission(input: {
     };
   }
   if (bias === 'bull' && input.side === 'long') {
+    const requireBos = input.longRequireBos ?? isV3StructureLongRequireBos();
+    if (requireBos) {
+      if (lastClose == null || !hasBullishStructureBreak(detail, lastClose)) {
+        const prior = detail.swingHighs[0];
+        return {
+          pass: false,
+          bias,
+          reason:
+            `blocked: bull HH+HL but no BOS (close ${lastClose ?? 'n/a'} ≤ prior high ${prior}) ` +
+            `(V3_STRUCTURE_LONG_REQUIRE_BOS)`,
+          detail,
+        };
+      }
+    }
     return { pass: true, bias, reason: `structure bull allows long (${detail.reason})`, detail };
   }
   if (bias === 'bear' && input.side === 'short') {
+    const requireBos = input.shortRequireBos ?? isV3StructureShortRequireBos();
+    if (requireBos) {
+      if (lastClose == null || !hasBearishStructureBreak(detail, lastClose)) {
+        const prior = detail.swingLows[0];
+        return {
+          pass: false,
+          bias,
+          reason:
+            `blocked: bear LH+LL but no BOS (close ${lastClose ?? 'n/a'} ≥ prior low ${prior}) ` +
+            `(V3_STRUCTURE_SHORT_REQUIRE_BOS)`,
+          detail,
+        };
+      }
+    }
     return { pass: true, bias, reason: `structure bear allows short (${detail.reason})`, detail };
   }
   return {
@@ -109,4 +154,37 @@ export function evaluatePlaybookSideMatch(input: {
     };
   }
   return { pass: true, reason: `playbook ${input.playbookSide} matches LLM` };
+}
+
+/** Facts for LLM confirm/veto — do not let the model invent HTF/playbook. */
+export function formatLlmGateContext(input: {
+  timeframe: string;
+  playbookKey: string;
+  playbookSide: 'long' | 'short' | null;
+  structureBias?: 'bull' | 'bear' | 'transition';
+  htfTf?: string;
+  htfRegime?: string;
+  htfDirection?: string | null;
+}): string {
+  const side = input.playbookSide ?? 'unknown';
+  const confirm =
+    side === 'long' ? 'buy' : side === 'short' ? 'sell' : 'hold';
+  const lines = [
+    'GATE CONTEXT (deterministic — do not contradict):',
+    `- Entry TF: ${input.timeframe}`,
+    `- Playbook: ${input.playbookKey} → side ${side}`,
+  ];
+  if (input.structureBias) {
+    lines.push(`- Structure bias (4h): ${input.structureBias}`);
+  }
+  if (input.htfTf) {
+    lines.push(
+      `- HTF ${input.htfTf}: ${input.htfRegime ?? 'unknown'}/${input.htfDirection ?? 'null'}`
+    );
+  }
+  lines.push(
+    `- Confirm ONLY "${confirm}" (with SL/TP) or "hold". Never the opposite side.`,
+    '- Hold is a valid veto. Do not invent BOS/CHOCH/OB/FVG/Fibo numbers.'
+  );
+  return lines.join('\n');
 }

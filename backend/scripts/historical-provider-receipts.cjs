@@ -1,0 +1,8 @@
+'use strict';
+const fs=require('fs'),crypto=require('crypto');
+function canonical(value){if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])]));return value;}
+const key=(url,body)=>crypto.createHash('sha256').update(JSON.stringify([url,canonical(body)])).digest('hex');
+function createHistoricalProviderReceipts(file){const bytes=fs.readFileSync(file),rows=JSON.parse(bytes),queues=new Map(),used=[],misses=[];if(!Array.isArray(rows))throw Error('invalid_provider_receipts');for(const [index,row]of rows.entries()){if(!row.body||!row.response||!Number.isInteger(row.status)||!Number.isFinite(row.at))throw Error('incomplete_provider_receipt');const k=key(row.url,row.body);if(!queues.has(k))queues.set(k,[]);queues.get(k).push({index,row});}
+ return {fetch:async(url,options)=>{if(options?.method!=='POST')throw Error('receipt_method_mismatch');const u=new URL(url),k=key(u.origin+u.pathname,JSON.parse(options.body)),queue=queues.get(k);if(!queue?.length){misses.push({input_sha256:k});throw Error('historical_provider_receipt_missing');}const {index,row}=queue.shift();used.push({index,input_sha256:k,original_at:row.at,reported_cost:row.response.usage?.cost??null});return new Response(JSON.stringify(row.response),{status:row.status,headers:{'content-type':'application/json'}});},diagnostics:()=>({source_sha256:crypto.createHash('sha256').update(bytes).digest('hex'),used:[...used],misses:[...misses],network_calls:0,cost_basis:'original_reported_usage_reused_not_new_billing'})};
+}
+module.exports={createHistoricalProviderReceipts};

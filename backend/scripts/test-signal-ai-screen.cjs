@@ -1,0 +1,16 @@
+const assert=require('assert/strict');
+const {features,detect}=require('./signal-ai-screen-spec.cjs');
+const bars=Array.from({length:200},(_,i)=>({timestamp:Date.UTC(2026,0,1)+i*900000,open:100+Math.sin(i),close:100+Math.sin(i+.2),high:102+Math.sin(i),low:98+Math.sin(i),volume:20+i}));
+const all=features(bars);
+assert.deepEqual(features(bars.slice(0,130)),all.slice(0,130));
+assert.equal(all[96].priorDayHigh,Math.max(...bars.slice(0,96).map(b=>b.high)));
+assert.equal(all[96].priorDayLow,Math.min(...bars.slice(0,96).map(b=>b.low)));
+assert.equal(all[80].channelHigh,Math.max(...bars.slice(60,80).map(b=>b.high)));
+const rows=all.slice(0,52).map(x=>({...x}));rows[51]={...rows[51],timestamp:Date.UTC(2026,0,2,1,45)};
+assert.equal(detect('hourly_channel_break',rows,51,{close:110,e20:105,e50:100,channelHigh:109,channelLow:90}),'long');
+rows[51].timestamp+=900000;
+assert.equal(detect('hourly_channel_break',rows,51,{close:110,e20:105,e50:100,channelHigh:109,channelLow:90}),null);
+rows[50].rsi=39;rows[51].rsi=41;rows[51].open=100;rows[51].close=101;
+assert.equal(detect('rsi_trend_reset',rows,51,{close:110,e20:105,e50:100}),'long');
+assert.equal(detect('rsi_trend_reset',rows,51,{close:90,e20:95,e50:100}),null);
+console.log('PASS: future-prefix invariance, prior-day isolation, channel excludes current bar, hourly dedup, RSI direction');

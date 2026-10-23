@@ -1,0 +1,19 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const pkg=path.resolve(process.argv[2]),m=JSON.parse(fs.readFileSync(path.join(pkg,'manifest.json'))),now=Date.parse('2026-10-02T14:00:00Z');
+assert.deepEqual(m.changedFiles,['services/position-pnl-reconcile.service.js','utils/net-trade-statistics.js','utils/recorded-net-statistics.js']);
+for(const v of ['baseline','release'])for(const[f,h]of Object.entries(m[v]))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(pkg,v,f))).digest('hex'),h);
+async function run(v,c){const writes=[],calls=[],events=[],exports={},file=path.join(pkg,v,'services/position-pnl-reconcile.service.js');
+ const prisma={testnetPosition:{findMany:async q=>{calls.push(['positions',q]);return c.positions;}},testnetAccount:{update:async q=>{calls.push('account');if(c.dbFailure)throw Error('db');writes.push(['account',q]);}},tradeOutcome:{findMany:async q=>{calls.push(['outcomes',q]);if(c.outcomeFailure)throw Error('outcomes');return c.outcomes??[];}},playbookStats:{upsert:async q=>writes.push(['playbook',q])}};
+ const mocks={'node:crypto':{randomUUID:()=> '00000000-0000-4000-8000-000000000001'},'../lib/prisma':{prisma},'../repositories/testnet.repository':{PIPELINE_EVENT_POSITION_ID:'pipeline_v3_kim_nghia'},'../utils/account-wallet-journal':{persistAccountWalletObservation:async(e,type)=>{events.push({e,type});if(c.journal==='failed')throw Error('journal');if(c.journal==='pending')return new Promise(()=>{});}}};
+ const fixedDate=class extends Date{constructor(...a){super(...(a.length?a:[now]));}};
+ vm.runInNewContext(fs.readFileSync(file,'utf8'),{exports,require:id=>{if(Object.hasOwn(mocks,id))return mocks[id];if(id.startsWith('../utils/'))return require(path.resolve(path.dirname(file),id+'.js'));return {};},Date:fixedDate,console:{warn(){},log(){}}},{filename:file});
+ let error;try{await exports.rebuildNetTradeStatistics(1);}catch(e){error=e.message;}
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();const json=v=>JSON.parse(JSON.stringify(v));return {writes:json(writes),calls:json(calls),events:json(events),error};
+}
+(async()=>{const vals=[-.02,-.01,0,.01,.02],fixtures=[[],...vals.map(v=>[v])];for(const a of vals)for(const b of vals)for(const c of vals)fixtures.push([a,b,c]);
+ const rows=vs=>vs.map((realized_pnl,i)=>({position_id:'p'+i,close_time:new Date(now-1000-i),realized_pnl,entry_fee:.1,exit_fee:.2,funding_fee:-.03}));
+ const scenarios=fixtures.map(v=>({positions:rows(v)})).concat([{positions:rows([-1]),dbFailure:true},{positions:rows([-1]),outcomeFailure:true},{positions:rows([-1]),journal:'failed'},{positions:rows([-1]),journal:'pending'},{positions:rows([-1]),outcomes:[{symbol:'BTC',decision:{playbook_key:'test'},outcome:'loss',realized_rr:-1,realized_pnl:-1}]}]);
+ let replayed=0;for(const c of scenarios){const b=await run('baseline',c),r=await run('release',c);assert.deepEqual(r.writes,b.writes);assert.deepEqual(r.calls,b.calls);assert.equal(r.error,b.error);assert.equal(r.events.length,c.dbFailure?0:1);
+ for(const {e,type}of r.events){assert.equal(type,'account_net_statistics_applied');const result=require(path.join(pkg,'release/utils/recorded-net-statistics.js')).replayRecordedNetStatistics(e,now,now);assert.equal(result.status,'evaluated');assert.equal(result.matches_recorded,true);replayed++;}}
+ const report={allHashesVerified:true,compiledScenarios:scenarios.length,recordedPayloadReplays:replayed,accountAndPlaybookWritesQueriesErrorsMatch:true,failedDbNoAppliedJournal:true,pendingFailedJournalsNonblocking:true,liveWrites:0,limits:'Mocked full statistics function only; other module functions/real event/portfolio parity separate.'};fs.writeFileSync(path.join(pkg,'compiled-tests.json'),JSON.stringify(report,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(report));
+})().catch(e=>{console.error(e);process.exitCode=1;});

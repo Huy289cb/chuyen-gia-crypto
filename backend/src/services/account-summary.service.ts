@@ -10,7 +10,7 @@ import { fetchBinanceClosedTradeRounds } from './binance-trade-history.service';
 import { syncTestnetAccountFromBinance } from './binance-balance-sync.service';
 
 /** Max |wallet − Σ position PnL| before DB position stats are hidden in UI. */
-export const PNL_DB_GAP_TRUST_USD = 5;
+export const PNL_DB_GAP_TRUST_USD = 0.01;
 
 export interface AccountBalanceSummary {
   isInitialized: boolean;
@@ -196,17 +196,19 @@ export async function getAccountBalanceSummary(
   const totalBalance = liveAccount.current_balance || 0;
   const walletPnl = totalBalance - startingBalance;
   const dbPositionPnlGap = walletPnl - dbPositionPnlSum;
-  const binanceRealizedPnl = liveAccount.realized_pnl ?? 0;
+  const canonicalNetPnl = liveAccount.realized_pnl ?? 0;
   const totalFees = liveAccount.accumulated_trading_fees ?? 0;
   const fundingFees = liveAccount.accumulated_funding_fee ?? 0;
-  const positionTradingPnlGap = binanceRealizedPnl - dbPositionPnlSum;
-  const approximateNetTradingPnl = binanceRealizedPnl - totalFees - fundingFees;
+  // Keep the public gross-PnL field compatible while comparing NET to NET.
+  const binanceRealizedPnl = canonicalNetPnl + totalFees + fundingFees;
+  const positionTradingPnlGap = canonicalNetPnl - dbPositionPnlSum;
+  const approximateNetTradingPnl = canonicalNetPnl;
   const walletIncomeGap = walletPnl - approximateNetTradingPnl;
   const trustGap =
     Math.abs(binanceRealizedPnl) > 0.01 || Math.abs(dbPositionPnlSum) > 0.01
       ? positionTradingPnlGap
       : dbPositionPnlGap;
-  const dbPositionPnlTrusted = Math.abs(trustGap) <= PNL_DB_GAP_TRUST_USD;
+  const dbPositionPnlTrusted = Math.abs(trustGap) <= PNL_DB_GAP_TRUST_USD && Math.abs(walletIncomeGap) <= PNL_DB_GAP_TRUST_USD;
 
   let dailyPnL: number;
   let weeklyPnL: number;
@@ -327,8 +329,9 @@ async function getTodayTradeStatsFromBinance(
   let wins = 0;
   let losses = 0;
   for (const r of todayRounds) {
-    if (r.realizedPnL > 0) wins++;
-    else if (r.realizedPnL < 0) losses++;
+    const net = r.netPnl ?? r.realizedPnL - r.fee - (r.fundingFee ?? 0);
+    if (net > 0.01) wins++;
+    else if (net < -0.01) losses++;
   }
 
   return {

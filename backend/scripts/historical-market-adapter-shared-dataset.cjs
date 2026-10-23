@@ -1,0 +1,8 @@
+'use strict';
+const {assertHistoricalDatasetBundle}=require('./shared-historical-dataset.cjs');
+function createHistoricalMarketAdapter({datasetPath,expectedSha256,readClock,candleAdapter,datasetBundle}){
+ const certified=assertHistoricalDatasetBundle({datasetBundle,datasetPath,expectedSha256}),funding=certified.data.funding,fundingMarkApproximation=certified.data.fundingMarkApproximation,reads=[];if(certified.dataset_sha256!==expectedSha256)throw Error('market_dataset_hash_mismatch');if(!Array.isArray(funding))throw Error('missing_historical_funding');let previous=-Infinity;for(const row of funding){if(![row.time,row.rate,row.markPrice].every(Number.isFinite)||row.markPrice<=0||row.time<=previous)throw Error('invalid_funding_history');previous=row.time;}
+ function rate(symbol){if(!['BTC','BTCUSDT'].includes(symbol))throw Error('market_symbol_not_supported');const at=readClock();let lo=0,hi=funding.length;while(lo<hi){const mid=(lo+hi)>>>1;if(funding[mid].time<=at)lo=mid+1;else hi=mid;}if(!lo)throw Error('funding_warmup_missing');const f=funding[lo-1];reads.push({at,settled_funding_time:f.time,rate:f.rate});return {symbol:'BTCUSDT',lastFundingRate:f.rate,markPrice:f.markPrice,nextFundingTime:Math.floor(at/28800000)*28800000+28800000};}
+ return {getPremiumIndex:async symbol=>rate(symbol),getPrice:async symbol=>{const bars=candleAdapter.getCandles({symbol,timeframe:'1m',limit:1}).candles;if(!bars.length)throw Error('price_warmup_missing');return bars[0].close;},diagnostics:()=>({funding_guard_basis:'last_known_settled_rate_carry_forward_proxy_not_historical_predicted_rate',mark_basis:fundingMarkApproximation??'dataset_provided',reads:reads.map(r=>({...r})),exact_live_funding_guard_parity:false})};
+}
+module.exports={createHistoricalMarketAdapter};

@@ -15,59 +15,46 @@ export interface BinanceIncomeSummary {
   rowCount: number;
 }
 
-interface IncomeRow {
+export interface IncomeRow {
   incomeType: string;
   income: string;
   time: number;
+  asset?: string;
+  symbol?: string;
+  tranId?: number | string;
+}
+export interface IncomeOptions { symbol?: string; startTime?: number; endTime?: number }
+
+/** Stable bounds + page pagination preserve multiple incomes at the same millisecond. */
+export async function fetchBinanceIncomeRows(options: IncomeOptions = {}): Promise<IncomeRow[]> {
+  const rows = new Map<string, IncomeRow>();
+  const endTime = options.endTime ?? Date.now();
+  const startTime = options.startTime ?? endTime - 90 * 86400_000;
+  const params: Record<string, string> = { startTime: String(startTime), endTime: String(endTime), limit: '1000' };
+  if (options.symbol) params.symbol = `${options.symbol.toUpperCase().replace(/USDT$/, '')}USDT`;
+  for (let page = 1; page <= 100; page++) {
+    const batch = await get(endpoints.INCOME, { ...params, page: String(page) }, true) as IncomeRow[];
+    const prior = rows.size;
+    for (const row of batch) {
+      if (row.time < startTime || row.time > endTime || (row.asset && row.asset !== 'USDT')) continue;
+      if (!Number.isFinite(Number(row.income))) throw new Error('Invalid Binance income');
+      const key = row.tranId != null ? `${row.incomeType}:${row.tranId}` : JSON.stringify(row);
+      rows.set(key, row);
+    }
+    if (batch.length < 1000) return [...rows.values()].sort((a, b) => a.time - b.time);
+    if (rows.size === prior) throw new Error('Income pagination made no progress');
+  }
+  throw new Error('Income pagination exhausted; refusing partial totals');
 }
 
-/**
- * Paginate income history and aggregate by type.
- */
-export async function fetchBinanceIncomeSummary(options?: {
-  symbol?: string;
-  startTime?: number;
-}): Promise<BinanceIncomeSummary> {
-  const byType: Record<string, number> = {};
-  let rowCount = 0;
-  let cursor = options?.startTime ?? 0;
-
-  for (let page = 0; page < 50; page++) {
-    const params: Record<string, string> = {
-      startTime: String(cursor),
-      limit: '1000',
-    };
-    if (options?.symbol) {
-      params.symbol = `${options.symbol.toUpperCase()}USDT`.replace(/USDTUSDT$/, 'USDT');
-    }
-
-    const batch = (await get(endpoints.INCOME, params, true)) as IncomeRow[];
-    if (!batch.length) break;
-
-    for (const row of batch) {
-      const amount = parseFloat(row.income) || 0;
-      byType[row.incomeType] = (byType[row.incomeType] ?? 0) + amount;
-      rowCount += 1;
-    }
-
-    cursor = batch[batch.length - 1]!.time + 1;
-    if (batch.length < 1000) break;
-  }
-
-  const realizedPnl = byType.REALIZED_PNL ?? 0;
-  const commission = byType.COMMISSION ?? 0;
-  const fundingFee = byType.FUNDING_FEE ?? 0;
-  const transferNet = byType.TRANSFER ?? 0;
-  const netTradingPnl = realizedPnl + commission + fundingFee;
-
-  return {
-    realizedPnl,
-    commission,
-    fundingFee,
-    transferNet,
-    netTradingPnl,
-    rowCount,
-  };
+export async function fetchBinanceIncomeSummary(options?: IncomeOptions): Promise<BinanceIncomeSummary> {
+  const rows = await fetchBinanceIncomeRows(options);
+  const sum = (kind: string) => rows.filter(row => row.incomeType === kind).reduce((n, row) => n + Number(row.income), 0);
+  const realizedPnl = sum('REALIZED_PNL');
+  const commission = sum('COMMISSION');
+  const fundingFee = sum('FUNDING_FEE');
+  return { realizedPnl, commission, fundingFee, transferNet: sum('TRANSFER'),
+    netTradingPnl: realizedPnl + commission + fundingFee, rowCount: rows.length };
 }
 
 /**

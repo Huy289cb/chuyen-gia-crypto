@@ -1,3 +1,5 @@
+import { measuredExitLesson } from '../utils/post-exit-memory';
+import { currentEntryTrace, recordEntryStage } from '../utils/entry-trace';
 /**
  * Memory Service
  * Stores and retrieves trading decisions, outcomes, and reflections
@@ -73,6 +75,8 @@ export class MemoryService {
           console.log(
             `[MemoryService] Skip duplicate bar ${input.candle_hash} for ${input.symbol} ${input.timeframe} (id=${existing.id})`
           );
+          if (currentEntryTrace()) currentEntryTrace()!.decision_id = existing.id;
+          await recordEntryStage('decision', { decision_id: existing.id, cached: true });
           return existing;
         }
       }
@@ -82,6 +86,8 @@ export class MemoryService {
         method_id: methodId,
       });
       console.log(`[MemoryService] Stored decision for ${input.symbol}: ${input.decision}`);
+      if (currentEntryTrace()) currentEntryTrace()!.decision_id = decision.id;
+      await recordEntryStage('decision', { decision_id: decision.id, decision: input.decision, reason: input.reason });
       return decision;
     } catch (error) {
       console.error('[MemoryService] Error storing decision:', error);
@@ -165,7 +171,7 @@ export class MemoryService {
     };
 
     // Get symbol from outcome
-    const tradeOutcome = await TradeRepository.getTradeOutcomeByDecisionId(outcomeId);
+    const tradeOutcome = await MemoryRepository.getTradeOutcomeById(outcomeId);
     if (tradeOutcome) {
       reflection.symbol = tradeOutcome.symbol;
     }
@@ -261,15 +267,16 @@ export class MemoryService {
     const lines: string[] = ['RECENT TRADE REFLECTIONS (learn from outcomes):'];
     for (const o of outcomes) {
       const r = o.reflection;
-      const lesson = r?.lesson_learned?.trim();
+      const measured = measuredExitLesson(o.decision_id, o.realized_pnl, o.exit_price);
+      const lesson = measured ?? r?.lesson_learned?.trim();
       if (!lesson) continue;
       lines.push(
         `- ${o.outcome.toUpperCase()} PnL ${o.realized_pnl.toFixed(2)} RR ${o.realized_rr.toFixed(2)} (${o.close_reason}): ${lesson}`
       );
-      if (r?.what_went_wrong) {
+      if (!measured && r?.what_went_wrong) {
         lines.push(`  Avoid: ${r.what_went_wrong}`);
       }
-      if (r?.what_worked) {
+      if (!measured && r?.what_worked) {
         lines.push(`  Repeat: ${r.what_worked}`);
       }
     }

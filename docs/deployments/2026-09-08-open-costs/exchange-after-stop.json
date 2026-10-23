@@ -1,0 +1,68 @@
+{
+  "checkedAt": "2026-09-08T02:51:42.577Z",
+  "positions": [
+    {
+      "symbol": "BTCUSDT",
+      "positionAmt": 0.001,
+      "entryPrice": 79168.8,
+      "markPrice": 79041.08355797,
+      "unRealizedProfit": -0.12771644,
+      "liquidationPrice": 45091.44475904,
+      "leverage": null,
+      "maxNotionalValue": null,
+      "isolatedMargin": 0,
+      "isAutoAddMargin": false,
+      "positionSide": "BOTH",
+      "notional": 79.04108355,
+      "isolatedWallet": 0
+    }
+  ],
+  "orders": [],
+  "algos": [
+    {
+      "algoId": 3000002180940409,
+      "orderId": 3000002180940409,
+      "clientOrderId": "3fTppDjw3b5snzpvm3MgGn",
+      "symbol": "BTCUSDT",
+      "side": "SELL",
+      "type": "TAKE_PROFIT_MARKET",
+      "orderType": "TAKE_PROFIT_MARKET",
+      "algoStatus": "NEW",
+      "positionSide": "BOTH",
+      "price": 0,
+      "stopPrice": null,
+      "triggerPrice": 80118.8,
+      "quantity": 0.001,
+      "origQty": 0.001,
+      "status": "NEW",
+      "timeInForce": "GTC",
+      "reduceOnly": true,
+      "updateTime": 1788819091499
+    },
+    {
+      "algoId": 3000002180940408,
+      "orderId": 3000002180940408,
+      "clientOrderId": "1fwvx7yBR7onGH2hI1woUi",
+      "symbol": "BTCUSDT",
+      "side": "SELL",
+      "type": "STOP_MARKET",
+      "orderType": "STOP_MARKET",
+      "algoStatus": "NEW",
+      "positionSide": "BOTH",
+      "price": 0,
+      "stopPrice": null,
+      "triggerPrice": 78535.4,
+      "quantity": 0.001,
+      "origQty": 0.001,
+      "status": "NEW",
+      "timeInForce": "GTC",
+      "reduceOnly": true,
+      "updateTime": 1788819091480
+    }
+  ],
+  "balance": {
+    "walletBalance": 34.25772102,
+    "unrealizedPnl": -0.12771644,
+    "equity": 34.13000458
+  }
+}

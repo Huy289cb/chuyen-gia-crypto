@@ -1,0 +1,6 @@
+const fs=require('node:fs'),crypto=require('node:crypto');require('tsx/cjs');
+const {replayRecordedPartialRequery}=require('../src/utils/partial-fill-evidence.ts');
+const [input,cutoff,out]=process.argv.slice(2);if(!out)throw Error('Usage: EXPORT ISO_CUTOFF NEW_REPORT');const asOf=Date.parse(cutoff);if(!Number.isFinite(asOf))throw Error('invalid_cutoff');
+const bytes=fs.readFileSync(input),source=JSON.parse(bytes);if(!Array.isArray(source.events))throw Error('missing_events');
+let excludedFuture=0;const rows=source.events.filter(e=>e.event_type==='partial_fill_requery').flatMap(e=>{const known=Date.parse(e.timestamp);if(!Number.isFinite(known))return [{event_id:e.id,result:{status:'unknown',reason:'missing_event_timestamp'}}];if(known>asOf){excludedFuture++;return [];}return [{event_id:e.id,result:replayRecordedPartialRequery(e.event_data,asOf)}];});
+const report={schema:'recorded-partial-fill-replay-v1',input_sha256:crypto.createHash('sha256').update(bytes).digest('hex'),as_of:cutoff,input_events:source.events.length,rows,excludedFuture,limits:'Partial re-query component only. Materialization checks are not a created/protected position or full lifecycle parity.'};fs.writeFileSync(out,JSON.stringify(report,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({rows:rows.length,excludedFuture}));

@@ -1,0 +1,56 @@
+{
+  "verifiedAt": "2026-09-07T13:28:32.780767+00:00",
+  "riskCapUsd": 1,
+  "riskCapMode": "usd",
+  "monitor": {
+    "checked_at": "2026-09-07T13:28:01.780228+00:00",
+    "alerts": [],
+    "processes": {
+      "crypto-api": {
+        "status": "online",
+        "pids": [
+          3106770
+        ]
+      },
+      "crypto-worker": {
+        "status": "online",
+        "pids": [
+          3106777
+        ]
+      }
+    },
+    "db": {
+      "heartbeats": [
+        {
+          "name": "PendingOrderLifecycle",
+          "age_seconds": 182.08655
+        },
+        {
+          "name": "MarketScan",
+          "age_seconds": 177.08555
+        },
+        {
+          "name": "LLMDispatch",
+          "age_seconds": 122.09255
+        },
+        {
+          "name": "PositionMonitor",
+          "age_seconds": 61.98655
+        }
+      ],
+      "account": {
+        "balance": 34.27714639,
+        "baseline": 40,
+        "net_pnl": -5.72285361,
+        "trades": 36
+      },
+      "open_positions": 0,
+      "ledger_verified": 36,
+      "closed_positions": 36,
+      "adaptive_candidates": 0,
+      "provider_calls": 0
+    }
+  },
+  "decision": "Deploy user-authorized 1 USD cap; retain baseline signal rules after positive baseline results in two historical windows and rejection of relaxed rules. Evaluation completed; future live ROI is not guaranteed.",
+  "report": "../../audits/2026-09-07-entry-risk-1usd/review.md"
+}

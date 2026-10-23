@@ -1,0 +1,10 @@
+import {evaluateAccountCircuits, type AccountCircuitPolicy} from './account-circuit-evaluation';
+const object=(x:unknown):Record<string,unknown>|null=>x!==null&&typeof x==='object'&&!Array.isArray(x)?x as Record<string,unknown>:null;
+export function replayRecordedAccountCircuitDecision(record:unknown,knownAt:number,asOf:number){
+ const unknown=(reason:string)=>({status:'unknown' as const,reason});const d=object(record),p=object(d?.policy),s=object(d?.state),e=object(s?.expectancy),decision=object(d?.decision);
+ const clock=(x:unknown)=>typeof x==='string'?Date.parse(x):NaN;const start=clock(d?.reads_started_at),end=clock(d?.inputs_resolved_at);
+ if(d?.schema!=='account-circuit-decision-v1'||![start,end,knownAt,asOf].every(Number.isFinite)||start>end||end>knownAt||knownAt>asOf)return unknown('invalid_knowledge_clock');
+ if(!p||!s||!e||!decision||!['circuitDailyLossEnabled','circuitDrawdownEnabled','circuitExpectancyKillEnabled'].every(k=>typeof p[k]==='boolean')||!['dailyLossLimitPercent','maxDrawdownPercent','circuitExpectancyMinSumR'].every(k=>typeof p[k]==='number'&&Number.isFinite(p[k]))||Number(p.dailyLossLimitPercent)<0||Number(p.maxDrawdownPercent)<0||!Number.isSafeInteger(p.circuitExpectancyWindow)||Number(p.circuitExpectancyWindow)<1||!['dailyLossPercent','drawdownPercent'].every(k=>typeof s[k]==='number'&&Number.isFinite(s[k])&&Number(s[k])>=0)||!Number.isSafeInteger(e.n)||Number(e.n)<0||!['sumR','avgR'].every(k=>typeof e[k]==='number'&&Number.isFinite(e[k])))return unknown('missing_resolved_circuit_inputs');
+ const expected=evaluateAccountCircuits(p as unknown as AccountCircuitPolicy,{dailyLossPercent:Number(s.dailyLossPercent),drawdownPercent:Number(s.drawdownPercent),expectancy:{n:Number(e.n),sumR:Number(e.sumR),avgR:Number(e.avgR)}});
+ return {status:'evaluated' as const,matches_recorded:expected.allowed===decision.allowed&&expected.reason===decision.reason,expected_decision:expected,query_lineage:'not_established' as const,atomic_account_state:'not_established' as const};
+}

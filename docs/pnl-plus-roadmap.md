@@ -1,3 +1,5 @@
+> **Lộ trình phát triển hiện hành ngày12/10/2026:** [Cải thiện toàn hệ thống Futures100u](plan/2026-10-12-futures-system-research-roadmap.md) theo [policy mới](runtime-risk-policy.md), với [bằng chứng internet](research/2026-10-12-futures-evidence.md). Bảng PnL/tracking và cấu hình dưới đây là snapshot tháng06, không là hiện trạng hay ràng buộc mới. Research/docs DONE; triển khai/backtest100/live NOT_RUN, chưa xác nhận đạt1u/ngày.
+
 # PnL+ Roadmap (fix & cải thiện)
 
 **Cập nhật:** 2026-06-04  

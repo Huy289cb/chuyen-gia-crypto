@@ -1,0 +1,1 @@
+{"version":3,"file":"cooldown-simulator.d.ts","sourceRoot":"","sources":["../../src/backtest/cooldown-simulator.ts"],"names":[],"mappings":"AAEA,yEAAyE;AACzE,qBAAa,qBAAqB;IAChC,OAAO,CAAC,iBAAiB,CAAK;IAC9B,OAAO,CAAC,aAAa,CAAK;IAE1B,SAAS,CAAC,EAAE,EAAE,MAAM,GAAG,OAAO;IAI9B,YAAY,CAAC,MAAM,EAAE,MAAM,EAAE,SAAS,EAAE,MAAM,GAAG,IAAI;CAWtD"}

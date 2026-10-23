@@ -93,10 +93,12 @@ export async function performStartupReconciliation(): Promise<void> {
 async function reconcilePendingOrders(): Promise<void> {
   console.log('[BinanceReconciliation] Reconciling pending orders...');
 
-  const [localPendingOrders, localFailedOrders] = await Promise.all([
+  const [pendingOrders, partialOrders, localFailedOrders] = await Promise.all([
     getTestnetPendingOrders({ status: 'pending' }),
+    getTestnetPendingOrders({ status: 'partially_filled' }),
     getTestnetPendingOrders({ status: 'reconciliation_failed_not_on_binance' }),
   ]);
+  const localPendingOrders = [...pendingOrders, ...partialOrders];
 
   if (localPendingOrders.length === 0 && localFailedOrders.length === 0) {
     console.log('[BinanceReconciliation] No local pending orders to reconcile');
@@ -196,9 +198,10 @@ async function reconcilePendingOrders(): Promise<void> {
         console.log(`[BinanceReconciliation] Order ${localOrder.order_id} exists on Binance with status ${binanceStatus}`);
 
         // If Binance shows FILLED but local shows pending, local state is stale
-        if (binanceStatus === 'FILLED' && localOrder.status === 'pending') {
+        if (binanceStatus === 'PARTIALLY_FILLED' ||
+            (binanceStatus === 'FILLED' && localOrder.status === 'pending')) {
           console.warn(
-            `[BinanceReconciliation] Order ${localOrder.order_id} FILLED on Binance but PENDING locally — recovering`
+            `[BinanceReconciliation] Order ${localOrder.order_id} ${binanceStatus} on Binance — recovering execution`
           );
           await recoverPendingOrderFromBinance(localOrder);
         }

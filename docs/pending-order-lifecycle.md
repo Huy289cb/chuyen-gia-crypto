@@ -1,5 +1,7 @@
 # Pending limit order lifecycle (PnL+)
 
+> **Cooldown giao dịch:** [Chính sách rủi ro đã được người dùng chốt](runtime-risk-policy.md) — cooldown **1h**, ngày **10%**, mỗi lệnh **3% số dư**, cap USD để rỗng. Không áp dụng lại mức cũ từ default hoặc báo cáo lịch sử.
+
 Unfilled Binance **GTC limit** orders are managed so they do not block the pipeline indefinitely or fill on stale setups.
 
 ## Pipeline interaction
@@ -39,7 +41,8 @@ Cancel when `|mark - entry| / entry >= PENDING_ORDER_DRIFT_PCT` (default **0.8%*
 - Runs after TTL/drift pass if orders still `pending`.
 - Actions: `hold`, `cancel` (Binance + DB), `modify` (DB SL/TP/entry only — **exchange limit price unchanged**).
 - Min confidence: `PENDING_ORDER_REVIEW_MIN_CONFIDENCE` (default **0.7**).
-- Model: `llama-3.1-8b-instant` (cheap auxiliary call).
+- Models: `GROQ_MODEL_AUXILIARY` (default `openai/gpt-oss-20b`) then
+  `openai/gpt-oss-120b`; retired Llama IDs are filtered before requests.
 
 Disable: `PENDING_ORDER_REVIEW_ENABLED=false`.
 

@@ -1,0 +1,1158 @@
+[
+  {
+    "variant": "baseline",
+    "executionWalletUsd": null,
+    "summary": {
+      "count": 4,
+      "net": 3.127328435834622,
+      "profitFactor": 3.4618410265130604,
+      "maxDrawdownUsd": 0.9996024608831674,
+      "forcedEndCloses": 1
+    },
+    "result": {
+      "symbol": "BTC",
+      "period": {
+        "start": "2026-07-08T00:00:00.000Z",
+        "end": "2026-09-05T23:55:00.000Z",
+        "weeks": 8.571428571428571
+      },
+      "config": {
+        "minSlPct": 0.008,
+        "minRr": 3,
+        "notionalUsd": 100,
+        "feePctPerSide": 0.0005,
+        "timeframes": [
+          "5m",
+          "15m",
+          "1h"
+        ],
+        "entryTfPriority": [
+          "15m",
+          "1h",
+          "5m"
+        ]
+      },
+      "variant": {
+        "id": "baseline",
+        "label": "Current env policy + tiered loss-streak cooldown",
+        "enableCooldown": true
+      },
+      "summary": {
+        "steps": 17280,
+        "signalsPassed": 1192,
+        "entries": 4,
+        "wins": 2,
+        "losses": 2,
+        "winRate": 0.5,
+        "netPnlUsd": 3.127328435834622,
+        "grossPnlUsd": 3.92929308237581,
+        "feesUsd": 0.4019646465411879,
+        "avgSlPct": 0.8000067436437255,
+        "avgBarsHeld": 300.5,
+        "maxConsecutiveLosses": 1
+      },
+      "blocks": {
+        "signal_gate": 13089,
+        "regime": 0,
+        "htf": 438,
+        "no_direction": 0,
+        "open_position": 1199,
+        "duplicate_signal": 1800,
+        "entry_5m_guard": 21,
+        "grade_playbook": 0,
+        "pullback": 81,
+        "cooldown": 0,
+        "structure_bias": 648,
+        "side_align": 0,
+        "execution_risk": 0
+      },
+      "slBuckets": [
+        {
+          "bucket": ">=0.70%",
+          "n": 4,
+          "wins": 2,
+          "losses": 2,
+          "netPnl": 3.127328435834622
+        }
+      ],
+      "breakdown": {
+        "byTimeframe": [
+          {
+            "key": "15m",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.270718572097648,
+            "winRate": 0
+          },
+          {
+            "key": "1h",
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "netPnl": 3.39804700793227,
+            "winRate": 0.6666666666666666
+          }
+        ],
+        "byPlaybook": [
+          {
+            "key": "breakout_volume",
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "netPnl": 3.127328435834622,
+            "winRate": 0.5
+          }
+        ],
+        "byGrade": [
+          {
+            "key": "A",
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "netPnl": 0.9284971807042619,
+            "winRate": 0.3333333333333333
+          },
+          {
+            "key": "B",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.19883125513036,
+            "winRate": 1
+          }
+        ],
+        "bySide": [
+          {
+            "key": "long",
+            "n": 4,
+            "wins": 2,
+            "losses": 2,
+            "netPnl": 3.127328435834622,
+            "winRate": 0.5
+          }
+        ],
+        "byDay": [
+          {
+            "key": "2026-08-07",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.9996024608831674,
+            "winRate": 0
+          },
+          {
+            "key": "2026-09-05",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.270718572097648,
+            "winRate": 0
+          },
+          {
+            "key": "2026-08-24",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.1988182136850773,
+            "winRate": 1
+          },
+          {
+            "key": "2026-08-21",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.19883125513036,
+            "winRate": 1
+          }
+        ],
+        "byWeek": [
+          {
+            "key": "2026-W32",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.9996024608831674,
+            "winRate": 0
+          },
+          {
+            "key": "2026-W36",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.270718572097648,
+            "winRate": 0
+          },
+          {
+            "key": "2026-W35",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.1988182136850773,
+            "winRate": 1
+          },
+          {
+            "key": "2026-W34",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.19883125513036,
+            "winRate": 1
+          }
+        ]
+      },
+      "trades": [
+        {
+          "id": 1,
+          "side": "long",
+          "timeframe": "1h",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1786111200000,
+          "entryPrice": 64984.8,
+          "stopLoss": 64464.92,
+          "takeProfit": 66544.44,
+          "slDistancePct": 0.8000024621142247,
+          "rr": 2.999999999999972,
+          "closeTime": 1786375500000,
+          "closePrice": 64464.92,
+          "closeReason": "stop_loss",
+          "pnlUsd": -0.9996024608831674,
+          "pnlPct": -0.9996024608831674,
+          "barsHeld": 881,
+          "notionalUsd": 100,
+          "feeUsd": 0.09959999876894289,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 2,
+          "side": "long",
+          "timeframe": "1h",
+          "playbookKey": "breakout_volume",
+          "grade": "B",
+          "entryTime": 1787313600000,
+          "entryPrice": 76749,
+          "stopLoss": 76135,
+          "takeProfit": 78591,
+          "slDistancePct": 0.800010423588581,
+          "rr": 3,
+          "closeTime": 1787349300000,
+          "closePrice": 78591,
+          "closeReason": "take_profit",
+          "pnlUsd": 2.19883125513036,
+          "pnlPct": 2.19883125513036,
+          "barsHeld": 119,
+          "notionalUsd": 100,
+          "feeUsd": 0.10120001563538288,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 3,
+          "side": "long",
+          "timeframe": "1h",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1787590800000,
+          "entryPrice": 79021.9,
+          "stopLoss": 78389.72,
+          "takeProfit": 80918.44,
+          "slDistancePct": 0.8000060742654796,
+          "rr": 3.000000000000046,
+          "closeTime": 1787624400000,
+          "closePrice": 80918.44,
+          "closeReason": "take_profit",
+          "pnlUsd": 2.1988182136850773,
+          "pnlPct": 2.1988182136850773,
+          "barsHeld": 112,
+          "notionalUsd": 100,
+          "feeUsd": 0.10120000911139823,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 4,
+          "side": "long",
+          "timeframe": "15m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1788625800000,
+          "entryPrice": 79854.2,
+          "stopLoss": 79215.36,
+          "takeProfit": 81770.72,
+          "slDistancePct": 0.8000080146066162,
+          "rr": 3.0000000000000226,
+          "closeTime": 1788652500000,
+          "closePrice": 79797.7,
+          "closeReason": "end_of_data",
+          "pnlUsd": -0.270718572097648,
+          "pnlPct": -0.270718572097648,
+          "barsHeld": 90,
+          "notionalUsd": 100,
+          "feeUsd": 0.09996462302546393,
+          "slippageUsd": 0.1
+        }
+      ]
+    }
+  },
+  {
+    "variant": "baseline",
+    "executionWalletUsd": 34.27714639,
+    "summary": {
+      "count": 1,
+      "net": -0.6495896600000046,
+      "profitFactor": 0,
+      "maxDrawdownUsd": 0.6495896600000046,
+      "forcedEndCloses": 0
+    },
+    "result": {
+      "symbol": "BTC",
+      "period": {
+        "start": "2026-07-08T00:00:00.000Z",
+        "end": "2026-09-05T23:55:00.000Z",
+        "weeks": 8.571428571428571
+      },
+      "config": {
+        "minSlPct": 0.008,
+        "minRr": 3,
+        "notionalUsd": 100,
+        "feePctPerSide": 0.0005,
+        "timeframes": [
+          "5m",
+          "15m",
+          "1h"
+        ],
+        "entryTfPriority": [
+          "15m",
+          "1h",
+          "5m"
+        ]
+      },
+      "variant": {
+        "id": "baseline",
+        "label": "Current env policy + tiered loss-streak cooldown",
+        "enableCooldown": true
+      },
+      "summary": {
+        "steps": 17280,
+        "signalsPassed": 1211,
+        "entries": 1,
+        "wins": 0,
+        "losses": 1,
+        "winRate": 0,
+        "netPnlUsd": -0.6495896600000046,
+        "grossPnlUsd": -0.5198800000000046,
+        "feesUsd": 0.06472486000000001,
+        "avgSlPct": 0.8000024621142247,
+        "avgBarsHeld": 881,
+        "maxConsecutiveLosses": 1
+      },
+      "blocks": {
+        "signal_gate": 13342,
+        "regime": 0,
+        "htf": 438,
+        "no_direction": 0,
+        "open_position": 880,
+        "duplicate_signal": 1847,
+        "entry_5m_guard": 21,
+        "grade_playbook": 1,
+        "pullback": 96,
+        "cooldown": 0,
+        "structure_bias": 651,
+        "side_align": 0,
+        "execution_risk": 3
+      },
+      "slBuckets": [
+        {
+          "bucket": ">=0.70%",
+          "n": 1,
+          "wins": 0,
+          "losses": 1,
+          "netPnl": -0.6495896600000046
+        }
+      ],
+      "breakdown": {
+        "byTimeframe": [
+          {
+            "key": "1h",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6495896600000046,
+            "winRate": 0
+          }
+        ],
+        "byPlaybook": [
+          {
+            "key": "breakout_volume",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6495896600000046,
+            "winRate": 0
+          }
+        ],
+        "byGrade": [
+          {
+            "key": "A",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6495896600000046,
+            "winRate": 0
+          }
+        ],
+        "bySide": [
+          {
+            "key": "long",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6495896600000046,
+            "winRate": 0
+          }
+        ],
+        "byDay": [
+          {
+            "key": "2026-08-07",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6495896600000046,
+            "winRate": 0
+          }
+        ],
+        "byWeek": [
+          {
+            "key": "2026-W32",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6495896600000046,
+            "winRate": 0
+          }
+        ]
+      },
+      "trades": [
+        {
+          "id": 1,
+          "side": "long",
+          "timeframe": "1h",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1786111200000,
+          "entryPrice": 64984.8,
+          "stopLoss": 64464.92,
+          "takeProfit": 66544.44,
+          "slDistancePct": 0.8000024621142247,
+          "rr": 2.999999999999972,
+          "closeTime": 1786375500000,
+          "closePrice": 64464.92,
+          "closeReason": "stop_loss",
+          "pnlUsd": -0.6495896600000046,
+          "pnlPct": -0.9996024608831674,
+          "barsHeld": 881,
+          "notionalUsd": 64.9848,
+          "feeUsd": 0.06472486000000001,
+          "slippageUsd": 0.06498480000000001
+        }
+      ]
+    }
+  },
+  {
+    "variant": "roi-shadow-pb050",
+    "executionWalletUsd": null,
+    "summary": {
+      "count": 8,
+      "net": 5.5249408923268515,
+      "profitFactor": 2.689402157294139,
+      "maxDrawdownUsd": 2.0000270406636096,
+      "forcedEndCloses": 1
+    },
+    "result": {
+      "symbol": "BTC",
+      "period": {
+        "start": "2026-07-08T00:00:00.000Z",
+        "end": "2026-09-05T23:55:00.000Z",
+        "weeks": 8.571428571428571
+      },
+      "config": {
+        "minSlPct": 0.008,
+        "minRr": 3,
+        "notionalUsd": 100,
+        "feePctPerSide": 0.0005,
+        "timeframes": [
+          "5m",
+          "15m",
+          "1h"
+        ],
+        "entryTfPriority": [
+          "15m",
+          "1h",
+          "5m"
+        ]
+      },
+      "variant": {
+        "id": "roi-shadow-pb050",
+        "label": "Pullback 0.50% research only",
+        "enableCooldown": true,
+        "pullbackMaxAbovePct": 0.5,
+        "breakoutPullbackMaxAbovePct": 0.5
+      },
+      "summary": {
+        "steps": 17280,
+        "signalsPassed": 1147,
+        "entries": 8,
+        "wins": 4,
+        "losses": 4,
+        "winRate": 0.5,
+        "netPnlUsd": 5.5249408923268515,
+        "grossPnlUsd": 7.129305558028057,
+        "feesUsd": 0.8043646657012063,
+        "avgSlPct": 0.8000091685644792,
+        "avgBarsHeld": 243.75,
+        "maxConsecutiveLosses": 2
+      },
+      "blocks": {
+        "signal_gate": 12417,
+        "regime": 0,
+        "htf": 433,
+        "no_direction": 0,
+        "open_position": 1943,
+        "duplicate_signal": 1749,
+        "entry_5m_guard": 13,
+        "grade_playbook": 0,
+        "pullback": 60,
+        "cooldown": 24,
+        "structure_bias": 633,
+        "side_align": 0,
+        "execution_risk": 0
+      },
+      "slBuckets": [
+        {
+          "bucket": ">=0.70%",
+          "n": 8,
+          "wins": 4,
+          "losses": 4,
+          "netPnl": 5.5249408923268515
+        }
+      ],
+      "breakdown": {
+        "byTimeframe": [
+          {
+            "key": "15m",
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "netPnl": 0.9285067126327275,
+            "winRate": 0.3333333333333333
+          },
+          {
+            "key": "5m",
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "netPnl": 1.198400843286929,
+            "winRate": 0.5
+          },
+          {
+            "key": "1h",
+            "n": 3,
+            "wins": 2,
+            "losses": 1,
+            "netPnl": 3.3980333364071944,
+            "winRate": 0.6666666666666666
+          }
+        ],
+        "byPlaybook": [
+          {
+            "key": "breakout_volume",
+            "n": 8,
+            "wins": 4,
+            "losses": 4,
+            "netPnl": 5.5249408923268515,
+            "winRate": 0.5
+          }
+        ],
+        "byGrade": [
+          {
+            "key": "B",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.19883125513036,
+            "winRate": 1
+          },
+          {
+            "key": "A",
+            "n": 7,
+            "wins": 3,
+            "losses": 4,
+            "netPnl": 3.326109637196491,
+            "winRate": 0.42857142857142855
+          }
+        ],
+        "bySide": [
+          {
+            "key": "short",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -1.0004129286533443,
+            "winRate": 0
+          },
+          {
+            "key": "long",
+            "n": 7,
+            "wins": 4,
+            "losses": 3,
+            "netPnl": 6.525353820980196,
+            "winRate": 0.5714285714285714
+          }
+        ],
+        "byDay": [
+          {
+            "key": "2026-07-09",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -1.0004129286533443,
+            "winRate": 0
+          },
+          {
+            "key": "2026-07-31",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.9996141120102654,
+            "winRate": 0
+          },
+          {
+            "key": "2026-09-05",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.270718572097648,
+            "winRate": 0
+          },
+          {
+            "key": "2026-08-24",
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "netPnl": 1.1992020812768345,
+            "winRate": 0.5
+          },
+          {
+            "key": "2026-08-20",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.1988137719402734,
+            "winRate": 1
+          },
+          {
+            "key": "2026-08-21",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.19883125513036,
+            "winRate": 1
+          },
+          {
+            "key": "2026-08-04",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.1988393967406408,
+            "winRate": 1
+          }
+        ],
+        "byWeek": [
+          {
+            "key": "2026-W28",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -1.0004129286533443,
+            "winRate": 0
+          },
+          {
+            "key": "2026-W31",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.9996141120102654,
+            "winRate": 0
+          },
+          {
+            "key": "2026-W36",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.270718572097648,
+            "winRate": 0
+          },
+          {
+            "key": "2026-W35",
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "netPnl": 1.1992020812768345,
+            "winRate": 0.5
+          },
+          {
+            "key": "2026-W32",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 2.1988393967406408,
+            "winRate": 1
+          },
+          {
+            "key": "2026-W34",
+            "n": 2,
+            "wins": 2,
+            "losses": 0,
+            "netPnl": 4.3976450270706335,
+            "winRate": 1
+          }
+        ]
+      },
+      "trades": [
+        {
+          "id": 1,
+          "side": "short",
+          "timeframe": "5m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1783562100000,
+          "entryPrice": 61909,
+          "stopLoss": 62404.28,
+          "takeProfit": 60423.16,
+          "slDistancePct": 0.8000129221922481,
+          "rr": 3,
+          "closeTime": 1783573200000,
+          "closePrice": 62404.28,
+          "closeReason": "stop_loss",
+          "pnlUsd": -1.0004129286533443,
+          "pnlPct": -1.0004129286533443,
+          "barsHeld": 37,
+          "notionalUsd": 100,
+          "feeUsd": 0.10040000646109613,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 2,
+          "side": "long",
+          "timeframe": "15m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1785461400000,
+          "entryPrice": 65160.1,
+          "stopLoss": 64638.81,
+          "takeProfit": 66723.97,
+          "slDistancePct": 0.8000141190698001,
+          "rr": 3,
+          "closeTime": 1785462600000,
+          "closePrice": 64638.81,
+          "closeReason": "stop_loss",
+          "pnlUsd": -0.9996141120102654,
+          "pnlPct": -0.9996141120102654,
+          "barsHeld": 4,
+          "notionalUsd": 100,
+          "feeUsd": 0.09959999294046512,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 3,
+          "side": "long",
+          "timeframe": "15m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1785847500000,
+          "entryPrice": 63932.7,
+          "stopLoss": 63421.23,
+          "takeProfit": 65467.11,
+          "slDistancePct": 0.800013138816277,
+          "rr": 3.0000000000000426,
+          "closeTime": 1786313700000,
+          "closePrice": 65467.11,
+          "closeReason": "take_profit",
+          "pnlUsd": 2.1988393967406408,
+          "pnlPct": 2.1988393967406408,
+          "barsHeld": 1554,
+          "notionalUsd": 100,
+          "feeUsd": 0.10120001970822444,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 4,
+          "side": "long",
+          "timeframe": "5m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1787207100000,
+          "entryPrice": 69672.1,
+          "stopLoss": 69114.72,
+          "takeProfit": 71344.24,
+          "slDistancePct": 0.8000045929432363,
+          "rr": 2.999999999999974,
+          "closeTime": 1787213700000,
+          "closePrice": 71344.24,
+          "closeReason": "take_profit",
+          "pnlUsd": 2.1988137719402734,
+          "pnlPct": 2.1988137719402734,
+          "barsHeld": 22,
+          "notionalUsd": 100,
+          "feeUsd": 0.10120000688941486,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 5,
+          "side": "long",
+          "timeframe": "1h",
+          "playbookKey": "breakout_volume",
+          "grade": "B",
+          "entryTime": 1787313600000,
+          "entryPrice": 76749,
+          "stopLoss": 76135,
+          "takeProfit": 78591,
+          "slDistancePct": 0.800010423588581,
+          "rr": 3,
+          "closeTime": 1787349300000,
+          "closePrice": 78591,
+          "closeReason": "take_profit",
+          "pnlUsd": 2.19883125513036,
+          "pnlPct": 2.19883125513036,
+          "barsHeld": 119,
+          "notionalUsd": 100,
+          "feeUsd": 0.10120001563538288,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 6,
+          "side": "long",
+          "timeframe": "1h",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1787587200000,
+          "entryPrice": 79069.3,
+          "stopLoss": 78436.74,
+          "takeProfit": 80966.98,
+          "slDistancePct": 0.8000070823948077,
+          "rr": 3,
+          "closeTime": 1787592300000,
+          "closePrice": 78436.74,
+          "closeReason": "stop_loss",
+          "pnlUsd": -0.9996070788536102,
+          "pnlPct": -0.9996070788536102,
+          "barsHeld": 17,
+          "notionalUsd": 100,
+          "feeUsd": 0.0995999964588026,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 7,
+          "side": "long",
+          "timeframe": "1h",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1787592300000,
+          "entryPrice": 78562.2,
+          "stopLoss": 77933.7,
+          "takeProfit": 80447.7,
+          "slDistancePct": 0.8000030549042669,
+          "rr": 3,
+          "closeTime": 1787624400000,
+          "closePrice": 80447.7,
+          "closeReason": "take_profit",
+          "pnlUsd": 2.1988091601304447,
+          "pnlPct": 2.1988091601304447,
+          "barsHeld": 107,
+          "notionalUsd": 100,
+          "feeUsd": 0.1012000045823564,
+          "slippageUsd": 0.1
+        },
+        {
+          "id": 8,
+          "side": "long",
+          "timeframe": "15m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1788625800000,
+          "entryPrice": 79854.2,
+          "stopLoss": 79215.36,
+          "takeProfit": 81770.72,
+          "slDistancePct": 0.8000080146066162,
+          "rr": 3.0000000000000226,
+          "closeTime": 1788652500000,
+          "closePrice": 79797.7,
+          "closeReason": "end_of_data",
+          "pnlUsd": -0.270718572097648,
+          "pnlPct": -0.270718572097648,
+          "barsHeld": 90,
+          "notionalUsd": 100,
+          "feeUsd": 0.09996462302546393,
+          "slippageUsd": 0.1
+        }
+      ]
+    }
+  },
+  {
+    "variant": "roi-shadow-pb050",
+    "executionWalletUsd": 34.27714639,
+    "summary": {
+      "count": 3,
+      "net": 0.1350822000000036,
+      "profitFactor": 1.1063057454939094,
+      "maxDrawdownUsd": 1.2706951949999998,
+      "forcedEndCloses": 0
+    },
+    "result": {
+      "symbol": "BTC",
+      "period": {
+        "start": "2026-07-08T00:00:00.000Z",
+        "end": "2026-09-05T23:55:00.000Z",
+        "weeks": 8.571428571428571
+      },
+      "config": {
+        "minSlPct": 0.008,
+        "minRr": 3,
+        "notionalUsd": 100,
+        "feePctPerSide": 0.0005,
+        "timeframes": [
+          "5m",
+          "15m",
+          "1h"
+        ],
+        "entryTfPriority": [
+          "15m",
+          "1h",
+          "5m"
+        ]
+      },
+      "variant": {
+        "id": "roi-shadow-pb050",
+        "label": "Pullback 0.50% research only",
+        "enableCooldown": true,
+        "pullbackMaxAbovePct": 0.5,
+        "breakoutPullbackMaxAbovePct": 0.5
+      },
+      "summary": {
+        "steps": 17280,
+        "signalsPassed": 1170,
+        "entries": 3,
+        "wins": 1,
+        "losses": 2,
+        "winRate": 0.3333333333333333,
+        "netPnlUsd": 0.1350822000000036,
+        "grossPnlUsd": 0.5178400000000034,
+        "feesUsd": 0.191756,
+        "avgSlPct": 0.8000133933594418,
+        "avgBarsHeld": 531.6666666666666,
+        "maxConsecutiveLosses": 2
+      },
+      "blocks": {
+        "signal_gate": 12685,
+        "regime": 0,
+        "htf": 433,
+        "no_direction": 0,
+        "open_position": 1592,
+        "duplicate_signal": 1809,
+        "entry_5m_guard": 13,
+        "grade_playbook": 1,
+        "pullback": 73,
+        "cooldown": 24,
+        "structure_bias": 637,
+        "side_align": 0,
+        "execution_risk": 10
+      },
+      "slBuckets": [
+        {
+          "bucket": ">=0.70%",
+          "n": 3,
+          "wins": 1,
+          "losses": 2,
+          "netPnl": 0.1350822000000036
+        }
+      ],
+      "breakdown": {
+        "byTimeframe": [
+          {
+            "key": "5m",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6193456399999988,
+            "winRate": 0
+          },
+          {
+            "key": "15m",
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "netPnl": 0.7544278400000024,
+            "winRate": 0.5
+          }
+        ],
+        "byPlaybook": [
+          {
+            "key": "breakout_volume",
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "netPnl": 0.1350822000000036,
+            "winRate": 0.3333333333333333
+          }
+        ],
+        "byGrade": [
+          {
+            "key": "A",
+            "n": 3,
+            "wins": 1,
+            "losses": 2,
+            "netPnl": 0.1350822000000036,
+            "winRate": 0.3333333333333333
+          }
+        ],
+        "bySide": [
+          {
+            "key": "short",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6193456399999988,
+            "winRate": 0
+          },
+          {
+            "key": "long",
+            "n": 2,
+            "wins": 1,
+            "losses": 1,
+            "netPnl": 0.7544278400000024,
+            "winRate": 0.5
+          }
+        ],
+        "byDay": [
+          {
+            "key": "2026-07-31",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.651349555000001,
+            "winRate": 0
+          },
+          {
+            "key": "2026-07-09",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6193456399999988,
+            "winRate": 0
+          },
+          {
+            "key": "2026-08-04",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 1.4057773950000034,
+            "winRate": 1
+          }
+        ],
+        "byWeek": [
+          {
+            "key": "2026-W31",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.651349555000001,
+            "winRate": 0
+          },
+          {
+            "key": "2026-W28",
+            "n": 1,
+            "wins": 0,
+            "losses": 1,
+            "netPnl": -0.6193456399999988,
+            "winRate": 0
+          },
+          {
+            "key": "2026-W32",
+            "n": 1,
+            "wins": 1,
+            "losses": 0,
+            "netPnl": 1.4057773950000034,
+            "winRate": 1
+          }
+        ]
+      },
+      "trades": [
+        {
+          "id": 1,
+          "side": "short",
+          "timeframe": "5m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1783562100000,
+          "entryPrice": 61909,
+          "stopLoss": 62404.28,
+          "takeProfit": 60423.16,
+          "slDistancePct": 0.8000129221922481,
+          "rr": 3,
+          "closeTime": 1783573200000,
+          "closePrice": 62404.28,
+          "closeReason": "stop_loss",
+          "pnlUsd": -0.6193456399999988,
+          "pnlPct": -1.000412928653344,
+          "barsHeld": 37,
+          "notionalUsd": 61.909,
+          "feeUsd": 0.062156640000000006,
+          "slippageUsd": 0.061909
+        },
+        {
+          "id": 2,
+          "side": "long",
+          "timeframe": "15m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1785461400000,
+          "entryPrice": 65160.1,
+          "stopLoss": 64638.81,
+          "takeProfit": 66723.97,
+          "slDistancePct": 0.8000141190698001,
+          "rr": 3,
+          "closeTime": 1785462600000,
+          "closePrice": 64638.81,
+          "closeReason": "stop_loss",
+          "pnlUsd": -0.651349555000001,
+          "pnlPct": -0.9996141120102655,
+          "barsHeld": 4,
+          "notionalUsd": 65.1601,
+          "feeUsd": 0.06489945500000001,
+          "slippageUsd": 0.0651601
+        },
+        {
+          "id": 3,
+          "side": "long",
+          "timeframe": "15m",
+          "playbookKey": "breakout_volume",
+          "grade": "A",
+          "entryTime": 1785847500000,
+          "entryPrice": 63932.7,
+          "stopLoss": 63421.23,
+          "takeProfit": 65467.11,
+          "slDistancePct": 0.800013138816277,
+          "rr": 3.0000000000000426,
+          "closeTime": 1786313700000,
+          "closePrice": 65467.11,
+          "closeReason": "take_profit",
+          "pnlUsd": 1.4057773950000034,
+          "pnlPct": 2.1988393967406408,
+          "barsHeld": 1554,
+          "notionalUsd": 63.9327,
+          "feeUsd": 0.064699905,
+          "slippageUsd": 0.0639327
+        }
+      ]
+    }
+  }
+]

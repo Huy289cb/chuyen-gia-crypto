@@ -1,0 +1,61 @@
+"use strict";
+/**
+ * Profit protection: move exchange SL to breakeven / trail winners.
+ * Does not cancel TP; only tightens stop_loss.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isProfitProtectEnabled = isProfitProtectEnabled;
+exports.getBreakevenAtR = getBreakevenAtR;
+exports.getTrailActivatePct = getTrailActivatePct;
+exports.getTrailDistancePct = getTrailDistancePct;
+exports.getMinSlMovePct = getMinSlMovePct;
+exports.getProfitProtectMinMinutes = getProfitProtectMinMinutes;
+exports.getTimeStopHours = getTimeStopHours;
+exports.getBreakevenFeeBufferPct = getBreakevenFeeBufferPct;
+function envFloat(name, fallback) {
+    const v = parseFloat(process.env[name] || String(fallback));
+    return Number.isFinite(v) && v >= 0 ? v : fallback;
+}
+function envInt(name, fallback) {
+    const v = parseInt(process.env[name] || String(fallback), 10);
+    return Number.isFinite(v) && v >= 0 ? v : fallback;
+}
+/** Master switch — default on for live PnL protection. */
+function isProfitProtectEnabled() {
+    return process.env.PROFIT_PROTECT_ENABLED !== 'false';
+}
+/** Move SL to entry once unrealized profit >= this many R (entry→original SL). Default 1.5. */
+function getBreakevenAtR() {
+    return envFloat('PROFIT_PROTECT_BE_AT_R', 1.5);
+}
+/** Activate trailing when unrealized PnL % of entry reaches this. Default 2.5 (~near RR3). */
+function getTrailActivatePct() {
+    return envFloat('PROFIT_PROTECT_TRAIL_ACTIVATE_PCT', 2.5);
+}
+/** Trail distance behind mark (percent of price). Default 0.55. */
+function getTrailDistancePct() {
+    return envFloat('PROFIT_PROTECT_TRAIL_DISTANCE_PCT', 0.55);
+}
+/** Ignore tiny SL improvements (percent of entry). */
+function getMinSlMovePct() {
+    return envFloat('PROFIT_PROTECT_MIN_SL_MOVE_PCT', 0.05);
+}
+/** Min position age before first SL tighten (minutes). */
+function getProfitProtectMinMinutes() {
+    return envInt('PROFIT_PROTECT_MIN_MINUTES', 15);
+}
+/**
+ * After this many hours, if still green but below BE threshold, nudge SL to entry.
+ * 0 = disabled (default — RR3 swings often need >24h; 24h BE scratched winners).
+ */
+function getTimeStopHours() {
+    return envInt('PROFIT_PROTECT_TIME_STOP_HOURS', 0);
+}
+/**
+ * Place BE stop this many % of entry into profit (covers fees/slip).
+ * Long: entry*(1+buf), short: entry*(1-buf). Default 0.08%.
+ */
+function getBreakevenFeeBufferPct() {
+    return envFloat('PROFIT_PROTECT_BE_FEE_BUFFER_PCT', 0.08);
+}
+//# sourceMappingURL=profit-protect-policy.js.map

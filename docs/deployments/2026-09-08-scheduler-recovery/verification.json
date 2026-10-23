@@ -1,0 +1,37 @@
+{
+  "verifiedAt": "2026-09-08T08:40:59.968760+00:00",
+  "changedJsFiles": [
+    "schedulers/llm-dispatch.scheduler.js",
+    "schedulers/market-scan.scheduler.js"
+  ],
+  "jsFileCount": 177,
+  "processes": {
+    "crypto-api": {
+      "pid": 3448752,
+      "env": {
+        "MAX_EFFECTIVE_RISK_PER_TRADE_USD": "1",
+        "DAILY_LOSS_LIMIT_PERCENT": "3",
+        "V3_ADAPTIVE_SETUP_MODE": "live",
+        "V3_RANGE_SWEEP_RR": "1.5",
+        "WORKER_ENABLE_TESTNET_SYNC": "false"
+      }
+    },
+    "crypto-worker": {
+      "pid": 3448759,
+      "env": {
+        "MAX_EFFECTIVE_RISK_PER_TRADE_USD": "1",
+        "DAILY_LOSS_LIMIT_PERCENT": "3",
+        "V3_ADAPTIVE_SETUP_MODE": "live",
+        "V3_RANGE_SWEEP_RR": "1.5",
+        "WORKER_ENABLE_TESTNET_SYNC": "false"
+      }
+    }
+  },
+  "testsPassed": 23,
+  "fullBuildExitCode": 0,
+  "health": {
+    "status": "ok",
+    "timestamp": "2026-09-08T08:41:00.055Z",
+    "uptime": 23.544942571
+  }
+}

@@ -73,28 +73,13 @@ describe('closeLocalPosition balance updates', () => {
     });
   });
 
-  it('applies local balance delta when Binance sync fails with -1109', async () => {
-    await closeLocalPosition(basePosition, 60550, 'stop_loss', {
-      verified_binance_zero: true,
-    });
-
-    expect(mockPrismaUpdate).toHaveBeenCalledWith({
-      where: { id: 1 },
-      data: expect.objectContaining({
-        current_balance: 5010.32,
-        equity: 5010.32,
-      }),
-    });
-    expect(mockSyncTestnetAccountFromBinance).toHaveBeenCalledWith(1);
-    expect(mockResolveTestnetAccountBalances).toHaveBeenCalledWith(1, false);
-    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith(
-      'pos_test',
-      'position_closed',
-      expect.objectContaining({
-        account_balance: 5010.32,
-        realized_pnl: -5.5,
-      })
-    );
+  it('does not turn an unverified estimate into realized PnL when Binance is unavailable', async () => {
+    await closeLocalPosition(basePosition, 60550, 'stop_loss', { verified_binance_zero: true });
+    expect(mockPrismaUpdate).not.toHaveBeenCalled();
+    expect(mockRecordTradeOutcomeOnClose).not.toHaveBeenCalled();
+    expect(mockSyncTestnetAccountFromBinance).toHaveBeenCalledWith(1, expect.any(Function));
+    expect(mockRecordTestnetTradeEvent).toHaveBeenCalledWith('pos_test', 'position_closed',
+      expect.objectContaining({ realized_pnl: 0, fill_verified: false }));
   });
 
   it('still applies local delta when BINANCE_ENABLED is false', async () => {
@@ -102,6 +87,8 @@ describe('closeLocalPosition balance updates', () => {
 
     await closeLocalPosition(basePosition, 60550, 'manual_close');
 
+    const journal = mockRecordTestnetTradeEvent.mock.calls.find(call => call[1] === 'close_account_update_applied');
+    expect(journal?.[2]).toEqual(expect.objectContaining({schema:'close-account-update-v1',input:expect.objectContaining({binance_enabled:false}),update:expect.objectContaining({current_balance:5010.32})}));
     expect(mockPrismaUpdate).toHaveBeenCalledWith({
       where: { id: 1 },
       data: expect.objectContaining({
@@ -110,6 +97,18 @@ describe('closeLocalPosition balance updates', () => {
       }),
     });
     expect(mockSyncTestnetAccountFromBinance).not.toHaveBeenCalled();
+  });
+
+  it.each(['failed','pending'])('account journal %s does not block completed local close', async state => {
+    process.env.BINANCE_ENABLED = 'false';
+    mockRecordTestnetTradeEvent.mockImplementation((_id, type) => type === 'close_account_update_applied'
+      ? state === 'failed' ? Promise.reject(new Error('journal unavailable')) : new Promise(() => {})
+      : Promise.resolve());
+    try {
+      await closeLocalPosition(basePosition, 60550, 'manual_close');
+      expect(mockPrismaUpdate).toHaveBeenCalledOnce();
+      expect(mockRecordTestnetTradeEvent.mock.calls.some(call => call[1] === 'position_closed')).toBe(true);
+    } finally { mockRecordTestnetTradeEvent.mockReset(); }
   });
 
   it('bookkeeping close: zero PnL, no wallet/stats update, no trade outcome', async () => {
@@ -138,7 +137,7 @@ describe('closeLocalPosition balance updates', () => {
     );
   });
 
-  it('breakeven close does not increment consecutive losses or trade stats', async () => {
+  it('verified breakeven close counts one completed trade and resets the loss streak', async () => {
     mockResolveClosePnlFromUserTrades.mockResolvedValue({
       verified: true,
       realizedPnl: 0,
@@ -160,9 +159,9 @@ describe('closeLocalPosition balance updates', () => {
     });
     expect(mockPrismaUpdate).toHaveBeenCalledWith({
       where: { id: 1 },
-      data: expect.not.objectContaining({
-        consecutive_losses: expect.anything(),
-        total_trades: expect.anything(),
+      data: expect.objectContaining({
+        consecutive_losses: 0,
+        total_trades: { increment: 1 },
       }),
     });
     expect(mockApplyConsecutiveLossCooldownIfNeeded).not.toHaveBeenCalled();

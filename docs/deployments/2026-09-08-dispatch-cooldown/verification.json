@@ -1,0 +1,39 @@
+{
+  "verifiedAt": "2026-09-08T13:38:26.794352+00:00",
+  "changedJsFiles": [
+    "services/v3-entry-eligibility.service.js"
+  ],
+  "jsFileCount": 177,
+  "processes": {
+    "crypto-api": {
+      "pid": 3533441,
+      "env": {
+        "MAX_EFFECTIVE_RISK_PER_TRADE_USD": "1",
+        "DAILY_LOSS_LIMIT_PERCENT": "3",
+        "V3_ADAPTIVE_SETUP_MODE": "live",
+        "V3_RANGE_SWEEP_RR": "1.5",
+        "POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES": "90",
+        "POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES": "360"
+      }
+    },
+    "crypto-worker": {
+      "pid": 3533452,
+      "env": {
+        "MAX_EFFECTIVE_RISK_PER_TRADE_USD": "1",
+        "DAILY_LOSS_LIMIT_PERCENT": "3",
+        "V3_ADAPTIVE_SETUP_MODE": "live",
+        "V3_RANGE_SWEEP_RR": "1.5",
+        "POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES": "90",
+        "POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES": "360"
+      }
+    }
+  },
+  "testsPassed": 42,
+  "researchTestsPassed": 11,
+  "fullBuildExitCode": 0,
+  "health": {
+    "status": "ok",
+    "timestamp": "2026-09-08T13:38:26.863Z",
+    "uptime": 34.518643399
+  }
+}

@@ -1,9 +1,25 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+
+vi.mock('../../src/services/binance/trading', () => ({
+  getUserTrades: vi.fn(),
+}));
+
+vi.mock('../../src/services/binance-income.service', () => ({ fetchBinanceIncomeRows: vi.fn().mockResolvedValue([]) }));
+
+import { getUserTrades } from '../../src/services/binance/trading';
 import {
   aggregateUserTradesToRounds,
+  clearBinanceTradeHistoryCacheForTests,
   computeLossStreakFromRounds,
+  fetchBinanceClosedTradeRounds,
   type BinanceTradeRound,
 } from '../../src/services/binance-trade-history.service';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv('BINANCE_ENABLED', 'true');
+  clearBinanceTradeHistoryCacheForTests();
+});
 
 function round(realizedPnL: number, fee: number, closedAt: string): BinanceTradeRound {
   return {
@@ -162,5 +178,50 @@ describe('computeLossStreakFromRounds', () => {
     const streak = computeLossStreakFromRounds([]);
     expect(streak.consecutiveLosses).toBe(0);
     expect(streak.lastLossTime).toBe(0);
+  });
+});
+
+describe('fetchBinanceClosedTradeRounds', () => {
+  it('queries explicit seven-day windows and recovers fills older than seven days', async () => {
+    const nowMs = Date.parse('2026-09-03T08:00:00.000Z');
+    const oldOpen = nowMs - 10 * 24 * 3600 * 1000;
+    const oldClose = oldOpen + 60_000;
+    vi.mocked(getUserTrades).mockImplementation(async (_symbol, options) => {
+      const opts = typeof options === 'number' ? { limit: options } : options;
+      if ((opts.startTime ?? 0) <= oldOpen && (opts.endTime ?? 0) >= oldClose) {
+        return [
+          { tradeId: 1, side: 'BUY', price: 100, qty: 1, commission: 0.1, realizedPnl: 0, time: oldOpen, orderId: 1 },
+          { tradeId: 2, side: 'SELL', price: 110, qty: 1, commission: 0.1, realizedPnl: 10, time: oldClose, orderId: 2 },
+        ];
+      }
+      return [];
+    });
+
+    const rounds = await fetchBinanceClosedTradeRounds('BTC', 20, {
+      nowMs,
+      lookbackMs: 14 * 24 * 3600 * 1000,
+      cacheTtlMs: 0,
+    });
+
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0].realizedPnL).toBe(10);
+    expect(getUserTrades).toHaveBeenCalledTimes(2);
+    for (const [, options] of vi.mocked(getUserTrades).mock.calls) {
+      expect(typeof options).toBe('object');
+      if (typeof options !== 'object') continue;
+      expect(options.startTime).toBeTypeOf('number');
+      expect(options.endTime).toBeTypeOf('number');
+      expect((options.endTime ?? 0) - (options.startTime ?? 0)).toBeLessThan(7 * 24 * 3600 * 1000);
+    }
+  });
+
+  it('caches the reconstructed history briefly to avoid repeated Binance fan-out', async () => {
+    const nowMs = Date.parse('2026-09-03T08:00:00.000Z');
+    vi.mocked(getUserTrades).mockResolvedValue([]);
+
+    await fetchBinanceClosedTradeRounds('BTC', 20, { nowMs, lookbackMs: 1_000, cacheTtlMs: 60_000 });
+    await fetchBinanceClosedTradeRounds('BTC', 20, { nowMs: nowMs + 1_000, lookbackMs: 1_000, cacheTtlMs: 60_000 });
+
+    expect(getUserTrades).toHaveBeenCalledTimes(1);
   });
 });

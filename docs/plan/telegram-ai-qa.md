@@ -168,7 +168,7 @@ export interface TelegramAiConfig {
 ```bash
 # Telegram AI Q&A
 TELEGRAM_AI_ENABLED=false
-TELEGRAM_AI_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+TELEGRAM_AI_MODEL=openai/gpt-oss-120b
 TELEGRAM_AI_MAX_TOKENS=2048
 TELEGRAM_AI_RATE_LIMIT_PER_USER_HOUR=5
 TELEGRAM_AI_RATE_LIMIT_PER_CHAT_DAY=30

@@ -4,7 +4,6 @@
  */
 import 'dotenv/config';
 import { createGroqClient } from '../src/services/groq-client';
-import { cleanJSONResponse } from '../src/services/groq-client';
 import { getGroqModelChain, getGroqPrimaryModel } from '../src/config/groq-models';
 
 const SYSTEM = `You are a crypto futures analyst. Return JSON only for symbol btc:
@@ -19,18 +18,13 @@ async function tryModel(model: string): Promise<{ ok: boolean; detail: string }>
   }
 
   try {
-    const raw = await client.completeText({
+    const parsed = await client.analyze({
       systemPrompt: SYSTEM,
       userPrompt: USER,
       temperature: 0.15,
-      maxTokens: 512,
       maxRetries: 0,
       preferredModels: [model],
     });
-    const parsed = cleanJSONResponse(raw);
-    if (!parsed) {
-      return { ok: false, detail: `JSON parse failed (preview: ${raw.slice(0, 120)})` };
-    }
     const btc = (parsed as { btc?: Record<string, unknown> }).btc ?? parsed;
     if (!btc || typeof btc !== 'object') {
       return { ok: false, detail: 'missing btc object' };

@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');const {variants}=require('./entry-quality-variants.cjs');
+const s={asOf:300000,plans:[{id:'p',entry:100,stopLoss:96,takeProfit:108,side:'long'}],candles:{'5m':[{high:101,low:99}]}};
+const bars=[[300000,100,101,98.9,100.5],[600000,100,102,99.5,101.5]];
+const a=variants(s,bars);assert.equal(a.find(x=>x.kind==='retest_reclaim').time,960000);
+assert(!variants(s,bars.slice(0,1)).some(x=>x.kind==='retest_reclaim'));
+assert(!variants(s,[[300000,100,109,98,102]]).some(x=>x.kind==='confirmation'));
+assert(a.every(x=>x.stopLoss===96&&x.takeProfit===108));assert.equal(a[1].entry,99);
+const short={...s,plans:[{id:'s',entry:100,stopLoss:104,takeProfit:92,side:'short'}]};
+const flipped=bars.map(([t,o,h,l,c])=>[t,200-o,200-l,200-h,200-c]);
+assert.equal(variants(short,flipped).find(x=>x.kind==='retest_reclaim').time,960000);
+assert.deepEqual(variants(s,[...bars,[2100000,101,103,100,102]]),a);
+console.log('PASS: closed-bar timing, prior-bar retest, barrier invalidation, fixed exits, symmetry, future-prefix');

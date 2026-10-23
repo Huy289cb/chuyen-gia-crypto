@@ -1,3 +1,4 @@
+import { withProviderPurpose } from '../../utils/provider-purpose-context';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getIctDateString } from '../../utils/ict-time';
@@ -174,7 +175,7 @@ async function runAiAnalysis(
   const systemPrompt = getSystemPrompt(scope);
   const userPrompt = getUserPrompt(scope, contextJson, question, session?.turns);
 
-  const answer = await groq.completeText({
+  const answer = await withProviderPurpose('telegram', () => groq.completeText({
     systemPrompt,
     userPrompt,
     temperature: conversational ? 0.55 : 0.3,
@@ -182,7 +183,7 @@ async function runAiAnalysis(
       ? Math.min(telegramAiConfig.maxTokens, 900)
       : telegramAiConfig.maxTokens,
     preferredModels: [telegramAiConfig.model],
-  });
+  }));
 
   if (isAiJobCancelled(chatId)) {
     enqueueTelegramMessage('❌ Đã hủy phân tích.', chatId);
@@ -264,7 +265,7 @@ export async function runTelegramAiQuery(
   const userPrompt = getUserPrompt(scope, contextJson, question);
 
   const conversational = isConversationalScope(scope);
-  const answer = await groq.completeText({
+  const answer = await withProviderPurpose('telegram', () => groq.completeText({
     systemPrompt,
     userPrompt,
     temperature: conversational ? 0.55 : 0.3,
@@ -272,7 +273,7 @@ export async function runTelegramAiQuery(
       ? Math.min(telegramAiConfig.maxTokens, 900)
       : telegramAiConfig.maxTokens,
     preferredModels: [telegramAiConfig.model],
-  });
+  }));
 
   return { answer, scope, generatedAt: bundle.meta.generatedAt };
 }

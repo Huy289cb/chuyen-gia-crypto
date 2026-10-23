@@ -1,0 +1,7 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),ts=require('typescript');const pkg=path.resolve(process.argv[2]),printer=ts.createPrinter({removeComments:true}),prints=[];
+for(const variant of ['baseline','release']){const sf=ts.createSourceFile('statistics.js',fs.readFileSync(path.join(pkg,variant,'services/position-pnl-reconcile.service.js'),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);let functions=0;
+ const result=ts.transform(sf,[ctx=>root=>{function visit(n){
+ if(ts.isVariableStatement(n)&&n.declarationList.declarations.length===1&&['__createBinding','__setModuleDefault','__importStar','net_trade_statistics_1','node_crypto_1'].includes(n.declarationList.declarations[0].name.getText(sf)))return undefined;
+ if(ts.isFunctionDeclaration(n)&&n.name?.text==='rebuildNetTradeStatistics'){functions++;return ts.factory.updateFunctionDeclaration(n,n.modifiers,n.asteriskToken,n.name,n.typeParameters,n.parameters,n.type,ts.factory.createBlock([]));}
+ return ts.visitEachChild(n,visit,ctx);}return ts.visitNode(root,visit);}]);assert.equal(functions,1);prints.push(printer.printFile(result.transformed[0]));result.dispose();}
+assert.equal(prints[0],prints[1]);const report={wholeModuleOutsideStatisticsFunctionMatches:true,limits:'Statistics function body and dynamic-import compiler helpers excluded; full function parity covered by separate compiled fixtures.'};fs.writeFileSync(path.join(pkg,'compiled-ast-tests.json'),JSON.stringify(report,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(report));

@@ -1,3 +1,4 @@
+import {withProviderPurpose} from '../utils/provider-purpose-context';
 /**
  * LLM review of unfilled limit pending orders (hold / cancel / modify).
  * Runs when pending exists — does not block new-trade dispatch path.
@@ -6,6 +7,7 @@
 import { prisma } from '../lib/prisma';
 import { getLatestPrice } from '../repositories/market.repository';
 import { createGroqClient } from './groq-client';
+import { getGroqAuxiliaryModelChain } from '../config/groq-models';
 import { memoryService } from './memory.service';
 import {
   getPendingOrderReviewMinConfidence,
@@ -144,13 +146,13 @@ export async function runPendingOrderReview(symbol = 'BTC'): Promise<PendingRevi
   const userPrompt = await buildPendingReviewUserPrompt(symbol, pending, markPrice);
 
   try {
-    const analysis = await client.analyze({
+    const analysis = await withProviderPurpose('pending_review', () => client.analyze({
       systemPrompt: REVIEW_SYSTEM_PROMPT,
       userPrompt,
       temperature: 0.2,
       maxRetries: 1,
-      preferredModels: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'],
-    });
+      preferredModels: getGroqAuxiliaryModelChain(2),
+    }));
 
     const decisions = parsePendingOrderDecisions(analysis.pending_order_decisions);
     if (decisions.length === 0) {

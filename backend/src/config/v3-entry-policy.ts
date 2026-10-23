@@ -293,15 +293,18 @@ function tfConfirmsSide(state: HtfConfirmTfState, side: 'long' | 'short'): boole
 
 /**
  * When fail-closed (default on): HTF must be trend + trendDirection matching side.
- * Legacy fail-open: non-trend HTF passes (range hole — see structure-first plan).
+ * If structure already granted bull/bear, range/chop HTF does not veto (breakouts start in range).
+ * Fail-closed still applies when structure is transition / unset.
  */
 export function isV3HtfSideAlignFailClosed(): boolean {
   return process.env.V3_HTF_SIDE_ALIGN_FAIL_CLOSED !== 'false';
 }
 
+export type StructureBiasForAlign = 'bull' | 'bear' | 'transition';
+
 /**
  * When HTF is in trend, side must match trendDirection.
- * Fail-closed (default): non-trend / missing direction → block.
+ * Fail-closed: non-trend blocks unless structure already chose a side.
  */
 export function evaluateHtfSideAlign(input: {
   side: 'long' | 'short';
@@ -309,6 +312,7 @@ export function evaluateHtfSideAlign(input: {
   htf: HtfConfirmTfState;
   enabled?: boolean;
   failClosed?: boolean;
+  structureBias?: StructureBiasForAlign;
 }): HtfSideAlignResult {
   const enabled = input.enabled ?? isV3RequireHtfSideAlign();
   if (!enabled) return { pass: true };
@@ -316,7 +320,17 @@ export function evaluateHtfSideAlign(input: {
   const failClosed = input.failClosed ?? isV3HtfSideAlignFailClosed();
   const { side, htfTf, htf } = input;
   if (htf.regime !== 'trend' || !htf.trendDirection) {
-    if (!failClosed) return { pass: true };
+    const structureAllowsSide =
+      (input.structureBias === 'bull' && side === 'long') ||
+      (input.structureBias === 'bear' && side === 'short');
+    if (!failClosed || structureAllowsSide) {
+      return {
+        pass: true,
+        reason: structureAllowsSide
+          ? `${htfTf} ${htf.regime ?? 'unknown'} — structure ${input.structureBias} allows ${side}`
+          : undefined,
+      };
+    }
     return {
       pass: false,
       reason: `blocked: ${htfTf} regime ${htf.regime ?? 'unknown'}/${htf.trendDirection ?? 'null'} — need trend+direction for ${side} (V3_HTF_SIDE_ALIGN_FAIL_CLOSED)`,
@@ -436,6 +450,15 @@ export function getV3PullbackSmaPeriod(): number {
 /** Long: max % entry may sit above SMA. Short: max % below SMA. Default 0.25. */
 export function getV3PullbackMaxAbovePct(): number {
   const v = parseFloat(process.env.V3_PULLBACK_MAX_ABOVE_PCT || '0.25');
+  return Number.isFinite(v) && v >= 0 ? v : 0.25;
+}
+
+/**
+ * Breakout pullback band (same default as trend pullback).
+ * Was 1.25 (impulse privilege) — live chase losses; default 0.25 = no FOMO.
+ */
+export function getV3BreakoutPullbackMaxAbovePct(): number {
+  const v = parseFloat(process.env.V3_BREAKOUT_PULLBACK_MAX_ABOVE_PCT || '0.25');
   return Number.isFinite(v) && v >= 0 ? v : 0.25;
 }
 

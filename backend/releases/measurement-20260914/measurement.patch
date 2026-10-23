@@ -1,0 +1,994 @@
+--- baseline/repositories/testnet.repository.js
++++ release/repositories/testnet.repository.js
+@@ -72,6 +72,7 @@
+ exports.createTestnetPendingOrder = createTestnetPendingOrder;
+ exports.updatePrecisionError = updatePrecisionError;
+ exports.resetPrecisionErrorTracking = resetPrecisionErrorTracking;
++const entry_trace_1 = require("../utils/entry-trace");
+ const prisma_1 = require("../lib/prisma");
+ const risk_policy_1 = require("../config/risk-policy");
+ const account_performance_service_1 = require("../services/account-performance.service");
+@@ -430,7 +431,7 @@
+             data: {
+                 position_id: positionId,
+                 event_type: eventType,
+-                event_data: eventData ? JSON.stringify(eventData) : null,
++                event_data: JSON.stringify((0, entry_trace_1.tracedEvent)(eventData)),
+                 timestamp: new Date(),
+             },
+         });
+@@ -488,7 +489,7 @@
+         data: {
+             position_id: positionId,
+             event_type: eventType,
+-            event_data: eventData ? JSON.stringify(eventData) : null,
++            event_data: JSON.stringify((0, entry_trace_1.tracedEvent)(eventData)),
+             timestamp: new Date(),
+         },
+     });
+@@ -814,4 +815,3 @@
+         },
+     });
+ }
+-//# sourceMappingURL=testnet.repository.js.map--- baseline/routes/metrics.js
++++ release/routes/metrics.js
+@@ -1,9 +1,10 @@
+ "use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++const entry_trace_audit_1 = require("../utils/entry-trace-audit");
+ /**
+  * Metrics Routes
+  * Provides endpoints for risk, playbooks, no-trade reasons, and execution costs
+  */
+-Object.defineProperty(exports, "__esModule", { value: true });
+ const express_1 = require("express");
+ const risk_manager_service_1 = require("../services/risk-manager.service");
+ const memory_service_1 = require("../services/memory.service");
+@@ -222,6 +223,31 @@
+  * GET /api/metrics/gate-funnel?symbol=BTC&days=7
+  * Unique deterministic pre-LLM observations, including all blockers (not only first).
+  */
++router.get('/entry-traces', async (req, res) => {
++    try {
++        const days = Math.min(30, Math.max(1, Number(req.query.days) || 1));
++        const since = new Date(Date.now() - days * 86400000);
++        const rows = await prisma_1.prisma.testnetTradeEvent.findMany({
++            where: { timestamp: { gte: since }, event_type: { in: ['entry_trace', 'llm_provider_request',
++                        'llm_provider_result', 'pending_order_linked', 'entry_order_filled', 'retest_feasibility_pair'] } },
++            orderBy: { id: 'desc' }, take: 10001, select: { event_type: true, event_data: true },
++        });
++        let malformed = 0;
++        const events = rows.slice(0, 10000).reverse().flatMap(row => {
++            try {
++                return [{ event_type: row.event_type, event_data: JSON.parse(row.event_data ?? '{}') }];
++            }
++            catch {
++                malformed++;
++                return [];
++            }
++        });
++        res.json({ since, truncated: rows.length > 10000, malformed, ...(0, entry_trace_audit_1.auditEntryTraces)(events) });
++    }
++    catch {
++        res.status(500).json({ error: 'Failed to read entry traces' });
++    }
++});
+ router.get('/gate-funnel', async (req, res) => {
+     try {
+         const symbol = String(req.query.symbol || 'BTC').toUpperCase();
+@@ -269,6 +295,11 @@
+             duplicate_events: Math.max(0, rows.length - observations.length - malformed),
+             malformed_events: malformed,
+             would_pass_pre_llm: observations.filter((row) => row.would_pass_pre_llm).length,
++            would_pass_pre_llm_semantics: 'deprecated_all_gate_proxy_not_actual_provider_calls',
++            pre_ai_proxy_pass: observations.filter(row => row.pre_ai_proxy_pass === true).length,
++            v2_observations: observations.filter(row => row.measurement_version === 2).length,
++            classifications: countBy(observations.map(row => row.classification ?? 'legacy_unclassified')),
++            feasibility: countBy(observations.map(row => row.feasibility?.status ?? 'unavailable')),
+             by_timeframe: countBy(observations.map((row) => row.timeframe)),
+             by_grade: countBy(observations.map((row) => row.grade)),
+             by_playbook: countBy(observations.map((row) => row.playbook)),
+@@ -561,4 +592,3 @@
+     }
+ });
+ exports.default = router;
+-//# sourceMappingURL=metrics.js.map--- baseline/schedulers/llm-dispatch.scheduler.js
++++ release/schedulers/llm-dispatch.scheduler.js
+@@ -169,6 +169,7 @@
+                     dispatchResult.reason.includes('SL distance');
+                 if (isRiskPreBlock && dispatchResult.analysis) {
+                     await (0, testnet_repository_1.recordPipelineEvent)('execution_blocked', {
++                        ...dispatchResult.trace,
+                         symbol,
+                         timeframe,
+                         reason: dispatchResult.reason,
+@@ -211,6 +212,7 @@
+                     symbol,
+                     timeframe,
+                     analysis: dispatchResult.analysis,
++                    trace: dispatchResult.trace,
+                     methodId: 'kim_nghia',
+                     decisionRecordId: dispatchResult.decisionRecordId,
+                     requiredMinRr: retestOpportunity?.rr ?? methodConfig.autoEntry.minRRRatio,
+@@ -230,6 +232,7 @@
+                         await memory_service_1.memoryService.recordExecutionBlocked(dispatchResult.decisionRecordId, symbol, summary, execResult.reason);
+                     }
+                     await (0, testnet_repository_1.recordPipelineEvent)('execution_blocked', {
++                        ...dispatchResult.trace,
+                         symbol,
+                         timeframe,
+                         reason: execResult.reason,
+@@ -300,4 +303,3 @@
+ async function runManualLLMDispatch() {
+     return await runLLMDispatch();
+ }
+-//# sourceMappingURL=llm-dispatch.scheduler.js.map--- baseline/services/binance-order-fill.service.js
++++ release/services/binance-order-fill.service.js
+@@ -223,6 +223,7 @@
+     });
+     await (0, testnet_repository_1.executeTestnetPendingOrder)(localOrder.order_id, positionId);
+     let linkedDecisionId;
++    let linkedTrace = {};
+     try {
+         const { prisma: db } = await Promise.resolve().then(() => __importStar(require('../lib/prisma')));
+         const { PIPELINE_EVENT_POSITION_ID } = await Promise.resolve().then(() => __importStar(require('../repositories/testnet.repository')));
+@@ -230,16 +231,19 @@
+             where: {
+                 position_id: PIPELINE_EVENT_POSITION_ID,
+                 event_type: 'pending_order_linked',
++                event_data: { contains: `"order_id":${JSON.stringify(localOrder.order_id)}` },
+             },
+             orderBy: { timestamp: 'desc' },
+-            take: 30,
++            take: 1,
+         });
+         for (const ev of linkEvents) {
+             if (!ev.event_data)
+                 continue;
+             const data = JSON.parse(ev.event_data);
+-            if (data.order_id === localOrder.order_id && typeof data.decision_id === 'number') {
++            if (data.order_id === localOrder.order_id) {
+                 linkedDecisionId = data.decision_id;
++                linkedTrace = { trace_id: data.trace_id, observation_key: data.observation_key,
++                    candidate_key: data.candidate_key, policy_hash: data.policy_hash, code_hash: data.code_hash };
+                 break;
+             }
+         }
+@@ -254,6 +258,8 @@
+         options?.reconciliationBackfill === true ||
+         entryAlreadyNotified;
+     await (0, testnet_repository_1.recordTestnetTradeEvent)(positionId, 'entry_order_filled', {
++        ...linkedTrace,
++        linkage_status: linkedTrace.trace_id ? 'linked' : 'legacy_or_missing',
+         order_id: localOrder.order_id,
+         binance_order_id: localOrder.binance_order_id,
+         symbol: localOrder.symbol,
+@@ -433,4 +439,3 @@
+     }
+     return null;
+ }
+-//# sourceMappingURL=binance-order-fill.service.js.map--- baseline/services/entry-gate-funnel.service.js
++++ release/services/entry-gate-funnel.service.js
+@@ -1,12 +1,11 @@
+ "use strict";
+-/**
+- * Non-short-circuit observability for deterministic entry gates.
+- * This service never calls an LLM or places/cancels an exchange order.
+- */
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.evaluateEntryGateFunnel = evaluateEntryGateFunnel;
+ exports.recordEntryGateFunnel = recordEntryGateFunnel;
+ exports.clearEntryGateFunnelDedupForTests = clearEntryGateFunnelDedupForTests;
++const entry_feasibility_observation_1 = require("../utils/entry-feasibility-observation");
++const risk_policy_1 = require("../config/risk-policy");
++const methods_1 = require("../config/methods");
+ const candle_service_1 = require("./candle.service");
+ const v3_entry_policy_1 = require("../config/v3-entry-policy");
+ const v3_structure_bias_policy_1 = require("../config/v3-structure-bias-policy");
+@@ -50,6 +49,8 @@
+     return evidence?.metrics ? { ...evidence.metrics } : null;
+ }
+ async function evaluateEntryGateFunnel(input) {
++    const asOf = Date.now();
++    let structureCandles = [];
+     const setup = input.signalResult.setupResult;
+     const side = (0, setup_trade_side_1.inferSetupTradeSide)(setup, input.timeframe, input.candles);
+     const gateRegime = (0, v3_entry_policy_1.resolveGateRegimeFromSignal)(input.signalResult);
+@@ -88,6 +89,7 @@
+                 limit: limit + 1,
+             });
+             const closed = (0, closed_candles_1.closedCandlesOnly)(fetched, tf).slice(-limit);
++            structureCandles = closed;
+             const check = (0, v3_structure_bias_policy_1.evaluateStructureSidePermission)({ side, candles: closed });
+             structureBias = check.bias;
+             structureDetail = check.detail ?? null;
+@@ -235,9 +237,32 @@
+     const allBlocks = Object.entries(gates)
+         .filter(([, result]) => result.status === 'block' || result.status === 'unavailable')
+         .map(([name]) => name);
++    const diagnosticGates = { ...gates };
++    if (!side) {
++        diagnosticGates.direction = unavailable('playbook direction unavailable');
++        for (const key of ['structure', 'side_align', 'entry_5m_guard']) {
++            if (diagnosticGates[key].status !== 'not_applicable')
++                diagnosticGates[key] = notApplicable('requires a directional setup');
++        }
++    }
++    const diagnosticBlocks = Object.entries(diagnosticGates)
++        .filter(([, g]) => g.status === 'block' || g.status === 'unavailable').map(([key]) => key);
+     const barKey = (0, candle_hash_1.generateCandleBarKey)(input.candles);
+     return {
+         schema_version: 1,
++        measurement_version: 2,
++        diagnostic_gates: diagnosticGates,
++        diagnostic_blocks: diagnosticBlocks,
++        legacy_control_fields_preserved: true,
++        classification: !side && !input.signalResult.pass && (setup.grade === 'D' || !setup.playbookKey || setup.playbookKey === 'unknown') ? 'no_setup' :
++            Object.values(diagnosticGates).some(g => g.status === 'unavailable') ? 'missing_data' : diagnosticBlocks.length ? 'blocked' : 'proxy_pass',
++        // Legacy dispatch checks signal/regime and structure before AI; remaining proxies run after AI.
++        pre_ai_proxy_pass: ['signal_gate', 'regime', 'direction', 'structure'].every(k => gates[k].status === 'pass' || gates[k].status === 'not_applicable'),
++        post_ai_proxy_blocks: allBlocks.filter(k => !['signal_gate', 'regime', 'direction', 'structure'].includes(k)),
++        feasibility: (0, entry_feasibility_observation_1.observeEntryFeasibility)({ asOf, timeframe: input.timeframe, candles: input.candles,
++            structureCandles, structureTimeframe: (0, v3_structure_bias_policy_1.getV3StructureBiasTf)(), side,
++            minSlFraction: (0, risk_policy_1.getRiskPolicy)().minSlDistancePercent,
++            minRr: (0, methods_1.getMethodConfig)(input.methodId ?? 'kim_nghia').autoEntry.minRRRatio }),
+         observation_key: `${input.symbol.toUpperCase()}:${input.timeframe}:${input.methodId ?? 'kim_nghia'}:${barKey}`,
+         bar_key: barKey,
+         symbol: input.symbol.toUpperCase(),
+@@ -278,4 +303,3 @@
+ function clearEntryGateFunnelDedupForTests() {
+     recordedKeys.clear();
+ }
+-//# sourceMappingURL=entry-gate-funnel.service.js.map--- baseline/services/groq-dispatch.service.js
++++ release/services/groq-dispatch.service.js
+@@ -1,11 +1,15 @@
+ "use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.groqDispatchService = exports.GroqDispatchService = void 0;
++const entry_feasibility_observation_1 = require("../utils/entry-feasibility-observation");
++const entry_trace_1 = require("../utils/entry-trace");
++const candle_hash_1 = require("../utils/candle-hash");
++const plan_feasibility_1 = require("../utils/plan-feasibility");
+ /**
+  * Groq Dispatch Service
+  * Orchestrates LLM calls with strict validation and memory context
+  * Only calls Groq when signal gate and risk engine approve
+  */
+-Object.defineProperty(exports, "__esModule", { value: true });
+-exports.groqDispatchService = exports.GroqDispatchService = void 0;
+ const groq_client_1 = require("./groq-client");
+ const memory_service_1 = require("./memory.service");
+ const signal_gate_service_1 = require("./signal-gate.service");
+@@ -22,7 +26,7 @@
+ const account_risk_guard_service_1 = require("./account-risk-guard.service");
+ const market_scan_scheduler_1 = require("../schedulers/market-scan.scheduler");
+ const candle_service_1 = require("./candle.service");
+-const candle_hash_1 = require("../utils/candle-hash");
++const candle_hash_2 = require("../utils/candle-hash");
+ const closed_candles_1 = require("../utils/closed-candles");
+ const scan_freshness_1 = require("../utils/scan-freshness");
+ const groq_levels_adapter_service_1 = require("./groq-levels-adapter.service");
+@@ -80,12 +84,34 @@
+      * Main dispatch method - evaluates whether to call Groq and executes if approved
+      */
+     async dispatch(input) {
++        const trace = (0, entry_trace_1.createEntryTrace)({
++            observation_key: `${input.symbol.toUpperCase()}:${input.timeframe}:${input.method_id ?? 'kim_nghia'}:${(0, candle_hash_1.generateCandleBarKey)(input.candles)}`,
++            candidate_key: input.retestContext?.candidateKey,
++            candle_cutoff: input.candles.at(-1)?.timestamp,
++            lane: input.retestContext ? 'legacy_retest' : 'legacy_signal',
++        }, { risk: (0, risk_policy_1.getRiskPolicy)(), auto: (0, methods_1.getMethodConfig)(input.method_id ?? 'kim_nghia').autoEntry });
++        return (0, entry_trace_1.withEntryTrace)(trace, async () => {
++            await (0, entry_trace_1.recordEntryStage)('dispatch_started');
++            try {
++                const result = await this.dispatchTraced(input);
++                trace.decision_id = result.decisionRecordId ?? trace.decision_id;
++                await (0, entry_trace_1.recordEntryStage)('dispatch_result', { decision: result.decision, reason: result.reason });
++                return { ...result, decisionRecordId: trace.decision_id, trace: { ...trace } };
++            }
++            catch (error) {
++                await (0, entry_trace_1.recordEntryStage)('dispatch_error');
++                throw error;
++            }
++        });
++    }
++    async dispatchTraced(input) {
+         const { symbol, timeframe, candles, systemPrompt, method_id = 'kim_nghia', signalResult: precomputed, retestContext, } = input;
++        let diagnosticStructure = [];
+         const optimizedRangeRetest = (0, adaptive_retest_dispatch_1.isOptimizedRangeRetest)(retestContext);
+         if (retestContext?.candidateKind === 'range_sweep_reclaim' && !optimizedRangeRetest) {
+             return { decision: 'no_trade', reason: 'adaptive range retest context is not live-policy eligible' };
+         }
+-        const candleHash = (0, candle_hash_1.generateCandleHash)(candles.map((c) => ({
++        const candleHash = (0, candle_hash_2.generateCandleHash)(candles.map((c) => ({
+             timestamp: c.timestamp,
+             high: c.high,
+             low: c.low,
+@@ -133,6 +159,7 @@
+                     limit: structLimit + 1,
+                 });
+                 const closed = (0, closed_candles_1.closedCandlesOnly)(fetched, structTf).slice(-structLimit);
++                diagnosticStructure = closed;
+                 adaptiveRangeStructureBias = (0, structure_bias_1.classifyStructureBias)(closed, {
+                     strength: (0, v3_structure_bias_policy_1.getV3StructureBiasStrength)(),
+                 }).bias;
+@@ -237,6 +264,7 @@
+                     limit: structLimit + 1,
+                 });
+                 const closedStructCandles = (0, closed_candles_1.closedCandlesOnly)(structCandles, structTf).slice(-structLimit);
++                diagnosticStructure = closedStructCandles;
+                 const structCheck = (0, v3_structure_bias_policy_1.evaluateStructureSidePermission)({
+                     side: playbookSide,
+                     candles: closedStructCandles,
+@@ -321,6 +349,14 @@
+                     htfRegime: htfPre.regime,
+                     htfDirection: htfPre.trendDirection,
+                 });
++        await (0, entry_trace_1.recordEntryStage)('feasibility_before_ai', {
++            measurement: (0, entry_feasibility_observation_1.observeEntryFeasibility)({ asOf: Date.now(), timeframe, candles,
++                structureCandles: diagnosticStructure, structureTimeframe: (0, v3_structure_bias_policy_1.getV3StructureBiasTf)(),
++                side: playbookSide, entry: retestContext?.confirmedEntryPrice,
++                minSlFraction: (0, risk_policy_1.getRiskPolicy)().minSlDistancePercent,
++                minRr: optimizedRangeRetest && retestContext ? retestContext.minRr : (0, methods_1.getMethodConfig)(method_id).autoEntry.minRRRatio }),
++        });
++        await (0, entry_trace_1.recordEntryStage)('pre_ai_passed', { cached_analysis: !!cachedTradeAnalysis });
+         // Step 4: Reuse only the LLM payload; cached trades still pass every current hard gate below.
+         let analysis = cachedTradeAnalysis ?? (await this.callGroqWithValidation(reviewSystemPrompt, userPrompt));
+         if (!analysis) {
+@@ -369,6 +405,19 @@
+                 expected_rr: retestContext.minRr,
+             };
+         }
++        if (analysis.action !== 'hold') {
++            await (0, entry_trace_1.recordEntryStage)('plan_geometry', {
++                source: 'ai_output_before_repair', entry: analysis.suggested_entry,
++                stop_loss: analysis.suggested_stop_loss, take_profit: analysis.suggested_take_profit,
++                measurement: (0, plan_feasibility_1.measurePlanGeometry)({ side: analysis.action === 'buy' ? 'long' : 'short',
++                    entry: Number(analysis.suggested_entry), stopLoss: Number(analysis.suggested_stop_loss),
++                    takeProfit: Number(analysis.suggested_take_profit),
++                    minSlFraction: (0, risk_policy_1.getRiskPolicy)().minSlDistancePercent,
++                    minRr: optimizedRangeRetest && retestContext ? retestContext.minRr : (0, methods_1.getMethodConfig)(method_id).autoEntry.minRRRatio }),
++            });
++        }
++        else
++            await (0, entry_trace_1.recordEntryStage)('ai_veto');
+         // Step 5a: Enforce minimum SL distance (before execution — avoids tight stops)
+         if (analysis.action !== 'hold' &&
+             analysis.suggested_entry &&
+@@ -1115,4 +1164,3 @@
+ exports.GroqDispatchService = GroqDispatchService;
+ // Export singleton instance
+ exports.groqDispatchService = new GroqDispatchService();
+-//# sourceMappingURL=groq-dispatch.service.js.map--- baseline/services/llm-telemetry.service.js
++++ release/services/llm-telemetry.service.js
+@@ -34,6 +34,7 @@
+ })();
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.fetchWithLlmTelemetry = fetchWithLlmTelemetry;
++const entry_trace_1 = require("../utils/entry-trace");
+ /** Persist only provider/model/status, never headers, prompts, responses or keys. */
+ async function fetchWithLlmTelemetry(url, options = {}) {
+     if (process.env.NODE_ENV === 'test')
+@@ -49,7 +50,7 @@
+     const record = async (type, data) => {
+         try {
+             const { recordSilentPipelineEvent } = await Promise.resolve().then(() => __importStar(require('../repositories/testnet.repository')));
+-            await recordSilentPipelineEvent(type, { request_id: requestId, provider, model, ...data });
++            await recordSilentPipelineEvent(type, (0, entry_trace_1.tracedEvent)({ request_id: requestId, provider, model, cost_usd: null, cost_status: 'unknown', ...data }));
+         }
+         catch {
+             console.warn('[LlmTelemetry] Could not persist provider request metadata');
+@@ -58,7 +59,21 @@
+     await record('llm_provider_request', {});
+     try {
+         const response = await fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(45_000) });
+-        await record('llm_provider_result', { status: response.status, ok: response.ok, latency_ms: Date.now() - started });
++        let costUsd = null;
++        let inputTokens = null, outputTokens = null;
++        try {
++            const request = JSON.parse(String(options.body ?? '{}'));
++            if (response.ok && request.stream !== true) {
++                const result = await response.clone().json();
++                const number = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
++                costUsd = number(result.usage?.cost);
++                inputTokens = number(result.usage?.prompt_tokens);
++                outputTokens = number(result.usage?.completion_tokens);
++            }
++        }
++        catch { /* Missing usage is unknown, never zero. Original response remains readable. */ }
++        await record('llm_provider_result', { status: response.status, ok: response.ok, latency_ms: Date.now() - started,
++            cost_usd: costUsd, cost_status: costUsd === null ? 'unknown' : 'reported', input_tokens: inputTokens, output_tokens: outputTokens });
+         return response;
+     }
+     catch (error) {
+@@ -66,4 +81,3 @@
+         throw error;
+     }
+ }
+-//# sourceMappingURL=llm-telemetry.service.js.map--- baseline/services/memory.service.js
++++ release/services/memory.service.js
+@@ -1,9 +1,4 @@
+ "use strict";
+-/**
+- * Memory Service
+- * Stores and retrieves trading decisions, outcomes, and reflections
+- * Builds context for LLM to learn from past trades
+- */
+ var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+     if (k2 === undefined) k2 = k;
+     var desc = Object.getOwnPropertyDescriptor(m, k);
+@@ -39,6 +34,12 @@
+ })();
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.memoryService = exports.MemoryService = void 0;
++const entry_trace_1 = require("../utils/entry-trace");
++/**
++ * Memory Service
++ * Stores and retrieves trading decisions, outcomes, and reflections
++ * Builds context for LLM to learn from past trades
++ */
+ const MemoryRepository = __importStar(require("../repositories/memory.repository"));
+ const TradeRepository = __importStar(require("../repositories/trade.repository"));
+ /**
+@@ -55,6 +56,9 @@
+                 const existing = await MemoryRepository.findTradeDecisionForBar(input.symbol, input.timeframe, input.candle_hash, methodId);
+                 if (existing) {
+                     console.log(`[MemoryService] Skip duplicate bar ${input.candle_hash} for ${input.symbol} ${input.timeframe} (id=${existing.id})`);
++                    if ((0, entry_trace_1.currentEntryTrace)())
++                        (0, entry_trace_1.currentEntryTrace)().decision_id = existing.id;
++                    await (0, entry_trace_1.recordEntryStage)('decision', { decision_id: existing.id, cached: true });
+                     return existing;
+                 }
+             }
+@@ -63,6 +67,9 @@
+                 method_id: methodId,
+             });
+             console.log(`[MemoryService] Stored decision for ${input.symbol}: ${input.decision}`);
++            if ((0, entry_trace_1.currentEntryTrace)())
++                (0, entry_trace_1.currentEntryTrace)().decision_id = decision.id;
++            await (0, entry_trace_1.recordEntryStage)('decision', { decision_id: decision.id, decision: input.decision, reason: input.reason });
+             return decision;
+         }
+         catch (error) {
+@@ -273,4 +280,3 @@
+ exports.MemoryService = MemoryService;
+ // Export singleton instance
+ exports.memoryService = new MemoryService();
+-//# sourceMappingURL=memory.service.js.map--- baseline/services/transition-breakout-retest.service.js
++++ release/services/transition-breakout-retest.service.js
+@@ -1,11 +1,4 @@
+ "use strict";
+-/**
+- * Stateful breakout -> retest state machine.
+- *
+- * Transition setups are always shadow-only. Directional trend setups can be
+- * re-armed for LLM dispatch only when pullback was the sole remaining blocker.
+- * The normal dispatch/execution pipeline still revalidates every live gate.
+- */
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.registerTransitionRetestCandidate = registerTransitionRetestCandidate;
+ exports.processTransitionRetestScan = processTransitionRetestScan;
+@@ -14,6 +7,9 @@
+ exports.recordTransitionRetestDispatch = recordTransitionRetestDispatch;
+ exports.resetTransitionRetestStateForTests = resetTransitionRetestStateForTests;
+ exports.getTransitionRetestStateForTests = getTransitionRetestStateForTests;
++const candle_service_1 = require("./candle.service");
++const entry_feasibility_observation_1 = require("../utils/entry-feasibility-observation");
++const retest_feasibility_1 = require("../utils/retest-feasibility");
+ const transition_retest_policy_1 = require("../config/transition-retest-policy");
+ const v3_structure_bias_policy_1 = require("../config/v3-structure-bias-policy");
+ const scan_freshness_1 = require("../utils/scan-freshness");
+@@ -309,6 +305,8 @@
+     }
+     const shadowWaveBypassed = canDispatch && seenWaves.has(waveKey) && !seenDispatchWaves.has(waveKey);
+     const candidate = {
++        initial_feasibility: observation.feasibility,
++        observation_key: observation.observation_key,
+         schema_version: 1,
+         candidate_key: key,
+         wave_key: waveKey,
+@@ -565,6 +563,20 @@
+             take_profit: levels.takeProfit,
+             rr,
+         };
++        // Paired observations reuse the immutable candidate; additional H4 reads never grant entry permission.
++        try {
++            const fourHour = await (0, candle_service_1.getCandles)({ symbol: input.symbol, timeframe: '4h', limit: 121 });
++            const measurement = (0, entry_feasibility_observation_1.observeEntryFeasibility)({ asOf: nowMs, timeframe: input.timeframe,
++                candles: input.candles, structureCandles: fourHour.candles, side: candidate.side,
++                entry: candle.close, minSlFraction: (0, risk_policy_1.getRiskPolicy)().minSlDistancePercent, minRr: rr });
++            await (0, testnet_repository_1.recordSilentPipelineEvent)('retest_feasibility_pair', { candidate_key: candidate.candidate_key,
++                wave_key: candidate.wave_key, observation_key: candidate.observation_key,
++                comparison: (0, retest_feasibility_1.compareRetestFeasibility)(candidate.initial_feasibility, measurement) });
++        }
++        catch {
++            await (0, testnet_repository_1.recordSilentPipelineEvent)('retest_feasibility_pair', { candidate_key: candidate.candidate_key,
++                comparison: { paired: false, reason: 'missing_data' } });
++        }
+         await (0, testnet_repository_1.recordSilentPipelineEvent)('transition_retest_confirmed', position);
+         candidates.delete(slot);
+         shadowPositions.set(candidate.candidate_key, position);
+@@ -644,4 +656,3 @@
+         opportunities: [...liveOpportunities.values()],
+     };
+ }
+-//# sourceMappingURL=transition-breakout-retest.service.js.map--- baseline/services/v3-trade-execution.service.js
++++ release/services/v3-trade-execution.service.js
+@@ -1,8 +1,4 @@
+ "use strict";
+-/**
+- * V3 trade execution — places Binance testnet limit orders and records pending orders.
+- * Position is created only after WebSocket fill (binance-websocket-sync).
+- */
+ var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+     if (k2 === undefined) k2 = k;
+     var desc = Object.getOwnPropertyDescriptor(m, k);
+@@ -38,6 +34,7 @@
+ })();
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.executeV3Trade = executeV3Trade;
++const entry_trace_1 = require("../utils/entry-trace");
+ const methods_1 = require("../config/methods");
+ const risk_policy_1 = require("../config/risk-policy");
+ const v3_entry_policy_1 = require("../config/v3-entry-policy");
+@@ -82,6 +79,26 @@
+  * Execute an LLM-approved trade on Binance testnet (limit entry + pending order row).
+  */
+ async function executeV3Trade(input) {
++    const trace = input.trace ?? (0, entry_trace_1.currentEntryTrace)() ?? (0, entry_trace_1.createEntryTrace)({
++        lane: 'direct_execution', decision_id: input.decisionRecordId,
++    }, (0, risk_policy_1.getRiskPolicy)());
++    return (0, entry_trace_1.withEntryTrace)(trace, async () => {
++        await (0, entry_trace_1.recordEntryStage)('admission_started');
++        try {
++            const result = await executeV3TradeTraced(input);
++            await (0, entry_trace_1.recordEntryStage)(result.success ? 'order_pending' : 'admission_rejected', {
++                rejection_code: result.rejectionCode ?? (result.success ? null : 'other_guard'),
++                reason: result.reason, order_id: result.orderId, binance_order_id: result.binanceOrderId
++            });
++            return result;
++        }
++        catch (error) {
++            await (0, entry_trace_1.recordEntryStage)('execution_error');
++            throw error;
++        }
++    });
++}
++async function executeV3TradeTraced(input) {
+     const { symbol, timeframe, analysis, methodId = 'kim_nghia', decisionRecordId, requiredMinRr, } = input;
+     if (process.env.BINANCE_ENABLED !== 'true') {
+         const reason = 'BINANCE_ENABLED is not true — cannot place live testnet order';
+@@ -95,11 +112,11 @@
+     const stopLoss = Number(analysis.suggested_stop_loss);
+     const takeProfit = Number(analysis.suggested_take_profit);
+     if (!isValidNumber(entry) || !isValidNumber(stopLoss) || !isValidNumber(takeProfit)) {
+-        return { success: false, reason: 'Missing or invalid entry / stop_loss / take_profit' };
++        return { success: false, rejectionCode: 'missing_data', reason: 'Missing or invalid entry / stop_loss / take_profit' };
+     }
+     const levelError = validatePriceLevels(side, entry, stopLoss, takeProfit);
+     if (levelError) {
+-        return { success: false, reason: levelError };
++        return { success: false, rejectionCode: 'invalid_levels', reason: levelError };
+     }
+     const auto = (0, methods_1.getMethodConfig)(methodId).autoEntry;
+     const riskPolicy = (0, risk_policy_1.getRiskPolicy)();
+@@ -110,6 +127,7 @@
+     if (!slCheck.ok) {
+         return {
+             success: false,
++            rejectionCode: 'stop_floor',
+             reason: `SL distance ${(slCheck.distancePct * 100).toFixed(2)}% below min ${(slCheck.minPct * 100).toFixed(2)}%`,
+         };
+     }
+@@ -207,6 +225,7 @@
+     if (totalExposure >= maxExposure) {
+         return {
+             success: false,
++            rejectionCode: 'exposure',
+             reason: `Max exposure reached (${totalExposure.toFixed(0)}/${maxExposure} USD open+pending)`,
+         };
+     }
+@@ -221,14 +240,14 @@
+         remainingCapacityUsd: remainingCapacity,
+     });
+     if (sizeUsd <= 0) {
+-        return { success: false, reason: 'Computed position size <= 0' };
++        return { success: false, rejectionCode: 'min_notional', reason: 'Computed position size <= 0' };
+     }
+     const minNotionalFloor = (0, v3_entry_policy_1.minNotionalWithTolerance)(minNotional, notionalTolerance);
+     if (sizeUsd < minNotionalFloor) {
+         const headroomMsg = exposure.openUsd > 0
+             ? `Scale-in headroom $${remainingCapacity.toFixed(0)} below Binance min order $${minNotional}`
+             : `Order notional $${sizeUsd.toFixed(0)} well below Binance minimum $${minNotional}`;
+-        return { success: false, reason: headroomMsg };
++        return { success: false, rejectionCode: remainingCapacity < minNotionalFloor ? 'exposure' : 'min_notional', reason: headroomMsg };
+     }
+     const sizeQty = sizeUsd / entry;
+     const symbolUsdt = `${symbol.toUpperCase()}USDT`;
+@@ -242,9 +261,14 @@
+         maxNotionalUsd: remainingCapacity,
+         tolerancePercent: notionalTolerance,
+     });
++    await (0, entry_trace_1.recordEntryStage)('quantity_checked', { raw_quantity: sizeQty, normalized_quantity: qtyResolved.normalizedQty,
++        min_qty: qtyCheck.minQty, step_size: qtyCheck.stepSize, min_notional: minNotional,
++        remaining_exposure_usd: remainingCapacity, order_notional: qtyResolved.orderNotional,
++        raised_to_minimum: qtyResolved.normalizedQty > sizeQty, rejection_code: qtyResolved.code ?? null });
+     if (!qtyResolved.valid) {
+         return {
+             success: false,
++            rejectionCode: qtyResolved.code ?? 'quantity_unknown',
+             reason: qtyResolved.reason ?? 'Order quantity invalid after exchange normalization',
+         };
+     }
+@@ -261,9 +285,12 @@
+     const levelAdjustment = undefined;
+     const effectiveRiskCapUsd = (0, execution_risk_1.resolveExecutionRiskCapUsd)({ balance,
+         maxRiskPercent: riskPolicy.maxEffectiveRiskPerTradePercent, maxRiskUsd: riskPolicy.maxEffectiveRiskPerTradeUsd });
++    await (0, entry_trace_1.recordEntryStage)('risk_checked', { ...risk, cap_usd: effectiveRiskCapUsd,
++        remaining_daily_risk_usd: accountGuard.remainingDailyRiskUsd ?? null });
+     if (effectiveRiskUsd > effectiveRiskCapUsd + 1e-9) {
+         return {
+             success: false,
++            rejectionCode: 'risk_cap',
+             reason: `Exchange minimum would risk ${effectiveRiskPercent.toFixed(2)}% of wallet after fees/slippage ` +
+                 `(cap ${effectiveRiskCapUsd.toFixed(4)} USDT)`,
+         };
+@@ -273,7 +300,7 @@
+         0;
+     const minRr = requiredMinRr ?? auto.minRRRatio;
+     if (!Number.isFinite(expectedRr) || expectedRr + 1e-9 < minRr) {
+-        return { success: false, reason: `R:R ${expectedRr.toFixed(2)} below minimum ${minRr}` };
++        return { success: false, rejectionCode: 'rr', reason: `R:R ${expectedRr.toFixed(2)} below minimum ${minRr}` };
+     }
+     const invalidation = Number(analysis.invalidation_level);
+     if (Number.isFinite(invalidation) && invalidation > 0 &&
+@@ -283,7 +310,7 @@
+     }
+     if (riskPolicy.circuitDailyLossEnabled && accountGuard.remainingDailyRiskUsd != null &&
+         effectiveRiskUsd > accountGuard.remainingDailyRiskUsd + 1e-9) {
+-        return { success: false, reason: 'Projected stop loss after costs exceeds remaining daily loss budget' };
++        return { success: false, rejectionCode: 'daily_risk', reason: 'Projected stop loss after costs exceeds remaining daily loss budget' };
+     }
+     const orderId = `v3_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+     const newClientOrderId = `x-${orderId}`;
+@@ -294,6 +321,7 @@
+     await (0, binance_hedge_mode_1.ensurePositionModeDetected)();
+     const binanceSide = side === 'long' ? 'BUY' : 'SELL';
+     let binanceOrderId;
++    await (0, entry_trace_1.recordEntryStage)('order_submitting', { order_id: orderId, client_order_id: newClientOrderId });
+     try {
+         const order = await (0, binanceClient_1.placeLimitOrder)(client, symbolUsdt, binanceSide, normalizedSizeQty, entry, 'OPEN', null, null, newClientOrderId);
+         binanceOrderId = String(order.orderId);
+@@ -304,7 +332,7 @@
+     catch (error) {
+         const message = error instanceof Error ? error.message : String(error);
+         console.error(`[V3TradeExecution] Binance order failed: ${message}`);
+-        return { success: false, reason: `Binance order placement failed: ${message}` };
++        return { success: false, rejectionCode: 'exchange_submission_unknown', reason: `Binance order placement failed: ${message}` };
+     }
+     await (0, testnet_repository_1.createTestnetPendingOrder)({
+         orderId,
+@@ -338,7 +366,7 @@
+         orderId,
+         binanceOrderId,
+     });
+-    if (decisionRecordId) {
++    {
+         const { recordPipelineEvent } = await Promise.resolve().then(() => __importStar(require('../repositories/testnet.repository')));
+         await recordPipelineEvent('pending_order_linked', {
+             order_id: orderId,
+@@ -359,4 +387,3 @@
+         levelAdjustment,
+     };
+ }
+-//# sourceMappingURL=v3-trade-execution.service.js.map--- baseline/utils/order-quantity.js
++++ release/utils/order-quantity.js
+@@ -35,6 +35,7 @@
+             valid: false,
+             normalizedQty: 0,
+             orderNotional: 0,
++            code: 'missing_data',
+             reason: 'Invalid entry price',
+         };
+     }
+@@ -51,6 +52,7 @@
+             valid: false,
+             normalizedQty: 0,
+             orderNotional: 0,
++            code: 'min_lot',
+             reason: `Quantity ${quantity} cannot satisfy minQty ${minQty} (stepSize ${stepSize})`,
+         };
+     }
+@@ -59,6 +61,7 @@
+             valid: false,
+             normalizedQty,
+             orderNotional,
++            code: 'min_notional',
+             reason: `Order notional $${orderNotional.toFixed(0)} well below minimum $${minNotionalUsd} (tolerance ${tolerancePercent}%)`,
+         };
+     }
+@@ -69,6 +72,7 @@
+                 valid: false,
+                 normalizedQty,
+                 orderNotional,
++                code: 'exposure',
+                 reason: `Order notional $${orderNotional.toFixed(0)} exceeds remaining capacity $${maxNotionalUsd.toFixed(0)} (tolerance ${tolerancePercent}%)`,
+             };
+         }
+@@ -105,4 +109,3 @@
+         valid: true,
+     };
+ }
+-//# sourceMappingURL=order-quantity.js.map--- baseline/utils/entry-feasibility-observation.js
++++ release/utils/entry-feasibility-observation.js
+@@ -0,0 +1,47 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.observeEntryFeasibility = observeEntryFeasibility;
++const closed_candles_1 = require("./closed-candles");
++const structure_bias_1 = require("./structure-bias");
++const plan_feasibility_1 = require("./plan-feasibility");
++/** A fixed diagnostic rule, not an entry strategy or a runtime guard. No future pivots. */
++function observeEntryFeasibility(input) {
++    const base = { version: 'entry-feasibility-v1', role: 'diagnostic_only', asOf: input.asOf,
++        minSlFraction: input.minSlFraction, minRr: input.minRr, structureStrength: 2,
++        structureTimeframe: input.structureTimeframe ?? '4h',
++        entrySource: input.entry === undefined ? 'closed_bar_proxy' : 'confirmed_retest' };
++    if (!input.side)
++        return { ...base, status: 'no_setup', geometry: null };
++    const rows = (0, closed_candles_1.closedCandlesOnly)(input.candles, input.timeframe, input.asOf);
++    const h4 = (0, closed_candles_1.closedCandlesOnly)(input.structureCandles, input.structureTimeframe ?? '4h', input.asOf);
++    const durations = { '5m': 300000, '15m': 900000, '1h': 3600000, '4h': 14400000 };
++    const complete = (bars, tf) => {
++        const step = durations[tf];
++        return !!step && bars.every((b, i) => i === 0 || b.timestamp - bars[i - 1].timestamp === step) &&
++            !!bars.length && input.asOf - (bars.at(-1).timestamp + step) <= step + 120000;
++    };
++    if (!complete(rows, input.timeframe) || !complete(h4, input.structureTimeframe ?? '4h') || rows.length < 6 || h4.length < 5 || [...rows, ...h4].some(b => ![b.close, b.high, b.low].every(x => Number.isFinite(x) && x > 0) || b.low > b.close || b.close > b.high))
++        return { ...base, status: 'missing_data', geometry: null };
++    const entry = input.entry ?? rows.at(-1).close;
++    const side = input.side, dir = side === 'long' ? 1 : -1;
++    const invalidation = side === 'long' ? Math.min(...rows.slice(-6).map(b => b.low)) : Math.max(...rows.slice(-6).map(b => b.high));
++    const rawStop = side === 'long' ? Math.min(invalidation - entry * .0001, entry * (1 - input.minSlFraction))
++        : Math.max(invalidation + entry * .0001, entry * (1 + input.minSlFraction));
++    const stopLoss = (side === 'long' ? Math.floor(rawStop * 10) : Math.ceil(rawStop * 10)) / 10;
++    const swings = (0, structure_bias_1.findStructureSwings)(h4, 2);
++    const targets = swings.filter(s => s.kind === (side === 'long' ? 'high' : 'low') && dir * (s.price - entry) > 0);
++    const target = targets.sort((a, b) => dir * (a.price - b.price))[0];
++    const bias = (0, structure_bias_1.classifyStructureBias)(h4, { strength: 2 });
++    const lastSupport = swings.filter(s => s.kind === (bias.bias === 'bull' ? 'low' : 'high')).at(-1);
++    // This measures a stale pivot bias; it does not grant permission for the opposite side.
++    const brokenAt = bias.bias !== 'transition' && lastSupport ? h4.slice(lastSupport.index + 3)
++        .find(b => bias.bias === 'bull' ? b.close < lastSupport.price : b.close > lastSupport.price)?.timestamp : undefined;
++    const geometry = (0, plan_feasibility_1.measurePlanGeometry)({ side, entry, stopLoss, targetBound: target?.price,
++        minSlFraction: input.minSlFraction, minRr: input.minRr });
++    return { ...base, status: geometry.feasible ? 'geometry_feasible' : geometry.blockers[0],
++        sourceCutoff: rows.at(-1).timestamp, structureCutoff: h4.at(-1).timestamp,
++        entry, stopLoss, invalidation, targetBound: target?.price ?? null, geometry,
++        structure: { bias: bias.bias, pivotAt: lastSupport ? h4[lastSupport.index].timestamp : null,
++            confirmationBarAt: lastSupport ? h4[lastSupport.index + 2].timestamp : null,
++            invalidationBarAt: brokenAt ?? null, staleBias: brokenAt !== undefined }, };
++}
+--- baseline/utils/entry-trace-audit.js
++++ release/utils/entry-trace-audit.js
+@@ -0,0 +1,58 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.auditEntryTraces = auditEntryTraces;
++function auditEntryTraces(events) {
++    const traces = new Map();
++    let unlinkedRequests = 0, unlinkedFills = 0, unknownProviderCosts = 0;
++    let knownProviderCostUsd = 0;
++    const results = new Map(events.filter(e => e.event_type === 'llm_provider_result' && typeof e.event_data.request_id === 'string')
++        .map(e => [e.event_data.request_id, e.event_data]));
++    let paired = 0, improved = 0, missingPairs = 0;
++    for (const event of events) {
++        const d = event.event_data, id = typeof d.trace_id === 'string' ? d.trace_id : null;
++        if (event.event_type === 'llm_provider_request') {
++            if (!id)
++                unlinkedRequests++;
++            const cost = results.get(d.request_id)?.cost_usd;
++            if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0)
++                unknownProviderCosts++;
++            else
++                knownProviderCostUsd += cost;
++        }
++        if (event.event_type === 'entry_order_filled' && !id)
++            unlinkedFills++;
++        if (event.event_type === 'retest_feasibility_pair') {
++            const c = d.comparison;
++            if (c?.paired === true) {
++                paired++;
++                if (c.becameGeometryFeasible === true)
++                    improved++;
++            }
++            else
++                missingPairs++;
++        }
++        if (!id)
++            continue;
++        let t = traces.get(id);
++        if (!t) {
++            t = { trace_id: id, observation_key: d.observation_key, requests: 0, decisions: new Set(), stages: [], orders: new Set(), fills: 0 };
++            traces.set(id, t);
++        }
++        if (event.event_type === 'llm_provider_request')
++            t.requests++;
++        if (typeof d.decision_id === 'number')
++            t.decisions.add(d.decision_id);
++        if (typeof d.order_id === 'string')
++            t.orders.add(d.order_id);
++        if (event.event_type === 'entry_trace' && typeof d.stage === 'string')
++            t.stages.push(d.stage);
++        if (event.event_type === 'entry_order_filled')
++            t.fills++;
++    }
++    return { traceCount: traces.size, unlinkedRequests, unlinkedFills, unknownProviderCosts, knownProviderCostUsd,
++        retest: { paired, becameGeometryFeasible: improved, unavailable: missingPairs, pnlMeasured: false },
++        traces: [...traces.values()].map(t => ({ ...t, decisions: [...t.decisions], orders: [...t.orders] })),
++        limitations: ['Counts apply only to supplied events; historical missing links are not reconstructed by proximity.',
++            'Repeated requests, bars and retest observations are not independent trades.',
++            'Unknown provider costs cannot be treated as zero for ROI.'] };
++}
+--- baseline/utils/entry-trace.js
++++ release/utils/entry-trace.js
+@@ -0,0 +1,97 @@
++"use strict";
++var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
++    if (k2 === undefined) k2 = k;
++    var desc = Object.getOwnPropertyDescriptor(m, k);
++    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
++      desc = { enumerable: true, get: function() { return m[k]; } };
++    }
++    Object.defineProperty(o, k2, desc);
++}) : (function(o, m, k, k2) {
++    if (k2 === undefined) k2 = k;
++    o[k2] = m[k];
++}));
++var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
++    Object.defineProperty(o, "default", { enumerable: true, value: v });
++}) : function(o, v) {
++    o["default"] = v;
++});
++var __importStar = (this && this.__importStar) || (function () {
++    var ownKeys = function(o) {
++        ownKeys = Object.getOwnPropertyNames || function (o) {
++            var ar = [];
++            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
++            return ar;
++        };
++        return ownKeys(o);
++    };
++    return function (mod) {
++        if (mod && mod.__esModule) return mod;
++        var result = {};
++        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
++        __setModuleDefault(result, mod);
++        return result;
++    };
++})();
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.withEntryTrace = exports.currentEntryTrace = void 0;
++exports.createEntryTrace = createEntryTrace;
++exports.tracedEvent = tracedEvent;
++exports.recordEntryStage = recordEntryStage;
++const node_async_hooks_1 = require("node:async_hooks");
++const node_crypto_1 = require("node:crypto");
++const node_fs_1 = require("node:fs");
++const node_path_1 = require("node:path");
++const context = new node_async_hooks_1.AsyncLocalStorage();
++let fingerprint;
++/** Hash the actual source/build tree once per process, without exposing its contents. */
++function codeFingerprint() {
++    if (fingerprint)
++        return fingerprint;
++    const root = (0, node_path_1.resolve)(__dirname, '..'), files = [];
++    const walk = (dir) => {
++        for (const e of (0, node_fs_1.readdirSync)(dir, { withFileTypes: true })) {
++            const p = (0, node_path_1.resolve)(dir, e.name);
++            if (e.isDirectory())
++                walk(p);
++            else if (/\.(js|ts)$/.test(e.name) && !e.name.endsWith('.d.ts'))
++                files.push(p);
++        }
++    };
++    try {
++        walk(root);
++        const hash = (0, node_crypto_1.createHash)('sha256');
++        for (const p of files.sort())
++            hash.update((0, node_path_1.relative)(root, p)).update('\0').update((0, node_fs_1.readFileSync)(p)).update('\0');
++        fingerprint = hash.digest('hex');
++    }
++    catch {
++        fingerprint = 'unavailable';
++    }
++    return fingerprint;
++}
++const currentEntryTrace = () => context.getStore();
++exports.currentEntryTrace = currentEntryTrace;
++const withEntryTrace = (trace, fn) => context.run(trace, fn);
++exports.withEntryTrace = withEntryTrace;
++function createEntryTrace(input, policy) {
++    const env = Object.fromEntries(Object.keys(process.env).filter(k => /^(V3_|ADAPTIVE_|TRANSITION_RETEST_|RANGE_SWEEP_|POST_|PENDING_ORDER_REENTRY_|CLOSED_CANDLE_)/.test(k)).sort().map(k => [k, process.env[k]]));
++    return { ...input, trace_id: (0, node_crypto_1.randomUUID)(), evaluated_at: new Date().toISOString(),
++        code_hash: codeFingerprint(), policy_hash: (0, node_crypto_1.createHash)('sha256').update(JSON.stringify({ policy, env })).digest('hex') };
++}
++/** Explicit fields win; no prompts, credentials or provider responses enter this context. */
++function tracedEvent(data = {}) {
++    return { ...(0, exports.currentEntryTrace)(), ...data };
++}
++async function recordEntryStage(stage, data = {}) {
++    if (!(0, exports.currentEntryTrace)())
++        return;
++    try {
++        const { recordSilentPipelineEvent } = await Promise.resolve().then(() => __importStar(require('../repositories/testnet.repository')));
++        const id = await recordSilentPipelineEvent('entry_trace', tracedEvent({ stage, ...data }));
++        if (id === null)
++            console.warn('[EntryTrace] persistence unavailable');
++    }
++    catch {
++        console.warn('[EntryTrace] persistence unavailable');
++    }
++}
+--- baseline/utils/plan-feasibility.js
++++ release/utils/plan-feasibility.js
+@@ -0,0 +1,36 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.measurePlanGeometry = measurePlanGeometry;
++function measurePlanGeometry(p) {
++    const blockers = [];
++    const invalid = !['long', 'short'].includes(p.side) ||
++        ![p.entry, p.stopLoss, p.minSlFraction, p.minRr].every(x => Number.isFinite(x) && x > 0);
++    if (invalid)
++        return { blockers: ['missing_data'], feasible: false, stopFraction: null,
++            requiredTargetFraction: null, availableTargetFraction: null, rr: null };
++    const dir = p.side === 'long' ? 1 : -1;
++    const stopFraction = dir * (p.entry - p.stopLoss) / p.entry;
++    if (stopFraction <= 0)
++        blockers.push('invalid_levels');
++    else if (stopFraction + 1e-12 < p.minSlFraction)
++        blockers.push('stop_floor');
++    const requiredTargetFraction = Math.max(p.minSlFraction, stopFraction) * p.minRr;
++    const availableTargetFraction = p.targetBound != null && Number.isFinite(p.targetBound) && p.targetBound > 0
++        ? dir * (p.targetBound - p.entry) / p.entry : null;
++    if (availableTargetFraction === null)
++        blockers.push('missing_target_bound');
++    else if (availableTargetFraction + 1e-12 < requiredTargetFraction)
++        blockers.push('target_room');
++    const reward = p.takeProfit != null && Number.isFinite(p.takeProfit) && p.takeProfit > 0
++        ? dir * (p.takeProfit - p.entry) / p.entry : null;
++    const rr = reward !== null && stopFraction > 0 ? reward / stopFraction : null;
++    if (p.takeProfit !== undefined) {
++        if (rr === null || reward <= 0)
++            blockers.push('invalid_levels');
++        else if (rr + 1e-9 < p.minRr)
++            blockers.push('rr');
++        if (reward !== null && availableTargetFraction !== null && reward > availableTargetFraction + 1e-12)
++            blockers.push('target_bound_exceeded');
++    }
++    return { feasible: blockers.length === 0, blockers, stopFraction, requiredTargetFraction, availableTargetFraction, rr };
++}
+--- baseline/utils/retest-feasibility.js
++++ release/utils/retest-feasibility.js
+@@ -0,0 +1,20 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.compareRetestFeasibility = compareRetestFeasibility;
++function compareRetestFeasibility(first, retest) {
++    if (first && (first.version !== retest.version || first.minSlFraction !== retest.minSlFraction ||
++        first.minRr !== retest.minRr || first.structureTimeframe !== retest.structureTimeframe))
++        return { paired: false, reason: 'policy_mismatch' };
++    if (!first?.geometry || !retest.geometry || first.asOf >= retest.asOf ||
++        !('entry' in first) || !('entry' in retest))
++        return { paired: false, reason: 'missing_or_noncausal_pair' };
++    const before = first.geometry, after = retest.geometry;
++    const beforeRoom = before.availableTargetFraction, afterRoom = after.availableTargetFraction;
++    return { paired: true, role: 'diagnostic_not_pnl', elapsedMs: retest.asOf - first.asOf,
++        first, retest, entryChangeFraction: (retest.entry - first.entry) / first.entry,
++        targetChanged: first.targetBound !== retest.targetBound,
++        stopChanged: first.stopLoss !== retest.stopLoss,
++        targetRoomDelta: beforeRoom !== null && afterRoom !== null ? afterRoom - beforeRoom : null,
++        becameGeometryFeasible: !before.feasible && after.feasible,
++        becameGeometryInfeasible: before.feasible && !after.feasible };
++}

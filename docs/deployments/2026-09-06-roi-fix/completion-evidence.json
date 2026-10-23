@@ -1,0 +1,74 @@
+{
+  "completedAt": "2026-09-07T08:20:37.978494+00:00",
+  "objective": "implement fix + test + backtest + deploy monitor",
+  "status": "complete",
+  "evidenceFiles": [
+    "deployment-review.md",
+    "deployment-manifest.json",
+    "final-runtime-verification.json",
+    "exchange-final.json",
+    "accounting-replay.json",
+    "ledger-applied.json",
+    "core-backtest.json",
+    "adaptive-cost-sensitivity.json",
+    "api-final.json",
+    "monitor-final.json",
+    "acceptance-tests.log",
+    "additional-tests.log",
+    "batch-tests.log",
+    "typecheck-build.log"
+  ],
+  "latestMonitor": {
+    "checked_at": "2026-09-07T08:20:01.389308+00:00",
+    "alerts": [],
+    "processes": {
+      "crypto-api": {
+        "status": "online",
+        "pids": [
+          2946840
+        ]
+      },
+      "crypto-worker": {
+        "status": "online",
+        "pids": [
+          2946841
+        ]
+      }
+    },
+    "db": {
+      "heartbeats": [
+        {
+          "name": "MarketScan",
+          "age_seconds": 295.776429
+        },
+        {
+          "name": "LLMDispatch",
+          "age_seconds": 241.495429
+        },
+        {
+          "name": "PendingOrderLifecycle",
+          "age_seconds": 0.995429
+        },
+        {
+          "name": "PositionMonitor",
+          "age_seconds": 0.990429
+        }
+      ],
+      "account": {
+        "balance": 34.27714639,
+        "baseline": 40,
+        "net_pnl": -5.72285361,
+        "trades": 36
+      },
+      "open_positions": 0,
+      "ledger_verified": 36,
+      "closed_positions": 36,
+      "adaptive_candidates": 0,
+      "provider_calls": 0
+    }
+  },
+  "limitations": [
+    "Adaptive remains shadow; no new candidate in observation window.",
+    "Small backtest samples do not establish sustained positive live ROI."
+  ]
+}

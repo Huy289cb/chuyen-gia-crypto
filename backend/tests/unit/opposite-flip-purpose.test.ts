@@ -1,0 +1,17 @@
+import {it,expect,vi,beforeEach} from 'vitest';
+import {currentProviderPurpose as current,withProviderPurpose as withPurpose} from '../../src/utils/provider-purpose-context';
+const mocks=vi.hoisted(()=>({complete:vi.fn(),positions:vi.fn(),close:vi.fn()}));
+vi.mock('../../src/services/groq-client',()=>({createGroqClient:()=>({completeText:mocks.complete})}));
+vi.mock('../../src/config/groq-models',()=>({getGroqAuxiliaryModelChain:()=>['test']}));
+vi.mock('../../src/config/v3-entry-policy',()=>({isV3OppositeFlipEnabled:()=>true,getV3OppositeFlipMinConfidence:()=>.85}));
+vi.mock('../../src/services/binance-exposure.service',()=>({fetchBinanceNetPosition:async()=>null}));
+vi.mock('../../src/repositories/testnet.repository',()=>({getActiveTestnetPositions:mocks.positions,recordTestnetTradeEvent:vi.fn()}));
+vi.mock('../../src/lib/prisma',()=>({prisma:{}}));
+vi.mock('../../src/services/position-close.service',()=>({closeLocalPosition:mocks.close,closePositionOnBinanceMarket:mocks.close}));
+vi.mock('../../src/services/v3-entry-eligibility.service',()=>({oppositeLocalSide:()=> 'short'}));
+import {tryOppositeFlipBeforeEntry as run} from '../../src/services/opposite-flip.service';
+const input:any={symbol:'BTC',methodId:'kim_nghia',newSide:'long',timeframe:'5m',analysis:{confidence:.9,suggested_entry:100,suggested_stop_loss:99,suggested_take_profit:102}};
+beforeEach(()=>{vi.clearAllMocks();mocks.positions.mockResolvedValue([{side:'short',entry_price:100,size_qty:1}]);});
+it('labels flip evaluation and restores parent context without closing on rejection',async()=>{mocks.complete.mockImplementationOnce(async()=>{expect(current()).toBe('opposite_flip');return '{"close_existing":false,"confidence":0.9}';});await withPurpose('dispatch',async()=>{expect((await run(input)).flipped).toBe(false);expect(current()).toBe('dispatch');});expect(current()).toBeNull();expect(mocks.close).not.toHaveBeenCalled();});
+it('restores context when provider fails and retains unavailable evaluation outcome',async()=>{mocks.complete.mockImplementationOnce(async()=>{expect(current()).toBe('opposite_flip');throw Error('test failure');});const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});try{await withPurpose('dispatch',async()=>{expect((await run(input)).flipped).toBe(false);expect(current()).toBe('dispatch');});expect(mocks.close).not.toHaveBeenCalled();}finally{warn.mockRestore();}});
+it('skips evaluation without opposite exposure',async()=>{mocks.positions.mockResolvedValueOnce([]);expect(await run(input)).toMatchObject({flipped:false,reason:'no opposite exposure'});expect(mocks.complete).not.toHaveBeenCalled();});

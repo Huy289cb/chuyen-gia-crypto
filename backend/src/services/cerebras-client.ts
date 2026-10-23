@@ -1,3 +1,4 @@
+import { fetchWithLlmTelemetry } from './llm-telemetry.service';
 /**
  * Cerebras Cloud dispatch fallback (OpenAI-compatible).
  * Uses gpt-oss-120b with response_format json_object — required for reliable trade JSON.
@@ -29,7 +30,7 @@ export async function analyzeViaCerebras(
 
   console.log(`[CerebrasClient] Dispatch fallback model=${model} (json_object)`);
 
-  const response = await fetch(CEREBRAS_CHAT_URL, {
+  const response = await fetchWithLlmTelemetry(CEREBRAS_CHAT_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,

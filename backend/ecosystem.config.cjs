@@ -19,7 +19,8 @@ const distDir = path.join(backendRoot, 'dist');
 const envPath = path.join(backendRoot, '.env');
 const logsDir = path.join(backendRoot, 'logs');
 
-require('dotenv').config({ path: envPath, override: true });
+const dotenvResult = require('dotenv').config({ path: envPath, override: true });
+const fileEnv = dotenvResult.parsed || {};
 
 /** PM2 env_file misparses values starting with `-` (group chat_id). Inject via env. */
 const telegramEnv = {
@@ -49,6 +50,12 @@ const telegramEnv = {
   CURSOR_CHAT_JOB_TIMEOUT_MS: process.env.CURSOR_CHAT_JOB_TIMEOUT_MS,
 };
 
+/**
+ * Pass parsed values explicitly so `pm2 reload --update-env` replaces stale
+ * process snapshots. `env_file` alone is not reapplied reliably to existing apps.
+ */
+const runtimeEnv = { ...fileEnv, ...telegramEnv };
+
 module.exports = {
   apps: [
     {
@@ -61,7 +68,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M',
       env_file: envPath,
-      env: telegramEnv,
+      env: runtimeEnv,
       error_file: path.join(logsDir, 'api-error.log'),
       out_file: path.join(logsDir, 'api-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
@@ -78,7 +85,10 @@ module.exports = {
       watch: false,
       max_memory_restart: '350M',
       env_file: envPath,
-      env: telegramEnv,
+      env: {
+        ...runtimeEnv,
+        PRISMA_CONNECTION_LIMIT: runtimeEnv.PRISMA_CONNECTION_LIMIT || '2',
+      },
       error_file: path.join(logsDir, 'worker-error.log'),
       out_file: path.join(logsDir, 'worker-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',

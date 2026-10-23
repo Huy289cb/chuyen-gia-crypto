@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),{generate}=require('./generate-range-entry-experiments.cjs');
+const seed={at:300005,value:{candidate_key:'seed',adaptive_evidence:{range_low:100,range_high:104,lastLow:99}}};
+const bar=(t,o,h,l,c)=>[t,o,h,l,c,1];
+const bs=[bar(300000,100,101,99,99.7),bar(600000,99.7,100.1,99.4,99.5),bar(900000,99.5,100.2,99.4,100.1)];
+const a=generate([seed],bs,7200000);
+const short=a.entries.find(e=>e.variant==='breakdown_retest');assert(short);assert.equal(short.sourceLastClose,900000);assert(short.candidate.time>short.sourceLastClose);
+assert.equal(generate([seed],bs.slice(0,1),7200000).entries.filter(e=>e.variant==='breakdown_retest').length,0,'breakdown candle itself cannot also confirm retest');
+const prefix=generate([seed],bs.slice(0,2),7200000).entries;assert.deepEqual(a.entries.filter(e=>e.sourceLastClose<=900000),prefix,'later candles cannot change earlier signals');
+for(const e of a.entries)assert(Math.abs(e.candidate.entry-e.candidate.stopLoss)/e.candidate.entry>=.008-1e-10,'stop floor survives ticks');
+assert.equal(generate([seed],[bar(6000000,100,101,99,100.5)],7200000).entries.length,0,'expired seeds cannot generate entries');
+console.log('PASS: distinct retest, causal timestamps, prefix invariance, stop floor, seed expiry');

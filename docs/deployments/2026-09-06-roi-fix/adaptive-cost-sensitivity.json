@@ -1,0 +1,50 @@
+{
+  "source": "adaptive-backtest.json",
+  "method": "Reprice the same completed simulated fills. Fees do not affect adaptive candidate selection or position lifecycle. Funding excluded.",
+  "feePerSide": 0.0005,
+  "totalSlippageFraction": 0.001,
+  "byKind": {
+    "early_structure_flip": {
+      "fees_only": {
+        "trades": 1,
+        "netR": -1.1244999999999998,
+        "avgNetR": -1.1244999999999998,
+        "profitFactor": 0.0
+      },
+      "fees_and_slippage": {
+        "trades": 1,
+        "netR": -1.2494999999999996,
+        "avgNetR": -1.2494999999999996,
+        "profitFactor": 0.0
+      }
+    },
+    "aligned_micro_bos": {
+      "fees_only": {
+        "trades": 20,
+        "netR": 4.500500000000033,
+        "avgNetR": 0.22502500000000164,
+        "profitFactor": 1.3637208550531403
+      },
+      "fees_and_slippage": {
+        "trades": 20,
+        "netR": 2.000500000000031,
+        "avgNetR": 0.10002500000000154,
+        "profitFactor": 1.1455067825580993
+      }
+    },
+    "range_sweep_reclaim": {
+      "fees_only": {
+        "trades": 11,
+        "netR": 2.6229999999999736,
+        "avgNetR": 0.23845454545454306,
+        "profitFactor": 1.4665184526456159
+      },
+      "fees_and_slippage": {
+        "trades": 11,
+        "netR": 1.247999999999978,
+        "avgNetR": 0.11345454545454346,
+        "profitFactor": 1.199759903961581
+      }
+    }
+  }
+}

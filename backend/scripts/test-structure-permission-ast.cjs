@@ -1,0 +1,11 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto'),ts=require('typescript');const pkg=path.resolve(process.argv[2]),m=JSON.parse(fs.readFileSync(path.join(pkg,'manifest.json'))),printer=ts.createPrinter({removeComments:true}),prints=[];
+assert.deepEqual(m.changedFiles,['services/groq-dispatch.service.js','utils/recorded-structure-permission.js']);for(const v of ['baseline','release'])for(const[f,h]of Object.entries(m[v]))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(pkg,v,f))).digest('hex'),h);
+for(const v of ['baseline','release']){const sf=ts.createSourceFile('dispatch.js',fs.readFileSync(path.join(pkg,v,'services/groq-dispatch.service.js'),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);let journals=0,inputs=0;
+ const result=ts.transform(sf,[ctx=>root=>{function visit(n){
+ if(ts.isVariableStatement(n)&&n.declarationList.declarations.length===1){const d=n.declarationList.declarations[0],name=d.name.getText(sf);
+ if(name==='structureInput'){inputs++;return undefined;}
+ if(name==='structCheck'||name==='measuredEvidence')return ts.factory.updateVariableStatement(n,n.modifiers,ts.factory.createVariableDeclarationList([ts.factory.updateVariableDeclaration(d,d.name,d.exclamationToken,d.type,ts.factory.createIdentifier(name==='structCheck'?'verifiedStructureDecision':'verifiedOptionalEvidence'))],n.declarationList.flags));
+ }
+ if(ts.isExpressionStatement(n)&&n.getText(sf).includes("'structure_permission_evaluated'")){journals++;return undefined;}
+ return ts.visitEachChild(n,visit,ctx);}return ts.visitNode(root,visit);}]);assert.equal(journals,v==='release'?1:0);assert.equal(inputs,v==='release'?1:0);prints.push(printer.printFile(result.transformed[0]));result.dispose();}
+fs.writeFileSync("/tmp/structure-base-normalized.js",prints[0]);fs.writeFileSync("/tmp/structure-release-normalized.js",prints[1]);assert.equal(prints[0],prints[1]);const report={allHashesVerified:true,wholeModuleOutsideExplicitPolicyJournalAndOptionalEvidenceMatches:true,limits:'Excluded permission/identity expressions require separate branch integration; no full portfolio proof.'};fs.writeFileSync(path.join(pkg,'compiled-ast-tests.json'),JSON.stringify(report,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(report));

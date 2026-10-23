@@ -15,6 +15,7 @@ export interface OpenSimPosition {
   rr: number;
   notionalUsd: number;
   feePctPerSide: number;
+  slippagePct?: number;
   entryBarIndex: number;
 }
 
@@ -48,8 +49,9 @@ export function closePositionAt(
   const qty = pos.notionalUsd / pos.entryPrice;
   const raw = (closePrice - pos.entryPrice) * qty;
   const pnlUsd = pos.side === 'long' ? raw : -raw;
-  const feeUsd = pos.notionalUsd * pos.feePctPerSide * 2;
-  const netPnl = pnlUsd - feeUsd;
+  const feeUsd = (pos.entryPrice + closePrice) * qty * pos.feePctPerSide;
+  const slippageUsd = pos.notionalUsd * (pos.slippagePct ?? 0);
+  const netPnl = pnlUsd - feeUsd - slippageUsd;
   const pnlPct = (netPnl / pos.notionalUsd) * 100;
 
   return {
@@ -69,6 +71,7 @@ export function closePositionAt(
     pnlUsd: netPnl,
     pnlPct,
     barsHeld,
+    notionalUsd: pos.notionalUsd, feeUsd, slippageUsd,
   };
 }
 

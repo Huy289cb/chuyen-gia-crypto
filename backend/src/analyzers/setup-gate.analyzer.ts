@@ -6,7 +6,7 @@ import { getSignalGateWindows } from '../config/signal-gate-windows';
 import { analyzeLiquiditySweep } from './liquidity-sweep.analyzer';
 import { analyzeBreakoutVolume } from './breakout-volume.analyzer';
 import { computeRegimeEvidence } from './market-regime.analyzer';
-import type { SetupGateEvidence } from './setup-gate.types';
+import type { RegimeEvidence, SetupGateEvidence } from './setup-gate.types';
 import { formatSetupGateDetail } from '../utils/setup-gate-evidence';
 
 export interface CandleData {
@@ -22,6 +22,7 @@ export interface SetupGateResult {
   playbookKey: string | null;
   grade: 'A' | 'B' | 'C' | 'D';
   confidence: number;
+  confidenceKind?: 'rule_quality';
   regime: 'trend' | 'range' | 'chop';
   reason: string;
   /** Full scan evidence (numbers from this candle window) */
@@ -65,7 +66,7 @@ function withDetail(
   };
 }
 
-export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGateResult> {
+export async function analyzeSetupGate(input: SetupGateInput, researchRegime?: RegimeEvidence): Promise<SetupGateResult> {
   const { candles, timeframe } = input;
   const windows = getSignalGateWindows(timeframe);
 
@@ -113,7 +114,7 @@ export async function analyzeSetupGate(input: SetupGateInput): Promise<SetupGate
     );
   }
 
-  const regimeEvidence = computeRegimeEvidence(candles, {
+  const regimeEvidence = researchRegime ?? computeRegimeEvidence(candles, {
     regimeBars: windows.regimeBars,
     timeframe,
   });

@@ -5,6 +5,7 @@ import {
   evaluateEntryExtension,
   evaluateTrendPullbackEntry,
   smaFromCloses,
+  getV3BreakoutPullbackMaxAbovePct,
   getV3HtfTrendAlt,
   isRangeEntryBlocked,
   isV3HtfFlexLtfOnly,
@@ -136,13 +137,49 @@ describe('evaluateHtfSideAlign', () => {
     expect(r.pass).toBe(true);
   });
 
-  it('fail-closed blocks when HTF not in trend (default)', () => {
+  it('fail-closed blocks when HTF not in trend and structure unset', () => {
     process.env.V3_HTF_SIDE_ALIGN_FAIL_CLOSED = 'true';
     const r = evaluateHtfSideAlign({
       side: 'long',
       htfTf: '1h',
       htf: { regime: 'chop', trendDirection: null },
       enabled: true,
+    });
+    expect(r.pass).toBe(false);
+  });
+
+  it('fail-closed does not veto range when structure already chose that side', () => {
+    process.env.V3_HTF_SIDE_ALIGN_FAIL_CLOSED = 'true';
+    const r = evaluateHtfSideAlign({
+      side: 'short',
+      htfTf: '1h',
+      htf: { regime: 'range', trendDirection: null },
+      enabled: true,
+      structureBias: 'bear',
+    });
+    expect(r.pass).toBe(true);
+  });
+
+  it('fail-closed still blocks long in range when structure is bear', () => {
+    const r = evaluateHtfSideAlign({
+      side: 'long',
+      htfTf: '1h',
+      htf: { regime: 'range', trendDirection: null },
+      enabled: true,
+      failClosed: true,
+      structureBias: 'bear',
+    });
+    expect(r.pass).toBe(false);
+  });
+
+  it('fail-closed still blocks transition in range', () => {
+    const r = evaluateHtfSideAlign({
+      side: 'long',
+      htfTf: '1h',
+      htf: { regime: 'range', trendDirection: null },
+      enabled: true,
+      failClosed: true,
+      structureBias: 'transition',
     });
     expect(r.pass).toBe(false);
   });
@@ -335,5 +372,40 @@ describe('evaluateTrendPullbackEntry', () => {
       enabled: true,
     });
     expect(r.pass).toBe(false);
+  });
+
+  it('0.25% band blocks 0.6% impulse chase; allows ~0.2% above SMA', () => {
+    const sma = 64000;
+    const closes = Array.from({ length: 20 }, () => sma);
+    const near = evaluateTrendPullbackEntry({
+      side: 'long',
+      entry: 64128, // ~0.2%
+      closes,
+      maxAbovePct: 0.25,
+      maxBelowPct: 1.0,
+      enabled: true,
+    });
+    const impulse = evaluateTrendPullbackEntry({
+      side: 'long',
+      entry: 64384, // ~0.6%
+      closes,
+      maxAbovePct: 0.25,
+      maxBelowPct: 1.0,
+      enabled: true,
+    });
+    expect(near.pass).toBe(true);
+    expect(impulse.pass).toBe(false);
+  });
+});
+
+describe('getV3BreakoutPullbackMaxAbovePct', () => {
+  const envBackup = { ...process.env };
+  afterEach(() => {
+    process.env = { ...envBackup };
+  });
+
+  it('defaults 0.25', () => {
+    delete process.env.V3_BREAKOUT_PULLBACK_MAX_ABOVE_PCT;
+    expect(getV3BreakoutPullbackMaxAbovePct()).toBe(0.25);
   });
 });

@@ -1,5 +1,7 @@
 # Setup Guide
 
+> **Cấu hình BTC hiện hành:** [Chính sách rủi ro đã được người dùng chốt](runtime-risk-policy.md) — cooldown **1h**, ngày **10%**, mỗi lệnh **3% số dư**, cap USD để rỗng. Không áp dụng lại mức cũ từ default hoặc báo cáo lịch sử.
+
 ## Prerequisites
 
 - Node.js >= 18
@@ -103,8 +105,9 @@ SNAPSHOT_CRON=*/5 * * * *
 GROQ_API_KEY=gsk_your_groq_api_key_here
 GROQ_API_KEY_1=
 GROQ_API_KEY_2=
-GROQ_MODEL_PRIMARY=meta-llama/llama-4-scout-17b-16e-instruct
-# GROQ_MODEL_FALLBACKS=llama-3.3-70b-versatile,qwen/qwen3-32b,qwen/qwen3.6-27b,llama-3.1-8b-instant
+GROQ_MODEL_PRIMARY=openai/gpt-oss-120b
+# GROQ_MODEL_FALLBACKS=openai/gpt-oss-20b
+# GROQ_MODEL_AUXILIARY=openai/gpt-oss-20b
 
 # Cerebras (dispatch fallback step 2)
 # CEREBRAS_API_KEY=csk_...

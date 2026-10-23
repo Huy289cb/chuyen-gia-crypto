@@ -1,10 +1,11 @@
 /**
  * Big Update v3 worker cron schedules + signal-gate timeframes (single source of truth).
- * MarketScan every 5 min; LLMDispatch +1 min after each 5m boundary when 5m is in stack.
+ * MarketScan runs five seconds after each 5m boundary so Binance has finalized the
+ * just-closed kline; LLMDispatch remains +1 min after the boundary.
  */
 
 export const V3_MARKET_SCAN_CRON =
-  process.env.V3_MARKET_SCAN_CRON?.trim() || '*/5 * * * *';
+  process.env.V3_MARKET_SCAN_CRON?.trim() || '5 */5 * * * *';
 
 /** Default: 1 min after each 5m scan when using 5m stack */
 export const V3_LLM_DISPATCH_CRON =

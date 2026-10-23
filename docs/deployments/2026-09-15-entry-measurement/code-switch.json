@@ -1,0 +1,7 @@
+{
+  "direction": "apply",
+  "target": "/home/ubuntu/chuyen-gia-crypto/backend/dist",
+  "matches": "release",
+  "retainedBackup": "/home/ubuntu/chuyen-gia-crypto/backend/dist.measurement-backup-ec79e9d94f9b4ce58bde6129dcd3e095",
+  "processesStarted": false
+}

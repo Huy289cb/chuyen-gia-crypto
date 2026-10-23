@@ -1,3 +1,4 @@
+import { computeExecutionRisk, resolveExecutionRiskCapUsd } from '../utils/execution-risk';
 /**
  * Walk-forward historical testbed — signal gate + HTF guard + rule-based SL/TP (no LLM).
  */
@@ -9,13 +10,20 @@ import {
   evaluateHtfTrendRequirement,
   evaluate5mEntryGuards,
   evaluateHtfSideAlign,
+  evaluateTrendPullbackEntry,
   evaluateSetupGradePlaybookFilter,
+  getV3BreakoutPullbackMaxAbovePct,
   getSignalGateAllowedRegimes,
   getV3HtfSideAlignTf,
   getV3HtfTrendAlt,
   getV3LtfAlignRegimeHtf,
+  getV3PullbackMaxAbovePct,
+  getV3PullbackMaxBelowPct,
+  getV3PullbackSmaPeriod,
+  getV3PullbackTf,
   getV3RequireHtfTrend,
   isRangeEntryBlocked,
+  isV3RequirePullback,
 } from '../config/v3-entry-policy';
 import {
   evaluateStructureSidePermission,
@@ -23,6 +31,7 @@ import {
   getV3StructureBiasTf,
   isV3StructureBiasEnabled,
 } from '../config/v3-structure-bias-policy';
+import { shouldBypassRegimeForBreakout } from '../config/v3-regime-policy';
 import { resolveTestbedVariant } from '../config/testbed-variants';
 import { buildAllBreakdowns, formatBreakdownSection } from './breakdown';
 import { BacktestCooldownState } from './cooldown-simulator';
@@ -89,9 +98,15 @@ export async function runHistoricalTestbed(
   const feePctPerSide = options.feePctPerSide ?? 0.0004;
   const timeframes = [...getV3SignalGateTimeframes()];
   const structTf = getV3StructureBiasTf();
+  const pullbackTf = getV3PullbackTf();
+  const structureEnabledForRun = variant.structureBiasEnabled ?? isV3StructureBiasEnabled();
+  const requirePullbackForRun = variant.requirePullback ?? isV3RequirePullback();
   const loadTfs = [...timeframes];
-  if (isV3StructureBiasEnabled() && !loadTfs.includes(structTf)) {
+  if (structureEnabledForRun && !loadTfs.includes(structTf)) {
     loadTfs.push(structTf);
+  }
+  if (requirePullbackForRun && !loadTfs.includes(pullbackTf)) {
+    loadTfs.push(pullbackTf);
   }
   const entryRank = getV3EntryTfPriorityRank();
 
@@ -116,11 +131,12 @@ export async function runHistoricalTestbed(
   const gate = new SignalGateService({
     minGrade: variant.minGrade ?? policy.minSignalGrade,
     minConfidence: variant.minConfidence ?? policy.minSignalConfidence,
-    allowedRegimes: getSignalGateAllowedRegimes(),
+    allowedRegimes: variant.allowedRegimes ?? getSignalGateAllowedRegimes(),
     enableDuplicateFilter: false,
   });
 
-  const htfTf = getV3LtfAlignRegimeHtf() ?? getV3RequireHtfTrend() ?? '1h';
+  const requiredHtfTf = getV3RequireHtfTrend();
+  const htfTf = getV3LtfAlignRegimeHtf() ?? requiredHtfTf ?? '1h';
   const altTf = getV3HtfTrendAlt();
   const alignTf = getV3HtfSideAlignTf();
   const structureLookback = getV3StructureBiasCandleLimit();
@@ -133,9 +149,11 @@ export async function runHistoricalTestbed(
     duplicate_signal: 0,
     entry_5m_guard: 0,
     grade_playbook: 0,
+    pullback: 0,
     cooldown: 0,
     structure_bias: 0,
     side_align: 0,
+    execution_risk: 0,
   };
 
   const seenSignals = new Set<string>();
@@ -239,20 +257,14 @@ export async function runHistoricalTestbed(
     signalsPassed += 1;
 
     const gateRegime = pick.result.gateRegime ?? pick.result.setupResult.regime;
-    if (isRangeEntryBlocked(gateRegime)) {
+    const rangeLike = gateRegime === 'range' || gateRegime === 'chop';
+    const rangeBlocked = variant.blockRangeEntries ?? isRangeEntryBlocked(gateRegime);
+    const rangePlaybookBlocked =
+      rangeLike &&
+      variant.rangeAllowedPlaybooks != null &&
+      !variant.rangeAllowedPlaybooks.includes(pick.result.setupResult.playbookKey ?? '');
+    if (rangeBlocked || rangePlaybookBlocked) {
       blocks.regime += 1;
-      continue;
-    }
-
-    const htfCheck = evaluateHtfTrendRequirement({
-      entryTimeframe: pick.timeframe,
-      primaryTf: htfTf,
-      primaryRegime: htfRegime1h,
-      altTf: altTf ?? undefined,
-      altRegime: htfRegimeAlt,
-    });
-    if (!htfCheck.pass) {
-      blocks.htf += 1;
       continue;
     }
 
@@ -262,7 +274,32 @@ export async function runHistoricalTestbed(
       continue;
     }
 
-    if (isV3StructureBiasEnabled()) {
+    // Grade A breakout skips 1h-trend only for longs (shorts need HTF).
+    const breakoutImpulse =
+      shouldBypassRegimeForBreakout(
+        pick.timeframe,
+        pick.result.setupResult.playbookKey,
+        pick.result.setupResult.grade
+      ) && side === 'long';
+    const skipHtfForRange = rangeLike && variant.skipHtfTrendForRange === true;
+    if (requiredHtfTf && !breakoutImpulse && !skipHtfForRange) {
+      const requiredHtfRegime =
+        requiredHtfTf === htfTf ? htfRegime1h : getHtfRegime(requiredHtfTf, ts);
+      const htfCheck = evaluateHtfTrendRequirement({
+        entryTimeframe: pick.timeframe,
+        primaryTf: requiredHtfTf,
+        primaryRegime: requiredHtfRegime,
+        altTf: altTf ?? undefined,
+        altRegime: htfRegimeAlt,
+      });
+      if (!htfCheck.pass) {
+        blocks.htf += 1;
+        continue;
+      }
+    }
+
+    let structBias: 'bull' | 'bear' | 'transition' | undefined;
+    if (structureEnabledForRun) {
       const structSlice = closedCandlesUpTo(
         loaded.byTf[structTf] ?? [],
         ts,
@@ -272,11 +309,15 @@ export async function runHistoricalTestbed(
       const structCheck = evaluateStructureSidePermission({
         side,
         candles: structSlice,
+        enabled: structureEnabledForRun,
+        shortRequireBos: variant.structureShortRequireBos,
+        longRequireBos: variant.structureLongRequireBos,
       });
       if (!structCheck.pass) {
         blocks.structure_bias += 1;
         continue;
       }
+      structBias = structCheck.bias;
     }
 
     const alignState = getHtfState(alignTf, ts);
@@ -284,6 +325,9 @@ export async function runHistoricalTestbed(
       side,
       htfTf: alignTf,
       htf: alignState,
+      structureBias: structBias,
+      enabled: variant.requireHtfSideAlign,
+      failClosed: variant.htfSideAlignFailClosed,
     });
     if (!sideAlign.pass) {
       blocks.side_align += 1;
@@ -318,6 +362,31 @@ export async function runHistoricalTestbed(
 
     const action = side === 'long' ? 'buy' : 'sell';
     const entry = bar.close;
+    if (requirePullbackForRun) {
+      const period = getV3PullbackSmaPeriod();
+      const pullbackCandles = closedCandlesUpTo(
+        loaded.byTf[pullbackTf] ?? [],
+        ts,
+        pullbackTf
+      );
+      const maxAbovePct = breakoutImpulse
+        ? variant.breakoutPullbackMaxAbovePct ?? getV3BreakoutPullbackMaxAbovePct()
+        : variant.pullbackMaxAbovePct ?? getV3PullbackMaxAbovePct();
+      const pullback = evaluateTrendPullbackEntry({
+        side,
+        entry,
+        closes: pullbackCandles.map((c) => c.close),
+        smaPeriod: period,
+        maxAbovePct,
+        maxBelowPct: variant.pullbackMaxBelowPct ?? getV3PullbackMaxBelowPct(),
+        tfLabel: `SMA${period}@${pullbackTf}`,
+      });
+      if (!pullback.pass) {
+        blocks.pullback += 1;
+        continue;
+      }
+    }
+
     const levels = computePolicyCompliantStopAndTarget({
       action,
       entry,
@@ -328,6 +397,26 @@ export async function runHistoricalTestbed(
 
     const slDistancePct = (Math.abs(entry - levels.stopLoss) / entry) * 100;
     const rr = Math.abs(levels.takeProfit - entry) / Math.abs(entry - levels.stopLoss);
+
+    let executableNotional = notionalUsd;
+    if (options.executionWalletUsd != null) {
+      const wallet = options.executionWalletUsd + trades.reduce((sum, trade) => sum + trade.pnlUsd, 0);
+      const stopFraction = Math.abs(entry - levels.stopLoss) / entry;
+      const desired = Math.min(policy.maxTotalExposureUsd, wallet * policy.riskPerTradePercent / 100 / stopFraction);
+      const qty = Math.max(0.001, Math.ceil(50 / entry / 0.001 - 1e-9) * 0.001, Math.floor(desired / entry / 0.001 + 1e-9) * 0.001);
+      executableNotional = qty * entry;
+      const dayKey = (time: number) => Math.floor((time + 7 * 3600_000) / 86400_000);
+      const dayPnl = trades.filter(t => dayKey(t.closeTime) === dayKey(ts)).reduce((sum, t) => sum + t.pnlUsd, 0);
+      const dayStart = wallet - dayPnl;
+      const risk = wallet > 0 ? computeExecutionRisk({ entry, stopLoss: levels.stopLoss, quantity: qty, balance: wallet,
+        roundTripFeePercent: Math.max(0.1, feePctPerSide * 200), slippagePercent: Math.max(0.1, (options.slippagePct ?? 0.001) * 100) }) : null;
+      if (!risk || executableNotional > policy.maxTotalExposureUsd + 1e-9 ||
+          risk.totalRiskUsd > resolveExecutionRiskCapUsd({ balance: wallet, maxRiskPercent: policy.maxEffectiveRiskPerTradePercent, maxRiskUsd: policy.maxEffectiveRiskPerTradeUsd }) + 1e-9 ||
+          (policy.circuitDailyLossEnabled && risk.totalRiskUsd > dayStart * policy.dailyLossLimitPercent / 100 + Math.min(0, dayPnl))) {
+        blocks.execution_risk = (blocks.execution_risk ?? 0) + 1;
+        continue;
+      }
+    }
 
     open = {
       id: tradeId + 1,
@@ -341,8 +430,9 @@ export async function runHistoricalTestbed(
       takeProfit: levels.takeProfit,
       slDistancePct,
       rr,
-      notionalUsd,
+      notionalUsd: executableNotional,
       feePctPerSide,
+      slippagePct: options.slippagePct ?? (options.executionWalletUsd != null ? 0.001 : 0),
       entryBarIndex: barIdx,
     };
   }
@@ -357,8 +447,8 @@ export async function runHistoricalTestbed(
 
   const wins = trades.filter((t) => t.pnlUsd > 0).length;
   const losses = trades.filter((t) => t.pnlUsd < 0).length;
-  const grossPnl = trades.reduce((s, t) => s + t.pnlUsd + notionalUsd * feePctPerSide * 2, 0);
-  const fees = trades.length * notionalUsd * feePctPerSide * 2;
+  const grossPnl = trades.reduce((s, t) => s + t.pnlUsd + (t.feeUsd ?? 0) + (t.slippageUsd ?? 0), 0);
+  const fees = trades.reduce((s, t) => s + (t.feeUsd ?? 0), 0);
   const netPnl = trades.reduce((s, t) => s + t.pnlUsd, 0);
 
   return {
@@ -441,6 +531,7 @@ export function formatTestbedReport(result: BacktestRunResult): string {
     `  side_align: ${result.blocks.side_align}`,
     `  entry_5m_guard: ${result.blocks.entry_5m_guard}`,
     `  grade_playbook: ${result.blocks.grade_playbook}`,
+    `  pullback: ${result.blocks.pullback}`,
     `  cooldown: ${result.blocks.cooldown}`,
     `  no_direction: ${result.blocks.no_direction}`,
     `  duplicate_signal: ${result.blocks.duplicate_signal}`,

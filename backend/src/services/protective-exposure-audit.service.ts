@@ -1,3 +1,7 @@
+import { classifyProtectiveCoverage } from '../utils/protective-coverage';
+import type { ProtectiveAlgoLike, ProtectiveCoverage } from '../utils/protective-coverage';
+export { classifyProtectiveCoverage } from '../utils/protective-coverage';
+export type { ProtectiveAlgoLike, ProtectiveCoverage } from '../utils/protective-coverage';
 /**
  * Independent P0 guard: live Binance exposure must have exchange-side SL.
  */
@@ -26,25 +30,6 @@ import {
   findRecentlyExecutedPending,
 } from './position-lifecycle-guard.service';
 
-export interface ProtectiveAlgoLike {
-  symbol?: string;
-  side?: string;
-  type?: string;
-  orderType?: string;
-  algoId?: string | number;
-  orderId?: string | number;
-  quantity?: number;
-  origQty?: number;
-  positionSide?: string;
-}
-
-export interface ProtectiveCoverage {
-  stopLossId: string | null;
-  takeProfitId: string | null;
-  stopLossCount: number;
-  takeProfitCount: number;
-}
-
 const MIN_AMT = 1e-8;
 
 function pairSymbol(symbol: string): string {
@@ -61,54 +46,6 @@ function entryBlockTtlMs(): number {
 }
 
 export { protectiveAuditStartupDelayMs } from './position-lifecycle-guard.service';
-
-function algoId(order: ProtectiveAlgoLike): string | null {
-  const id = order.algoId ?? order.orderId;
-  return id == null ? null : String(id);
-}
-
-function algoType(order: ProtectiveAlgoLike): string {
-  return String(order.orderType ?? order.type ?? '').toUpperCase();
-}
-
-function isMatchingPositionSide(order: ProtectiveAlgoLike, position: ParsedBinancePosition): boolean {
-  const ps = String(order.positionSide ?? '').toUpperCase();
-  if (!ps || ps === 'BOTH') return true;
-  return ps === (position.side === 'long' ? 'LONG' : 'SHORT');
-}
-
-export function classifyProtectiveCoverage(
-  position: ParsedBinancePosition,
-  orders: ProtectiveAlgoLike[]
-): ProtectiveCoverage {
-  const closeSide = position.side === 'long' ? 'SELL' : 'BUY';
-  const symbolUsdt = pairSymbol(position.symbol);
-  const coverage: ProtectiveCoverage = {
-    stopLossId: null,
-    takeProfitId: null,
-    stopLossCount: 0,
-    takeProfitCount: 0,
-  };
-
-  for (const order of orders) {
-    if (String(order.symbol ?? '').toUpperCase() !== symbolUsdt) continue;
-    if (String(order.side ?? '').toUpperCase() !== closeSide) continue;
-    if (!isMatchingPositionSide(order, position)) continue;
-
-    const t = algoType(order);
-    const id = algoId(order);
-    if (!id) continue;
-    if (t.includes('TAKE_PROFIT')) {
-      coverage.takeProfitCount += 1;
-      coverage.takeProfitId ??= id;
-    } else if (t.includes('STOP')) {
-      coverage.stopLossCount += 1;
-      coverage.stopLossId ??= id;
-    }
-  }
-
-  return coverage;
-}
 
 async function findLocalOpenPosition(position: ParsedBinancePosition) {
   return prisma.testnetPosition.findFirst({

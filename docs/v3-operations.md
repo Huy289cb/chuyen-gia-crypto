@@ -1,5 +1,7 @@
 # V3 Operations Reference
 
+> **Chính sách vận hành:** [Chính sách rủi ro đã được người dùng chốt](runtime-risk-policy.md) — cooldown **1h**, ngày **10%**, mỗi lệnh **3% số dư**, cap USD để rỗng. Không áp dụng lại mức cũ từ default hoặc báo cáo lịch sử.
+
 Operational behavior for Big Update v3 (BTC-only, Kim Nghia, Binance Futures testnet).
 
 **Signal gate stack (May 2026):** `5m`, `15m`, `1h` — see [v3-5m-reset-plan.md](./v3-5m-reset-plan.md).

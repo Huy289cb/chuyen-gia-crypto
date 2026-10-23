@@ -31,7 +31,7 @@ export function getRegimeStrongTrendMinPct(): number {
 
 /**
  * Grade-A breakout counts as directional impulse — bypass range-only block on 15m/1h.
- * Default off when structure bias is on (structure-first plan Phase B); else on if trend-only.
+ * Default on when trend-only (slope lags the break). Structure bias still blocks the wrong side.
  */
 export function isBreakoutRegimeBypassEnabled(): boolean {
   if (process.env.V3_BREAKOUT_REGIME_BYPASS === 'false') {
@@ -40,11 +40,6 @@ export function isBreakoutRegimeBypassEnabled(): boolean {
   if (process.env.V3_BREAKOUT_REGIME_BYPASS === 'true') {
     return true;
   }
-  // Structure-first: do not inflate LTF range→trend via breakout unless explicitly enabled.
-  if (process.env.V3_STRUCTURE_BIAS_ENABLED !== 'false') {
-    return false;
-  }
-  // Default on when strict trend-only (fixes "price moved but slope says range")
   return (process.env.V3_ALLOWED_REGIMES?.trim() || 'trend') === 'trend';
 }
 

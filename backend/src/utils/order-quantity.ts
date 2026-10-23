@@ -41,6 +41,7 @@ export interface ResolveQuantityForMinNotionalInput {
 }
 
 export interface ResolveQuantityForMinNotionalResult {
+  code?: 'missing_data' | 'min_lot' | 'min_notional' | 'exposure';
   valid: boolean;
   normalizedQty: number;
   orderNotional: number;
@@ -70,10 +71,16 @@ export function resolveQuantityForMinNotional(
       valid: false,
       normalizedQty: 0,
       orderNotional: 0,
+      code: 'missing_data',
       reason: 'Invalid entry price',
     };
   }
 
+  if (![stepSize, minQty, minNotionalUsd].every(v => Number.isFinite(v) && v > 0) ||
+    !Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(tolerancePercent) || tolerancePercent < 0 || tolerancePercent >= 100 ||
+    (maxNotionalUsd !== undefined && (!Number.isFinite(maxNotionalUsd) || maxNotionalUsd < 0))) {
+    return { valid: false, normalizedQty: 0, orderNotional: 0, code: 'missing_data', reason: 'Invalid quantity, filters or exposure data' };
+  }
   const minFloor = minNotionalUsd * (1 - tolerancePercent / 100);
   let normalizedQty = normalizeToStepSize(quantity, stepSize);
   let orderNotional = normalizedQty * entryPrice;
@@ -89,6 +96,7 @@ export function resolveQuantityForMinNotional(
       valid: false,
       normalizedQty: 0,
       orderNotional: 0,
+      code: 'min_lot',
       reason: `Quantity ${quantity} cannot satisfy minQty ${minQty} (stepSize ${stepSize})`,
     };
   }
@@ -98,6 +106,7 @@ export function resolveQuantityForMinNotional(
       valid: false,
       normalizedQty,
       orderNotional,
+      code: 'min_notional',
       reason: `Order notional $${orderNotional.toFixed(0)} well below minimum $${minNotionalUsd} (tolerance ${tolerancePercent}%)`,
     };
   }
@@ -109,6 +118,7 @@ export function resolveQuantityForMinNotional(
         valid: false,
         normalizedQty,
         orderNotional,
+        code: 'exposure',
         reason: `Order notional $${orderNotional.toFixed(0)} exceeds remaining capacity $${maxNotionalUsd.toFixed(0)} (tolerance ${tolerancePercent}%)`,
       };
     }

@@ -1,3 +1,10 @@
+import {encodeMaterializationNumber} from '../utils/recorded-materialization-gate';
+import {randomUUID} from 'node:crypto';
+import {observeMaterializationWrite} from '../utils/materialization-write-observation';
+import {evaluateMaterializationPrice,evaluateMaterializationExposureQuantity} from '../utils/fill-materialization-gate';
+import { validPartialFillEvidence, sealedEntryStatus, entryHasMaterializableFill } from '../utils/partial-fill-evidence';
+import { computeExecutionRisk } from '../utils/execution-risk';
+import { getRiskPolicy } from '../config/risk-policy';
 /**
  * Shared logic for Binance order fill price resolution and pending → position materialization.
  */
@@ -8,6 +15,7 @@ import {
   findTestnetPositionByBinanceOrderId,
   getTestnetPendingOrderByBinanceId,
   recordTestnetTradeEvent,
+  recordSilentPipelineEvent,
   updateTestnetPendingOrder,
 } from '../repositories/testnet.repository';
 import { prisma } from '../lib/prisma';
@@ -155,7 +163,26 @@ async function findStrictActiveBinanceExposure(
 /**
  * Create open position from a filled pending order and place SL/TP on Binance.
  */
+const pendingFillQueues = new Map<string, Promise<string | null>>();
+
+/** Serialize duplicate fill notifications on the single worker that owns execution. */
 export async function materializePositionFromPendingFill(
+  ...args: Parameters<typeof materializePositionFromPendingFillUnlocked>
+): Promise<string | null> {
+  const order = args[0];
+  const key = `${order.account_id}:${order.symbol}:${order.binance_order_id ?? order.order_id}`;
+  const previous = pendingFillQueues.get(key);
+  const current = (previous ? previous.catch(() => null) : Promise.resolve(null))
+    .then(() => materializePositionFromPendingFillUnlocked(...args));
+  pendingFillQueues.set(key, current);
+  try {
+    return await current;
+  } finally {
+    if (pendingFillQueues.get(key) === current) pendingFillQueues.delete(key);
+  }
+}
+
+async function materializePositionFromPendingFillUnlocked(
   localOrder: {
     order_id: string;
     account_id: number;
@@ -176,11 +203,25 @@ export async function materializePositionFromPendingFill(
   eventTime?: number,
   options?: MaterializeFillOptions
 ): Promise<string | null> {
+  const materializationAttemptId = randomUUID();
+  const publishGate = (stage: string, input: Record<string, unknown>, decision: unknown) => {
+    const data = { schema: 'materialization-gate-v1', materialization_attempt_id: materializationAttemptId,
+      order_id: localOrder.order_id, account_id: localOrder.account_id, stage,
+      observed_at: new Date().toISOString(), input, decision };
+    try { void recordSilentPipelineEvent('materialization_gate_evaluated', data)
+      .catch(() => console.warn('[MaterializationGate] persistence unavailable')); }
+    catch { console.warn('[MaterializationGate] persistence unavailable'); }
+  };
   if (localOrder.binance_order_id) {
     const existing = await findTestnetPositionByBinanceOrderId(localOrder.binance_order_id);
     if (existing) {
       if (localOrder.status !== 'executed') {
-        await executeTestnetPendingOrder(localOrder.order_id, existing.position_id);
+        const identity = { materialization_attempt_id: materializationAttemptId, order_id: localOrder.order_id,
+          position_id: existing.position_id, account_id: localOrder.account_id };
+        await observeMaterializationWrite('execute_pending', identity,
+          { order_id: localOrder.order_id, position_id: existing.position_id, status: 'executed' },
+          () => executeTestnetPendingOrder(localOrder.order_id, existing.position_id),
+          record => recordSilentPipelineEvent('materialization_write_observed', record));
       }
       const { prisma: db } = await import('../lib/prisma');
       const full = await db.testnetPosition.findUnique({
@@ -198,15 +239,23 @@ export async function materializePositionFromPendingFill(
     }
   }
 
-  if (!Number.isFinite(avgPrice) || avgPrice <= 0) {
+  const priceGate = evaluateMaterializationPrice(avgPrice);
+  publishGate('price', { avg_price: encodeMaterializationNumber(avgPrice) }, priceGate);
+  if (!priceGate.allowed) {
     console.error(
       `[BinanceOrderFill] Invalid avgPrice for order ${localOrder.order_id}: ${avgPrice}`
     );
     return null;
   }
 
+  const exposureReadStartedAt = new Date().toISOString();
   const liveExposure = await findStrictActiveBinanceExposure(localOrder.symbol, localOrder.side);
-  if (!liveExposure) {
+  const exposureReadReturnedAt = new Date().toISOString();
+  const materializationGate = evaluateMaterializationExposureQuantity(!!liveExposure, executedQty);
+  publishGate('exposure_quantity', { exposure_present: !!liveExposure, executed_qty: encodeMaterializationNumber(executedQty),
+    read_started_at: exposureReadStartedAt, read_returned_at: exposureReadReturnedAt,
+    source: 'resolved_helper_return_not_query_coverage' }, materializationGate);
+  if (!materializationGate.allowed && materializationGate.reason === 'missing_live_exposure') {
     console.warn(
       `[BinanceOrderFill] Refuse materialize ${localOrder.order_id} — no live ${localOrder.side} exposure on Binance`
     );
@@ -214,7 +263,7 @@ export async function materializePositionFromPendingFill(
   }
 
   const qty = Math.abs(executedQty);
-  if (!Number.isFinite(qty) || qty <= 0) {
+  if (!materializationGate.allowed) {
     console.error(
       `[BinanceOrderFill] Invalid executedQty for order ${localOrder.order_id}: ${executedQty}`
     );
@@ -243,7 +292,12 @@ export async function materializePositionFromPendingFill(
     mark
   );
 
-  await createTestnetPosition({
+  const policy = getRiskPolicy();
+  const plannedBalance = localOrder.risk_percent > 0 ? localOrder.risk_usd * 100 / localOrder.risk_percent : 0;
+  const actualRisk = plannedBalance > 0 ? computeExecutionRisk({ entry: avgPrice, stopLoss: levels.stop_loss,
+    quantity: qty, balance: plannedBalance, roundTripFeePercent: Math.max(0.1, policy.maxFeePercent),
+    slippagePercent: Math.max(0.1, policy.maxSlippagePercent) }) : null;
+  const createInput = {
     positionId,
     accountId: localOrder.account_id,
     symbol: localOrder.symbol,
@@ -253,8 +307,8 @@ export async function materializePositionFromPendingFill(
     takeProfit: levels.take_profit,
     sizeUsd,
     sizeQty: qty,
-    riskUsd: localOrder.risk_usd,
-    riskPercent: localOrder.risk_percent,
+    riskUsd: actualRisk?.totalRiskUsd ?? localOrder.risk_usd,
+    riskPercent: actualRisk?.riskPercent ?? localOrder.risk_percent,
     expectedRr: localOrder.expected_rr,
     linkedPredictionId: localOrder.linked_prediction_id ?? undefined,
     binanceOrderId: localOrder.binance_order_id ?? undefined,
@@ -264,11 +318,18 @@ export async function materializePositionFromPendingFill(
     tpHitCount: 0,
     partialClosed: 0,
     entryFee: 0,
-  });
-
-  await executeTestnetPendingOrder(localOrder.order_id, positionId);
+  };
+  const materializationIdentity = { materialization_attempt_id: materializationAttemptId, order_id: localOrder.order_id,
+    position_id: positionId, account_id: localOrder.account_id };
+  const publishWrite = (record: Record<string, unknown>) => recordSilentPipelineEvent('materialization_write_observed', record);
+  await observeMaterializationWrite('create_position', materializationIdentity, createInput,
+    () => createTestnetPosition(createInput), publishWrite);
+  await observeMaterializationWrite('execute_pending', materializationIdentity,
+    { order_id: localOrder.order_id, position_id: positionId, status: 'executed' },
+    () => executeTestnetPendingOrder(localOrder.order_id, positionId), publishWrite);
 
   let linkedDecisionId: number | undefined;
+  let linkedTrace: Record<string, unknown> = {};
   try {
     const { prisma: db } = await import('../lib/prisma');
     const { PIPELINE_EVENT_POSITION_ID } = await import('../repositories/testnet.repository');
@@ -276,18 +337,22 @@ export async function materializePositionFromPendingFill(
       where: {
         position_id: PIPELINE_EVENT_POSITION_ID,
         event_type: 'pending_order_linked',
+        event_data: { contains: `"order_id":${JSON.stringify(localOrder.order_id)}` },
       },
       orderBy: { timestamp: 'desc' },
-      take: 30,
+      take: 1,
     });
     for (const ev of linkEvents) {
       if (!ev.event_data) continue;
       const data = JSON.parse(ev.event_data) as {
         order_id?: string;
         decision_id?: number;
+        trace_id?: string; observation_key?: string; candidate_key?: string; policy_hash?: string; code_hash?: string;
       };
-      if (data.order_id === localOrder.order_id && typeof data.decision_id === 'number') {
+      if (data.order_id === localOrder.order_id) {
         linkedDecisionId = data.decision_id;
+        linkedTrace = { trace_id: data.trace_id, observation_key: data.observation_key,
+          candidate_key: data.candidate_key, policy_hash: data.policy_hash, code_hash: data.code_hash };
         break;
       }
     }
@@ -305,12 +370,17 @@ export async function materializePositionFromPendingFill(
     entryAlreadyNotified;
 
   await recordTestnetTradeEvent(positionId, 'entry_order_filled', {
+    ...linkedTrace,
+    linkage_status: linkedTrace.trace_id ? 'linked' : 'legacy_or_missing',
     order_id: localOrder.order_id,
     binance_order_id: localOrder.binance_order_id,
     symbol: localOrder.symbol,
     side: localOrder.side,
     entry_price: avgPrice,
     planned_entry: plannedEntry,
+    initial_risk_usd: actualRisk?.totalRiskUsd ?? localOrder.risk_usd,
+    initial_execution_risk: actualRisk,
+    planned_risk_usd: localOrder.risk_usd,
     stop_loss: levels.stop_loss,
     take_profit: levels.take_profit,
     executed_qty: qty,
@@ -389,18 +459,57 @@ export async function recoverPendingOrderFromBinance(
     return 'failed';
   }
 
-  const { getOrder } = await import('./binance/trading');
+  const { getOrder, cancelOrder } = await import('./binance/trading');
   const symbol = `${localOrder.symbol}USDT`;
 
   try {
-    const remote = await getOrder(symbol, Number(localOrder.binance_order_id));
+    let remote = await getOrder(symbol, Number(localOrder.binance_order_id));
 
-    if (remote.status === 'FILLED') {
+    if (remote.status === 'PARTIALLY_FILLED') {
+      const initialQueryKnownAt = Date.now();
+      const initialQuery = {orderId:remote.orderId,symbol:remote.symbol,status:remote.status,executedQty:remote.executedQty};
+      const observedQty = remote.executedQty;
+      const orderId = Number(localOrder.binance_order_id);
+      if (!validPartialFillEvidence({orderId,symbol,remoteOrderId:remote.orderId,remoteSymbol:remote.symbol,
+          executedQty:observedQty,minimumObservedQty:0,requirePositive:true})) {
+        throw new Error('Invalid partial-fill order evidence');
+      }
+      // Seal the remainder before linking a position: additional fills may race cancellation.
+      // A failed cancellation can mean FILLED already; the subsequent query is authoritative.
+      try {
+        await cancelOrder(symbol, orderId);
+      } catch {
+        console.warn(`[BinanceOrderFill] Partial remainder cancellation unconfirmed for ${localOrder.order_id}; querying final state`);
+      }
+      remote = await getOrder(symbol, orderId);
+      try {
+        await recordSilentPipelineEvent('partial_fill_requery', {
+          schema:'partial-fill-requery-v1',order_id:localOrder.order_id,
+          exchange_order_id:localOrder.binance_order_id,symbol,
+          initial_known_at:initialQueryKnownAt,final_known_at:Date.now(),initial:initialQuery,
+          final:{orderId:remote.orderId,symbol:remote.symbol,status:remote.status,executedQty:remote.executedQty,
+            avgPrice:remote.avgPrice,price:remote.price,cummulativeQuoteQty:remote.cummulativeQuoteQty,updateTime:remote.updateTime},
+        });
+      } catch { console.warn('[BinanceOrderFill] Partial query journal persistence unavailable'); }
+
+      if (!validPartialFillEvidence({orderId,symbol,remoteOrderId:remote.orderId,remoteSymbol:remote.symbol,
+          executedQty:remote.executedQty,minimumObservedQty:observedQty,requirePositive:false})) {
+        throw new Error('Invalid final partial-fill order evidence');
+      }
+      if (!sealedEntryStatus(remote.status)) {
+        // Preserve occupancy and observed quantity while the entry can still execute.
+        return 'unchanged';
+      }
+    }
+
+    if (entryHasMaterializableFill(remote.status,remote.executedQty)) {
       const qty = remote.executedQty > 0 ? remote.executedQty : 0;
       let avg =
         qty > 0 && remote.cummulativeQuoteQty > 0
           ? remote.cummulativeQuoteQty / qty
-          : remote.price;
+          : Number.isFinite(remote.avgPrice) && remote.avgPrice > 0
+            ? remote.avgPrice
+            : remote.price;
       if (!Number.isFinite(avg) || avg <= 0) {
         avg = localOrder.entry_price;
       }

@@ -29,6 +29,9 @@ export interface BacktestTrade {
   pnlUsd: number;
   pnlPct: number;
   barsHeld: number;
+  notionalUsd?: number;
+  feeUsd?: number;
+  slippageUsd?: number;
 }
 
 export interface BacktestBlockStats {
@@ -40,13 +43,18 @@ export interface BacktestBlockStats {
   duplicate_signal: number;
   entry_5m_guard: number;
   grade_playbook: number;
+  pullback: number;
   cooldown: number;
   structure_bias: number;
   side_align: number;
+  execution_risk?: number;
 }
 
 export interface BacktestRunOptions {
   symbol?: string;
+  /** Optional qualification with current exchange lot and wallet constraints. */
+  executionWalletUsd?: number;
+  slippagePct?: number;
   weeks?: number;
   startDate?: Date;
   endDate?: Date;

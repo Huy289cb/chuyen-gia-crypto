@@ -1,10 +1,20 @@
+> **Phạm vi phát triển hiện hành — 12/10/2026:** Cải thiện toàn hệ thống Futures, bỏ ICT/SMC và rule giao dịch cũ. Chỉ giữ vốn100USDT, lỗ tối đa10USDT/ngày cố định, không cap số lệnh, chấp nhận ngày âm và kỳ vọng mean khoảng1USDT/ngày lịch. Người dùng chấp nhận mạo hiểm; [followup mới](docs/research/2026-10-12-futures-aggressive-followup.md) ưu tiên EMA-anchor averaging và wick recovery, đã kiểm public wallet/filters/arithmetic. [Policy](docs/runtime-risk-policy.md), [lộ trình/tiến độ](docs/plan/2026-10-12-futures-system-research-roadmap.md). Feasibility còn PARTIAL, chưa strategy backtest100/đổi runtime/đặt lệnh hoặc xác nhận trọn mục tiêu. Các cap/cooldown/SL/target/guard dưới đây là lịch sử/runtime chưa migration.
+
 # Crypto Trend Analyzer (v2.9.0)
+
+> **Kế hoạch nâng cấp ngày 02/10/2026:** người dùng cho phép nghiên cứu SL rộng hơn, trần rủi ro mỗi lệnh trên 3% và bỏ circuit drawdown 15%. Xem [kế hoạch chi tiết](docs/plan/2026-10-02-roi-upgrade-plan.md) và [chính sách cập nhật](docs/runtime-risk-policy.md). Phương án 5%/drawdown tắt đang là đề xuất nghiên cứu, chưa đổi cấu hình live; các giá trị bên dưới tiếp tục mô tả baseline đã ghi nhận.
+
+> **Cấu hình BTC vận hành đã chốt (08/09/2026):** cooldown **1h**, giới hạn ngày **10%**, tối đa mỗi lệnh **3% số dư**, thay trần1USDT. Xem [chính sách chính thức](docs/runtime-risk-policy.md); giữ nguyên khi bảo trì/triển khai trừ khi người dùng yêu cầu đổi.
+
+> **Mục tiêu và quy tắc agent (27/09/2026): ROI+ sau mọi chi phí VÀ tăng cơ hội vào lệnh có chất lượng/số lệnh khớp độc lập.** Mọi lượt agent phải đọc [AGENTS.md](AGENTS.md), [quy trình hiện hành](docs/plan/2026-09-27-roi-opportunity-reset.md) và [bàn giao](docs/plan/roi-opportunity-progress.md). Không tiếp tục quét RR/model khi chưa kiểm tra khả thi và parity live/replay. Giữ cấu hình hiện tại, gồm SL distance floor **0,8% giá entry**; trần **3% tài khoản/lệnh** là đại lượng khác.
 
 MVP web app phân tích xu hướng BTC/ETH sử dụng **Kim Nghia (SMC + Volume + Fibonacci)** với AI và **Paper Trading**.
 
 **Note:** ICT Smart Money method is temporarily disabled (code preserved for future multi-method support). System currently runs KimNghia method only.
 
 ## Tính năng nổi bật
+
+**Lưu ý về tài liệu legacy:** phần mô tả tính năng bên dưới tổng hợp nhiều phiên bản; các con số RR, timeframe, exposure, cooldown và chuỗi model có thể là lịch sử, không phải nguồn cấu hình runtime. Khi vận hành hoặc tối ưu, dùng chính sách/quy trình/bàn giao ở đầu README và xác minh runtime thực; không chép các giá trị như exposure 2.000 USD hoặc model Scout từ mô tả cũ vào cấu hình hiện tại.
 
 ### ICT Smart Money Analysis (Temporarily Disabled)
 **Note:** ICT method is temporarily disabled. Code is preserved for future multi-method support.
@@ -30,13 +40,13 @@ Phân tích đa khung thời gian với priority: **1d > 4h > 1h > 15m**
 - **Kim Nghia Auto-Entry**: Trade trong all timeframes, không cần multi-timeframe alignment, confidence threshold 82%, R:R >= 2.5
 - **Risk Management**:
   - ICT: 1% risk per trade, SL distance minimum 0.75% (disabled)
-  - Kim Nghia: 10% risk per trade, SL distance minimum 0.3%
+  - Kim Nghia BTC hiện hành: tối đa 3% tổng rủi ro/lệnh, ngân sách ngày10%; xem chính sách chính thức ở trên
 - **Partial Take Profits**: Chốt từng phần (50% @ 1:1 R:R, 50% @ 2:1 R:R) theo ICT
 - **Trailing Stop**: Move SL to breakeven sau hit TP1, trail để bảo vệ lợi nhuận
 - **Volume Limit**: Tối đa 2k USD tổng volume positions per account (open positions + pending orders). Tối đa 2k USD cho từng position và pending order riêng lẻ. Khi volume đạt giới hạn, các pending order mới chỉ được phép nếu entry align với SL/TP của các position đang chạy (±0.5% tolerance)
 - **Order Validation**: Validation SL/TP placement đảm bảo logic hợp lý (LONG: SL<entry<TP, SHORT: SL>entry>TP)
 - **Real-time PnL**: Cập nhật PnL mỗi 10 giây với 1-minute candle data, auto-close khi hit SL/TP
-- **Cooldown System**: 4h cooldown sau 3 consecutive losses (updated from 8)
+- **Cooldown System**: 1h theo cấu hình người dùng chốt; các tầng chuỗi thua không kéo dài hơn 1h
 - **Performance Tracking**: Equity curve, win rate, profit factor, max drawdown, average R multiple
 - **Price Updates**: Cập nhật giá và PnL mỗi 10 giây với 1-minute candle OHLC data từ Binance API
 - **Prediction Timeline**: Hiển thị lịch sử dự báo theo thời gian với filter

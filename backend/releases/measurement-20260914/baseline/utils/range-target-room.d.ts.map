@@ -1,0 +1,1 @@
+{"version":3,"file":"range-target-room.d.ts","sourceRoot":"","sources":["../../src/utils/range-target-room.ts"],"names":[],"mappings":"AAAA,uGAAuG;AACvG,wBAAgB,kBAAkB,CAAC,KAAK,EAAE;IACxC,IAAI,EAAE,MAAM,GAAG,OAAO,CAAC;IAAC,KAAK,EAAE,MAAM,CAAC;IAAC,MAAM,EAAE,MAAM,CAAC;IAAC,QAAQ,EAAE,OAAO,CAAC;IAAC,SAAS,EAAE,OAAO,CAAC;CAC9F,GAAG,OAAO,CAMV"}

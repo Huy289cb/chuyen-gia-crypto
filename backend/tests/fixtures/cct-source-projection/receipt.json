@@ -1,0 +1,26 @@
+{
+  "status": "PURE_SOURCE_AND_STATIC_PROJECTOR_GOLDENS_NO_ACCOUNT_RUN",
+  "registeredProtocol": "/home/ubuntu/futures-improvement-20261015/cct-buffer11-continuous128/protocol.json",
+  "registeredProtocolSha256": "d91eb01b5ded0713987b2864465e636953b0cde430a476eab02f81902336af8b",
+  "inputs": {
+    "/home/ubuntu/futures-improvement-20261015/cct-candidate/generate_targets.py": "24d8340d58f91e1706077510264e95a055cb5fda6a7b611972a73f4f3709789f",
+    "/home/ubuntu/futures-improvement-20261015/candidate_projection.py": "3be3fc71a33d9e13b5f8a06c8cf56ffde733e209c43084227a5140ab683a835b",
+    "/home/ubuntu/chuyen-gia-crypto/docs/audits/futures-quick-win/momentum-paper-64d-20261014T140124Z/data/daily-source.csv": "4a4ec0763a1080cec94c800be39fde402625ad073472626535f65b26a2b5601c",
+    "/home/ubuntu/futures-improvement-20261015/cct-confirmation-targets/targets-64d.ndjson": "486a54ecffd194fa79d04441370a09ab5b3177470e431ea726fb8c2c759bb2b0",
+    "/home/ubuntu/futures-improvement-20261015/cct-candidate/long_cash/targets-64d.ndjson": "72c16ba9726957fbdee654b198e045aef2428283a1292a2549030711df1d3b9c"
+  },
+  "sourceRows": 128,
+  "sourceWeights": 5120,
+  "selectedStateRows": 640,
+  "sourceFunctionEqualsRegisteredTargetRows": true,
+  "projectionFixtures": 22,
+  "sourceFrozenBytesUnchanged": true,
+  "accountFinancialRuns": 0,
+  "networkCalls": 0,
+  "ordersSent": 0,
+  "generatedFiles": {
+    "projection.json": "d5b868e850b483dfeb22e2bd049d40fb4522ea880ca26054026090fb8ef8537a",
+    "source128.json": "e364b9221c4dad133134b8c2d21e3b6a062f65d0fa5b4b6550bf5bb0b4f886f8",
+    "daily-source.csv": "4a4ec0763a1080cec94c800be39fde402625ad073472626535f65b26a2b5601c"
+  }
+}

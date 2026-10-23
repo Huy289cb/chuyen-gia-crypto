@@ -1,0 +1,7 @@
+import {it,expect} from 'vitest';
+import {observeRangeMirror} from '../../src/utils/range-mirror-observation';
+const input={entry:100,stop:99,target:101.5,time:0,asOf:60000,bars:[{openTime:0,open:100,high:100,low:98,close:98}],funding:[]};
+it('distinguishes long stop and mirror target with asymmetric costs',()=>{const r=observeRangeMirror(input);expect(r.paths.map(p=>p.reason)).toEqual(['sl','tp']);expect(r.paths[1].stressNet).toBeGreaterThan(0);});
+it('stop-first on dual hit and adverse gap',()=>{const r=observeRangeMirror({...input,bars:[{openTime:0,open:98,high:102,low:98,close:100}]});expect(r.paths.every(p=>p.reason==='sl'&&p.ambiguous)).toBe(true);expect(r.paths[0].exit).toBe(98);});
+it('does not count incomplete or open paths as wins',()=>{expect(observeRangeMirror({...input,bars:[]}).status).toBe('incomplete');const r=observeRangeMirror({...input,bars:[{openTime:0,open:100,high:100.1,low:99.9,close:100}]});expect(r.paths[0].baseNet).toBeNull();});
+it('funding debits long and credits short only before exit',()=>{const bars=[{openTime:0,open:100,high:100,low:100,close:100},...input.bars.map(b=>({...b,openTime:60000}))];const r=observeRangeMirror({...input,bars,asOf:120000,funding:[{fundingTime:30000,fundingRate:'.001',markPrice:'100'}]});const b=observeRangeMirror({...input,bars,asOf:120000});expect(r.paths[0].baseNet!-b.paths[0].baseNet!).toBeCloseTo(-.0001);expect(r.paths[1].baseNet!-b.paths[1].baseNet!).toBeCloseTo(.0001);});

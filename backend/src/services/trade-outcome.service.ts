@@ -21,6 +21,8 @@ export interface CloseOutcomeContext {
   close_reason: string;
   decision_id?: number;
   fill_verified?: boolean;
+  close_time?: Date;
+  strict_link?: boolean;
 }
 
 export interface RecordOutcomeOptions {
@@ -59,7 +61,7 @@ export async function resolveDecisionIdForPosition(ctx: CloseOutcomeContext): Pr
           event_type: 'pending_order_linked',
         },
         orderBy: { timestamp: 'desc' },
-        take: 40,
+
       });
       for (const ev of linkEvents) {
         if (!ev.event_data) continue;
@@ -96,6 +98,7 @@ export async function resolveDecisionIdForPosition(ctx: CloseOutcomeContext): Pr
     }
   }
 
+  if (ctx.strict_link) return null;
   const windowStart = new Date(ctx.entry_time.getTime() - 6 * 60 * 60 * 1000);
   const candidates = await prisma.tradeDecision.findMany({
     where: {
@@ -144,13 +147,17 @@ export async function recordTradeOutcomeOnClose(
     return;
   }
 
-  const riskUsd = ctx.risk_usd > 0 ? ctx.risk_usd : 1;
+  if (!(ctx.risk_usd > 0)) {
+    console.warn(`[TradeOutcome] Missing initial risk for ${ctx.position_id}`);
+    return;
+  }
+  const riskUsd = ctx.risk_usd;
   const realizedRr = realizedPnl / riskUsd;
   const fees =
     (ctx.entry_fee ?? 0) + (ctx.exit_fee ?? 0) + (ctx.funding_fee ?? 0);
   const durationMinutes = Math.max(
     0,
-    Math.round((Date.now() - ctx.entry_time.getTime()) / 60000)
+    Math.round(((ctx.close_time?.getTime() ?? Date.now()) - ctx.entry_time.getTime()) / 60000)
   );
   const label = outcomeLabel(realizedPnl);
 

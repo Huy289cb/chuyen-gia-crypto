@@ -3,6 +3,9 @@
  * Monitors open positions — conservative: prefer exchange SL/TP, max one reduce.
  */
 
+import { randomUUID } from 'node:crypto';
+import { observePositionReductionWrite } from '../utils/position-reduction-write-observation';
+import { recordTestnetTradeEvent } from '../repositories/testnet.repository';
 import cron, { type ScheduledTask } from 'node-cron';
 import { prisma } from '../lib/prisma';
 import { updateTestnetPosition } from '../repositories/testnet.repository';
@@ -318,12 +321,20 @@ async function runPositionMonitor() {
           refreshed.size_usd > 0
             ? (refreshed.size_usd * remainingQty) / totalQty
             : remainingQty * mark;
-        await updateTestnetPosition(position.position_id, {
+        const reductionUpdate = {
           size_qty: refreshed.side === 'short' ? -remainingQty : remainingQty,
           size_usd: sizeUsd,
           current_price: mark,
           partial_closed: 1,
-        });
+        };
+        await observePositionReductionWrite(
+          { reduction_attempt_id: randomUUID(), account_id: position.account_id, position_id: position.position_id },
+          { side: refreshed.side, status: refreshed.status, size_qty: refreshed.size_qty, size_usd: refreshed.size_usd, partial_closed: refreshed.partial_closed ?? 0 },
+          reductionUpdate,
+          { ok: closeResult.ok, normalizedQty: closeResult.normalizedQty ?? null, requestedQty: reduceQty },
+          () => updateTestnetPosition(position.position_id, reductionUpdate),
+          data => recordTestnetTradeEvent(position.position_id, 'position_reduction_write_observed', data)
+        );
         console.log(
           `[PositionMonitor] Reduced ${position.position_id} once (remaining qty ${remainingQty}, partial_closed=1.00)`
         );

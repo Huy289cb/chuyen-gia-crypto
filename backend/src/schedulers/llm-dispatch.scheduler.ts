@@ -24,6 +24,13 @@ import { runPendingOrderLifecycle } from '../services/pending-order-lifecycle.se
 import { runPendingOrderReview } from '../services/pending-order-review.service';
 import { canRunLlmDispatchForSymbol } from '../services/v3-entry-eligibility.service';
 import { isV3ScaleInEnabled } from '../config/v3-entry-policy';
+import { runAiOpportunityReview } from '../services/ai-opportunity-runtime';
+import {
+  claimTransitionRetestOpportunity,
+  peekTransitionRetestOpportunity,
+  recordTransitionRetestDispatch,
+  type TransitionRetestOpportunity,
+} from '../services/transition-breakout-retest.service';
 
 let llmDispatchTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -135,12 +142,46 @@ async function runLLMDispatch() {
         );
       }
 
-      const picked = pickBestScanResult(symbol);
-      if (!picked) {
+      const aiOpportunity = await runAiOpportunityReview((tf) => getScanResult(symbol, tf));
+      if (aiOpportunity.handled) {
+        console.log(`[AiOpportunity] ${symbol}: ${aiOpportunity.reason}`);
         continue;
       }
 
-      const { timeframe, scanResult } = picked;
+      let retestOpportunity: TransitionRetestOpportunity | null = null;
+      let timeframe: string;
+      let scanResult: MarketScanResult;
+      const readyRetest = peekTransitionRetestOpportunity(symbol);
+      const readyScan = readyRetest
+        ? getScanResult(symbol, readyRetest.timeframe)
+        : undefined;
+
+      if (readyRetest && readyScan) {
+        const claimed = await claimTransitionRetestOpportunity(readyRetest.candidate_key);
+        if (!claimed) continue;
+        retestOpportunity = claimed;
+        timeframe = claimed.timeframe;
+        scanResult = {
+          ...readyScan,
+          signalResult: {
+            ...claimed.signal_result,
+            pass: true,
+            shouldCallGroq: true,
+            isDuplicate: false,
+            reason: `Stateful ${claimed.candidate_kind} retest confirmed (${claimed.candidate_key})`,
+          },
+        };
+        console.log(
+          `[LLMDispatch] ${symbol} ${timeframe}: prioritizing ${claimed.mode} ` +
+            `${claimed.candidate_kind} retest ${claimed.candidate_key}`
+        );
+      } else {
+        const picked = pickBestScanResult(symbol);
+        if (!picked) continue;
+        timeframe = picked.timeframe;
+        scanResult = picked.scanResult;
+      }
+
       const methodConfig = getMethodConfig('kim_nghia');
 
       const dispatchResult = await groqDispatchService.dispatch({
@@ -150,6 +191,19 @@ async function runLLMDispatch() {
         systemPrompt: methodConfig.systemPrompt,
         method_id: 'kim_nghia',
         signalResult: scanResult.signalResult,
+        retestContext: retestOpportunity
+          ? {
+              candidateKey: retestOpportunity.candidate_key,
+              candidateKind: retestOpportunity.candidate_kind,
+              side: retestOpportunity.side,
+              boundaryPrice: retestOpportunity.boundary_price,
+              breakoutBarKey: retestOpportunity.breakout_bar_key,
+              confirmedEntryPrice: retestOpportunity.entry_price,
+              minRr: retestOpportunity.rr,
+              rangeLow: Number(retestOpportunity.adaptive_evidence?.range_low),
+              rangeHigh: Number(retestOpportunity.adaptive_evidence?.range_high),
+            }
+          : undefined,
       });
 
       console.log(`[LLMDispatch] ${symbol} ${timeframe}: ${dispatchResult.decision.toUpperCase()} - ${dispatchResult.reason}`);
@@ -160,6 +214,7 @@ async function runLLMDispatch() {
           dispatchResult.reason.includes('SL distance');
         if (isRiskPreBlock && dispatchResult.analysis) {
           await recordPipelineEvent('execution_blocked', {
+            ...dispatchResult.trace,
             symbol,
             timeframe,
             reason: dispatchResult.reason,
@@ -171,6 +226,15 @@ async function runLLMDispatch() {
             decision_id: dispatchResult.decisionRecordId,
           });
         }
+        if (retestOpportunity) {
+          await recordTransitionRetestDispatch({
+            opportunity: retestOpportunity,
+            decision: 'no_trade',
+            reason: dispatchResult.reason,
+            executionAttempted: false,
+            decisionRecordId: dispatchResult.decisionRecordId,
+          });
+        }
       }
 
       if (dispatchResult.decision === 'trade' && dispatchResult.analysis) {
@@ -180,18 +244,40 @@ async function runLLMDispatch() {
             `Confidence: ${((dispatchResult.analysis.confidence ?? 0) * 100).toFixed(0)}%`
         );
 
+        if (retestOpportunity && retestOpportunity.mode !== 'live') {
+          console.log(
+            `[LLMDispatch] ${symbol} ${timeframe}: retest LLM confirmed in ${retestOpportunity.mode}; ` +
+              `execution intentionally skipped`
+          );
+          await recordTransitionRetestDispatch({
+            opportunity: retestOpportunity,
+            decision: 'trade',
+            reason: dispatchResult.reason,
+            executionAttempted: false,
+            executionReason: `${retestOpportunity.mode} does not execute`,
+            decisionRecordId: dispatchResult.decisionRecordId,
+          });
+          continue;
+        }
+
         const execResult = await executeV3Trade({
           symbol,
           timeframe,
           analysis: dispatchResult.analysis,
+          trace: dispatchResult.trace,
           methodId: 'kim_nghia',
           decisionRecordId: dispatchResult.decisionRecordId,
+          requiredMinRr: retestOpportunity?.rr ?? methodConfig.autoEntry.minRRRatio,
         });
 
         if (execResult.success) {
           console.log(
             `[LLMDispatch] Binance pending order ${execResult.orderId} ` +
-              `(binance=${execResult.binanceOrderId}) for ${symbol}`
+              `(binance=${execResult.binanceOrderId}) for ${symbol}` +
+              (execResult.levelAdjustment
+                ? `; normalized stop ${execResult.levelAdjustment.originalStopPercent.toFixed(2)}%` +
+                  `→${execResult.levelAdjustment.normalizedStopPercent.toFixed(2)}%`
+                : '')
           );
         } else {
           console.warn(`[LLMDispatch] Trade execution skipped: ${execResult.reason}`);
@@ -206,6 +292,7 @@ async function runLLMDispatch() {
             );
           }
           await recordPipelineEvent('execution_blocked', {
+            ...dispatchResult.trace,
             symbol,
             timeframe,
             reason: execResult.reason,
@@ -215,6 +302,18 @@ async function runLLMDispatch() {
             stop_loss: dispatchResult.analysis.suggested_stop_loss,
             take_profit: dispatchResult.analysis.suggested_take_profit,
             decision_id: dispatchResult.decisionRecordId,
+          });
+        }
+
+        if (retestOpportunity) {
+          await recordTransitionRetestDispatch({
+            opportunity: retestOpportunity,
+            decision: 'trade',
+            reason: dispatchResult.reason,
+            executionAttempted: true,
+            executionSuccess: execResult.success,
+            executionReason: execResult.reason,
+            decisionRecordId: dispatchResult.decisionRecordId,
           });
         }
       }
@@ -238,7 +337,15 @@ export function startLLMDispatchScheduler(cronExpression: string = V3_LLM_DISPAT
   }
 
   console.log(`[LLMDispatch] Starting scheduler with cron: ${cronExpression}`);
-  llmDispatchTask = cron.schedule(cronExpression, runLLMDispatch);
+  // Catch delayed ticks using current eligibility/scans; the in-flight guard and durable
+  // retest claims prevent replaying multiple orders after a stall.
+  let lastScheduledSecond = -1;
+  llmDispatchTask = cron.schedule(cronExpression, (scheduledAt) => {
+    const second = Math.floor((scheduledAt instanceof Date ? scheduledAt.getTime() : Date.now()) / 1000);
+    if (second <= lastScheduledSecond) return;
+    lastScheduledSecond = second;
+    void runLLMDispatch();
+  }, { recoverMissedExecutions: true });
 
   // Don't run immediately - wait for market scan to populate data
 }

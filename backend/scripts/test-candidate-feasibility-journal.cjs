@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict'),{buildJournal}=require('./candidate-feasibility-journal.cjs');
+const event=(id,trace,extra={})=>({id,timestamp:'2026-09-27T00:00:00Z',event_type:'entry_trace',event_data:{trace_id:trace,candidate_key:'setup',code_hash:'v1',policy_hash:'p1',stage:'risk_checked',...extra}});
+const result=buildJournal({events:[event(1,'a',{totalRiskUsd:1,cap_usd:2}),event(2,'b',{totalRiskUsd:1,cap_usd:2,remaining_daily_risk_usd:0}),event(3,'c',{code_hash:'v2',totalRiskUsd:3,cap_usd:2}),event(4,'d',{candidate_key:undefined,totalRiskUsd:null,cap_usd:2})]});
+assert.equal(result.groups.length,2);assert.deepEqual(result.groups[0].traceIds,['a','b']);
+assert.equal(result.attempts[0].riskChecks[0].dailyRisk,'unknown');
+assert.equal(result.attempts[1].riskChecks[0].dailyRisk,'blocked');
+assert.equal(result.attempts[2].riskChecks[0].tradeRisk,'blocked');
+assert.equal(result.attempts[3].riskChecks[0].tradeRisk,'unknown');
+assert.equal(result.coverage.attemptsWithCandidateKey,3);
+const conflict=buildJournal({events:[event(1,'a'),event(2,'a',{candidate_key:'other'})]});
+assert.equal(conflict.groups.length,0);assert.equal(conflict.attempts[0].identityConflict,true);
+console.log('candidate feasibility journal: 9 assertions passed');
+const funnel=buildJournal({events:[event(1,'a',{stage:'plan_geometry'}),event(2,'a',{stage:'dispatch_result',decision:'no_trade',reason:'blocked: short (V3_REQUIRE_PULLBACK)'}),event(3,'b',{stage:'plan_geometry'}),event(4,'c',{stage:'plan_geometry'}),event(5,'c',{stage:'admission_started'})]});
+assert.deepEqual(funnel.planFunnel,{pullback_gate:1,unknown:1,admission_reached:1});
+assert.equal(funnel.attempts[0].planAttribution.terminalEventId,2);
+assert.equal(funnel.attempts[1].planAttribution.outcome,'unknown');
+console.log('plan attribution: 3 assertions passed');

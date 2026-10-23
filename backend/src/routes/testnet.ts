@@ -1,3 +1,9 @@
+import {buildAccountResetUpdate} from '../utils/account-reset-update';
+import {buildAccountResetReceipt} from '../utils/account-reset-receipt';
+import {insertAccountResetReceipt} from '../repositories/account-mutation-journal.repository';
+import { buildManualCloseAccountUpdate } from '../utils/manual-close-account-update';
+import { buildStartingBalanceUpdate } from '../utils/starting-balance-update';
+import { randomUUID } from 'node:crypto';
 /**
  * Testnet Routes backed by Prisma + PostgreSQL
  */
@@ -194,35 +200,17 @@ router.post('/reset/:accountId', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Account not found' });
     }
 
-    await prismaClient.$transaction([
-      prismaClient.testnetPendingOrder.deleteMany({ where: { account_id: accountId } }),
-      prismaClient.testnetTradeEvent.deleteMany({
-        where: {
-          position: {
-            account_id: accountId,
-          },
-        },
-      }),
-      prismaClient.testnetPosition.deleteMany({ where: { account_id: accountId } }),
-      prismaClient.testnetAccountSnapshot.deleteMany({ where: { account_id: accountId } }),
-      prismaClient.testnetAccount.update({
-        where: { id: accountId },
-        data: {
-          current_balance: account.starting_balance,
-          equity: account.starting_balance,
-          unrealized_pnl: 0,
-          realized_pnl: 0,
-          total_trades: 0,
-          winning_trades: 0,
-          losing_trades: 0,
-          max_drawdown: 0,
-          consecutive_losses: 0,
-          last_trade_time: null,
-          cooldown_until: null,
-          updated_at: new Date(),
-        },
-      }),
-    ]);
+    const updatedAt = new Date();
+    const receipt = buildAccountResetReceipt(accountId,randomUUID(),account.starting_balance,updatedAt);
+    await prismaClient.$transaction(async tx => {
+      await tx.testnetPendingOrder.deleteMany({where:{account_id:accountId}});
+      await tx.testnetTradeEvent.deleteMany({where:{position:{account_id:accountId}}});
+      await tx.testnetPosition.deleteMany({where:{account_id:accountId}});
+      await tx.testnetAccountSnapshot.deleteMany({where:{account_id:accountId}});
+      await tx.testnetAccount.update({where:{id:accountId},
+        data:buildAccountResetUpdate(account.starting_balance,updatedAt)});
+      await insertAccountResetReceipt(tx,receipt);
+    });
 
     return res.json({
       success: true,
@@ -275,10 +263,20 @@ router.get('/sync/:accountId', async (req: Request, res: Response) => {
     const equity = snap.equity;
 
     if (account.total_trades === 0) {
+      const update = buildStartingBalanceUpdate(walletBalance);
+      const evidence = { schema: 'account-starting-balance-sync-v1', account_id: accountId,
+        capital_attempt_id: randomUUID(), input: { total_trades: account.total_trades,
+          previous_starting_balance: account.starting_balance ?? null, wallet_balance: walletBalance },
+        update, write_started_at: new Date().toISOString() };
       await prismaClient.testnetAccount.update({
         where: { id: accountId },
-        data: { starting_balance: walletBalance },
+        data: update,
       });
+      const appliedAt = new Date().toISOString();
+      void import('../utils/account-wallet-journal').then(module => module.persistAccountWalletObservation(
+        { ...evidence, applied_at: appliedAt, applied_clock_source: 'db_update_return' },
+        'account_starting_balance_sync_applied'))
+        .catch(() => console.warn('[TestnetRoutes] Starting balance journal unavailable'));
     }
 
     await prismaClient.testnetAccountSnapshot.create({
@@ -478,21 +476,21 @@ router.post('/positions/:id/close', async (req: Request, res: Response) => {
       },
     });
 
-    await prismaClient.testnetAccount.update({
-      where: { id: position.account_id },
-      data: {
-        current_balance: position.account.current_balance + realizedPnl,
-        equity: position.account.current_balance + realizedPnl,
-        unrealized_pnl: 0,
-        realized_pnl: { increment: realizedPnl },
-        total_trades: { increment: 1 },
-        winning_trades: { increment: isWin ? 1 : 0 },
-        losing_trades: { increment: isWin ? 0 : 1 },
-        consecutive_losses: isWin ? 0 : { increment: 1 },
-        last_trade_time: new Date(),
-        updated_at: new Date(),
-      },
-    });
+    const lastTradeTime = new Date(), updatedAt = new Date();
+    const update = buildManualCloseAccountUpdate({balance:position.account.current_balance,
+      realizedPnl, lastTradeTime, updatedAt});
+    const evidence = {schema:'account-manual-close-v1', account_id:position.account_id,
+      manual_close_attempt_id:randomUUID(), position_id:String(id),
+      input:{balance:position.account.current_balance, realized_pnl:realizedPnl},
+      update:{...update,last_trade_time:lastTradeTime.toISOString(),updated_at:updatedAt.toISOString()},
+      write_started_at:updatedAt.toISOString(), pnl_basis:'local_mark_price',
+      exchange_close_verified:false};
+    await prismaClient.testnetAccount.update({where:{id:position.account_id},data:update});
+    const appliedAt = new Date().toISOString();
+    void import('../utils/account-wallet-journal').then(module => module.persistAccountWalletObservation(
+      {...evidence,applied_at:appliedAt,applied_clock_source:'db_update_return'},
+      'account_manual_close_applied'))
+      .catch(() => console.warn('[TestnetRoutes] Manual close journal unavailable'));
 
     await prismaClient.testnetTradeEvent.create({
       data: {

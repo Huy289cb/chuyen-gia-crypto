@@ -1,12 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GroqClient, createGroqClient } from '../../src/services/groq-client.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
 
 describe('GroqClient', () => {
+  const envBackup = { ...process.env };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const key of Object.keys(process.env)) {
+      if (/^(GROQ_API_KEY|OPENROUTER_API_KEY|CEREBRAS_API_KEY)/.test(key)) delete process.env[key];
+    }
+    process.env.LLM_PROVIDER = 'groq';
+    process.env.OPENROUTER_DISPATCH_FALLBACK_ENABLED = 'false';
+    process.env.CEREBRAS_DISPATCH_FALLBACK_ENABLED = 'false';
+  });
+
+  afterEach(() => {
+    process.env = { ...envBackup };
+    vi.useRealTimers();
   });
 
   describe('API Key Management', () => {
@@ -189,6 +202,44 @@ describe('GroqClient', () => {
 
       expect(result).toEqual({ bias: 'bullish', action: 'buy', confidence: 0.8 });
       expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses OpenRouter Scout first and Groq only when OpenRouter fails', async () => {
+      process.env.LLM_PROVIDER = 'openrouter';
+      process.env.OPENROUTER_API_KEY = 'openrouter-key';
+      process.env.OPENROUTER_DISPATCH_FALLBACK_ENABLED = 'true';
+      process.env.OPENROUTER_DISPATCH_MODEL = 'meta-llama/llama-4-scout';
+      process.env.CEREBRAS_DISPATCH_FALLBACK_ENABLED = 'false';
+
+      const client = new GroqClient(['groq-key']);
+      global.fetch.mockImplementation((url) => {
+        if (String(url).includes('openrouter.ai')) {
+          return Promise.resolve({
+            ok: false,
+            status: 503,
+            text: () => Promise.resolve('upstream unavailable'),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            choices: [{ message: { content: '{"bias":"bullish","action":"buy","confidence":0.8}' } }],
+          }),
+        });
+      });
+
+      const result = await client.analyze({
+        systemPrompt: 'test',
+        userPrompt: 'test',
+        maxRetries: 0,
+      });
+
+      expect(result).toEqual({ bias: 'bullish', action: 'buy', confidence: 0.8 });
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(String(global.fetch.mock.calls[0][0])).toContain('openrouter.ai');
+      expect(String(global.fetch.mock.calls[1][0])).toContain('api.groq.com');
+      const groqBody = JSON.parse(global.fetch.mock.calls[1][1].body);
+      expect(groqBody.model).toBe('openai/gpt-oss-120b');
     });
   });
 

@@ -1,0 +1,199 @@
+{
+  "at": "2026-09-15T04:03:32.054472+00:00",
+  "processes": {
+    "crypto-api": {
+      "pid": 2052984,
+      "verifiedEnv": {
+        "MAX_EFFECTIVE_RISK_PER_TRADE_USD": "",
+        "MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT": "3",
+        "DAILY_LOSS_LIMIT_PERCENT": "10",
+        "POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES": "60",
+        "POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES": "60",
+        "CONSECUTIVE_LOSS_COOLDOWN_HOURS": "1",
+        "LOSS_COOLDOWN_TIER2_HOURS": "1",
+        "LOSS_COOLDOWN_TIER3_HOURS": "1",
+        "LOSS_COOLDOWN_TIER3_UNTIL_UTC_DAY": "false",
+        "CIRCUIT_EXPECTANCY_COOLDOWN_HOURS": "1",
+        "PENDING_ORDER_REENTRY_COOLDOWN_MINUTES": "60",
+        "RISK_PER_TRADE_PERCENT": "0.5"
+      }
+    },
+    "crypto-worker": {
+      "pid": 2052991,
+      "verifiedEnv": {
+        "MAX_EFFECTIVE_RISK_PER_TRADE_USD": "",
+        "MAX_EFFECTIVE_RISK_PER_TRADE_PERCENT": "3",
+        "DAILY_LOSS_LIMIT_PERCENT": "10",
+        "POST_CLOSE_SAME_SIDE_COOLDOWN_MINUTES": "60",
+        "POST_LOSS_SAME_SIDE_COOLDOWN_MINUTES": "60",
+        "CONSECUTIVE_LOSS_COOLDOWN_HOURS": "1",
+        "LOSS_COOLDOWN_TIER2_HOURS": "1",
+        "LOSS_COOLDOWN_TIER3_HOURS": "1",
+        "LOSS_COOLDOWN_TIER3_UNTIL_UTC_DAY": "false",
+        "CIRCUIT_EXPECTANCY_COOLDOWN_HOURS": "1",
+        "PENDING_ORDER_REENTRY_COOLDOWN_MINUTES": "60",
+        "RISK_PER_TRADE_PERCENT": "0.5"
+      }
+    }
+  },
+  "health": {
+    "status": "ok",
+    "timestamp": "2026-09-15T04:03:27.561Z",
+    "uptime": 6.992805426
+  },
+  "entryTraces": {
+    "since": "2026-09-14T04:03:27.665Z",
+    "truncated": false,
+    "malformed": 0,
+    "traceCount": 3,
+    "unlinkedRequests": 0,
+    "unlinkedFills": 0,
+    "unknownProviderCosts": 0,
+    "knownProviderCostUsd": 0,
+    "retest": {
+      "paired": 0,
+      "becameGeometryFeasible": 0,
+      "unavailable": 0,
+      "pnlMeasured": false
+    },
+    "traces": [
+      {
+        "trace_id": "8e2145b9-8f98-463c-b43f-431840cf6913",
+        "observation_key": "BTC:15m:kim_nghia:bar:v2:1786736700000",
+        "requests": 0,
+        "decisions": [],
+        "stages": [
+          "dispatch_started",
+          "dispatch_result"
+        ],
+        "orders": [],
+        "fills": 0
+      },
+      {
+        "trace_id": "b0221e16-4dd9-436f-8a7a-cf67587e7d7d",
+        "observation_key": "BTC:15m:kim_nghia:bar:v2:1786736700000",
+        "requests": 0,
+        "decisions": [],
+        "stages": [
+          "dispatch_started",
+          "feasibility_before_ai",
+          "pre_ai_passed",
+          "ai_veto",
+          "dispatch_result"
+        ],
+        "orders": [],
+        "fills": 0
+      },
+      {
+        "trace_id": "22b13f3a-f5b9-4c15-86a1-019a75629795",
+        "observation_key": "BTC:5m:kim_nghia:bar:v2:1786736700000",
+        "requests": 0,
+        "decisions": [],
+        "stages": [
+          "dispatch_started",
+          "feasibility_before_ai",
+          "pre_ai_passed",
+          "ai_veto",
+          "dispatch_result"
+        ],
+        "orders": [],
+        "fills": 0
+      }
+    ],
+    "limitations": [
+      "Counts apply only to supplied events; historical missing links are not reconstructed by proximity.",
+      "Repeated requests, bars and retest observations are not independent trades.",
+      "Unknown provider costs cannot be treated as zero for ROI."
+    ]
+  },
+  "risk": {
+    "config": {
+      "risk_per_trade_percent": 0.5,
+      "max_effective_risk_per_trade_percent": 3,
+      "max_effective_risk_per_trade_usd": null,
+      "effective_risk_cap_mode": "percent",
+      "minimum_lot_stop_normalization_enabled": false,
+      "minimum_lot_normalized_stop_max_percent": 0.0084,
+      "daily_loss_limit_percent": 10,
+      "max_drawdown_percent": 15,
+      "max_consecutive_losses": 2,
+      "consecutive_loss_cooldown_hours": 1,
+      "max_spread_percent": 0.05,
+      "max_slippage_percent": 0.1,
+      "max_fee_percent": 0.1,
+      "min_signal_grade": "B",
+      "min_signal_confidence": 0.7,
+      "max_positions_per_symbol": 1,
+      "max_total_positions": 2,
+      "circuit_daily_loss_enabled": true,
+      "circuit_drawdown_enabled": true,
+      "circuit_expectancy_kill_enabled": true,
+      "circuit_expectancy_window": 10,
+      "circuit_expectancy_min_sum_r": -3
+    },
+    "circuit": {
+      "scope": "strategy_epoch",
+      "starts_at": "2026-08-12T16:00:00.000Z",
+      "allowed": true,
+      "reason": "circuits clear",
+      "daily_loss_usd": 0,
+      "daily_loss_percent": 0,
+      "drawdown_percent": 7.515612063829284,
+      "peak_equity": 36.33007341,
+      "peak_equity_source": "override_ratcheted",
+      "expectancy_since": "2026-08-12T16:00:00.000Z",
+      "expectancy": {
+        "n": 8,
+        "wins": 3,
+        "losses": 5,
+        "breakeven": 0,
+        "sumR": 3.4505847259117752,
+        "avgR": 0.4313230907389719,
+        "profitFactor": 1.5471657814710733,
+        "sumPnl": 1.8032371199999995,
+        "winRate": 0.375
+      }
+    },
+    "full_history": {
+      "scope": "full_history",
+      "baseline_balance": 40,
+      "current_balance": 33.59964603,
+      "current_equity": 33.59964603,
+      "wallet_pnl": -6.400353969999998,
+      "wallet_return_percent": -16.000884924999994,
+      "peak_equity": 52.9426757,
+      "peak_equity_at": "2026-07-15T14:15:00.623Z",
+      "current_drawdown_percent": 36.53579917193343,
+      "max_drawdown_percent": 41.09794505531574,
+      "max_drawdown_at": "2026-08-19T21:15:00.806Z",
+      "first_snapshot_at": "2026-07-10T17:30:00.979Z",
+      "last_snapshot_at": "2026-09-15T03:45:00.785Z",
+      "snapshot_count": 3899
+    },
+    "strategy_epoch": {
+      "scope": "strategy_epoch",
+      "starts_at": "2026-08-12T16:00:00.000Z",
+      "peak_equity": 36.33007341,
+      "peak_equity_source": "override_ratcheted",
+      "drawdown_percent": 7.515612063829284,
+      "expectancy_since": "2026-08-12T16:00:00.000Z",
+      "expectancy": {
+        "n": 8,
+        "wins": 3,
+        "losses": 5,
+        "breakeven": 0,
+        "sumR": 3.4505847259117752,
+        "avgR": 0.4313230907389719,
+        "profitFactor": 1.5471657814710733,
+        "sumPnl": 1.8032371199999995,
+        "winRate": 0.375
+      },
+      "trading_allowed": true,
+      "circuit_reason": "circuits clear"
+    },
+    "trading_allowed": true,
+    "timestamp": "2026-09-15T04:03:31.851Z"
+  },
+  "releaseMatches": true,
+  "envUnchanged": true
+}

@@ -1,3 +1,7 @@
+# Portfolio paper testbed — đã kiểm 14 ngày, 14/10/2026
+
+[Report](research/2026-10-14-futures-momentum-paper-implementation.md) mô tả chế độ momentum mới dùng cùng engine với runtime paper, funding/mark/trade/lot/shared 100u/10u. Chạy `cd backend && npm run paper:momentum:testbed`; fixed registered window 30/09–13/10 ICT, cached outputs reuse, không sweep hoặc lấy `.env` policy cũ. Trang `/api/portfolio-paper/view`, API POST `/api/portfolio-paper/testbed` body `{"days":14}`. Không chờ 14 ngày thực; không coi replay là prospective record. Nội dung V3 phía dưới là chế độ legacy khác, không áp cho momentum portfolio.
+
 # Historical Testbed (Walk-Forward Backtest)
 
 Offline replay of the **deterministic** parts of the V3 pipeline on 2–4 weeks of Binance Futures OHLCV. No LLM calls, no DB writes, no orders on the exchange.
