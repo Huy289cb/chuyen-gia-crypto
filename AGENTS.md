@@ -1,5 +1,11 @@
+<!-- roi-aggressive-100u-reverify-20261023 -->
+# Hiện hành 23/10 — macro momentum 100u không qua kiểm chứng, live giữ dừng
+
+Commit 01839ca tái dựng đúng +668,67u / 1.485 ngày, mean +0,450u, ngày xấu −11,45u, 0 lần chạm −12u. File ngày chỉ có giá đóng cửa; sổ công bố vẫn khớp 357 lần dừng tại đúng −5% từ giá vào. Phần chênh với giá đóng cửa là +408,32u. Khớp tại giá đóng cửa của file: net +260,64u, mean +0,176u/ngày, ngày xấu −16,43u ngày 2022-11-08, 2 ngày vượt −12u. Drawdown đường vốn công bố là 8,8%, không phải 35,2%. Phép kiểm: `backend/scripts/verify-macro-momentum-claim.py` in `FAIL_NOT_DEPLOYABLE`. Không đưa vào live. `crypto-portfolio-live` vẫn stopped. [Biên bản](docs/research/2026-10-23-futures-aggressive-roi-breakthrough.md).
+<!-- /roi-aggressive-100u-reverify-20261023 -->
+
 <!-- roi-aggressive-100u-breakthrough-20261023 -->
-# Hiện hành 23/10 — Chuẩn hóa vốn 100u và risk 12%/ngày: Macro Momentum đạt +0,45%/ngày (+164%/năm)
+# Công bố 20:11 23/10 — macro momentum 100u trước kiểm chứng độc lập
 
 Người dùng làm rõ mục tiêu: vốn thiết kế 100 USDT (ví 31u cũ chỉ là môi trường test), ngân sách rủi ro tối đa 12%/ngày (12 USDT/ngày). Khảo sát và backtest độc lập 4 chiến lược. Macro Momentum (Top 2 / 40 coins, phân bổ cố định $35/coin = $70 vị thế, Stop Loss 5%, tái cân bằng 3 ngày) đạt:
 - Toàn bộ 1.485 ngày: net +668,7 USDT, mean +0,450%/ngày (+164,3%/năm), ngày xấu nhất −11,45 USDT, số lần chạm cầu chì 12u: 0.

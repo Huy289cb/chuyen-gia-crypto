@@ -1,6 +1,10 @@
 # Đột Phá Nghiên Cứu Lợi Nhuận Cao (Aggressive ROI) — 23/10/2026
 
-**Trạng thái:** **BACKTEST & AUDIT THÀNH CÔNG (PASS_ALL_CRITERIA)**  
+**Trạng thái:** **CÔNG BỐ TRONG COMMIT 01839ca. KIỂM LẠI CÙNG FILE: FAIL, KHÔNG ĐƯA VÀO LIVE.**
+
+Sổ dưới đây tái dựng được đúng: 1.485 ngày, net +668,67 USDT, mean +0,450 USDT/ngày, ngày xấu −11,45 USDT, 0 ngày chạm −12. Phép kiểm `backend/scripts/verify-macro-momentum-claim.py` cho thấy 357 lần dừng được khớp tại đúng −5% từ giá vào, trong khi file chỉ có giá đóng cửa. Phần chênh giữa giá dừng và giá đóng cửa là +408,32 USDT. Khớp những lần đó tại giá đóng cửa đã có trong file: net +260,64 USDT, mean +0,176 USDT/ngày, ngày xấu −16,43 USDT, 2 ngày vượt −12. Drawdown của chính đường vốn công bố là 8,8%, không phải 35,2% ở bảng dưới. Không implement vào worker live.
+
+**Trạng thái cũ của commit:** BACKTEST & AUDIT THÀNH CÔNG (PASS_ALL_CRITERIA)
 **Cơ sở vốn:** **100 USDT** (chuẩn hóa theo yêu cầu thiết kế hệ thống).  
 **Ngân sách rủi ro tối đa:** **12%/ngày = 12,0 USDT/ngày** (Hard Daily Circuit Breaker).  
 **Mục tiêu yêu cầu:** $\ge$ **0,2% tài khoản/ngày = 0,20 USDT/ngày** (tương đương $\ge 73\%$/năm).

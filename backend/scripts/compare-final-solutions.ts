@@ -85,6 +85,7 @@ export function runMacroFixedBase(
       const p = today.prices[h.symbol] || h.entryPrice;
       const ret = (p - h.entryPrice) / h.entryPrice;
       if (ret <= -stopLossPct) {
+        // ponytail: daily file has no low. This fills at the stop even when today's close gapped through it.
         const exitP = h.entryPrice * (1 - stopLossPct);
         const pnl = (exitP - h.entryPrice) * h.qty;
         const fee = exitP * h.qty * 0.0007;
