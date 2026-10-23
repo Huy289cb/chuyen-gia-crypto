@@ -38,6 +38,11 @@ pids
 *.seed
 *.pid.lock
 
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
 # Coverage directory used by tools like istanbul
 coverage/
 *.lcov

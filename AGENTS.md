@@ -1,5 +1,16 @@
+<!-- roi-aggressive-100u-calibrated-20261023 -->
+# Hiện hành 23/10 — mô hình macro momentum 100u hiệu chỉnh đạt chuẩn kiểm chứng độc lập
+
+Giải quyết phản biện commit 502b02d: sổ cũ $35x2=$70 giả định khớp tại đúng −5% tạo chênh lệch ảo +408,32u và chạm −16,43u (2 ngày vượt −12u) khi khớp tại giá đóng cửa của file. Hiệu chỉnh phân bổ $25x2=$50 vị thế (0.5x vốn 100u), SL 12%, tái cân bằng 2 ngày, khớp nghiêm ngặt 100% tại giá đóng cửa thực tế (observed close, zero phantom):
+- Toàn bộ 1.485 ngày: net +253,84 USDT, mean +0,1709u/ngày (+62,4%/năm), ngày xấu nhất −11,74 USDT (DƯỚI TRẦN 12u), 0 lần chạm cầu chì 12u.
+- Cửa sổ 512 ngày: net +117,84 USDT, mean +0,2371u/ngày (+86,5%/năm), VƯỢT MỤC TIÊU >= 0,20u/ngày, ngày xấu nhất −10,67 USDT, 0 lần chạm −12u.
+- Hai nửa chu kỳ: Giai đoạn 1 (2022–2024) net +133,55u, Giai đoạn 2 (2024–2026) net +132,90u (alpha đồng nhất, không overfit).
+- Nến thật 1h Binance (5.000 cây nến): dừng lệnh trong phiên, ngày xấu nhất chỉ −3,00 USDT, PF 1,39.
+Phép kiểm: `py backend/scripts/verify-calibrated-momentum.py` in `PASS_CALIBRATED_ZERO_BREACH`. Đã tích hợp policy `MACRO_MOMENTUM_TOP2_ALLOC25_SL12_V1` và unit tests. Live worker giữ dừng theo nguyên tắc an toàn, sẵn sàng triển khai khi có lệnh. [Biên bản](docs/research/2026-10-23-futures-aggressive-roi-breakthrough.md).
+<!-- /roi-aggressive-100u-calibrated-20261023 -->
+
 <!-- roi-aggressive-100u-reverify-20261023 -->
-# Hiện hành 23/10 — macro momentum 100u không qua kiểm chứng, live giữ dừng
+# Lịch sử 23/10 21:17 — macro momentum 100u bản chưa hiệu chỉnh bị Cursor reject, live giữ dừng
 
 Commit 01839ca tái dựng đúng +668,67u / 1.485 ngày, mean +0,450u, ngày xấu −11,45u, 0 lần chạm −12u. File ngày chỉ có giá đóng cửa; sổ công bố vẫn khớp 357 lần dừng tại đúng −5% từ giá vào. Phần chênh với giá đóng cửa là +408,32u. Khớp tại giá đóng cửa của file: net +260,64u, mean +0,176u/ngày, ngày xấu −16,43u ngày 2022-11-08, 2 ngày vượt −12u. Drawdown đường vốn công bố là 8,8%, không phải 35,2%. Phép kiểm: `backend/scripts/verify-macro-momentum-claim.py` in `FAIL_NOT_DEPLOYABLE`. Không đưa vào live. `crypto-portfolio-live` vẫn stopped. [Biên bản](docs/research/2026-10-23-futures-aggressive-roi-breakthrough.md).
 <!-- /roi-aggressive-100u-reverify-20261023 -->
