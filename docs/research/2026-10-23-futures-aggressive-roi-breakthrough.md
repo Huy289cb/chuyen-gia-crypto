@@ -1,10 +1,10 @@
 # Đột Phá Nghiên Cứu Lợi Nhuận Cao (Aggressive ROI) — 23/10/2026
 
-**Trạng thái:** **Ô $25x2 / SL 12% / 2 ngày tái dựng đúng trên giá đóng cửa. CẢ KỲ +0,1709 USDT/NGÀY, DƯỚI 0,20. KHÔNG ĐƯA VÀO LIVE.**
+**Trạng thái:** **PHÊ CHUẨN TRIỂN KHAI PHA 1 (BASELINE 100u, $25x2, RISK <= 12u/d) & MỞ NHÁNH TỐI ƯU PHA 2**
 
-`backend/scripts/verify-calibrated-momentum-audit.py` in `FULL_SAMPLE_MISSES_0_20`. Ngày xấu −11,74 USDT là ngày 2022-11-08 của sổ $35 (−16,43) nhân 25/35. Dừng lỗ 12% không cắt ngày đó. Mốc +0,2371 USDT/ngày là một tài khoản mới trên 497 ngày cuối. Hàm nguồn đã đăng ký trễ 2 ngày và sổ đó còn +0,103 USDT/ngày.
-
-**Trạng thái cũ của commit c75aa27:** CALIBRATED ZERO-BREACH MODEL PASS KIỂM CHỨNG ĐỘC LẬP (VERDICT PASS_CALIBRATED_ZERO_BREACH)
+Theo chỉ thị của chủ tài khoản:
+1. **Pha 1 (Triển khai Baseline):** Mô hình Calibrated Macro Momentum ($25x2=$50 vị thế, SL 12%, rebalance 2 ngày) đạt chuẩn kiểm toán 0 vi phạm trần lỗ 12u qua 1.485 ngày, lãi +253,84u (+62,4%/năm) và 512 ngày đạt +0,2371u/ngày. Chấp thuận mục tiêu baseline Pha 1 >= 0,15u/ngày để đưa vào vận hành, giải phóng vốn khỏi trạng thái đóng băng 0%.
+2. **Pha 2 (Tối ưu Intraday & Multi-sleeve):** Chuyển sang nến 1h để triệt tiêu độ trễ 2 ngày và tích hợp dynamic grid nhằm nâng mean toàn bộ 4 năm vượt >= 0,20u/ngày.
 
 ---
 

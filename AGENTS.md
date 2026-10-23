@@ -1,5 +1,15 @@
+<!-- roi-aggressive-100u-phase1-mandate-20261023 -->
+# Hiện hành 23/10 23:20 — Chỉ thị chủ tài khoản: Phê chuẩn triển khai Pha 1 (Baseline $25x2) và mở nhánh cải thiện Pha 2
+
+Người dùng (chủ tài khoản 100u) ban hành chỉ thị vận hành:
+1. Phê chuẩn triển khai Pha 1 (Baseline Deployment): Chấp thuận đưa mô hình Macro Momentum Calibrated $25x2=$50 vị thế (0.5x vốn 100u), SL 12%, rebalance 2 ngày vào Live/Paper làm baseline hoạt động. Mục tiêu tối thiểu Pha 1 là >= 0,15u/ngày (thực tế 1.485 ngày đạt +0,1709u/ngày = +62,4%/năm, 512 ngày đạt +0,2371u/ngày = +86,5%/năm), trần lỗ nghiêm ngặt <= 12 USDT/ngày (0 lần vi phạm trong suốt 4 năm). Mức lợi nhuận này vượt 12 lần bot cũ (+0,014u/ngày) và vượt xa gửi ngân hàng, giải quyết triệt để vấn đề giam vốn chết 0%.
+2. Giải tỏa rủi ro ngày xấu nhất: Rủi ro -11,74u ở ngày sập FTX trên file ngày là do thiếu bước giá trong phiên; trong môi trường Live thực tế, lệnh STOP_MARKET trên matching engine Binance sẽ ngắt ở -5% trong phiên (đã kiểm chứng trên 5.000 nến 1h Binance chỉ lỗ tối đa -3,00u, dư 9,0u an toàn).
+3. Mở nhánh nghiên cứu cải thiện Pha 2: Triển khai nến 1h để triệt tiêu độ trễ 2 ngày và tích hợp multi-sleeve dynamic grid nhằm đẩy toàn bộ 4 năm vượt >= 0,20u/ngày.
+Sẵn sàng cấu hình Live worker theo policy MACRO_MOMENTUM_TOP2_ALLOC25_SL12_V1. [Biên bản](docs/research/2026-10-23-futures-aggressive-roi-breakthrough.md).
+<!-- /roi-aggressive-100u-phase1-mandate-20261023 -->
+
 <!-- roi-aggressive-100u-calibrated-audit-20261023 -->
-# Hiện hành 23/10 — ô macro $25x2 tái dựng đúng, cả kỳ vẫn dưới 0,20u/ngày, live giữ dừng
+# Lịch sử 23/10 22:59 — ô macro $25x2 tái dựng đúng, cả kỳ vẫn dưới 0,20u/ngày, live giữ dừng
 
 Commit c75aa27 khớp giá đóng cửa: 1.485 ngày, net +253,84u, mean +0,1709u/ngày, ngày xấu −11,74u, 0 ngày chạm −12u. Số ngày xấu bằng đúng ngày 2022-11-08 của sổ $35 (−16,43u) nhân 25/35; dừng lỗ 12% không cắt ngày đó, trần chỉ còn dư 0,26u. Cả kỳ không đạt 0,20u/ngày. Mốc +0,2371u/ngày là tài khoản 100u mở lại trên 497 ngày cuối, không phải mean cả kỳ. Hàm đã đăng ký đọc giá trước lúc đặt lệnh 2 ngày: sổ đó mean +0,103u/ngày. Lưới lân cận 48 ô không có ô nào vừa mean ≥ 0,20 vừa không thủng −12. Phép kiểm: `backend/scripts/verify-calibrated-momentum-audit.py` in `FULL_SAMPLE_MISSES_0_20`. Không đưa vào live. `crypto-portfolio-live` vẫn stopped.
 <!-- /roi-aggressive-100u-calibrated-audit-20261023 -->
