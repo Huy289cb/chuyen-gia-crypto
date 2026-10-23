@@ -1,0 +1,81 @@
+{
+  "status": "DEV_ONLY_ONE_RULE",
+  "rule": "taker_ratio_continuation_next_day_B5",
+  "devReturnDatesBefore": "2025-05-20",
+  "goalMean": 0.2,
+  "cases": {
+    "g1_base_continuation": {
+      "days": 987,
+      "net": 37.89484985135884,
+      "mean": 0.03839397148060673,
+      "worst": -10.495027835127482,
+      "endEquity": 69.37229531135873,
+      "daysBeyondSoft": 5,
+      "daysBeyond12": 0
+    },
+    "g1_base_invert": {
+      "days": 987,
+      "net": -26.1248197899278,
+      "mean": -0.026468915693949137,
+      "worst": -3.763385133291938,
+      "endEquity": 5.352625670072198,
+      "daysBeyondSoft": 0,
+      "daysBeyond12": 0
+    },
+    "g1_stress_continuation": {
+      "days": 987,
+      "net": 33.3201771084678,
+      "mean": 0.0337590446894304,
+      "worst": -9.82253939078395,
+      "endEquity": 64.7976225684678,
+      "daysBeyondSoft": 4,
+      "daysBeyond12": 0
+    },
+    "g1_stress_invert": {
+      "days": 987,
+      "net": -26.477462735246323,
+      "mean": -0.026826203379175607,
+      "worst": -3.670699723502981,
+      "endEquity": 4.999982724753748,
+      "daysBeyondSoft": 0,
+      "daysBeyond12": 0
+    },
+    "g8_base_continuation": {
+      "days": 987,
+      "net": -31.477446001614464,
+      "mean": -0.031892042554827214,
+      "worst": -38.03147777238578,
+      "endEquity": -5.416144168267049e-07,
+      "daysBeyondSoft": 6,
+      "daysBeyond12": 1
+    },
+    "g8_base_invert": {
+      "days": 987,
+      "net": -31.477445459999988,
+      "mean": -0.031892042006079015,
+      "worst": -16.588348546743156,
+      "endEquity": 4.0479402319350356e-15,
+      "daysBeyondSoft": 4,
+      "daysBeyond12": 2
+    },
+    "g8_stress_continuation": {
+      "days": 987,
+      "net": -31.477445764544147,
+      "mean": -0.03189204231463439,
+      "worst": -37.79791626882267,
+      "endEquity": -3.0454416747428453e-07,
+      "daysBeyondSoft": 6,
+      "daysBeyond12": 1
+    },
+    "g8_stress_invert": {
+      "days": 987,
+      "net": -31.47744546000002,
+      "mean": -0.03189204200607905,
+      "worst": -16.53873737246063,
+      "endEquity": 2.2740977781875306e-15,
+      "daysBeyondSoft": 4,
+      "daysBeyond12": 2
+    }
+  },
+  "verdict": "MISSES_DEV_GOAL"
+}

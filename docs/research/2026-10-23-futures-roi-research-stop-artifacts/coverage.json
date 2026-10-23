@@ -1,0 +1,238 @@
+{
+  "status": "COVERAGE_ONLY_NO_SIGNAL_NO_PNL",
+  "symbols": {
+    "BTCUSDT": {
+      "metrics": {
+        "files": 1747,
+        "missingFiles": 0,
+        "missingSample": [],
+        "parseErrors": [],
+        "rows": 503003,
+        "internalGapSteps": 41119,
+        "blankTopTraderCells": {
+          "2": 0,
+          "3": 0,
+          "4": 91815,
+          "5": 91781,
+          "6": 5387,
+          "7": 36850
+        },
+        "blankFrac": {
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.18253370258229076,
+          "5": 0.18246610855203646,
+          "6": 0.010709677675878673,
+          "7": 0.07326000043737314
+        },
+        "dev": {
+          "expectedDays": 988,
+          "presentDays": 988,
+          "missingDays": 0,
+          "missingSample": []
+        },
+        "test512": {
+          "expectedDays": 512,
+          "presentDays": 512,
+          "missingDays": 0,
+          "missingSample": []
+        }
+      },
+      "premium1h": {
+        "files": 70,
+        "rows": 41856,
+        "internalGapSteps": 3,
+        "boundaryGaps": 0,
+        "firstOpenMs": 1640995200000,
+        "lastOpenMs": 1791932400000
+      }
+    },
+    "ETHUSDT": {
+      "metrics": {
+        "files": 1747,
+        "missingFiles": 0,
+        "missingSample": [],
+        "parseErrors": [],
+        "rows": 503003,
+        "internalGapSteps": 42201,
+        "blankTopTraderCells": {
+          "2": 0,
+          "3": 0,
+          "4": 91819,
+          "5": 91781,
+          "6": 5389,
+          "7": 36847
+        },
+        "blankFrac": {
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.1825416548211442,
+          "5": 0.18246610855203646,
+          "6": 0.010713653795305396,
+          "7": 0.07325403625823305
+        },
+        "dev": {
+          "expectedDays": 988,
+          "presentDays": 988,
+          "missingDays": 0,
+          "missingSample": []
+        },
+        "test512": {
+          "expectedDays": 512,
+          "presentDays": 512,
+          "missingDays": 0,
+          "missingSample": []
+        }
+      },
+      "premium1h": {
+        "files": 70,
+        "rows": 41856,
+        "internalGapSteps": 3,
+        "boundaryGaps": 0,
+        "firstOpenMs": 1640995200000,
+        "lastOpenMs": 1791932400000
+      }
+    },
+    "BNBUSDT": {
+      "metrics": {
+        "files": 1747,
+        "missingFiles": 0,
+        "missingSample": [],
+        "parseErrors": [],
+        "rows": 503003,
+        "internalGapSteps": 41355,
+        "blankTopTraderCells": {
+          "2": 0,
+          "3": 0,
+          "4": 91817,
+          "5": 91781,
+          "6": 5389,
+          "7": 36853
+        },
+        "blankFrac": {
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.1825376787017175,
+          "5": 0.18246610855203646,
+          "6": 0.010713653795305396,
+          "7": 0.07326596461651322
+        },
+        "dev": {
+          "expectedDays": 988,
+          "presentDays": 988,
+          "missingDays": 0,
+          "missingSample": []
+        },
+        "test512": {
+          "expectedDays": 512,
+          "presentDays": 512,
+          "missingDays": 0,
+          "missingSample": []
+        }
+      },
+      "premium1h": {
+        "files": 70,
+        "rows": 41856,
+        "internalGapSteps": 3,
+        "boundaryGaps": 0,
+        "firstOpenMs": 1640995200000,
+        "lastOpenMs": 1791932400000
+      }
+    },
+    "SOLUSDT": {
+      "metrics": {
+        "files": 1747,
+        "missingFiles": 0,
+        "missingSample": [],
+        "parseErrors": [],
+        "rows": 502986,
+        "internalGapSteps": 41113,
+        "blankTopTraderCells": {
+          "2": 0,
+          "3": 0,
+          "4": 91817,
+          "5": 91781,
+          "6": 5390,
+          "7": 36850
+        },
+        "blankFrac": {
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.18254384813891442,
+          "5": 0.1824722755702942,
+          "6": 0.010716004023968858,
+          "7": 0.07326247649039934
+        },
+        "dev": {
+          "expectedDays": 988,
+          "presentDays": 988,
+          "missingDays": 0,
+          "missingSample": []
+        },
+        "test512": {
+          "expectedDays": 512,
+          "presentDays": 512,
+          "missingDays": 0,
+          "missingSample": []
+        }
+      },
+      "premium1h": {
+        "files": 70,
+        "rows": 41880,
+        "internalGapSteps": 2,
+        "boundaryGaps": 0,
+        "firstOpenMs": 1640995200000,
+        "lastOpenMs": 1791932400000
+      }
+    },
+    "XRPUSDT": {
+      "metrics": {
+        "files": 1747,
+        "missingFiles": 0,
+        "missingSample": [],
+        "parseErrors": [],
+        "rows": 503002,
+        "internalGapSteps": 42199,
+        "blankTopTraderCells": {
+          "2": 0,
+          "3": 0,
+          "4": 91530,
+          "5": 91493,
+          "6": 5390,
+          "7": 36565
+        },
+        "blankFrac": {
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.18196746732617367,
+          "5": 0.18189390897054086,
+          "6": 0.010715663158396985,
+          "7": 0.07269354793817917
+        },
+        "dev": {
+          "expectedDays": 988,
+          "presentDays": 988,
+          "missingDays": 0,
+          "missingSample": []
+        },
+        "test512": {
+          "expectedDays": 512,
+          "presentDays": 512,
+          "missingDays": 0,
+          "missingSample": []
+        }
+      },
+      "premium1h": {
+        "files": 70,
+        "rows": 41880,
+        "internalGapSteps": 2,
+        "boundaryGaps": 0,
+        "firstOpenMs": 1640995200000,
+        "lastOpenMs": 1791932400000
+      }
+    }
+  },
+  "jobs": 9085,
+  "downloadedOrCached": 9085,
+  "missing": 0
+}
