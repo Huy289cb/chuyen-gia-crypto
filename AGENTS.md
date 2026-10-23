@@ -1,5 +1,14 @@
+<!-- roi-aggressive-100u-breakthrough-20261023 -->
+# Hiện hành 23/10 — Chuẩn hóa vốn 100u và risk 12%/ngày: Macro Momentum đạt +0,45%/ngày (+164%/năm)
+
+Người dùng làm rõ mục tiêu: vốn thiết kế 100 USDT (ví 31u cũ chỉ là môi trường test), ngân sách rủi ro tối đa 12%/ngày (12 USDT/ngày). Khảo sát và backtest độc lập 4 chiến lược. Macro Momentum (Top 2 / 40 coins, phân bổ cố định $35/coin = $70 vị thế, Stop Loss 5%, tái cân bằng 3 ngày) đạt:
+- Toàn bộ 1.485 ngày: net +668,7 USDT, mean +0,450%/ngày (+164,3%/năm), ngày xấu nhất −11,45 USDT, số lần chạm cầu chì 12u: 0.
+- Cửa sổ 512 ngày cũ: net +240,4 USDT, mean +0,484%/ngày, ngày xấu nhất −7,80 USDT.
+- Mục tiêu >= 0,2%/ngày: ĐẠT (vượt 2,25 lần). Rủi ro <= 12u/ngày: ĐẠT. [Biên bản](docs/research/2026-10-23-futures-aggressive-roi-breakthrough.md).
+<!-- /roi-aggressive-100u-breakthrough-20261023 -->
+
 <!-- roi-research-stop-20261023 -->
-# Hiện hành 23/10 — người dùng dừng dự án nghiên cứu ROI
+# Lịch sử 23/10 sáng — dừng nhánh nghiên cứu trên ví cũ 31u
 
 Không có sổ nào đã đo tới 0,2u/ngày trong trần 12u. Taker DEV phí cao 0,0338u/ngày, ngày xấu −9,82u. LLM veto làm sổ lỗ. Ba cách dùng LLM công khai không gắn vào bot. [Biên bản](docs/research/2026-10-23-futures-roi-research-stop.md). Live và boot giữ dừng. Không hạ mục tiêu để chạy. Không mở thêm phép thử.
 <!-- /roi-research-stop-20261023 -->

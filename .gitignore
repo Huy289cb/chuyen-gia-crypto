@@ -114,6 +114,7 @@ Thumbs.db
 *.sqlite3
 backend/data/predictions.db
 backend/data/backup.db
+backend/data/backtest-cache/
 
 # API Keys and secrets
 **/api-keys/
