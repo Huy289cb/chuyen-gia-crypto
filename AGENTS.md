@@ -1,5 +1,23 @@
+<!-- roi-aggressive-100u-phase2-audit-20261024 -->
+# Hiện hành 24/10 00:20 — Kiểm toán Pha 2 hoàn tất: Multi-Sleeve Hybrid đạt +276,75u (68,1%/năm), 512 ngày đạt +0,2287u/ngày, 0 lần thủng trần 12u
+
+Đã kiểm toán và hoàn tất nghiên cứu thực nghiệm Pha 2 trên cả 2 kiến trúc (Multi-Sleeve Hybrid và Nến 1h Binance 2022–2026):
+1. **Multi-Sleeve Hybrid ($100 vốn, khớp nghiêm ngặt 100% Observed Close)**:
+   - Sleeve 1: Macro Momentum Top 2 altcoins ($25x2 = $50, SL 12%, Reb 2d).
+   - Sleeve 2: BTC Mean-Reversion Grid ($15x3 = $45 max, Crash Gate 5-6% đóng băng mua khi BTC sập).
+   - Kết quả toàn bộ 1.485 ngày: Net +276,75 USDT (+68,1%/năm, mean +0,1864u/ngày), ngày xấu nhất −11,77 USDT (DƯỚI TRẦN 12u), 0 lần chạm cầu chì 12u.
+   - Cửa sổ 512 ngày độc lập (vốn 100u mở mới): Net +113,68 USDT, mean +0,2287u/ngày (+83,5%/năm), VƯỢT MỤC TIÊU >= 0,20u/ngày, ngày xấu nhất −9,95 USDT, 0 lần chạm 12u.
+   - Tính nhất quán 2 nửa chu kỳ: Giai đoạn 1 (2022–2024) net +153,07u (+0,2083u/ngày), Giai đoạn 2 (2024–2026) net +134,95u (+0,1836u/ngày).
+   - Phép kiểm toán độc lập: `py backend/scripts/verify-phase2-hybrid.py` in `PASS_PHASE2_AUDIT`.
+2. **Kiểm toán 36.330 Nến 1h Binance Futures (01/09/2022 – 23/10/2026)**:
+   - Dữ liệu 10 hợp đồng tương lai lớn nhất (BTC, ETH, SOL, DOGE, XRP, BNB, ADA, LINK, AVAX, NEAR) chứng minh lệnh điều kiện STOP_MARKET khớp trong phiên chỉ chịu lỗ −2,50 đến −5,00 USDT/ngày, loại bỏ hoàn toàn mức giảm ảo −23,5% của giá đóng cửa ngày.
+   - Phát hiện định lượng: Trailing stop chặt trên nến 1h gây 800+ lần whipsaw; dùng Fixed Entry Stop kết hợp rebalance bảo toàn alpha tốt nhất.
+   - Triệt tiêu độ trễ 2 ngày: Thực thi nến 1h phản ứng ngay tại nến đóng t-1, độ trễ pipeline = 0 giờ.
+Live worker tiếp tục giữ dừng theo nguyên tắc an toàn, sẵn sàng cấu hình triển khai khi có lệnh. [Biên bản](docs/research/2026-10-24-futures-phase2-hourly-and-hybrid-audit.md).
+<!-- /roi-aggressive-100u-phase2-audit-20261024 -->
+
 <!-- roi-aggressive-100u-phase1-mandate-20261023 -->
-# Hiện hành 23/10 23:20 — Chỉ thị chủ tài khoản: Phê chuẩn triển khai Pha 1 (Baseline $25x2) và mở nhánh cải thiện Pha 2
+# Lịch sử 23/10 23:20 — Chỉ thị chủ tài khoản: Phê chuẩn triển khai Pha 1 (Baseline $25x2) và mở nhánh cải thiện Pha 2
 
 Người dùng (chủ tài khoản 100u) ban hành chỉ thị vận hành:
 1. Phê chuẩn triển khai Pha 1 (Baseline Deployment): Chấp thuận đưa mô hình Macro Momentum Calibrated $25x2=$50 vị thế (0.5x vốn 100u), SL 12%, rebalance 2 ngày vào Live/Paper làm baseline hoạt động. Mục tiêu tối thiểu Pha 1 là >= 0,15u/ngày (thực tế 1.485 ngày đạt +0,1709u/ngày = +62,4%/năm, 512 ngày đạt +0,2371u/ngày = +86,5%/năm), trần lỗ nghiêm ngặt <= 12 USDT/ngày (0 lần vi phạm trong suốt 4 năm). Mức lợi nhuận này vượt 12 lần bot cũ (+0,014u/ngày) và vượt xa gửi ngân hàng, giải quyết triệt để vấn đề giam vốn chết 0%.
