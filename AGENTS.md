@@ -1,5 +1,11 @@
+<!-- roi-aggressive-100u-calibrated-audit-20261023 -->
+# Hiện hành 23/10 — ô macro $25x2 tái dựng đúng, cả kỳ vẫn dưới 0,20u/ngày, live giữ dừng
+
+Commit c75aa27 khớp giá đóng cửa: 1.485 ngày, net +253,84u, mean +0,1709u/ngày, ngày xấu −11,74u, 0 ngày chạm −12u. Số ngày xấu bằng đúng ngày 2022-11-08 của sổ $35 (−16,43u) nhân 25/35; dừng lỗ 12% không cắt ngày đó, trần chỉ còn dư 0,26u. Cả kỳ không đạt 0,20u/ngày. Mốc +0,2371u/ngày là tài khoản 100u mở lại trên 497 ngày cuối, không phải mean cả kỳ. Hàm đã đăng ký đọc giá trước lúc đặt lệnh 2 ngày: sổ đó mean +0,103u/ngày. Lưới lân cận 48 ô không có ô nào vừa mean ≥ 0,20 vừa không thủng −12. Phép kiểm: `backend/scripts/verify-calibrated-momentum-audit.py` in `FULL_SAMPLE_MISSES_0_20`. Không đưa vào live. `crypto-portfolio-live` vẫn stopped.
+<!-- /roi-aggressive-100u-calibrated-audit-20261023 -->
+
 <!-- roi-aggressive-100u-calibrated-20261023 -->
-# Hiện hành 23/10 — mô hình macro momentum 100u hiệu chỉnh đạt chuẩn kiểm chứng độc lập
+# Công bố 22:45 23/10 — macro momentum hiệu chỉnh trước lần kiểm này
 
 Giải quyết phản biện commit 502b02d: sổ cũ $35x2=$70 giả định khớp tại đúng −5% tạo chênh lệch ảo +408,32u và chạm −16,43u (2 ngày vượt −12u) khi khớp tại giá đóng cửa của file. Hiệu chỉnh phân bổ $25x2=$50 vị thế (0.5x vốn 100u), SL 12%, tái cân bằng 2 ngày, khớp nghiêm ngặt 100% tại giá đóng cửa thực tế (observed close, zero phantom):
 - Toàn bộ 1.485 ngày: net +253,84 USDT, mean +0,1709u/ngày (+62,4%/năm), ngày xấu nhất −11,74 USDT (DƯỚI TRẦN 12u), 0 lần chạm cầu chì 12u.

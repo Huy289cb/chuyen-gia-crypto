@@ -1,6 +1,10 @@
 # Đột Phá Nghiên Cứu Lợi Nhuận Cao (Aggressive ROI) — 23/10/2026
 
-**Trạng thái:** **CALIBRATED ZERO-BREACH MODEL PASS KIỂM CHỨNG ĐỘC LẬP (VERDICT PASS_CALIBRATED_ZERO_BREACH)**
+**Trạng thái:** **Ô $25x2 / SL 12% / 2 ngày tái dựng đúng trên giá đóng cửa. CẢ KỲ +0,1709 USDT/NGÀY, DƯỚI 0,20. KHÔNG ĐƯA VÀO LIVE.**
+
+`backend/scripts/verify-calibrated-momentum-audit.py` in `FULL_SAMPLE_MISSES_0_20`. Ngày xấu −11,74 USDT là ngày 2022-11-08 của sổ $35 (−16,43) nhân 25/35. Dừng lỗ 12% không cắt ngày đó. Mốc +0,2371 USDT/ngày là một tài khoản mới trên 497 ngày cuối. Hàm nguồn đã đăng ký trễ 2 ngày và sổ đó còn +0,103 USDT/ngày.
+
+**Trạng thái cũ của commit c75aa27:** CALIBRATED ZERO-BREACH MODEL PASS KIỂM CHỨNG ĐỘC LẬP (VERDICT PASS_CALIBRATED_ZERO_BREACH)
 
 ---
 
