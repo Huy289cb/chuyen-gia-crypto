@@ -56,6 +56,7 @@ export class HybridLiveWorker {
     this.running = true;
     this.setupSignalHandlers();
 
+    await this.restoreDayAnchor();
     // Start interactive Telegram listener (/status, /report, /lenh, /pnl)
     this.stopTelegramListener = startHybridTelegramCommandListener(() => this.lastState);
 
@@ -95,6 +96,23 @@ export class HybridLiveWorker {
 
   private getUtcDay(): string {
     return new Date(Date.now() + ICT_OFFSET).toISOString().slice(0, 10);
+  }
+
+  /** Keep the 12 USDT day anchor across a restart. A fresh read would zero today's loss. */
+  private async restoreDayAnchor(): Promise<void> {
+    try {
+      const raw = JSON.parse(await fs.readFile(path.join(this.stateDir, 'worker-status.json'), 'utf8')) as HybridLiveState;
+      const observed = Date.parse(raw.lastObservedAt);
+      if (!Number.isFinite(observed) || !Number.isFinite(raw.dayStartEquity) || raw.dayStartEquity <= 0) return;
+      const observedDay = new Date(observed + ICT_OFFSET).toISOString().slice(0, 10);
+      if (observedDay !== this.getUtcDay()) return;
+      this.currentDay = observedDay;
+      this.dayStartEquity = raw.dayStartEquity;
+      this.breakerLatched = raw.breakerLatched === true;
+      console.log(`[HybridLiveWorker] Restored day anchor ${raw.dayStartEquity} for ${observedDay}`);
+    } catch {
+      // First boot has no status file.
+    }
   }
 
   private async tick(): Promise<void> {

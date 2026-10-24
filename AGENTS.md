@@ -6,6 +6,8 @@
 Sàn lúc 11:04 ICT: equity 31,38639119, available 26,340885. `1000PEPEUSDT` 5470 @ 0,0045283, mark 0,00459993, SL 0,003984904. `TIAUSDT` 46 @ 0,5361, mark 0,54816562, SL 0,471768. Không mua thêm. Cầu chì chưa gài: mốc ngày 31,40291097 tại lúc restart, PnL ngày −0,0165, trần 12 USDT. Dừng lỗ 12% tính từ giá vào trên sàn.
 
 11:13 ICT: worker gửi Telegram bản vị thế đang giữ (message 1154). Cùng đường gửi sẽ báo khi chạm dừng lỗ 12% hoặc cầu chì 12 USDT. Mỗi bản vị thế một tin mỗi ngày, không lặp mỗi nhịp.
+
+15:34 ICT: lên `061b2ac`. Worker pid 712682 trả lời `/status`, `/report`, `/lenh`, `/pnl`. Lệnh `/lenh` đã được trả lời. Mốc ngày giữ 31,12625203, không reset lúc restart. Lúc 15:34: equity 29,9103101, PnL ngày −1,2159, cầu chì chưa gài. PEPE 5470 mark 0,00438462 lỗ −0,7859. TIA 46 mark 0,54163095 lãi +0,2544. SL 12% giữ 0,003984904 và 0,471768.
 <!-- /roi-hybrid-live-e4dfb8d-restart-20261024 -->
 
 <!-- roi-aggressive-100u-phase2-live-mandate-20261024 -->
