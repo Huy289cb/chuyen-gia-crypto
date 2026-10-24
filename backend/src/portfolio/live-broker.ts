@@ -340,8 +340,9 @@ export function createDefaultLiveBroker(settings: DefaultLiveBrokerOptions = {})
   if (settings.retryReads !== undefined && typeof settings.retryReads !== 'boolean') {
     throw new TypeError('Invalid live broker read retry setting.');
   }
+  const executionOwner = process.env.PORTFOLIO_EXECUTION_OWNER?.trim() || 'CONSTANT_DIRECTION_B5_S6_DAILY15_V1';
   const options = { transformResponse: parseLiveBinanceJson, quietErrors: true,
-    executionOwner: 'CONSTANT_DIRECTION_B5_S6_DAILY15_V1',
+    executionOwner,
     ...(settings.requestTimeoutMs === undefined ? {} : { timeoutMs: settings.requestTimeoutMs }) };
   let cooldownUntil = 0;
   const transport: LiveBrokerTransport = async (method, path, params, signed) => {
@@ -356,5 +357,5 @@ export function createDefaultLiveBroker(settings: DefaultLiveBrokerOptions = {})
     }
   };
   const identity = `binance:${createHash('sha256').update(`${config.BASE_URL}\n${config.API_KEY}`).digest('hex')}`;
-  return new BinanceLiveBroker(transport, identity);
+  return new BinanceLiveBroker(transport, identity, executionOwner);
 }

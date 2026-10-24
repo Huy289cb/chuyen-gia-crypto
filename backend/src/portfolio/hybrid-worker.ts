@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { createDefaultLiveBroker, type LiveBroker } from './live-broker';
+import { formatHybridBookNotice, formatHybridBreakerNotice, formatHybridStopNotice, sendHybridTelegram } from './hybrid-live-notice';
 import { HYBRID_POLICY_ID } from './source-hybrid';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -32,6 +33,8 @@ export class HybridLiveWorker {
   private dayStartEquity = 100.0;
   private currentDay = '';
   private breakerLatched = false;
+  private sentNotices = new Set<string>();
+  private noticesLoaded = false;
 
   constructor() {
     this.broker = createDefaultLiveBroker({ requestTimeoutMs: 5_000, retryReads: true });
@@ -108,6 +111,7 @@ export class HybridLiveWorker {
 
     let totalUnrealizedPnl = 0.0;
     const posMap: HybridLiveState['positions'] = {};
+    const alerts: Array<{ key: string; text: string }> = [];
 
     for (const p of activePositions) {
       const qty = parseFloat(p.positionAmt);
@@ -143,8 +147,10 @@ export class HybridLiveWorker {
             reduceOnly: true,
           });
           console.log(`[HybridLiveWorker] STOP LOSS order submitted successfully for ${p.symbol}`);
+          alerts.push({ key: `sl:${today}:${p.symbol}`, text: formatHybridStopNotice({ symbol: p.symbol, mark, slPrice, sent: true }) });
         } catch (err) {
           console.error(`[HybridLiveWorker] Failed to execute stop loss for ${p.symbol}:`, err);
+          alerts.push({ key: `sl-fail:${today}:${p.symbol}`, text: formatHybridStopNotice({ symbol: p.symbol, mark, slPrice, sent: false }) });
         }
       }
     }
@@ -157,6 +163,7 @@ export class HybridLiveWorker {
     if (!this.breakerLatched && currentDayPnl <= -DAILY_LOSS_LIMIT_USD) {
       console.error(`[HybridLiveWorker] CIRCUIT BREAKER TRIGGERED! Day PnL=${currentDayPnl.toFixed(2)} <= -${DAILY_LOSS_LIMIT_USD} USDT. Flattening ALL positions!`);
       this.breakerLatched = true;
+      let breakerOk = true;
 
       for (const p of activePositions) {
         const qty = parseFloat(p.positionAmt);
@@ -172,10 +179,12 @@ export class HybridLiveWorker {
             });
             console.log(`[HybridLiveWorker] Breaker flatten submitted for ${p.symbol}`);
           } catch (err) {
+            breakerOk = false;
             console.error(`[HybridLiveWorker] Breaker flatten error for ${p.symbol}:`, err);
           }
         }
       }
+      alerts.push({ key: `breaker:${today}`, text: formatHybridBreakerNotice(currentDayPnl, breakerOk) });
     }
 
     // Write state
@@ -194,6 +203,48 @@ export class HybridLiveWorker {
     };
 
     await fs.writeFile(path.join(this.stateDir, 'worker-status.json'), JSON.stringify(state, null, 2));
+    await this.publish(state, alerts);
+  }
+
+  private noticeFile(): string {
+    return path.join(this.stateDir, 'telegram-sent.json');
+  }
+
+  private async loadNotices(): Promise<void> {
+    if (this.noticesLoaded) return;
+    this.noticesLoaded = true;
+    try {
+      const raw = JSON.parse(await fs.readFile(this.noticeFile(), 'utf8')) as { keys?: string[] };
+      for (const key of raw.keys ?? []) this.sentNotices.add(key);
+    } catch {
+      // First notice for this policy.
+    }
+  }
+
+  private async publish(state: HybridLiveState, alerts: Array<{ key: string; text: string }>): Promise<void> {
+    await this.loadNotices();
+    const bookKey = `book:${this.currentDay}:${Object.values(state.positions).map(position => `${position.symbol}:${position.qty}`).sort().join('|')}`;
+    const jobs = this.sentNotices.has(bookKey) ? alerts : [{
+      key: bookKey,
+      text: formatHybridBookNotice({
+        positions: Object.values(state.positions),
+        equity: state.accountEquity,
+        dayPnl: state.currentDayPnl,
+      }),
+    }, ...alerts];
+    for (const job of jobs) {
+      if (this.sentNotices.has(job.key)) continue;
+      try {
+        const ids = await sendHybridTelegram(job.text);
+        if (!ids.length) return;
+        this.sentNotices.add(job.key);
+        await fs.writeFile(this.noticeFile(), JSON.stringify({ keys: [...this.sentNotices] }));
+        console.log(`[HybridLiveWorker] telegram_sent ${job.key} ${ids.join(',')}`);
+      } catch (error) {
+        console.error('[HybridLiveWorker] telegram_error', error instanceof Error ? error.message : error);
+        return;
+      }
+    }
   }
 }
 

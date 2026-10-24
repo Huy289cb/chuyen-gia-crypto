@@ -1,3 +1,13 @@
+<!-- roi-hybrid-live-e4dfb8d-restart-20261024 -->
+# Hiện hành 24/10 11:04 — worker Pha 2 bản e4dfb8d đang giám sát 2 vị thế
+
+`git pull` đã lên `e4dfb8d`. `npm run build` xong. PM2 `crypto-hybrid-live` chạy `dist/portfolio/hybrid-worker.js` từ `backend/ecosystem.hybrid-live.config.cjs`, pid 591874, online. `crypto-worker` và `crypto-portfolio-live` vẫn stopped.
+
+Sàn lúc 11:04 ICT: equity 31,38639119, available 26,340885. `1000PEPEUSDT` 5470 @ 0,0045283, mark 0,00459993, SL 0,003984904. `TIAUSDT` 46 @ 0,5361, mark 0,54816562, SL 0,471768. Không mua thêm. Cầu chì chưa gài: mốc ngày 31,40291097 tại lúc restart, PnL ngày −0,0165, trần 12 USDT. Dừng lỗ 12% tính từ giá vào trên sàn.
+
+11:13 ICT: worker gửi Telegram bản vị thế đang giữ (message 1154). Cùng đường gửi sẽ báo khi chạm dừng lỗ 12% hoặc cầu chì 12 USDT. Mỗi bản vị thế một tin mỗi ngày, không lặp mỗi nhịp.
+<!-- /roi-hybrid-live-e4dfb8d-restart-20261024 -->
+
 <!-- roi-aggressive-100u-phase2-live-mandate-20261024 -->
 # Hiện hành 24/10 10:30 — Triển khai Pha 2 Multi-Sleeve Hybrid Live: crypto-hybrid-live ONLINE, 2 vị thế Momentum đã khớp
 
