@@ -1,5 +1,27 @@
+<!-- roi-aggressive-100u-phase2-live-mandate-20261024 -->
+# Hiện hành 24/10 10:30 — Triển khai Pha 2 Multi-Sleeve Hybrid Live: crypto-hybrid-live ONLINE, 2 vị thế Momentum đã khớp
+
+Chủ tài khoản ban hành chỉ thị: Phê chuẩn vận hành Pha 2 Multi-Sleeve Hybrid theo quy mô vốn thiết kế 100 USDT trên tài khoản live.
+1. **Trạng thái thực thi sàn (Binance Futures)**:
+   - Worker live `crypto-hybrid-live` đã online dưới sự giám sát của PM2.
+   - Hai vị thế Sleeve 1 (Macro Momentum) đã khớp thành công:
+     * `1000PEPEUSDT`: 5.470 @ 0,0045283 (~24,77 USDT)
+     * `TIAUSDT`: 46 @ 0,5361 (~24,66 USDT)
+     * Tổng vị thế momentum: ~49,43 USDT.
+   - Sleeve 2 (BTC Grid Mean-Reversion): Đang chờ kích hoạt khi BTC giảm sâu dưới 10-EMA theo bước giá 2%/tầng; Crash Gate 6% bảo vệ đóng băng khi có sập nguồn.
+   - Worker cũ `crypto-portfolio-live` đã tắt theo đúng quy trình an toàn.
+2. **Quản trị rủi ro & Cắt lỗ**:
+   - Dừng lỗ vị thế: 12% mỗi vị thế altcoin (mức lỗ tối đa nếu cả 2 chạm SL là 5,93 USDT).
+   - Trần rủi ro ngày: 12.0 USDT/ngày (0 lần thủng trần suốt 1.485 ngày kiểm toán độc lập `PASS_PHASE2_AUDIT`).
+3. **Mã nguồn đồng bộ**:
+   - `backend/src/portfolio/source-hybrid.ts`: Nguồn tín hiệu Pha 2 (`PHASE2_HYBRID_MOM50_BTCGRID45_SL12_V1`).
+   - `backend/src/portfolio/policy-registry.ts`: Đã đăng ký `PHASE2_HYBRID_POLICY` (100u, cap 12u, grossCap 0.95).
+   - `backend/src/portfolio/hybrid-worker.ts`: Worker thực thi trực tiếp, kết nối LiveBroker và tự động ngắt theo SL 12% và trần 12u.
+   - `backend/ecosystem.hybrid-live.config.cjs`: Cấu hình PM2 cho `crypto-hybrid-live`.
+<!-- /roi-aggressive-100u-phase2-live-mandate-20261024 -->
+
 <!-- roi-aggressive-100u-phase2-audit-20261024 -->
-# Hiện hành 24/10 00:20 — Kiểm toán Pha 2 hoàn tất: Multi-Sleeve Hybrid đạt +276,75u (68,1%/năm), 512 ngày đạt +0,2287u/ngày, 0 lần thủng trần 12u
+# Lịch sử 24/10 00:20 — Kiểm toán Pha 2 hoàn tất: Multi-Sleeve Hybrid đạt +276,75u (68,1%/năm), 512 ngày đạt +0,2287u/ngày, 0 lần thủng trần 12u
 
 Đã kiểm toán và hoàn tất nghiên cứu thực nghiệm Pha 2 trên cả 2 kiến trúc (Multi-Sleeve Hybrid và Nến 1h Binance 2022–2026):
 1. **Multi-Sleeve Hybrid ($100 vốn, khớp nghiêm ngặt 100% Observed Close)**:

@@ -8,7 +8,7 @@ export interface PortfolioPaperConfig {
   initialCash?: Numeric; dailyLossLimitUsd?: Numeric; feeRate?: Numeric;
   slippageBps?: Numeric; leverage?: Numeric; maintenanceRate?: Numeric; closeBufferUsd?: Numeric;
   /** Absent means the original momentum policy, including its checkpoint hash. */
-  strategy?: 'momentum-v1' | 'cct-lc-b5-v1' | 'constant-direction-b5-v1' | 'macro-momentum-calibrated-v1';
+  strategy?: 'momentum-v1' | 'cct-lc-b5-v1' | 'constant-direction-b5-v1' | 'macro-momentum-calibrated-v1' | 'multi-sleeve-hybrid-v1';
   policyId?: string; sourceRevision?: string; solverRevision?: string;
   grossCap?: Numeric; bandThreshold?: Numeric;
 }
@@ -18,7 +18,7 @@ export interface SourcePortfolioTargets {
   labelTimeMs: number; sourceId: string;
   /** Explicit paper-start delay; absent in the historical source-parity schedule. */
   scheduledExecuteAtMs?: number;
-  strategy?: 'cct-lc-b5-v1' | 'constant-direction-b5-v1' | 'macro-momentum-calibrated-v1'; originalSourceId?: string;
+  strategy?: 'cct-lc-b5-v1' | 'constant-direction-b5-v1' | 'macro-momentum-calibrated-v1' | 'multi-sleeve-hybrid-v1'; originalSourceId?: string;
   policyId?: string; sourceRevision?: string;
   /** Decimal source-scaling bytes for execution; weights remains the display/source numeric view. */
   decimalWeights?: Record<string, string>;

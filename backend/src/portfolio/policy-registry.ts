@@ -3,6 +3,7 @@ import { CCT_SOURCE_REVISION } from './source-cct';
 import { CCT_PROJECTION_REVISION } from './target-projection';
 import { CONSTANT_DIRECTION_POLICY_ID, CONSTANT_DIRECTION_SOURCE_REVISION } from './source-constant-direction';
 import { MACRO_MOMENTUM_POLICY_ID, SOURCE_MACRO_MOMENTUM_REVISION } from './source-macro-momentum';
+import { HYBRID_POLICY_ID, SOURCE_HYBRID_REVISION } from './source-hybrid';
 
 export const CCT_PAPER_POLICY = Object.freeze({
   id: 'CCT_LC_B5_S6_BUFFER11_V1', strategy: 'cct-lc-b5-v1' as const,
@@ -26,12 +27,21 @@ export const MACRO_MOMENTUM_CALIBRATED_POLICY = Object.freeze({
   initialCash: '100', dailyLossLimitUsd: '12', leverage: '10', maintenanceRate: '0.005',
 } as const);
 
-export type PortfolioPaperPolicyId = 'momentum-v1' | typeof CCT_PAPER_POLICY.id | typeof CONSTANT_DIRECTION_POLICY.id | typeof MACRO_MOMENTUM_CALIBRATED_POLICY.id;
+/** Phase 2 Multi-Sleeve Hybrid policy: $50 momentum + $45 BTC grid, daily loss cap 12u */
+export const PHASE2_HYBRID_POLICY = Object.freeze({
+  id: HYBRID_POLICY_ID, strategy: 'multi-sleeve-hybrid-v1' as const,
+  sourceRevision: SOURCE_HYBRID_REVISION, solverRevision: CCT_PROJECTION_REVISION,
+  grossCap: '0.95', bandThreshold: '0.2', closeBufferUsd: '5.9',
+  initialCash: '100', dailyLossLimitUsd: '12', leverage: '10', maintenanceRate: '0.005',
+} as const);
+
+export type PortfolioPaperPolicyId = 'momentum-v1' | typeof CCT_PAPER_POLICY.id | typeof CONSTANT_DIRECTION_POLICY.id | typeof MACRO_MOMENTUM_CALIBRATED_POLICY.id | typeof PHASE2_HYBRID_POLICY.id;
 export function normalizePortfolioPaperPolicy(value?: string): PortfolioPaperPolicyId {
   if (value === undefined || value === '' || value === 'momentum-v1') return 'momentum-v1';
   if (value === CCT_PAPER_POLICY.id || value === CCT_PAPER_POLICY.strategy) return CCT_PAPER_POLICY.id;
   if (value === CONSTANT_DIRECTION_POLICY.id || value === CONSTANT_DIRECTION_POLICY.strategy) return CONSTANT_DIRECTION_POLICY.id;
   if (value === MACRO_MOMENTUM_CALIBRATED_POLICY.id || value === MACRO_MOMENTUM_CALIBRATED_POLICY.strategy) return MACRO_MOMENTUM_CALIBRATED_POLICY.id;
+  if (value === PHASE2_HYBRID_POLICY.id || value === PHASE2_HYBRID_POLICY.strategy) return PHASE2_HYBRID_POLICY.id;
   throw new Error(`Unknown portfolio paper policy: ${value}`);
 }
 
@@ -48,5 +58,10 @@ export function buildCctPaperConfig(filters: Record<string, SymbolFilter>,
 export function buildMacroMomentumCalibratedConfig(filters: Record<string, SymbolFilter>,
   costs: { feeRate?: Numeric; slippageBps?: Numeric } = {}): PortfolioPaperConfig {
   const { id, ...policy } = MACRO_MOMENTUM_CALIBRATED_POLICY;
+  return { ...policy, policyId: id, filters, feeRate: costs.feeRate ?? '0.0007', slippageBps: costs.slippageBps ?? '2' };
+}
+export function buildPhase2HybridConfig(filters: Record<string, SymbolFilter>,
+  costs: { feeRate?: Numeric; slippageBps?: Numeric } = {}): PortfolioPaperConfig {
+  const { id, ...policy } = PHASE2_HYBRID_POLICY;
   return { ...policy, policyId: id, filters, feeRate: costs.feeRate ?? '0.0007', slippageBps: costs.slippageBps ?? '2' };
 }
