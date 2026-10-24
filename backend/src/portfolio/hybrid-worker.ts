@@ -1,14 +1,17 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { createDefaultLiveBroker, type LiveBroker } from './live-broker';
+import { createDefaultLiveBroker, type LiveBroker, type LiveExchangeInfo } from './live-broker';
 import {
   formatHybridBookNotice,
   formatHybridBreakerNotice,
   formatHybridStopNotice,
+  formatHybridRebalanceNotice,
+  formatHybridTpNotice,
   sendHybridTelegram,
   startHybridTelegramCommandListener,
 } from './hybrid-live-notice';
+import { SOURCE_MOMENTUM_SYMBOLS } from './market-data';
 import { HYBRID_POLICY_ID } from './source-hybrid';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -17,6 +20,12 @@ const ICT_OFFSET = 7 * 3_600_000;
 const CHECK_INTERVAL_MS = 3_000;
 const DAILY_LOSS_LIMIT_USD = 12.0;
 const MOMENTUM_SL_PCT = 0.12;
+const MOMENTUM_ALLOC_USD = 25.0;
+const BTC_GRID_TICKET_USD = 15.0;
+const BTC_GRID_MAX_LEVELS = 3;
+const BTC_GRID_STEP_PCT = 0.02;
+const BTC_GRID_TP_PCT = 0.03;
+const BTC_CRASH_GATE_PCT = 0.06;
 
 export interface HybridLiveState {
   policyId: string;
@@ -30,6 +39,84 @@ export interface HybridLiveState {
   breakerLatched: boolean;
   positions: Record<string, { symbol: string; qty: number; entryPrice: number; markPrice: number; unrlPnl: number; slPrice: number }>;
   btcGridLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }>;
+  lastRebalanceUtcDay?: string;
+  daysSinceRebalance?: number;
+  nativeStopsActive?: string[];
+}
+
+interface SymbolFilterInfo {
+  stepSize: number;
+  tickSize: number;
+  minQty: number;
+  minNotional: number;
+}
+
+function formatToTick(price: number, tickSize: number): string {
+  const decimals = tickSize.toString().includes('.') ? tickSize.toString().split('.')[1].length : 0;
+  return price.toFixed(decimals);
+}
+
+function formatToStep(qty: number, stepSize: number): string {
+  const decimals = stepSize.toString().includes('.') ? stepSize.toString().split('.')[1].length : 0;
+  const floored = Math.floor(qty / stepSize) * stepSize;
+  return floored.toFixed(decimals);
+}
+
+async function fetch14dReturn(symbol: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=16`, {
+      signal: AbortSignal.timeout(6_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as Array<[number, string, string, string, string, ...unknown[]]>;
+    if (data.length < 15) return null;
+    const yesterdayClose = parseFloat(data[data.length - 2][4]);
+    const pastClose = parseFloat(data[0][4]);
+    if (pastClose <= 0 || !Number.isFinite(yesterdayClose) || !Number.isFinite(pastClose)) return null;
+    return (yesterdayClose - pastClose) / pastClose;
+  } catch {
+    return null;
+  }
+}
+
+async function computeMomentumUniverse(): Promise<Array<{ symbol: string; score: number }>> {
+  const results: Array<{ symbol: string; score: number }> = [];
+  const chunkSize = 5;
+  for (let i = 0; i < SOURCE_MOMENTUM_SYMBOLS.length; i += chunkSize) {
+    const chunk = SOURCE_MOMENTUM_SYMBOLS.slice(i, i + chunkSize);
+    const chunkRes = await Promise.all(
+      chunk.map(async (sym) => {
+        const ret = await fetch14dReturn(sym);
+        return ret !== null ? { symbol: sym, score: ret } : null;
+      })
+    );
+    for (const r of chunkRes) {
+      if (r && r.score >= 0.02) results.push(r);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  results.sort((a, b) => b.score - a.score);
+  return results;
+}
+
+async function fetchBtcGridSignal(): Promise<{ ema10: number; oneDayReturn: number; crashGateTripped: boolean }> {
+  try {
+    const res = await fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=12', {
+      signal: AbortSignal.timeout(6_000),
+    });
+    if (!res.ok) return { ema10: 0, oneDayReturn: 0, crashGateTripped: false };
+    const data = (await res.json()) as Array<[number, string, string, string, string, ...unknown[]]>;
+    if (data.length < 11) return { ema10: 0, oneDayReturn: 0, crashGateTripped: false };
+    const closes = data.slice(-11, -1).map((k) => parseFloat(k[4]));
+    const yesterdayClose = closes[closes.length - 1];
+    const dayBeforeYesterday = closes[closes.length - 2];
+    const oneDayReturn = (yesterdayClose - dayBeforeYesterday) / dayBeforeYesterday;
+    const ema10 = closes.reduce((sum, v) => sum + v, 0) / closes.length;
+    const crashGateTripped = oneDayReturn < -BTC_CRASH_GATE_PCT;
+    return { ema10, oneDayReturn, crashGateTripped };
+  } catch {
+    return { ema10: 0, oneDayReturn: 0, crashGateTripped: false };
+  }
 }
 
 export class HybridLiveWorker {
@@ -43,9 +130,18 @@ export class HybridLiveWorker {
   private noticesLoaded = false;
   private lastState: HybridLiveState | null = null;
   private stopTelegramListener: (() => void) | null = null;
+  private exchangeFilters: Record<string, SymbolFilterInfo> = {};
+  private daysSinceRebalance = 0;
+  private lastRebalanceUtcDay = '';
+  private btcGridLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }> = [];
+  private tickCounter = 0;
 
   constructor() {
-    this.broker = createDefaultLiveBroker({ requestTimeoutMs: 5_000, retryReads: true });
+    this.broker = createDefaultLiveBroker({
+      requestTimeoutMs: 5_000,
+      retryReads: true,
+      executionOwner: process.env.PORTFOLIO_EXECUTION_OWNER?.trim() || HYBRID_POLICY_ID,
+    });
     this.stateDir = path.resolve(__dirname, '../../data/portfolio-live', HYBRID_POLICY_ID);
   }
 
@@ -56,7 +152,9 @@ export class HybridLiveWorker {
     this.running = true;
     this.setupSignalHandlers();
 
+    await this.loadExchangeFilters();
     await this.restoreDayAnchor();
+
     // Start interactive Telegram listener (/status, /report, /lenh, /pnl)
     this.stopTelegramListener = startHybridTelegramCommandListener(() => this.lastState);
 
@@ -98,35 +196,282 @@ export class HybridLiveWorker {
     return new Date(Date.now() + ICT_OFFSET).toISOString().slice(0, 10);
   }
 
-  /** Keep the 12 USDT day anchor across a restart. A fresh read would zero today's loss. */
+  private async loadExchangeFilters(): Promise<void> {
+    try {
+      const info: LiveExchangeInfo = await this.broker.getExchangeInfo();
+      for (const s of info.symbols) {
+        const lot = s.filters.find((f: Record<string, unknown>) => f.filterType === 'LOT_SIZE') as Record<string, string> | undefined;
+        const price = s.filters.find((f: Record<string, unknown>) => f.filterType === 'PRICE_FILTER') as Record<string, string> | undefined;
+        const notional = s.filters.find((f: Record<string, unknown>) => f.filterType === 'MIN_NOTIONAL') as Record<string, string> | undefined;
+        if (lot && price) {
+          this.exchangeFilters[s.symbol] = {
+            stepSize: parseFloat(lot.stepSize || '1'),
+            tickSize: parseFloat(price.tickSize || '0.0001'),
+            minQty: parseFloat(lot.minQty || '1'),
+            minNotional: parseFloat(notional?.notional || '5.0'),
+          };
+        }
+      }
+      console.log(`[HybridLiveWorker] Loaded exchange filters for ${Object.keys(this.exchangeFilters).length} symbols.`);
+    } catch (err) {
+      console.warn('[HybridLiveWorker] Could not load exchange filters on start:', err);
+    }
+  }
+
+  /** Keep the 12 USDT day anchor, rebalance state, and grid state across restarts. */
   private async restoreDayAnchor(): Promise<void> {
     try {
       const raw = JSON.parse(await fs.readFile(path.join(this.stateDir, 'worker-status.json'), 'utf8')) as HybridLiveState;
       const observed = Date.parse(raw.lastObservedAt);
+      if (Array.isArray(raw.btcGridLevels)) {
+        this.btcGridLevels = raw.btcGridLevels;
+      }
+      if (typeof raw.lastRebalanceUtcDay === 'string') {
+        this.lastRebalanceUtcDay = raw.lastRebalanceUtcDay;
+      }
+      if (typeof raw.daysSinceRebalance === 'number') {
+        this.daysSinceRebalance = raw.daysSinceRebalance;
+      }
       if (!Number.isFinite(observed) || !Number.isFinite(raw.dayStartEquity) || raw.dayStartEquity <= 0) return;
       const observedDay = new Date(observed + ICT_OFFSET).toISOString().slice(0, 10);
       if (observedDay !== this.getUtcDay()) return;
       this.currentDay = observedDay;
       this.dayStartEquity = raw.dayStartEquity;
       this.breakerLatched = raw.breakerLatched === true;
-      console.log(`[HybridLiveWorker] Restored day anchor ${raw.dayStartEquity} for ${observedDay}`);
+      console.log(`[HybridLiveWorker] Restored day anchor ${raw.dayStartEquity} for ${observedDay}, daysSinceRebalance: ${this.daysSinceRebalance}`);
     } catch {
       // First boot has no status file.
     }
   }
 
+  private async syncNativeStopLoss(symbol: string, qty: number, slPrice: number): Promise<boolean> {
+    try {
+      const filter = this.exchangeFilters[symbol];
+      if (!filter) return false;
+      const openOrders = await this.broker.getOpenOrders(symbol);
+      const existingStop = openOrders.find((o) => o.type === 'STOP_MARKET');
+      if (existingStop) {
+        return true;
+      }
+      const stopPriceStr = formatToTick(slPrice, filter.tickSize);
+      const qtyStr = formatToStep(Math.abs(qty), filter.stepSize);
+      await this.broker.submitStopMarketOrder({
+        symbol,
+        side: qty > 0 ? 'SELL' : 'BUY',
+        stopPrice: stopPriceStr,
+        quantity: qtyStr,
+        clientOrderId: `sl_${symbol.toLowerCase()}_${Date.now()}`,
+        positionSide: 'BOTH',
+        reduceOnly: true,
+      });
+      console.log(`[HybridLiveWorker] Native venue STOP_MARKET placed for ${symbol}: SL=${stopPriceStr}, Qty=${qtyStr}`);
+      return true;
+    } catch (err) {
+      console.warn(`[HybridLiveWorker] Could not place native STOP_MARKET for ${symbol}:`, err instanceof Error ? err.message : err);
+      return false;
+    }
+  }
+
+  private async cancelSymbolStops(symbol: string): Promise<void> {
+    try {
+      const openOrders = await this.broker.getOpenOrders(symbol);
+      for (const o of openOrders) {
+        if (o.type === 'STOP_MARKET' && o.clientOrderId) {
+          await this.broker.cancelOrder(symbol, o.clientOrderId);
+          console.log(`[HybridLiveWorker] Cancelled open stop order for ${symbol}: ${o.clientOrderId}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[HybridLiveWorker] Failed to cancel open stop orders for ${symbol}:`, err);
+    }
+  }
+
+  private async rebalanceMomentum(): Promise<void> {
+    console.log('[HybridLiveWorker] Starting 2-day Momentum Rebalance...');
+    try {
+      const ranked = await computeMomentumUniverse();
+      const top2 = ranked.slice(0, 2).map((r) => r.symbol);
+      console.log(`[HybridLiveWorker] Rebalance Top 2 Momentum: ${top2.join(', ')}`);
+
+      const positions = await this.broker.getPositions();
+      const activePositions = positions.filter((p) => Math.abs(parseFloat(p.positionAmt)) > 0);
+      const activeSymbols = activePositions.map((p) => p.symbol);
+
+      const closedSymbols: string[] = [];
+      const openedPositions: Array<{ symbol: string; qty: number; entryPrice: number }> = [];
+
+      // 1. Close symbols that fell out of Top 2 (excluding BTC if held in grid)
+      for (const p of activePositions) {
+        if (p.symbol === 'BTCUSDT' && this.btcGridLevels.length > 0) continue;
+        if (!top2.includes(p.symbol)) {
+          const qty = parseFloat(p.positionAmt);
+          console.log(`[HybridLiveWorker] Rebalance: Rotating out of ${p.symbol} (no longer in Top 2)`);
+          await this.broker.submitMarketOrder({
+            symbol: p.symbol,
+            side: qty > 0 ? 'SELL' : 'BUY',
+            quantity: Math.abs(qty).toString(),
+            clientOrderId: `reb_close_${p.symbol.toLowerCase()}_${Date.now()}`,
+            positionSide: 'BOTH',
+            reduceOnly: true,
+          });
+          await this.cancelSymbolStops(p.symbol);
+          closedSymbols.push(p.symbol);
+        }
+      }
+
+      // 2. Open new symbols in Top 2
+      for (const sym of top2) {
+        if (!activeSymbols.includes(sym)) {
+          const filter = this.exchangeFilters[sym];
+          if (!filter) continue;
+          const markPrices = await this.broker.getMarkPrices(sym);
+          const mark = parseFloat(markPrices[0]?.markPrice || '0');
+          if (mark <= 0) continue;
+
+          const targetQty = MOMENTUM_ALLOC_USD / mark;
+          const qtyStr = formatToStep(targetQty, filter.stepSize);
+          const numQty = parseFloat(qtyStr);
+          if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
+            console.warn(`[HybridLiveWorker] Rebalance: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
+            continue;
+          }
+
+          console.log(`[HybridLiveWorker] Rebalance: Opening Top 2 position ${sym} Qty=${qtyStr} (~$${MOMENTUM_ALLOC_USD})`);
+          const order = await this.broker.submitMarketOrder({
+            symbol: sym,
+            side: 'BUY',
+            quantity: qtyStr,
+            clientOrderId: `reb_open_${sym.toLowerCase()}_${Date.now()}`,
+            positionSide: 'BOTH',
+          });
+          const fillPrice = parseFloat(order.avgPrice || mark.toString());
+          const slPrice = fillPrice * (1.0 - MOMENTUM_SL_PCT);
+          openedPositions.push({ symbol: sym, qty: numQty, entryPrice: fillPrice });
+
+          await this.syncNativeStopLoss(sym, numQty, slPrice);
+        }
+      }
+
+      const nextDate = new Date(Date.now() + 2 * 86_400_000 + ICT_OFFSET).toISOString().slice(0, 10);
+      const text = formatHybridRebalanceNotice({
+        closed: closedSymbols,
+        opened: openedPositions,
+        nextRebalanceDate: nextDate,
+      });
+      await sendHybridTelegram(text);
+    } catch (err) {
+      console.error('[HybridLiveWorker] Error during momentum rebalance:', err);
+    }
+  }
+
+  private async tickBtcGrid(): Promise<void> {
+    const filter = this.exchangeFilters['BTCUSDT'];
+    if (!filter) return;
+
+    try {
+      const [markPrices, btcSignal] = await Promise.all([
+        this.broker.getMarkPrices('BTCUSDT'),
+        fetchBtcGridSignal(),
+      ]);
+      const btcMark = parseFloat(markPrices[0]?.markPrice || '0');
+      if (btcMark <= 0 || btcSignal.ema10 <= 0) return;
+
+      // 1. Check Take Profit on existing active grid levels (+3.0%)
+      const survivingLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }> = [];
+      for (const lvl of this.btcGridLevels) {
+        if (btcMark >= lvl.tpPrice) {
+          console.log(`[HybridLiveWorker] BTC Grid Take Profit Triggered! Mark=${btcMark} >= TP=${lvl.tpPrice} (+${(BTC_GRID_TP_PCT * 100).toFixed(1)}%)`);
+          const qtyStr = formatToStep(lvl.qty, filter.stepSize);
+          await this.broker.submitMarketOrder({
+            symbol: 'BTCUSDT',
+            side: 'SELL',
+            quantity: qtyStr,
+            clientOrderId: `btc_grid_tp_${Date.now()}`,
+            positionSide: 'BOTH',
+            reduceOnly: true,
+          });
+          const pnl = (btcMark - lvl.entryPrice) * lvl.qty;
+          const text = formatHybridTpNotice({
+            symbol: 'BTCUSDT',
+            qty: lvl.qty,
+            exitPrice: btcMark,
+            pnl,
+          });
+          await sendHybridTelegram(text);
+        } else {
+          survivingLevels.push(lvl);
+        }
+      }
+      this.btcGridLevels = survivingLevels;
+
+      // 2. Check Crash Gate: If 1d return < -6%, freeze new entries
+      if (btcSignal.crashGateTripped) {
+        console.warn(`[HybridLiveWorker] BTC Crash Gate Tripped (${(btcSignal.oneDayReturn * 100).toFixed(2)}% < -6%)! Freezing new Grid entries.`);
+        return;
+      }
+
+      // 3. Check Dip Buy Levels (-2%, -4%, -6% under EMA10)
+      if (this.btcGridLevels.length < BTC_GRID_MAX_LEVELS) {
+        const nextLevelIndex = this.btcGridLevels.length + 1;
+        const stepPct = BTC_GRID_STEP_PCT * nextLevelIndex;
+        const dipThreshold = btcSignal.ema10 * (1.0 - stepPct);
+
+        if (btcMark <= dipThreshold) {
+          const targetQty = BTC_GRID_TICKET_USD / btcMark;
+          const qtyStr = formatToStep(targetQty, filter.stepSize);
+          const numQty = parseFloat(qtyStr);
+
+          if (numQty * btcMark >= filter.minNotional) {
+            console.log(`[HybridLiveWorker] BTC Grid Entry Level ${nextLevelIndex} Triggered: Mark=${btcMark} <= Dip=${dipThreshold.toFixed(2)} (-${(stepPct * 100).toFixed(1)}%)! Buying $${BTC_GRID_TICKET_USD}...`);
+            const order = await this.broker.submitMarketOrder({
+              symbol: 'BTCUSDT',
+              side: 'BUY',
+              quantity: qtyStr,
+              clientOrderId: `btc_grid_buy_lvl${nextLevelIndex}_${Date.now()}`,
+              positionSide: 'BOTH',
+            });
+            const entryPrice = parseFloat(order.avgPrice || btcMark.toString());
+            const tpPrice = entryPrice * (1.0 + BTC_GRID_TP_PCT);
+            this.btcGridLevels.push({ entryPrice, qty: numQty, tpPrice });
+            await sendHybridTelegram(
+              `⚡ KHỚP LƯỚI BTC TẦNG ${nextLevelIndex} (SLEEVE 2)\n` +
+              `• MUA ${qtyStr} BTC @ ${entryPrice} (~${BTC_GRID_TICKET_USD} USDT)\n` +
+              `• Chốt lời kỳ vọng: ${tpPrice.toFixed(2)} (+${(BTC_GRID_TP_PCT * 100).toFixed(1)}%)\n` +
+              `• 10-EMA hiện tại: ${btcSignal.ema10.toFixed(2)}`
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[HybridLiveWorker] Error in BTC Grid tick:', err instanceof Error ? err.message : err);
+    }
+  }
+
   private async tick(): Promise<void> {
+    this.tickCounter++;
     const today = this.getUtcDay();
     if (this.currentDay !== today) {
       console.log(`[HybridLiveWorker] Day roll: ${this.currentDay || 'init'} -> ${today}`);
+      const isFirstBoot = !this.currentDay;
       this.currentDay = today;
       this.breakerLatched = false;
+
       // Re-anchor start equity
       try {
         const acc = await this.broker.getAccount();
         this.dayStartEquity = parseFloat(acc.totalMarginBalance || acc.totalWalletBalance || '100');
       } catch {
         this.dayStartEquity = 100.0;
+      }
+
+      // Check 2-day rebalance boundary
+      if (!isFirstBoot) {
+        this.daysSinceRebalance++;
+        if (this.daysSinceRebalance >= 2 && !this.breakerLatched) {
+          await this.rebalanceMomentum();
+          this.daysSinceRebalance = 0;
+          this.lastRebalanceUtcDay = today;
+        }
       }
     }
 
@@ -162,9 +507,12 @@ export class HybridLiveWorker {
         slPrice,
       };
 
-      // -----------------------------------------------------------------------
-      // Check Sleeve 1 Per-Position Stop Loss (12%)
-      // -----------------------------------------------------------------------
+      // Ensure native STOP_MARKET order is on Binance matching engine
+      if (!this.breakerLatched && qty > 0) {
+        void this.syncNativeStopLoss(p.symbol, qty, slPrice);
+      }
+
+      // In-memory fallback check
       if (!this.breakerLatched && qty > 0 && mark <= slPrice) {
         console.warn(`[HybridLiveWorker] STOP LOSS TRIGGERED for ${p.symbol}: Mark=${mark} <= SL=${slPrice} (-${(MOMENTUM_SL_PCT * 100).toFixed(1)}%)! Closing position...`);
         try {
@@ -176,6 +524,7 @@ export class HybridLiveWorker {
             positionSide: 'BOTH',
             reduceOnly: true,
           });
+          await this.cancelSymbolStops(p.symbol);
           console.log(`[HybridLiveWorker] STOP LOSS order submitted successfully for ${p.symbol}`);
           alerts.push({ key: `sl:${today}:${p.symbol}`, text: formatHybridStopNotice({ symbol: p.symbol, mark, slPrice, sent: true }) });
         } catch (err) {
@@ -187,9 +536,7 @@ export class HybridLiveWorker {
 
     const currentDayPnl = accountEquity - this.dayStartEquity;
 
-    // -------------------------------------------------------------------------
     // Check 12 USDT Daily Circuit Breaker
-    // -------------------------------------------------------------------------
     if (!this.breakerLatched && currentDayPnl <= -DAILY_LOSS_LIMIT_USD) {
       console.error(`[HybridLiveWorker] CIRCUIT BREAKER TRIGGERED! Day PnL=${currentDayPnl.toFixed(2)} <= -${DAILY_LOSS_LIMIT_USD} USDT. Flattening ALL positions!`);
       this.breakerLatched = true;
@@ -207,6 +554,7 @@ export class HybridLiveWorker {
               positionSide: 'BOTH',
               reduceOnly: true,
             });
+            await this.cancelSymbolStops(p.symbol);
             console.log(`[HybridLiveWorker] Breaker flatten submitted for ${p.symbol}`);
           } catch (err) {
             breakerOk = false;
@@ -215,6 +563,11 @@ export class HybridLiveWorker {
         }
       }
       alerts.push({ key: `breaker:${today}`, text: formatHybridBreakerNotice(currentDayPnl, breakerOk) });
+    }
+
+    // Tick BTC Grid every 20 ticks (~60s)
+    if (!this.breakerLatched && this.tickCounter % 20 === 0) {
+      await this.tickBtcGrid();
     }
 
     // Write state
@@ -229,7 +582,9 @@ export class HybridLiveWorker {
       worstDayPnl: Math.min(currentDayPnl, 0),
       breakerLatched: this.breakerLatched,
       positions: posMap,
-      btcGridLevels: [],
+      btcGridLevels: this.btcGridLevels,
+      lastRebalanceUtcDay: this.lastRebalanceUtcDay,
+      daysSinceRebalance: this.daysSinceRebalance,
     };
 
     this.lastState = state;

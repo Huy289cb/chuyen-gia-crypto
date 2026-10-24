@@ -79,6 +79,33 @@ describe('live broker raw venue transport', () => {
     expect(transport.mock.calls[0][2]).toMatchObject({ side: 'SELL', reduceOnly: 'true' });
   });
 
+  it('submits valid stop market and limit orders with proper parameter transformation', async () => {
+    const transport = vi.fn<LiveBrokerTransport>()
+      .mockResolvedValueOnce({ ...partial, clientOrderId: 'sl-btc-1' })
+      .mockResolvedValueOnce({ ...partial, clientOrderId: 'grid-btc-1' });
+    const broker = new BinanceLiveBroker(transport);
+
+    // Stop Market
+    await broker.submitStopMarketOrder({
+      symbol: 'BTCUSDT', side: 'SELL', quantity: '0.001', stopPrice: '59000',
+      clientOrderId: 'sl-btc-1', positionSide: 'BOTH', reduceOnly: true,
+    });
+    expect(transport.mock.calls[0]).toEqual(['POST', '/fapi/v1/order', {
+      symbol: 'BTCUSDT', side: 'SELL', type: 'STOP_MARKET', stopPrice: '59000', quantity: '0.001',
+      newClientOrderId: 'sl-btc-1', positionSide: 'BOTH', newOrderRespType: 'RESULT', reduceOnly: 'true',
+    }, true]);
+
+    // Limit Order
+    await broker.submitLimitOrder({
+      symbol: 'BTCUSDT', side: 'BUY', price: '58000', quantity: '0.001',
+      clientOrderId: 'grid-btc-1', positionSide: 'BOTH',
+    });
+    expect(transport.mock.calls[1]).toEqual(['POST', '/fapi/v1/order', {
+      symbol: 'BTCUSDT', side: 'BUY', type: 'LIMIT', price: '58000', quantity: '0.001',
+      timeInForce: 'GTC', newClientOrderId: 'grid-btc-1', positionSide: 'BOTH', newOrderRespType: 'RESULT',
+    }, true]);
+  });
+
   it('keeps mainnet mutation acknowledgment enforced even for an injected transport', async () => {
     vi.stubEnv('BINANCE_BASE_URL', 'https://fapi.binance.com'); vi.stubEnv('MAINNET_LIVE_TRADING_ENABLED', 'false');
     const transport = vi.fn<LiveBrokerTransport>(); const broker = new BinanceLiveBroker(transport);

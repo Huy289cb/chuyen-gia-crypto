@@ -55,6 +55,34 @@ export function formatHybridBreakerNotice(dayPnl: number, sent: boolean): string
   ].join('\n');
 }
 
+export function formatHybridRebalanceNotice(input: {
+  closed: string[];
+  opened: Array<{ symbol: string; qty: number; entryPrice: number }>;
+  nextRebalanceDate: string;
+}): string {
+  const lines = ['🔄 TÁI CÂN BẰNG ĐỊNH KỲ 2 NGÀY (PHA 2)'];
+  if (input.closed.length) {
+    lines.push(`• Đã đóng các coin rời Top 2: ${input.closed.map(coin).join(', ')}`);
+  }
+  if (input.opened.length) {
+    for (const p of input.opened) {
+      lines.push(`• Mở mới: MUA ${qtyText(p.qty)} ${coin(p.symbol)} @ ${px(p.entryPrice)}`);
+    }
+  } else {
+    lines.push('• Giữ nguyên Top 2 hiện tại.');
+  }
+  lines.push(`• Đợt tái cân bằng tiếp theo: ${input.nextRebalanceDate}`);
+  return lines.join('\n');
+}
+
+export function formatHybridTpNotice(input: { symbol: string; qty: number; exitPrice: number; pnl: number }): string {
+  return [
+    `🎯 CHỐT LỜI ${coin(input.symbol)} (SLEEVE 2 GRID)`,
+    `Đã bán ${qtyText(input.qty)} ${coin(input.symbol)} @ ${px(input.exitPrice)}.`,
+    `Lợi nhuận chốt: +${usd(input.pnl)}.`,
+  ].join('\n');
+}
+
 /** Formats response for interactive Telegram commands (/status, /report, /lenh, /pnl, /help) */
 export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveState | null): string {
   const cmd = rawCmd.trim().replace(/^\//, '').split(/\s+/)[0]?.toLowerCase() || '';

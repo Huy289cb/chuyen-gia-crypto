@@ -52,6 +52,14 @@ export interface LiveMarketOrderRequest {
   symbol: string; side: 'BUY' | 'SELL'; quantity: string; clientOrderId: string;
   positionSide: 'BOTH' | 'LONG' | 'SHORT'; reduceOnly?: boolean;
 }
+export interface LiveStopMarketOrderRequest {
+  symbol: string; side: 'BUY' | 'SELL'; stopPrice: string; quantity: string; clientOrderId: string;
+  positionSide: 'BOTH' | 'LONG' | 'SHORT'; reduceOnly?: boolean;
+}
+export interface LiveLimitOrderRequest {
+  symbol: string; side: 'BUY' | 'SELL'; price: string; quantity: string; clientOrderId: string;
+  positionSide: 'BOTH' | 'LONG' | 'SHORT'; timeInForce?: 'GTC' | 'IOC' | 'FOK' | 'GTX'; reduceOnly?: boolean;
+}
 export type LiveBrokerTransport = (
   method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, string | number>, signed: boolean,
 ) => Promise<unknown>;
@@ -73,6 +81,8 @@ export interface LiveBroker {
   getLeverageBrackets(symbol?: string): Promise<LiveRawRow[]>;
   queryOrder(symbol: string, clientOrderId: string): Promise<LiveOrder>;
   submitMarketOrder(order: LiveMarketOrderRequest): Promise<LiveOrder>;
+  submitStopMarketOrder(order: LiveStopMarketOrderRequest): Promise<LiveOrder>;
+  submitLimitOrder(order: LiveLimitOrderRequest): Promise<LiveOrder>;
   cancelOrder(symbol: string, clientOrderId: string): Promise<LiveOrder>;
   cancelAllOpenOrders(symbol: string): Promise<LiveRawRow>;
   setLeverage(symbol: string, leverage: number): Promise<LiveRawRow>;
@@ -312,6 +322,44 @@ export class BinanceLiveBroker implements LiveBroker {
       return result;
     });
   }
+  async submitStopMarketOrder(order: LiveStopMarketOrderRequest): Promise<LiveOrder> {
+    symbolParams(order.symbol); assertClientOrderId(order.clientOrderId);
+    if (!['BUY', 'SELL'].includes(order.side) || !['BOTH', 'LONG', 'SHORT'].includes(order.positionSide)) throw new Error('Invalid Binance stop order direction.');
+    if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(order.quantity) || !/[1-9]/.test(order.quantity)) throw new Error('Invalid Binance stop order quantity.');
+    if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(order.stopPrice) || !/[1-9]/.test(order.stopPrice)) throw new Error('Invalid Binance stop order price.');
+    if (order.reduceOnly !== undefined && typeof order.reduceOnly !== 'boolean') throw new Error('Invalid Binance reduce-only flag.');
+    if (order.positionSide !== 'BOTH' && order.reduceOnly !== undefined) throw new Error('Binance hedge mode cannot send reduceOnly.');
+    const params: Record<string, string | number> = {
+      symbol: order.symbol, side: order.side, type: 'STOP_MARKET', stopPrice: order.stopPrice, quantity: order.quantity,
+      newClientOrderId: order.clientOrderId, positionSide: order.positionSide, newOrderRespType: 'RESULT',
+      ...(order.reduceOnly === undefined ? {} : { reduceOnly: String(order.reduceOnly) }),
+    };
+    return this.call('POST', '/fapi/v1/order', params, true, value => {
+      const result = this.order(value);
+      if (result.symbol !== order.symbol || result.clientOrderId !== order.clientOrderId) throw new Error('Binance submitted stop order identity mismatch.');
+      return result;
+    });
+  }
+  async submitLimitOrder(order: LiveLimitOrderRequest): Promise<LiveOrder> {
+    symbolParams(order.symbol); assertClientOrderId(order.clientOrderId);
+    if (!['BUY', 'SELL'].includes(order.side) || !['BOTH', 'LONG', 'SHORT'].includes(order.positionSide)) throw new Error('Invalid Binance limit order direction.');
+    if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(order.quantity) || !/[1-9]/.test(order.quantity)) throw new Error('Invalid Binance limit order quantity.');
+    if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(order.price) || !/[1-9]/.test(order.price)) throw new Error('Invalid Binance limit order price.');
+    if (order.reduceOnly !== undefined && typeof order.reduceOnly !== 'boolean') throw new Error('Invalid Binance reduce-only flag.');
+    if (order.positionSide !== 'BOTH' && order.reduceOnly !== undefined) throw new Error('Binance hedge mode cannot send reduceOnly.');
+    const timeInForce = order.timeInForce ?? 'GTC';
+    if (!['GTC', 'IOC', 'FOK', 'GTX'].includes(timeInForce)) throw new Error('Invalid Binance time in force.');
+    const params: Record<string, string | number> = {
+      symbol: order.symbol, side: order.side, type: 'LIMIT', price: order.price, quantity: order.quantity,
+      timeInForce, newClientOrderId: order.clientOrderId, positionSide: order.positionSide, newOrderRespType: 'RESULT',
+      ...(order.reduceOnly === undefined ? {} : { reduceOnly: String(order.reduceOnly) }),
+    };
+    return this.call('POST', '/fapi/v1/order', params, true, value => {
+      const result = this.order(value);
+      if (result.symbol !== order.symbol || result.clientOrderId !== order.clientOrderId) throw new Error('Binance submitted limit order identity mismatch.');
+      return result;
+    });
+  }
   async cancelOrder(symbol: string, clientOrderId: string): Promise<LiveOrder> {
     assertClientOrderId(clientOrderId);
     return this.call('DELETE', '/fapi/v1/order', { ...symbolParams(symbol), origClientOrderId: clientOrderId }, true, value => this.order(value));
@@ -330,6 +378,8 @@ export interface DefaultLiveBrokerOptions {
   requestTimeoutMs?: number;
   /** Disable automatic read retries for a short, predictable monitoring cycle. Writes never retry. */
   retryReads?: boolean;
+  /** Explicit execution owner policy id. Defaults to CONSTANT_DIRECTION_B5_S6_DAILY15_V1. */
+  executionOwner?: string;
 }
 
 export function createDefaultLiveBroker(settings: DefaultLiveBrokerOptions = {}): LiveBroker {
@@ -340,7 +390,7 @@ export function createDefaultLiveBroker(settings: DefaultLiveBrokerOptions = {})
   if (settings.retryReads !== undefined && typeof settings.retryReads !== 'boolean') {
     throw new TypeError('Invalid live broker read retry setting.');
   }
-  const executionOwner = process.env.PORTFOLIO_EXECUTION_OWNER?.trim() || 'CONSTANT_DIRECTION_B5_S6_DAILY15_V1';
+  const executionOwner = settings.executionOwner?.trim() || 'CONSTANT_DIRECTION_B5_S6_DAILY15_V1';
   const options = { transformResponse: parseLiveBinanceJson, quietErrors: true,
     executionOwner,
     ...(settings.requestTimeoutMs === undefined ? {} : { timeoutMs: settings.requestTimeoutMs }) };
