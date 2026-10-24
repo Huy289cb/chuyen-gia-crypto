@@ -2,7 +2,13 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { createDefaultLiveBroker, type LiveBroker } from './live-broker';
-import { formatHybridBookNotice, formatHybridBreakerNotice, formatHybridStopNotice, sendHybridTelegram } from './hybrid-live-notice';
+import {
+  formatHybridBookNotice,
+  formatHybridBreakerNotice,
+  formatHybridStopNotice,
+  sendHybridTelegram,
+  startHybridTelegramCommandListener,
+} from './hybrid-live-notice';
 import { HYBRID_POLICY_ID } from './source-hybrid';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -12,7 +18,7 @@ const CHECK_INTERVAL_MS = 3_000;
 const DAILY_LOSS_LIMIT_USD = 12.0;
 const MOMENTUM_SL_PCT = 0.12;
 
-interface HybridLiveState {
+export interface HybridLiveState {
   policyId: string;
   status: 'active' | 'risk_latched' | 'rebalance_pending';
   lastObservedAt: string;
@@ -35,6 +41,8 @@ export class HybridLiveWorker {
   private breakerLatched = false;
   private sentNotices = new Set<string>();
   private noticesLoaded = false;
+  private lastState: HybridLiveState | null = null;
+  private stopTelegramListener: (() => void) | null = null;
 
   constructor() {
     this.broker = createDefaultLiveBroker({ requestTimeoutMs: 5_000, retryReads: true });
@@ -47,6 +55,9 @@ export class HybridLiveWorker {
 
     this.running = true;
     this.setupSignalHandlers();
+
+    // Start interactive Telegram listener (/status, /report, /lenh, /pnl)
+    this.stopTelegramListener = startHybridTelegramCommandListener(() => this.lastState);
 
     // Initial sync
     await this.tick();
@@ -69,6 +80,7 @@ export class HybridLiveWorker {
   public stop(): void {
     console.log('[HybridLiveWorker] Gracefully stopping worker...');
     this.running = false;
+    this.stopTelegramListener?.();
     process.exit(0);
   }
 
@@ -202,6 +214,7 @@ export class HybridLiveWorker {
       btcGridLevels: [],
     };
 
+    this.lastState = state;
     await fs.writeFile(path.join(this.stateDir, 'worker-status.json'), JSON.stringify(state, null, 2));
     await this.publish(state, alerts);
   }
