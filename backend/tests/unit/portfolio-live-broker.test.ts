@@ -81,7 +81,7 @@ describe('live broker raw venue transport', () => {
 
   it('submits valid stop market and limit orders with proper parameter transformation', async () => {
     const transport = vi.fn<LiveBrokerTransport>()
-      .mockResolvedValueOnce({ ...partial, clientOrderId: 'sl-btc-1' })
+      .mockResolvedValueOnce({ algoId: '2146760', clientAlgoId: 'sl-btc-1', symbol: 'BTCUSDT', algoStatus: 'NEW' })
       .mockResolvedValueOnce({ ...partial, clientOrderId: 'grid-btc-1' });
     const broker = new BinanceLiveBroker(transport);
 
@@ -90,9 +90,9 @@ describe('live broker raw venue transport', () => {
       symbol: 'BTCUSDT', side: 'SELL', quantity: '0.001', stopPrice: '59000',
       clientOrderId: 'sl-btc-1', positionSide: 'BOTH', reduceOnly: true,
     });
-    expect(transport.mock.calls[0]).toEqual(['POST', '/fapi/v1/order', {
-      symbol: 'BTCUSDT', side: 'SELL', type: 'STOP_MARKET', stopPrice: '59000', quantity: '0.001',
-      newClientOrderId: 'sl-btc-1', positionSide: 'BOTH', newOrderRespType: 'RESULT', reduceOnly: 'true',
+    expect(transport.mock.calls[0]).toEqual(['POST', '/fapi/v1/algoOrder', {
+      algoType: 'CONDITIONAL', symbol: 'BTCUSDT', side: 'SELL', type: 'STOP_MARKET', triggerPrice: '59000',
+      quantity: '0.001', workingType: 'MARK_PRICE', clientAlgoId: 'sl-btc-1', positionSide: 'BOTH', reduceOnly: 'true',
     }, true]);
 
     // Limit Order

@@ -8,6 +8,8 @@ Sàn lúc 11:04 ICT: equity 31,38639119, available 26,340885. `1000PEPEUSDT` 547
 11:13 ICT: worker gửi Telegram bản vị thế đang giữ (message 1154). Cùng đường gửi sẽ báo khi chạm dừng lỗ 12% hoặc cầu chì 12 USDT. Mỗi bản vị thế một tin mỗi ngày, không lặp mỗi nhịp.
 
 15:34 ICT: lên `061b2ac`. Worker pid 712682 trả lời `/status`, `/report`, `/lenh`, `/pnl`. Lệnh `/lenh` đã được trả lời. Mốc ngày giữ 31,12625203, không reset lúc restart. Lúc 15:34: equity 29,9103101, PnL ngày −1,2159, cầu chì chưa gài. PEPE 5470 mark 0,00438462 lỗ −0,7859. TIA 46 mark 0,54163095 lãi +0,2544. SL 12% giữ 0,003984904 và 0,471768.
+
+25/10 13:49 ICT: lên `fdb4790`. STOP_MARKET cũ bị sàn từ chối (−4120) và giá PEPE bị làm tròn về 0. Đã chuyển sang `/fapi/v1/algoOrder`. Sàn đang giữ SELL reduce-only STOP_MARKET: PEPE 5470 trigger 0,0039849, TIA 46 trigger 0,4717, cả hai NEW. Không tái cân bằng, không mua thêm. Mốc ngày 28,60665317. Equity lúc đối soát 29,17164620.
 <!-- /roi-hybrid-live-e4dfb8d-restart-20261024 -->
 
 <!-- roi-aggressive-100u-phase2-live-mandate-20261024 -->

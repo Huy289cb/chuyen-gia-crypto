@@ -82,6 +82,7 @@ export interface LiveBroker {
   queryOrder(symbol: string, clientOrderId: string): Promise<LiveOrder>;
   submitMarketOrder(order: LiveMarketOrderRequest): Promise<LiveOrder>;
   submitStopMarketOrder(order: LiveStopMarketOrderRequest): Promise<LiveOrder>;
+  cancelAlgoOrder(symbol: string, clientAlgoId: string): Promise<LiveRawRow>;
   submitLimitOrder(order: LiveLimitOrderRequest): Promise<LiveOrder>;
   cancelOrder(symbol: string, clientOrderId: string): Promise<LiveOrder>;
   cancelAllOpenOrders(symbol: string): Promise<LiveRawRow>;
@@ -330,15 +331,25 @@ export class BinanceLiveBroker implements LiveBroker {
     if (order.reduceOnly !== undefined && typeof order.reduceOnly !== 'boolean') throw new Error('Invalid Binance reduce-only flag.');
     if (order.positionSide !== 'BOTH' && order.reduceOnly !== undefined) throw new Error('Binance hedge mode cannot send reduceOnly.');
     const params: Record<string, string | number> = {
-      symbol: order.symbol, side: order.side, type: 'STOP_MARKET', stopPrice: order.stopPrice, quantity: order.quantity,
-      newClientOrderId: order.clientOrderId, positionSide: order.positionSide, newOrderRespType: 'RESULT',
+      algoType: 'CONDITIONAL', symbol: order.symbol, side: order.side, type: 'STOP_MARKET',
+      triggerPrice: order.stopPrice, quantity: order.quantity, workingType: 'MARK_PRICE',
+      clientAlgoId: order.clientOrderId, positionSide: order.positionSide,
       ...(order.reduceOnly === undefined ? {} : { reduceOnly: String(order.reduceOnly) }),
     };
-    return this.call('POST', '/fapi/v1/order', params, true, value => {
-      const result = this.order(value);
-      if (result.symbol !== order.symbol || result.clientOrderId !== order.clientOrderId) throw new Error('Binance submitted stop order identity mismatch.');
-      return result;
-    });
+    return this.call('POST', '/fapi/v1/algoOrder', params, true, value => this.stopOrder(value, order));
+  }
+  private stopOrder(value: unknown, order: LiveStopMarketOrderRequest): LiveOrder {
+    const result = row(value);
+    const orderId = result.algoId ?? result.orderId;
+    const clientOrderId = result.clientAlgoId ?? result.clientOrderId;
+    assertSafeId(orderId);
+    if (result.symbol !== order.symbol || clientOrderId !== order.clientOrderId) throw new Error('Binance submitted stop order identity mismatch.');
+    return { ...result, orderId, clientOrderId, symbol: order.symbol,
+      status: String(result.algoStatus ?? result.status ?? 'NEW'), executedQty: String(result.executedQty ?? '0') } as LiveOrder;
+  }
+  async cancelAlgoOrder(symbol: string, clientAlgoId: string): Promise<LiveRawRow> {
+    symbolParams(symbol); assertClientOrderId(clientAlgoId);
+    return this.call('DELETE', '/fapi/v1/algoOrder', { ...symbolParams(symbol), clientAlgoId }, true, row);
   }
   async submitLimitOrder(order: LiveLimitOrderRequest): Promise<LiveOrder> {
     symbolParams(order.symbol); assertClientOrderId(order.clientOrderId);

@@ -5,9 +5,15 @@ import {
   formatHybridStopNotice,
   formatHybridCommandResponse,
 } from '../../src/portfolio/hybrid-live-notice';
+import { formatToTick } from '../../src/portfolio/hybrid-worker';
 import type { HybridLiveState } from '../../src/portfolio/hybrid-worker';
 
 describe('hybrid live telegram notices', () => {
+  it('keeps a scientific tick size from rounding the stop price to zero', () => {
+    expect(formatToTick(0.003984904, 1e-7)).toBe('0.0039849');
+    expect(formatToTick(0.471768, 0.0001)).toBe('0.4717');
+  });
+
   it('names the open book, the 12% stop, and the 12 USDT breaker', () => {
     const book = formatHybridBookNotice({
       equity: 31.38639119,

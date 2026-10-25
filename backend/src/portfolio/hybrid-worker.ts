@@ -51,14 +51,22 @@ interface SymbolFilterInfo {
   minNotional: number;
 }
 
-function formatToTick(price: number, tickSize: number): string {
-  const decimals = tickSize.toString().includes('.') ? tickSize.toString().split('.')[1].length : 0;
-  return price.toFixed(decimals);
+function stepDecimals(step: number): number {
+  if (!Number.isFinite(step) || step <= 0) return 0;
+  const text = step.toFixed(12).replace(/0+$/, '').replace(/\.$/, '');
+  const dot = text.indexOf('.');
+  return dot < 0 ? 0 : text.length - dot - 1;
+}
+
+export function formatToTick(price: number, tickSize: number): string {
+  const decimals = stepDecimals(tickSize);
+  const floored = tickSize > 0 ? Math.floor(price / tickSize + 1e-9) * tickSize : price;
+  return floored.toFixed(decimals);
 }
 
 function formatToStep(qty: number, stepSize: number): string {
-  const decimals = stepSize.toString().includes('.') ? stepSize.toString().split('.')[1].length : 0;
-  const floored = Math.floor(qty / stepSize) * stepSize;
+  const decimals = stepDecimals(stepSize);
+  const floored = stepSize > 0 ? Math.floor(qty / stepSize + 1e-9) * stepSize : qty;
   return floored.toFixed(decimals);
 }
 
@@ -131,6 +139,8 @@ export class HybridLiveWorker {
   private lastState: HybridLiveState | null = null;
   private stopTelegramListener: (() => void) | null = null;
   private exchangeFilters: Record<string, SymbolFilterInfo> = {};
+  private nativeStops = new Set<string>();
+  private stopRetryAt = new Map<string, number>();
   private daysSinceRebalance = 0;
   private lastRebalanceUtcDay = '';
   private btcGridLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }> = [];
@@ -245,12 +255,16 @@ export class HybridLiveWorker {
   }
 
   private async syncNativeStopLoss(symbol: string, qty: number, slPrice: number): Promise<boolean> {
+    if (this.nativeStops.has(symbol)) return true;
+    const retryAt = this.stopRetryAt.get(symbol) ?? 0;
+    if (retryAt > Date.now()) return false;
     try {
       const filter = this.exchangeFilters[symbol];
       if (!filter) return false;
-      const openOrders = await this.broker.getOpenOrders(symbol);
-      const existingStop = openOrders.find((o) => o.type === 'STOP_MARKET');
+      const algoOrders = await this.broker.getOpenAlgoOrders(symbol);
+      const existingStop = algoOrders.find((order) => order.orderType === 'STOP_MARKET' || order.type === 'STOP_MARKET');
       if (existingStop) {
+        this.nativeStops.add(symbol);
         return true;
       }
       const stopPriceStr = formatToTick(slPrice, filter.tickSize);
@@ -260,25 +274,29 @@ export class HybridLiveWorker {
         side: qty > 0 ? 'SELL' : 'BUY',
         stopPrice: stopPriceStr,
         quantity: qtyStr,
-        clientOrderId: `sl_${symbol.toLowerCase()}_${Date.now()}`,
+        clientOrderId: `sl_${symbol.toLowerCase()}_${Date.now()}`.slice(0, 36),
         positionSide: 'BOTH',
         reduceOnly: true,
       });
+      this.nativeStops.add(symbol);
       console.log(`[HybridLiveWorker] Native venue STOP_MARKET placed for ${symbol}: SL=${stopPriceStr}, Qty=${qtyStr}`);
       return true;
     } catch (err) {
+      this.stopRetryAt.set(symbol, Date.now() + 60_000);
       console.warn(`[HybridLiveWorker] Could not place native STOP_MARKET for ${symbol}:`, err instanceof Error ? err.message : err);
       return false;
     }
   }
 
   private async cancelSymbolStops(symbol: string): Promise<void> {
+    this.nativeStops.delete(symbol);
     try {
-      const openOrders = await this.broker.getOpenOrders(symbol);
-      for (const o of openOrders) {
-        if (o.type === 'STOP_MARKET' && o.clientOrderId) {
-          await this.broker.cancelOrder(symbol, o.clientOrderId);
-          console.log(`[HybridLiveWorker] Cancelled open stop order for ${symbol}: ${o.clientOrderId}`);
+      const algoOrders = await this.broker.getOpenAlgoOrders(symbol);
+      for (const order of algoOrders) {
+        const clientAlgoId = String(order.clientAlgoId ?? order.clientOrderId ?? '');
+        if ((order.orderType === 'STOP_MARKET' || order.type === 'STOP_MARKET') && clientAlgoId) {
+          await this.broker.cancelAlgoOrder(symbol, clientAlgoId);
+          console.log(`[HybridLiveWorker] Cancelled open stop order for ${symbol}: ${clientAlgoId}`);
         }
       }
     } catch (err) {
