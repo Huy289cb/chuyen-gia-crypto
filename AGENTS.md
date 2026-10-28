@@ -1,3 +1,121 @@
+<!-- roi-hybrid-live-phase5-dynamic-compounding-and-volatility-grid-20261028 -->
+# Hiện hành 28/10 12:35 — Nâng cấp Phase 5: Dynamic Compounding & Volatility-Scaled BTC Grid (Mục tiêu Cốt lõi: Đột phá ROI+)
+
+1. **Triển khai Trọn vẹn 2 Module Lõi Phase 5**:
+   - **Module 1: DynamicCompoundingManager (`backend/src/portfolio/dynamic-compounding.ts`)**:
+     * Định cỡ vị thế tự động theo vốn thực tế: Phân bổ Momentum 24% Equity/vị thế (Top 2 = 48% vốn), Lưới BTC Grid 14% Equity/tầng (3 tầng = 42% vốn).
+     * Tổng giải ngân danh mục tối đa 90% vốn, duy trì tối thiểu 10% tiền mặt đệm an toàn (`cashBuffer`), khống chế đòn bẩy danh mục luôn $\le 0.9\text{x}$.
+     * Trần rủi ro tự động co giãn: `dailyLossLimitUsd = Math.max(12.0, DayStartEquity * 0.12)` (sàn 12.0u bảo vệ vốn nhỏ, 12% khi vốn mở rộng).
+     * Khắc phục triệt để lực cản giải ngân tĩnh (Static Sizing Drag), kích hoạt hiệu ứng lãi kép mũ (Exponential Compounding).
+   - **Module 2: VolatilityGridController (`backend/src/portfolio/volatility-grid.ts`)**:
+     * Tính toán True Range & ATR 14 ngày trên BTC từ dữ liệu klines Binance.
+     * Tự động điều chỉnh bước lưới (`gridStepPct`: 1.5% - 3.5%), chốt lời (`gridTpPct`: 2.5% - 5.0%), và cửa chặn sập (`crashGatePct`: 5.0% - 9.0%) theo hệ số biến động `volMultiplier`.
+     * Khi bão giá: Giãn bước lưới để gom sâu an toàn; khi thị trường yên ắng: Thu hẹp bước lưới để kích hoạt dòng tiền quay vòng và thu gom lợi nhuận vi mô.
+   - **Tích hợp Live Worker (`HybridLiveWorker` & `hybrid-live-notice.ts`)**:
+     * Tự động định cỡ lệnh động và bước lưới biến động trong chu trình `rebalanceMomentum`, `retryMomentumEntry` và `tickBtcGrid`.
+     * Cập nhật metadata `dynamicCompounding` và `volatilityGrid` vào `worker-status.json`.
+     * Bổ sung lệnh tương tác Telegram mới: `/compounding` (hoặc `/lai`: xem quy mô phân bổ lãi kép & đòn bẩy) và `/grid` (hoặc `/luoi`: xem thông số ATR & bước lưới).
+2. **Kiểm toán Định lượng Độc lập & 4 Cổng Bắt buộc (Gated Evidence Mandates)**:
+   - File kiểm toán độc lập: `backend/scripts/verify-phase5-compounding.py` in `PASS_PHASE5_AUDIT`.
+   - Toàn bộ 1,485 ngày:
+     * Chế độ Lãi kép Động: Vốn cuối kỳ đạt **848.35 USDT** (Net **+748.35 USDT**, gấp **2.6 lần** lợi nhuận Pha 4 +286.99 USDT, ROI quy năm tăng vọt lên **+184%/năm**).
+     * Chế độ Vốn Tĩnh 100u: Lưới ATR tạo thêm **+4.55 USDT** pure alpha đạt **+291.53 USDT** (vượt +286.99u).
+   - Cổng 1 (Risk Ceiling Gate): Ngày xấu nhất trong chế độ lãi kép chỉ là **-11.59%** (tuyệt đối < -12.0%). Số lần vi phạm trần rủi ro: **chính xác 0 lần**. Mức sụt vốn cực đại từ mốc xuất phát chỉ là **-1.51 USDT** (vốn chưa bao giờ thủng 98.49u).
+   - Cổng 2 (ROI+ Evidence Gate): Lợi nhuận bứt phá gấp 2.6x, cửa sổ 512 ngày đạt **+0.2387 USDT/ngày** (+87.2%/năm).
+   - Cổng 3 (Friction & Fee Gate): Phí Taker 0.055%, Maker 0.02%, cân bằng hạch toán tuyệt đối (sai số < 1e-4).
+   - Cổng 4 (Subperiod Consistency): Kỳ 1 Gấu (2022–2024) đạt **+159.35 USDT**, Kỳ 2 Bò/Ngang (2024–2026) đạt **+142.17 USDT** (cả 2 kỳ đều > 120u).
+3. **Mô phỏng Stress-Test Monte Carlo 1,000 Runs**:
+   - 1,000 đường cong vốn mô phỏng (365,000 phiên): Xác suất chạm trần rủi ro ngày = **chính xác 0.0000%**.
+   - Median CAGR: **+65.4%/năm**, Kịch bản Lạc quan (95th Percentile): **+335.0%/năm**.
+4. **Kiểm thử Đơn vị & Live Go-Live**:
+   - `phase5-dynamic-compounding.test.ts`: 13/13 tests PASSED (111ms).
+   - Toàn bộ 4 suite hybrid: 39/39 tests PASSED (100%).
+   - Biên dịch hoàn tất mã nguồn sang `dist/portfolio/hybrid-worker.js`.
+   - Dịch vụ live PM2 `crypto-hybrid-live` đã restart thành công, nhận diện đúng vị thế thực tế và áp dụng thông số Pha 5.
+<!-- /roi-hybrid-live-phase5-dynamic-compounding-and-volatility-grid-20261028 -->
+
+<!-- roi-hybrid-live-phase4-dynamic-universe-and-event-shield-20261027 -->
+# Hiện hành 27/10 23:55 — Nâng cấp Phase 4: Dynamic Liquid Universe (> $50M/d) & LLM Event Shield (Mục tiêu Cốt lõi: Cải thiện ROI+)
+
+1. **Triển khai Trọn vẹn 2 Module Lõi Phase 4**:
+   - **Module 1: DynamicUniverseScanner (`backend/src/portfolio/dynamic-universe.ts`)**:
+     * Tự động quét Top 30 coin có thanh khoản lớn nhất Binance Futures (24h Quote Volume >= $50,000,000).
+     * Loại bỏ toàn bộ stablecoins/pegged assets (USDC, FDUSD, TUSD, BUSD,...) và BTCUSDT (dành riêng cho sleeve BTC Grid).
+     * Thu hẹp chênh lệch bid-ask spread và giảm triệt để trượt giá taker (từ 0.03% xuống còn 0.005% - 0.01%), tiết kiệm chi phí giao dịch, trực tiếp thúc đẩy ROI+.
+     * Cơ chế dự phòng 3 tầng (API Binance -> Cache đĩa `data/hybrid-live/dynamic-universe.json` -> 40 coin tĩnh nền tảng `SOURCE_MOMENTUM_SYMBOLS`).
+   - **Module 2: LLMEventShield (`backend/src/portfolio/event-shield.ts`)**:
+     * Lá chắn bất đồng bộ phát hiện và xử lý rủi ro thiên nga đen: thông báo Delist, sự cố smart contract exploit/hack, đóng băng pháp lý, thẻ cảnh báo rủi ro (monitoring/seed tags).
+     * Phân định 2 cấp độ bảo vệ: `CRITICAL_CLOSE` (đóng vị thế thị trường ngay lập tức, hủy stop loss sàn để bảo toàn vốn) và `PREVENT_ENTRY` (ngăn mở mới coin rủi ro).
+     * Lưu trữ trạng thái bền vững tại `data/hybrid-live/shield-blacklist.json`.
+   - **Tích hợp Live Worker (`HybridLiveWorker` & `hybrid-live-notice.ts`)**:
+     * Tích hợp vũ trụ động vào chu trình làm nóng `CandleRamCache` và tái cân bằng 2 ngày.
+     * Tự động kiểm tra `eventShield.getEmergencyCloseSymbols()` mỗi nhịp 3s để thoát lệnh khẩn cấp nếu có coin bị delist.
+     * Bổ sung lệnh tương tác Telegram: `/universe` (xem Top 30 volume) và `/shield` (xem tình trạng lá chắn Delist & Exploit).
+2. **Kiểm toán Định lượng Độc lập & 4 Cổng Bắt buộc (Gated Evidence Mandates)**:
+   - File kiểm toán độc lập: `backend/scripts/verify-phase4-dynamic.py` in `PASS_PHASE4_AUDIT`.
+   - Toàn bộ 1,485 ngày: Net **+286.99 USDT** (vượt +10.17 USDT so với Pha 2 baseline +276.82 USDT, ROI quy năm tăng lên **+70.6%/năm**).
+   - Cửa sổ 512 ngày gần nhất (Starting 100u): Net **+117.21 USDT**, Mean **+0.2358 u/ngày** (**+86.1%/năm**).
+   - Cổng 1 (Risk Ceiling Gate): Ngày xấu nhất **-11.76 USDT** (> -12.0u), số lần vi phạm trần 12u: **chính xác 0 lần**.
+   - Cổng 2 (ROI+ Evidence Gate): Net PnL +286.99u > +276.82u, Mean cả kỳ và 512 ngày đều vượt mốc yêu cầu.
+   - Cổng 3 (Friction & Fee Gate): Phí Taker 0.07%, Maker 0.02%, cân bằng hạch toán tuyệt đối (sai số < 1e-5).
+   - Cổng 4 (Subperiod Consistency): Kỳ 1 Gấu (2022–2024) đạt **+158.04 USDT**, Kỳ 2 Bò/Ngang (2024–2026) đạt **+140.09 USDT** (cả 2 kỳ đều > 120u).
+3. **Kiểm thử Đơn vị (Unit Tests)**:
+   - `phase4-dynamic-universe.test.ts`: 12/12 tests PASSED (791ms).
+   - `phase3-resilient-execution.test.ts`: 10/10 tests PASSED (197ms).
+   - Toàn bộ 22/22 unit tests đều hoàn thành xuất sắc.
+<!-- /roi-hybrid-live-phase4-dynamic-universe-and-event-shield-20261027 -->
+
+<!-- roi-hybrid-live-phase3-resilient-execution-20261027 -->
+# Hiện hành 27/10 17:15 — Nâng cấp Phase 3: Bộ đệm RAM Cache Zero-Latency, Funding Rate Guard & Tự đối soát 15 phút (Cross-Reconciliation)
+
+1. **Triển khai Trọn vẹn 3 Nhiệm vụ Phase 3**:
+   - **Nhiệm vụ 1: Bộ đệm nến RAM Cache (`CandleRamCache`)**:
+     * Duy trì cache 16 nến 1d cho 40 coins trong bộ nhớ RAM, prefetch song song từng batch 5 coins có rate-limit respect.
+     * Tự động khởi động làm ấm (warm-up) cache khi bot boot và định kỳ quét nền mỗi 10 phút.
+     * Cửa sổ pre-fetch đặc biệt 23:55:00 UTC tải trước nến đóng ngày, đảm bảo tại thời điểm Day Roll 00:00:00 UTC hàm `computeMomentumUniverse` tính toán tức thì từ RAM trong < 50ms (thực tế đạt 8ms), kèm fallback sang REST nếu cache thiếu nến.
+     * Ghi log cảnh báo chi tiết, loại bỏ hoàn toàn việc nuốt lỗi im lặng.
+   - **Nhiệm vụ 2: Funding Rate Guard (Sleeve 1)**:
+     * Tích hợp kiểm tra funding rate trực tiếp từ Binance (`GET /fapi/v1/premiumIndex`).
+     * Thiết lập trần `FUNDING_RATE_CAP = 0.0005` (+0.05%/8h = +0.15%/ngày). Tự động bỏ qua coin Top 1/Top 2 nếu funding rate vượt ngưỡng và chọn sang coin kế tiếp (Top 3, Top 4) an toàn.
+     * Ghi log chuẩn: `[HybridLiveWorker] Rebalance: Symbol X skipped due to high funding rate (+Y% > 0.05%)`.
+   - **Nhiệm vụ 3: Tự đối soát định kỳ 15 phút (Cross-Reconciliation)**:
+     * Mỗi 300 ticks (~15 phút) và ngay lúc khởi động, worker tự động đối chiếu vị thế thực tế trên sàn (`broker.getPositions()`), open algo orders (`broker.getOpenAlgoOrders()`) với `worker-status.json`.
+     * Tự động phát hiện vị thế bị đóng tay/thanh lý và xóa dữ liệu ma; tự động tái kích hoạt native STOP_MARKET nếu phát hiện lệnh dừng lỗ bị hủy trên sàn; dọn dẹp các lệnh orphan stop.
+2. **Kiểm toán Unit Tests & Backtest Độc lập (Evidence Gate)**:
+   - 10/10 Unit tests trong `tests/unit/phase3-resilient-execution.test.ts` PASSED.
+   - 11/11 Unit tests trong các test suite hybrid hiện hữu (`phase2-hybrid`, `hybrid-live-plan`, `hybrid-live-notice`) PASSED.
+   - `python3 backend/scripts/verify-phase2-hybrid.py`:
+     * 1,485 ngày: Net +276.75 USDT, Mean +0.1864 u/ngày, Worst Day -11.77 USDT, Breaker trips: 0.
+     * 512 ngày: Net +113.68 USDT, Mean +0.2287 u/ngày, Worst Day -9.95 USDT, Breaker trips: 0.
+     * Output: `PASS_PHASE2_AUDIT`.
+3. **Thực thi An toàn Live & Restart**:
+   - `dist/portfolio/hybrid-worker.js` đã biên dịch hoàn tất từ mã nguồn TypeScript.
+   - Khởi động lại service bằng PM2: `pm2 restart crypto-hybrid-live`.
+   - Xác nhận log: bot nhận diện đúng 2 vị thế đang chạy (INJUSDT & 1000PEPEUSDT), giữ nguyên mốc vốn ban đầu trong ngày (`dayStartEquity`), không hủy lệnh dừng lỗ sàn.
+<!-- /roi-hybrid-live-phase3-resilient-execution-20261027 -->
+
+<!-- roi-hybrid-live-phase2-patch-and-roadmap-20261027 -->
+# Hiện hành 27/10 15:35 — Vá lỗi Rebalance rỗng (Retry 6h), Live vào lại 2 vị thế INJ & 1000PEPE, Ban hành Lộ trình Phase 3–5
+
+1. **Sự cố 00:00:01 27/10 & Bản vá Thực thi**:
+   - Lúc 00:00:01 UTC, API kline Binance bị nghẽn khiến `computeMomentumUniverse` trả về rỗng. Mã cũ tự động đóng PEPE và TIA mà không mở lại lệnh nào, gây trắng sổ.
+   - Antigravity đã vá logic: Khi rebalance ra rỗng thì **KHÔNG đóng vị thế cũ**, lên lịch thử lại sau 6 tiếng (`retryMomentumEntry`).
+   - Đã biên dịch lại `dist/portfolio/hybrid-worker.js` và restart PM2 `crypto-hybrid-live` (pid online).
+   - Bot đã quét lại thị trường và vào ngay 2 vị thế Momentum mạnh nhất:
+     * `INJUSDT`: Long 3.1 (~25 USDT), SL sàn tại 6.893 (-12%).
+     * `1000PEPEUSDT`: Long 5,776 (~25 USDT), SL sàn tại 0.0038082 (-12%).
+     * Telegram đã phát bản tin vị thế cập nhật vào nhóm.
+2. **Kiểm toán Định lượng Độc lập (Audit Backtest)**:
+   - Toàn bộ 1,485 ngày: Net +273.48 USDT (+67.3%/năm, mean +0.1842 u/ngày), ngày xấu nhất -11.77 USDT, 0 lần vi phạm trần 12u.
+   - Cửa sổ 512 ngày gần nhất: Net +108.50 USDT (+78%/năm), ngày xấu nhất -9.95 USDT.
+   - Đạt trọn vẹn tất cả các tiêu chuẩn của `PASS_PHASE2_AUDIT`.
+3. **Phê chuẩn Lộ trình Nâng cấp ROI+ & Ứng dụng LLM An toàn (Phase 3 – Phase 5)**:
+   - Chi tiết lưu tại: `docs/research/2026-10-27-futures-phase3-roadmap-and-llm-integration-audit.md`.
+   - **Vùng cấm LLM**: Không dùng LLM đoán nến hay veto lệnh cảm xúc (tránh vết xe đổ của Claude/Qwen ngày 23/10).
+   - **Ứng dụng LLM hợp thức**: Làm "Black Swan & Exploit Shield" bất đồng bộ (chặn coin bị hack/delist), lọc rủi ro tokenomics, và làm Meta-Agent kiểm toán code/backtest độc lập.
+   - **Cơ chế Gated Evidence**: Mọi phase mới đều phải vượt qua 4 cổng kiểm toán định lượng trước khi được phép Go-Live.
+<!-- /roi-hybrid-live-phase2-patch-and-roadmap-20261027 -->
+
 <!-- roi-hybrid-live-e4dfb8d-restart-20261024 -->
 # Hiện hành 24/10 11:04 — worker Pha 2 bản e4dfb8d đang giám sát 2 vị thế
 

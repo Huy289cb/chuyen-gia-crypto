@@ -47,10 +47,10 @@ export function formatHybridStopNotice(input: { symbol: string; mark: number; sl
   ].join('\n');
 }
 
-export function formatHybridBreakerNotice(dayPnl: number, sent: boolean): string {
+export function formatHybridBreakerNotice(dayPnl: number, sent: boolean, limitUsd = 12.0): string {
   return [
     '🚨 CẦU CHÌ NGÀY',
-    `Lãi/lỗ ngày ${usd(dayPnl, true)}, chạm trần 12 USDT.`,
+    `Lãi/lỗ ngày ${usd(dayPnl, true)}, chạm trần ${usd(limitUsd)}.`,
     sent ? 'Đã gửi lệnh đóng toàn bộ.' : 'Gửi lệnh đóng thất bại. Worker sẽ thử lại.',
   ].join('\n');
 }
@@ -83,6 +83,16 @@ export function formatHybridTpNotice(input: { symbol: string; qty: number; exitP
   ].join('\n');
 }
 
+function formatTimeIct(iso?: string): string {
+  if (!iso) return 'vừa xong';
+  try {
+    const d = new Date(Date.parse(iso) + 7 * 3_600_000);
+    return d.toISOString().slice(11, 19) + ' ICT';
+  } catch {
+    return 'vừa xong';
+  }
+}
+
 /** Formats response for interactive Telegram commands (/status, /report, /lenh, /pnl, /help) */
 export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveState | null): string {
   const cmd = rawCmd.trim().replace(/^\//, '').split(/\s+/)[0]?.toLowerCase() || '';
@@ -103,6 +113,8 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
         `• Vốn sàn (Equity): ${usd(state.accountEquity)}`,
         `• Khả dụng (Available): ${usd(state.availableBalance)}`,
         `• Lãi/lỗ hôm nay: ${usd(state.currentDayPnl, true)}`,
+        `• Lãi/lỗ vị thế mở: ${usd(totalUnrl, true)}`,
+        `• Cập nhật: ${formatTimeIct(state.lastObservedAt)}`,
         `• Cầu chì ngày: 12 USDT ${state.breakerLatched ? '(ĐÃ CHẠM)' : '(An toàn)'}`,
         `• Vị thế đang giữ: ${positions.length} lệnh (${positions.map(p => coin(p.symbol)).join(', ') || 'trống'})`,
       ].join('\n');
@@ -114,7 +126,8 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'positions': {
       const lines = [
         '📊 BÁO CÁO VỊ THẾ PHA 2',
-        `Vốn: ${usd(state.accountEquity)} | Lãi/lỗ ngày: ${usd(state.currentDayPnl, true)}`,
+        `Vốn: ${usd(state.accountEquity)} | Lãi/lỗ ngày: ${usd(state.currentDayPnl, true)} | Chưa chốt: ${usd(totalUnrl, true)}`,
+        `Cập nhật lúc: ${formatTimeIct(state.lastObservedAt)}`,
         '',
         'Các lệnh đang giữ:',
       ];
@@ -145,13 +158,85 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
       ].join('\n');
     }
 
+    case 'universe':
+    case 'vutru': {
+      const du = state.dynamicUniverse;
+      if (!du) {
+        return '🌐 VŨ TRỤ GIAO DỊCH (PHASE 4):\n• Đang sử dụng 40 symbols mặc định.';
+      }
+      return [
+        '🌐 VŨ TRỤ GIAO DỊCH ĐỘNG (PHASE 4)',
+        `• Số lượng lọc: Top ${du.count} Binance Futures (> $50M/ngày)`,
+        `• Cập nhật lần cuối: ${formatTimeIct(du.lastScannedAt)}`,
+        `• Top 10 thanh khoản: ${du.topSymbols.map(coin).join(', ')}`,
+        '• Tự động loại bỏ coin rác, giảm trượt giá taker về tối thiểu.',
+      ].join('\n');
+    }
+
+    case 'shield':
+    case 'lachang': {
+      const es = state.eventShield;
+      if (!es || es.blacklistCount === 0) {
+        return [
+          '🛡️ EVENT SHIELD (LÁ CHẮN THIÊN NGA ĐEN)',
+          '• Trạng thái: ✅ Đang trực chiến',
+          '• Danh sách Blacklist: 0 coin',
+          '• Không phát hiện tin tức Delist hoặc Exploit nguy hiểm.',
+        ].join('\n');
+      }
+      return [
+        '🛡️ EVENT SHIELD (LÁ CHẮN THIÊN NGA ĐEN)',
+        `• Danh sách Blacklist: ${es.blacklistCount} coin`,
+        `• Lệnh đóng khẩn cấp (Critical Close): ${es.criticalCloseCount} coin`,
+        `• Các coin bị chặn: ${es.blacklistedSymbols.map(coin).join(', ')}`,
+      ].join('\n');
+    }
+
+    case 'compounding':
+    case 'lai':
+    case 'laikep': {
+      const dc = state.dynamicCompounding;
+      if (!dc) {
+        return '📈 LÃI KÉP ĐỘNG (PHASE 5):\n• Đang sử dụng phân bổ mặc định 24% / 14%.';
+      }
+      return [
+        '📈 LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING (PHASE 5)',
+        `• Vốn tài khoản hiện hành: ${usd(state.accountEquity)}`,
+        `• Phân bổ Momentum: ${usd(dc.momentumAllocUsd)} / lệnh (tương đương ${(dc.targetMomentumPct * 100).toFixed(0)}% vốn)`,
+        `• Phân bổ BTC Grid: ${usd(dc.btcGridTicketUsd)} / tầng (tương đương ${(dc.targetGridTicketPct * 100).toFixed(0)}% vốn)`,
+        `• Trần rủi ro ngày: ${usd(dc.dailyLossLimitUsd)} (12% day-start equity, sàn 12.0u)`,
+        '• Tự động tái đầu tư lợi nhuận, giữ an toàn tỷ lệ đòn bẩy tối đa 0.9x.',
+      ].join('\n');
+    }
+
+    case 'grid':
+    case 'luoi': {
+      const vg = state.volatilityGrid;
+      if (!vg) {
+        return '⚡ LƯỚI BTC CO GIÃN THEO ATR (PHASE 5):\n• Đang sử dụng thông số lưới mặc định.';
+      }
+      return [
+        '⚡ LƯỚI BIẾN ĐỘNG BTC (PHASE 5 ATR-14 VOLATILITY GRID)',
+        `• ATR 14 ngày hiện tại: $${vg.atr14.toFixed(0)} (${vg.atr14Pct.toFixed(2)}% giá BTC)`,
+        `• Hệ số biến động (Vol Multiplier): ${vg.volMultiplier.toFixed(2)}x (${vg.regime === 'high_volatility' ? 'Biến động mạnh' : vg.regime === 'low_volatility' ? 'Thị trường yên ắng' : 'Biến động bình thường'})`,
+        `• Bước lưới co giãn: ${(vg.gridStepPct * 100).toFixed(2)}% mỗi tầng`,
+        `• Chốt lời kỳ vọng: +${(vg.gridTpPct * 100).toFixed(2)}%`,
+        `• Cửa chặn sập (Crash Gate): -${(vg.crashGatePct * 100).toFixed(2)}%`,
+        `• Các tầng đang giữ: ${state.btcGridLevels?.length || 0}/3 tầng`,
+      ].join('\n');
+    }
+
     case 'help':
     default: {
       return [
-        '🤖 CÁC LỆNH THEO DÕI BOT PHA 2:',
+        '🤖 CÁC LỆNH THEO DÕI BOT PHA 5 HYBRID:',
         '• /status — Trạng thái worker, vốn sàn & an toàn',
         '• /report (hoặc /lenh) — Chi tiết các vị thế đang mở & giá Stop Loss',
         '• /pnl — Lãi/lỗ hôm nay & lãi/lỗ chưa chốt',
+        '• /compounding (hoặc /lai) — Quy mô phân bổ vốn lãi kép động',
+        '• /grid (hoặc /luoi) — Thông số lưới BTC co giãn theo biến động ATR',
+        '• /universe — Xem Top coin thanh khoản trong vũ trụ động',
+        '• /shield — Trạng thái lá chắn Delist & Exploit',
         '• /help — Danh sách lệnh hỗ trợ',
       ].join('\n');
     }
