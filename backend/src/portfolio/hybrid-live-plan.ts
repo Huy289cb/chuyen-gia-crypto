@@ -5,7 +5,7 @@ export const HYBRID_LIVE = {
   momentumNotional: 25,
   momentumSlots: 2,
   momentumStop: 0.12,
-  momentumRebalanceDays: 2,
+  momentumRebalanceDays: 3,
   momentumLookback: 14,
   momentumMinScore: 0.02,
   gridNotional: 15,

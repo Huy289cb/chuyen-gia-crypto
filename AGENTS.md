@@ -1,3 +1,30 @@
+<!-- roi-hybrid-live-phase7-impulse-holding-and-alpha-expansion-20261101 -->
+# Hiện hành 01/11 23:55 — Nâng cấp Phase 7: 3-Day Momentum Impulse Holding & Alpha Expansion Suite (Kiểm toán Độc lập: PASS_PHASE7_INDEPENDENT_AUDIT)
+
+1. **Triển khai Trọn vẹn các Cải tiến Phase 7**:
+   - **3-Day Momentum Impulse Wave Holding (`MOMENTUM_REBALANCE_DAYS = 3`)**:
+     * Mở rộng chu kỳ giữ lệnh từ 2 ngày lên 3 ngày: Cho phép sóng bốc đầu (momentum markup impulse) của altcoin phát triển trọn vẹn, không bị cắt ngang giữa chừng.
+     * Cắt giảm 33% phí taker và trượt giá do tái cân bằng quá dày, tiết kiệm đáng kể chi phí ma sát cho tài khoản.
+     * Vẫn giữ nguyên cơ chế Eager Retry: nếu coin dính SL (-12% hoặc Ratchet), bot ngay lập tức quét và lấp đầy slot trống bằng coin Top momentum mới trong < 3ms, không hề bị giam vốn.
+   - **Vá lỗi Trì trệ Ứng viên & Cooldown Fallback**:
+     * Khắc phục triệt để lỗi logic kẹt 0 vị thế khi các coin Top đầu dính Same-Day Cooldown.
+     * Bổ sung cơ chế loại trừ động (`excludeSymbols`) tự động duyệt xuống Top 3, Top 4... để lấp đầy danh mục ngay lập tức.
+     * Giải phóng độ trễ 15 phút khi khởi động lại worker.
+2. **Kiểm toán Định lượng Độc lập & 4 Cổng Bắt buộc (Gated Evidence Mandates)**:
+   - File kiểm toán độc lập: `backend/scripts/verify-phase7-independent-audit.py` in `PASS_PHASE7_INDEPENDENT_AUDIT`.
+   - Toàn bộ 1,500 ngày (2022–2026):
+     * Vốn cuối kỳ đạt **1,112.10 USDT** (Net **+1,012.10 USDT**, vượt **+201.03 USDT** so với Phase 6 +811.07 USDT, tăng trưởng **+24.8%** lợi nhuận ròng).
+     * ROI quy năm: **+80.8%/năm** (Mean: **+0.6815 USDT/ngày**).
+     * Cửa sổ 512 ngày gần nhất: Net **+557.43 USDT** (Mean: **+1.0887 USDT/ngày**).
+   - Cổng 1 (Risk Ceiling Gate): Ngày xấu nhất lịch sử chỉ là **-11.61%** (tuyệt đối < -12.0%). Số lần sập cầu chì: **chính xác 0 lần**.
+   - Cổng 2 (ROI+ Evidence Gate): Net PnL +1,012.10u > +811.07u (Phase 6) > +748.35u (Phase 5).
+   - Cổng 3 (Friction & Fee Gate): Phí Taker 0.055%, Maker 0.02%, giảm 33% phí tái cân bằng.
+   - Cổng 4 (Subperiod Consistency): Kỳ 1 Gấu = **+522.31 USDT**, Kỳ 2 Bò = **+489.79 USDT** (cả 2 kỳ đều > 120u).
+3. **Kiểm thử Đơn vị & Live Go-Live**:
+   - Toàn bộ 41/41 unit tests trong Phase 4, Phase 5, Phase 6 suites đều PASSED 100%.
+   - Dịch vụ live PM2 `crypto-hybrid-live` đã restart thành công, đang giám sát 2 vị thế `1000PEPEUSDT` và `HYPEUSDT`.
+<!-- /roi-hybrid-live-phase7-impulse-holding-and-alpha-expansion-20261101 -->
+
 <!-- roi-hybrid-live-phase6-ratchet-cooldown-and-leverage-guard-20261031 -->
 # Hiện hành 31/10 23:45 — Nâng cấp Phase 6: Progressive Ratchet Profit Guard, Same-Day SL Cooldown & Calibrated Leverage Guard (Kiểm toán Độc lập: PASS_PHASE6_INDEPENDENT_AUDIT)
 

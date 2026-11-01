@@ -25,6 +25,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const ICT_OFFSET = 7 * 3_600_000;
 const CHECK_INTERVAL_MS = 3_000;
 const MOMENTUM_SL_PCT = 0.12;
+export const MOMENTUM_REBALANCE_DAYS = 3; // Phase 7: 3-day momentum impulse holding
 const BTC_GRID_MAX_LEVELS = 3;
 const MOMENTUM_RETRY_INTERVAL_MS = 6 * 3_600_000; // 6 hours
 export const FUNDING_RATE_CAP = 0.0005; // +0.05% per 8h (+0.15% daily)
@@ -1008,7 +1009,7 @@ export class HybridLiveWorker {
         }
       }
 
-      const nextDate = new Date(Date.now() + 2 * 86_400_000 + ICT_OFFSET).toISOString().slice(0, 10);
+      const nextDate = new Date(Date.now() + MOMENTUM_REBALANCE_DAYS * 86_400_000 + ICT_OFFSET).toISOString().slice(0, 10);
       const text = formatHybridRebalanceNotice({
         closed: closedSymbols,
         opened: openedPositions,
@@ -1133,7 +1134,7 @@ export class HybridLiveWorker {
       }
 
       if (openedPositions.length > 0) {
-        const nextDate = new Date(Date.now() + 2 * 86_400_000 + ICT_OFFSET).toISOString().slice(0, 10);
+        const nextDate = new Date(Date.now() + MOMENTUM_REBALANCE_DAYS * 86_400_000 + ICT_OFFSET).toISOString().slice(0, 10);
         const text = formatHybridRebalanceNotice({
           closed: [],
           opened: openedPositions,
@@ -1301,10 +1302,10 @@ export class HybridLiveWorker {
         this.dayStartEquity = 100.0;
       }
 
-      // Check 2-day rebalance boundary
+      // Check 3-day momentum rebalance boundary (Phase 7)
       if (!isFirstBoot) {
         this.daysSinceRebalance++;
-        if (this.daysSinceRebalance >= 2 && !this.breakerLatched) {
+        if (this.daysSinceRebalance >= MOMENTUM_REBALANCE_DAYS && !this.breakerLatched) {
           await this.rebalanceMomentum();
           this.daysSinceRebalance = 0;
           this.lastRebalanceUtcDay = today;
