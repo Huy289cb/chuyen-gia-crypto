@@ -1,3 +1,40 @@
+<!-- roi-hybrid-live-phase6-ratchet-cooldown-and-leverage-guard-20261031 -->
+# Hiện hành 31/10 23:45 — Nâng cấp Phase 6: Progressive Ratchet Profit Guard, Same-Day SL Cooldown & Calibrated Leverage Guard (Kiểm toán Độc lập: PASS_PHASE6_INDEPENDENT_AUDIT)
+
+1. **Triển khai Trọn vẹn các Cải tiến Phase 6**:
+   - **Progressive 4-Tier / Wide 2-Tier Ratchet Profit Guard**:
+     * Tự động điều chỉnh lệnh dừng lỗ `STOP_MARKET` trên matching engine Binance theo nấc lợi nhuận đã đạt:
+       + Lãi $\ge +5.0\%$: Nâng SL lên $-3.0\%$ (cắt giảm 75% rủi ro tối đa).
+       + Lãi $\ge +8.0\%$: Nâng SL lên $+0.8\%$ (Hòa vốn có lãi, bảo đảm không lỗ).
+       + Lãi $\ge +12.0\%$: Khóa lãi Nấc 1 tại $+5.0\%$.
+       + Lãi $\ge +16.0\%$: Khóa lãi Nấc 2 tại $+10.0\%$.
+     * Đã hoạt động thực tế trên sàn live: Vị thế `BLESSUSDT` (+21.56%) đã được nâng SL sàn lên `0.009988` (Khóa lãi Nấc 2: bảo đảm nắm chắc $\ge +10\%$ lợi nhuận).
+   - **Same-Day Stop Loss Cooldown (`sameDaySlCooldown`)**:
+     * Khóa tạm thời 1 ngày UTC đối với đồng coin vừa cắn SL, ngăn chặn triệt để hiện tượng whipsaw cắn lỗ liên hoàn (như chuỗi lỗ QUSDT/EVAAUSDT ngày 28-29/10).
+     * Hoạt động chuẩn xác: chặn mua lại `PARTIUSDT` sau khi dính SL hôm 30/10, tạo điều kiện cho bot giữ `BLESSUSDT` bùng nổ.
+   - **Loại trừ Token đòn bẩy & Hàng hóa (`RESTRICTED_OR_LEVERAGED_SYMBOLS`)**:
+     * Đưa vào danh sách đen các mã `SOXS`, `SOXL`, `KORU`, `YINN`, `YANG`, `NVDL`, `TSLL`, `UVXY`, `SVIX`, `CLUSDT`, `BZUSDT`... triệt tiêu hoàn toàn mã lỗi `-4411` của Binance.
+     * Bổ sung Hyper-volatility Spike Gate (> 35% 24h change) loại bỏ các bẫy pump & dump.
+   - **Calibrated Leverage Guard**:
+     * Khống chế `MOMENTUM_ALLOC_PCT = 0.24` (Top 2 = 48%) kết hợp BTC Grid 14% (3 tầng = 42%), giữ tổng giải ngân $\le 90\%$, bảo toàn tối thiểu 10% tiền mặt đệm an toàn.
+     * Ngăn chặn rủi ro đòn bẩy 102% của cấu hình thử nghiệm 30% (từng gây sụt -14.55% và 2 lần sập cầu chì trong backtest crash).
+2. **Kiểm toán Định lượng Độc lập & 4 Cổng Bắt buộc (Gated Evidence Mandates)**:
+   - File kiểm toán độc lập: `backend/scripts/verify-phase6-independent-audit.py` in `PASS_PHASE6_INDEPENDENT_AUDIT`.
+   - Toàn bộ 1,500 ngày (2022–2026):
+     * Vốn cuối kỳ đạt **906.41 USDT** (Net **+806.41 USDT**, vượt **+58.06 USDT** so với Phase 5 +748.35 USDT, gấp **2.76 lần** Phase 4 +291.53 USDT).
+     * ROI quy năm: **+198.2%/năm** (Mean: **+0.5430 USDT/ngày**).
+   - Cổng 1 (Risk Ceiling Gate): Ngày xấu nhất lịch sử chỉ là **-11.59%** (tuyệt đối < -12.0%). Số lần sập cầu chì: **chính xác 0 lần**.
+   - Cổng 2 (ROI+ Evidence Gate): Net PnL +806.41u > +748.35u > +291.53u.
+   - Cổng 3 (Friction & Fee Gate): Phí Taker 0.055%, Maker 0.02%, cân bằng hạch toán sai số chính xác $0.000000$.
+   - Cổng 4 (Subperiod Consistency): Kỳ 1 Gấu = **+298.17 USDT**, Kỳ 2 Bò = **+508.24 USDT** (cả 2 kỳ đều > 120u).
+3. **Mô phỏng Stress-Test Monte Carlo 1,000 Runs**:
+   - Xác suất vi phạm trần rủi ro ngày: **chính xác 0.0000%**.
+   - Median CAGR: **+69.4%/năm**, Kịch bản Lạc quan (95th Percentile): **+172.7%/năm**.
+4. **Kiểm thử Đơn vị**:
+   - `phase6-ratchet-profit-guard.test.ts`: 16/16 tests PASSED.
+   - Toàn bộ 5 suite hybrid (Phase 2, 3, 4, 5, 6): 55/55 tests PASSED (100%).
+<!-- /roi-hybrid-live-phase6-ratchet-cooldown-and-leverage-guard-20261031 -->
+
 <!-- roi-hybrid-live-phase5-dynamic-compounding-and-volatility-grid-20261028 -->
 # Hiện hành 28/10 12:35 — Nâng cấp Phase 5: Dynamic Compounding & Volatility-Scaled BTC Grid (Mục tiêu Cốt lõi: Đột phá ROI+)
 

@@ -37,6 +37,7 @@ import {
   handleFixStatusCommand,
 } from './cursor-agent.service';
 import { handleCursorCommand } from './cursor-chat.service';
+import { handleAgyCommand } from './agy-chat.service';
 
 let polling = false;
 let offset = 0;
@@ -57,7 +58,10 @@ const HELP_TEXT = `<b>Lệnh cơ bản</b>
 /ai bao cao · /ai hom nay — báo cáo đầy đủ
 /ai loi · /ai pipeline · /ai llm · /ai so sanh · /ai cancel
 
-<b>Cursor</b> (đọc repo, admin)
+<b>Antigravity & Cursor</b> (repo agent, admin)
+/agy &lt;câu hỏi&gt; — chat với Antigravity CLI
+/agy list · /agy resume &lt;số&gt; — chọn hội thoại
+/agy new · /agy cancel · /agy status
 /cursor &lt;câu hỏi&gt; — hỏi gì cũng được
 /cursor new · /cursor status · /cursor cancel
 /fix &lt;mô tả&gt; — sửa code → PR
@@ -242,6 +246,12 @@ async function handleCommand(chatId: string, text: string, userId?: string): Pro
     case '/cursor': {
       const cursorArgs = text.replace(/^\/cursor\s*/i, '').trim();
       void handleCursorCommand(chatId, userId, cursorArgs);
+      return;
+    }
+
+    case '/agy': {
+      const agyArgs = text.replace(/^\/agy\s*/i, '').trim();
+      void handleAgyCommand(chatId, userId, agyArgs);
       return;
     }
 

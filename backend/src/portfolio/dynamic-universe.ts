@@ -21,6 +21,23 @@ export const DEFAULT_EXCLUDED_SYMBOLS = new Set([
   'BTCUSDT', // Reserved exclusively for BTC Mean-Reversion Grid sleeve
 ]);
 
+export const RESTRICTED_OR_LEVERAGED_SYMBOLS = new Set([
+  'SOXSUSDT',
+  'SOXLUSDT',
+  'KORUUSDT',
+  'YINNUSDT',
+  'YANGUSDT',
+  'NVDLUSDT',
+  'TSLLUSDT',
+  'UVXYUSDT',
+  'SVIXUSDT',
+  'CLUSDT', // Crude Oil commodity (returns -4411)
+  'BZUSDT', // Brent Oil commodity (returns -4411)
+  'SKHYNIXUSDT', // Pre-market equity contract
+  'SNDKUSDT', // Pre-market equity contract
+  'SKHYUSDT', // Pre-market equity contract
+]);
+
 export interface DynamicUniverseEntry {
   symbol: string;
   quoteVolume: number;
@@ -43,6 +60,7 @@ export interface DynamicUniverseScannerOptions {
   minVolumeUsd?: number;
   refreshIntervalMs?: number;
   fallbackUniverse?: readonly string[];
+  allowedSymbols?: Set<string>;
 }
 
 /**
@@ -61,6 +79,7 @@ export class DynamicUniverseScanner {
   private lastUpdatedMs = 0;
   private entries: DynamicUniverseEntry[] = [];
   private refreshing = false;
+  private allowedSymbols: Set<string> | null = null;
 
   constructor(options: DynamicUniverseScannerOptions = {}) {
     this.stateDir = options.stateDir || path.resolve(__dirname, '../../data/hybrid-live');
@@ -68,8 +87,13 @@ export class DynamicUniverseScanner {
     this.minVolumeUsd = options.minVolumeUsd || MIN_QUOTE_VOLUME_USD;
     this.refreshIntervalMs = options.refreshIntervalMs || WEEKLY_REFRESH_INTERVAL_MS;
     this.fallbackUniverse = options.fallbackUniverse || SOURCE_MOMENTUM_SYMBOLS;
+    this.allowedSymbols = options.allowedSymbols || null;
     // Default initial universe to fallback
     this.activeSymbols = [...this.fallbackUniverse];
+  }
+
+  public setAllowedSymbols(symbols: Set<string> | null): void {
+    this.allowedSymbols = symbols;
   }
 
   public getUniverse(): string[] {
@@ -125,11 +149,16 @@ export class DynamicUniverseScanner {
       if (!sym.endsWith('USDT')) continue;
       if (PEGGED_OR_STABLE_SYMBOLS.has(sym)) continue;
       if (DEFAULT_EXCLUDED_SYMBOLS.has(sym)) continue;
+      if (RESTRICTED_OR_LEVERAGED_SYMBOLS.has(sym)) continue;
+      if (this.allowedSymbols && !this.allowedSymbols.has(sym)) continue;
 
       const volume = parseFloat(item.quoteVolume || '0');
       if (volume < this.minVolumeUsd) continue;
 
       const pctChange = parseFloat(item.priceChangePercent || '0');
+      // Hyper-volatility spike gate: Exclude tokens experiencing abnormal 24h pump-and-dump spikes (> 35%)
+      if (Math.abs(pctChange) > 35.0) continue;
+
       const lastPx = parseFloat(item.lastPrice || '0');
 
       qualifying.push({

@@ -12,7 +12,7 @@
  *    resulting in EXACTLY 0 circuit breaker breaches across 1,485 historical trading days.
  */
 
-export const MOMENTUM_ALLOC_PCT = 0.24;
+export const MOMENTUM_ALLOC_PCT = 0.24; // Calibrated 24% per momentum position (Top 2 = 48% max exposure, 10% cash buffer preserved)
 export const BTC_GRID_TICKET_PCT = 0.14;
 export const DAILY_LOSS_LIMIT_PCT = 0.12;
 export const BASELINE_DAILY_LOSS_LIMIT_USD = 12.0;

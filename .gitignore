@@ -128,3 +128,4 @@ backend/data/backtest-cache/
 
 # Test files
 test-cors.js
+docs/audits/

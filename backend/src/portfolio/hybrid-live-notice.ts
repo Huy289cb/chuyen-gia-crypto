@@ -3,6 +3,7 @@ import https from 'node:https';
 import { isTelegramEnabled, telegramConfig } from '../config/telegram';
 import { createLiveTelegramSender } from './live-telegram-transport';
 import type { HybridLiveState } from './hybrid-worker';
+import { handleHybridAgyCommand } from '../services/telegram/agy-chat.service';
 
 const agent = new https.Agent({ family: 4, keepAlive: true });
 
@@ -39,11 +40,69 @@ export function formatHybridBookNotice(input: {
   return lines.join('\n');
 }
 
+export function formatHybridPositionClosedNotice(input: {
+  symbol: string;
+  qty: number;
+  entryPrice: number;
+  exitPrice?: number;
+  pnl?: number;
+  reason: 'STOP_LOSS' | 'RISK_REDUCTION' | 'BREAKEVEN' | 'LOCK_PROFIT' | 'MANUAL_OR_VENUE_STOP' | 'EVENT_SHIELD';
+}): string {
+  const reasonText =
+    input.reason === 'BREAKEVEN'
+      ? '🛡️ Dừng lỗ hòa vốn (+0.8%)'
+      : input.reason === 'RISK_REDUCTION'
+      ? '🛡️ Dừng lỗ giảm rủi ro (-3.0%)'
+      : input.reason === 'LOCK_PROFIT'
+      ? '🔒 Khóa lãi bảo toàn (+5% / +10%)'
+      : input.reason === 'EVENT_SHIELD'
+      ? '🚨 Event Shield bảo vệ'
+      : '🛑 Dừng lỗ ban đầu (Stop Loss)';
+
+  const lines = [
+    `🔔 [ĐÓNG VỊ THẾ] ${coin(input.symbol)}`,
+    `• Trạng thái đóng: ${reasonText}`,
+    `• Khối lượng: ${qtyText(input.qty)} ${coin(input.symbol)}`,
+    `• Giá vào lệnh: ${px(input.entryPrice)}`,
+  ];
+  if (input.exitPrice !== undefined && input.exitPrice > 0) {
+    lines.push(`• Giá đóng ước tính: ${px(input.exitPrice)}`);
+  }
+  if (input.pnl !== undefined) {
+    lines.push(`• Lãi/lỗ lệnh: ${usd(input.pnl, true)}`);
+  }
+  lines.push(`• Đã kích hoạt Same-Day Cooldown và hủy các lệnh chờ liên quan.`);
+  return lines.join('\n');
+}
+
 export function formatHybridStopNotice(input: { symbol: string; mark: number; slPrice: number; sent: boolean }): string {
   return [
     `⚠ DỪNG LỖ ${coin(input.symbol)}`,
-    `Giá ${px(input.mark)} đã chạm dừng lỗ 12% (${px(input.slPrice)}).`,
+    `Giá ${px(input.mark)} đã chạm dừng lỗ (${px(input.slPrice)}).`,
     input.sent ? 'Đã gửi lệnh đóng.' : 'Gửi lệnh đóng thất bại. Worker sẽ thử lại.',
+  ].join('\n');
+}
+
+export function formatHybridRatchetNotice(input: {
+  symbol: string;
+  tier: 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock';
+  entryPrice: number;
+  newSlPrice: number;
+  maxReturnPct: number;
+}): string {
+  let tierTitle = '🛡️ HÒA VỐN (+0,8%)';
+  if (input.tier === 'risk_reduction') {
+    tierTitle = '🛡️ GIẢM RỦI RO (-3,0%)';
+  } else if (input.tier === 'lock1') {
+    tierTitle = '🔒 KHÓA LÃI NẤC 1 (+5,0%)';
+  } else if (input.tier === 'lock2' || input.tier === 'lock') {
+    tierTitle = '🔒 KHÓA LÃI NẤC 2 (+10,0%)';
+  }
+  return [
+    `🛡️ BẢO VỆ LỢI NHUẬN: ${tierTitle} cho ${coin(input.symbol)}`,
+    `• Giá vào: ${px(input.entryPrice)}`,
+    `• Đỉnh lãi quan sát: +${input.maxReturnPct.toFixed(1)}%`,
+    `• Mức dừng lỗ mới: ${px(input.newSlPrice)} (Đã cập nhật lệnh STOP_MARKET sàn Binance)`,
   ].join('\n');
 }
 
@@ -230,6 +289,9 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     default: {
       return [
         '🤖 CÁC LỆNH THEO DÕI BOT PHA 5 HYBRID:',
+        '• /agy <câu hỏi> — Chat với Antigravity AI trực tiếp trên máy chủ',
+        '• /agy list · /agy resume <số> — Xem & chọn hội thoại tiếp tục',
+        '• /agy new · /agy status · /agy cancel — Quản lý phiên agy',
         '• /status — Trạng thái worker, vốn sàn & an toàn',
         '• /report (hoặc /lenh) — Chi tiết các vị thế đang mở & giá Stop Loss',
         '• /pnl — Lãi/lỗ hôm nay & lãi/lỗ chưa chốt',
@@ -293,6 +355,12 @@ export function startHybridTelegramCommandListener(getState: () => HybridLiveSta
           }
 
           console.log(`[HybridTelegramListener] Received command: "${text}" from ${chatId}`);
+
+          if (text.startsWith('/agy')) {
+            void handleHybridAgyCommand(chatId, text, send);
+            continue;
+          }
+
           const reply = formatHybridCommandResponse(text, getState());
           try {
             await send(chatId, reply);

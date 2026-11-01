@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../../src/portfolio/hybrid-live-notice', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/portfolio/hybrid-live-notice')>();
+  return {
+    ...actual,
+    sendHybridTelegram: vi.fn().mockResolvedValue([12345]),
+  };
+});
+
 import {
   DynamicUniverseScanner,
   MIN_QUOTE_VOLUME_USD,

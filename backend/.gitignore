@@ -8,7 +8,11 @@ coverage/
 
 # Production
 dist/
+dist-*/
+dist.*/
 build/
+data/
+agy-settings.json
 
 # Environment variables
 .env
