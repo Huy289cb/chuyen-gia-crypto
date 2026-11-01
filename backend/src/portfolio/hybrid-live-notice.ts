@@ -166,14 +166,22 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
   switch (cmd) {
     case 'status':
     case 'tt': {
+      const ageSec = state.lastObservedAt ? Math.round((Date.now() - Date.parse(state.lastObservedAt)) / 1000) : 999;
+      const isStale = ageSec > 45;
+      const statusText = state.breakerLatched
+        ? '🚨 CẦU CHÌ ĐÃ KÍCH HOẠT'
+        : isStale
+        ? `⚠️ Worker phản hồi chậm (${ageSec}s trước)`
+        : '✅ Đang giám sát (nhịp 3s)';
+
       return [
-        '🟢 WORKER PHA 2 HYBRID LIVE',
-        `• Trạng thái: ${state.breakerLatched ? '🚨 CẦU CHÌ ĐÃ KÍCH HOẠT' : '✅ Đang giám sát (nhịp 3s)'}`,
+        '🟢 WORKER HYBRID LIVE (PHASE 6)',
+        `• Trạng thái: ${statusText}`,
         `• Vốn sàn (Equity): ${usd(state.accountEquity)}`,
         `• Khả dụng (Available): ${usd(state.availableBalance)}`,
         `• Lãi/lỗ hôm nay: ${usd(state.currentDayPnl, true)}`,
         `• Lãi/lỗ vị thế mở: ${usd(totalUnrl, true)}`,
-        `• Cập nhật: ${formatTimeIct(state.lastObservedAt)}`,
+        `• Cập nhật: ${formatTimeIct(state.lastObservedAt)}${isStale ? ` (${ageSec}s trước)` : ''}`,
         `• Cầu chì ngày: 12 USDT ${state.breakerLatched ? '(ĐÃ CHẠM)' : '(An toàn)'}`,
         `• Vị thế đang giữ: ${positions.length} lệnh (${positions.map(p => coin(p.symbol)).join(', ') || 'trống'})`,
       ].join('\n');
@@ -184,7 +192,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'lenh':
     case 'positions': {
       const lines = [
-        '📊 BÁO CÁO VỊ THẾ PHA 2',
+        '📊 BÁO CÁO VỊ THẾ HYBRID LIVE (PHASE 6)',
         `Vốn: ${usd(state.accountEquity)} | Lãi/lỗ ngày: ${usd(state.currentDayPnl, true)} | Chưa chốt: ${usd(totalUnrl, true)}`,
         `Cập nhật lúc: ${formatTimeIct(state.lastObservedAt)}`,
         '',
@@ -195,8 +203,13 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
       } else {
         for (const p of positions) {
           const stateStr = p.unrlPnl > 0 ? 'đang lãi' : p.unrlPnl < 0 ? 'đang lỗ' : 'hòa vốn';
+          let tierNote = 'SL sàn:';
+          if (p.ratchetTier === 'risk_reduction') tierNote = '🛡️ SL Giảm rủi ro (-3%):';
+          else if (p.ratchetTier === 'breakeven') tierNote = '🛡️ SL Hòa vốn (+0.8%):';
+          else if (p.ratchetTier === 'lock1') tierNote = '🔒 SL Khóa lãi 1 (+5%):';
+          else if (p.ratchetTier === 'lock2' || p.ratchetTier === 'lock') tierNote = '🔒 SL Khóa lãi 2 (+10%):';
           lines.push(`• ${p.qty > 0 ? 'MUA' : 'BÁN'} ${qtyText(p.qty)} ${coin(p.symbol)}: ${stateStr} ${usd(p.unrlPnl, true)}`);
-          lines.push(`   Giá vào: ${px(p.entryPrice)} | Hiện tại: ${px(p.markPrice)} | SL 12%: ${px(p.slPrice)}`);
+          lines.push(`   Giá vào: ${px(p.entryPrice)} | Hiện tại: ${px(p.markPrice)} | ${tierNote} ${px(p.slPrice)}`);
         }
       }
       lines.push('');
@@ -288,7 +301,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'help':
     default: {
       return [
-        '🤖 CÁC LỆNH THEO DÕI BOT PHA 5 HYBRID:',
+        '🤖 CÁC LỆNH THEO DÕI BOT HYBRID LIVE (PHASE 6):',
         '• /agy <câu hỏi> — Chat với Antigravity AI trực tiếp trên máy chủ',
         '• /agy list · /agy resume <số> — Xem & chọn hội thoại tiếp tục',
         '• /agy new · /agy status · /agy cancel — Quản lý phiên agy',

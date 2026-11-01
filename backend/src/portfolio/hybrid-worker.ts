@@ -571,8 +571,13 @@ export class HybridLiveWorker {
       console.warn('[HybridLiveWorker] Could not pre-seed activeTrackedPositions:', err);
     }
 
-    // Start interactive Telegram listener (/status, /report, /lenh, /pnl)
-    this.stopTelegramListener = startHybridTelegramCommandListener(() => this.lastState);
+    // Start interactive Telegram listener only if explicitly enabled (embedded mode)
+    if (process.env.HYBRID_EMBEDDED_TELEGRAM_LISTENER === 'true') {
+      console.log('[HybridLiveWorker] Starting embedded Telegram listener...');
+      this.stopTelegramListener = startHybridTelegramCommandListener(() => this.lastState);
+    } else {
+      console.log('[HybridLiveWorker] Embedded Telegram listener disabled (standalone crypto-telegram-bot handles polling).');
+    }
 
     // Initial tick
     await this.tick();
