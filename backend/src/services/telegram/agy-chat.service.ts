@@ -221,7 +221,8 @@ export function listAgySessions(limit = 10): AgySessionSummary[] {
           if (parsed.content) {
             const match = parsed.content.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
             const rawReq = match ? match[1] : parsed.content;
-            preview = rawReq.replace(/\s+/g, ' ').trim().slice(0, 90);
+            const cleanReq = rawReq.replace(/\[Lưu ý định dạng:[\s\S]*?\]/gi, '').trim();
+            preview = cleanReq.replace(/\s+/g, ' ').trim().slice(0, 90);
           }
         }
       } catch {
@@ -329,7 +330,8 @@ export async function runAgyCli(
   options: { conversationId?: string; isNew?: boolean } = {}
 ): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve) => {
-    const cmdArgs: string[] = ['-p', question, '--output-format', 'text'];
+    const promptWithFormatHint = `${question}\n\n[Lưu ý định dạng: Trả lời qua tin nhắn Telegram mobile. Áp dụng skill telegram-chat-style: trực quan, chia đoạn ngắn, dùng bullet point và emoji sinh động, không dùng bảng markdown rộng hay trích xuất log terminal quá dài].`;
+    const cmdArgs: string[] = ['-p', promptWithFormatHint, '--output-format', 'text'];
 
     if (options.conversationId) {
       cmdArgs.push('--conversation', options.conversationId);
