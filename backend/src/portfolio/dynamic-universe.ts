@@ -36,6 +36,10 @@ export const RESTRICTED_OR_LEVERAGED_SYMBOLS = new Set([
   'SKHYNIXUSDT', // Pre-market equity contract
   'SNDKUSDT', // Pre-market equity contract
   'SKHYUSDT', // Pre-market equity contract
+  'SQQQUSDT', // Leveraged ETF contract
+  'TQQQUSDT', // Leveraged ETF contract
+  'QUSDT', // Severe whipsaw/loss trap token (28-29/10 incident)
+  'EVAAUSDT', // Severe whipsaw/loss trap token (28-29/10 incident)
 ]);
 
 export interface DynamicUniverseEntry {

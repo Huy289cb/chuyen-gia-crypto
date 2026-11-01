@@ -13,6 +13,8 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
       expect(RESTRICTED_OR_LEVERAGED_SYMBOLS.has('YANGUSDT')).toBe(true);
       expect(RESTRICTED_OR_LEVERAGED_SYMBOLS.has('NVDLUSDT')).toBe(true);
       expect(RESTRICTED_OR_LEVERAGED_SYMBOLS.has('TSLLUSDT')).toBe(true);
+      expect(RESTRICTED_OR_LEVERAGED_SYMBOLS.has('QUSDT')).toBe(true);
+      expect(RESTRICTED_OR_LEVERAGED_SYMBOLS.has('EVAAUSDT')).toBe(true);
     });
 
     it('does not exclude standard crypto futures', () => {
