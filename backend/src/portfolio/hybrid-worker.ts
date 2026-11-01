@@ -349,7 +349,7 @@ export async function computeMomentumUniverse(
     for (const sym of missingSymbols) {
       const ret = await fetch14dReturn(sym);
       if (ret !== null) {
-        if (ret >= 0.02) results.push({ symbol: sym, score: ret / 0.05, rawReturn: ret, atr14Pct: 0.05 });
+        if (ret >= 0.02) results.push({ symbol: sym, score: ret, rawReturn: ret, atr14Pct: 0.05 });
       } else {
         console.warn(`[HybridLiveWorker] computeMomentumUniverse: REST fallback also failed for ${sym}.`);
       }
@@ -399,7 +399,8 @@ export async function selectTopMomentumSymbols(
   ranked: Array<{ symbol: string; score: number }>,
   targetCount = 2,
   logPrefix = 'Rebalance',
-  eventShield?: LLMEventShield
+  eventShield?: LLMEventShield,
+  excludeSymbols?: Set<string>
 ): Promise<string[]> {
   if (ranked.length === 0) return [];
 
@@ -407,6 +408,11 @@ export async function selectTopMomentumSymbols(
   const selected: string[] = [];
 
   for (const candidate of ranked) {
+    if (excludeSymbols?.has(candidate.symbol)) {
+      console.log(`[HybridLiveWorker] ${logPrefix}: Symbol ${candidate.symbol} skipped (in exclude/cooldown list)`);
+      continue;
+    }
+
     // Phase 4: LLM Event Shield Check
     if (eventShield?.isBlacklisted(candidate.symbol)) {
       const entry = eventShield.getEntry(candidate.symbol);
@@ -675,9 +681,8 @@ export class HybridLiveWorker {
           }
         }
       }
-      if (typeof raw.momentumRetryAt === 'number' && raw.momentumRetryAt > Date.now()) {
-        this.momentumRetryAt = raw.momentumRetryAt;
-      }
+      // On boot/restart, allow an immediate momentum retry check if a slot is vacant
+      this.momentumRetryAt = 0;
       if (!Number.isFinite(observed) || !Number.isFinite(raw.dayStartEquity) || raw.dayStartEquity <= 0) return;
       const observedDay = new Date(observed + ICT_OFFSET).toISOString().slice(0, 10);
       if (observedDay !== this.getUtcDay()) return;
@@ -902,7 +907,12 @@ export class HybridLiveWorker {
     try {
       const universe = this.dynamicUniverseScanner.getUniverse();
       const ranked = await computeMomentumUniverse(this.candleCache, universe);
-      const top2 = await selectTopMomentumSymbols(ranked, 2, 'Rebalance', this.eventShield);
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      const cooldownExclude = new Set<string>();
+      for (const [sym, date] of this.sameDaySlCooldown.entries()) {
+        if (date === todayUtc) cooldownExclude.add(sym);
+      }
+      const top2 = await selectTopMomentumSymbols(ranked, 2, 'Rebalance', this.eventShield, cooldownExclude);
       console.log(`[HybridLiveWorker] Rebalance Top 2 Momentum: ${top2.join(', ') || '(none)'}`);
 
       // If no qualifying symbols found, schedule a retry in 6h instead of sitting idle
@@ -927,9 +937,9 @@ export class HybridLiveWorker {
       const closedSymbols: string[] = [];
       const openedPositions: Array<{ symbol: string; qty: number; entryPrice: number }> = [];
 
-      // 1. Close symbols that fell out of Top 2 (excluding BTC if held in grid)
+      // 1. Close symbols that fell out of Top 2 (excluding BTC which is managed by Grid sleeve)
       for (const p of activePositions) {
-        if (p.symbol === 'BTCUSDT' && this.btcGridLevels.length > 0) continue;
+        if (p.symbol === 'BTCUSDT') continue;
         if (!top2.includes(p.symbol)) {
           const qty = parseFloat(p.positionAmt);
           console.log(`[HybridLiveWorker] Rebalance: Rotating out of ${p.symbol} (no longer in Top 2)`);
@@ -1028,10 +1038,22 @@ export class HybridLiveWorker {
 
       const universe = this.dynamicUniverseScanner.getUniverse();
       const ranked = await computeMomentumUniverse(this.candleCache, universe);
-      const top2 = await selectTopMomentumSymbols(ranked, 2, 'Momentum retry', this.eventShield);
-      console.log(`[HybridLiveWorker] Momentum retry Top 2: ${top2.join(', ') || '(none)'} (Available slots: ${remainingSlots})`);
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      const retryExclude = new Set<string>();
+      for (const p of activePositions) retryExclude.add(p.symbol);
+      for (const [sym, date] of this.sameDaySlCooldown.entries()) {
+        if (date === todayUtc) retryExclude.add(sym);
+      }
+      const topCandidates = await selectTopMomentumSymbols(
+        ranked,
+        Math.max(5, remainingSlots),
+        'Momentum retry',
+        this.eventShield,
+        retryExclude
+      );
+      console.log(`[HybridLiveWorker] Momentum retry candidates: ${topCandidates.join(', ') || '(none)'} (Available slots: ${remainingSlots})`);
 
-      if (top2.length === 0) {
+      if (topCandidates.length === 0) {
         // Still nothing — schedule another retry in 6h
         this.momentumRetryAt = Date.now() + MOMENTUM_RETRY_INTERVAL_MS;
         const retryTime = new Date(this.momentumRetryAt + ICT_OFFSET).toISOString().slice(11, 16);
@@ -1054,8 +1076,7 @@ export class HybridLiveWorker {
       const accountEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0');
 
       let openedCount = 0;
-      const todayUtc = new Date().toISOString().slice(0, 10);
-      for (const sym of top2) {
+      for (const sym of topCandidates) {
         if (openedCount >= remainingSlots) break;
         if (activeSymbols.includes(sym)) continue;
 
