@@ -151,6 +151,7 @@ export class DynamicUniverseScanner {
     for (const item of data) {
       const sym = item.symbol;
       if (!sym.endsWith('USDT')) continue;
+      if (!/^[A-Z0-9_]{2,40}$/.test(sym)) continue;
       if (PEGGED_OR_STABLE_SYMBOLS.has(sym)) continue;
       if (DEFAULT_EXCLUDED_SYMBOLS.has(sym)) continue;
       if (RESTRICTED_OR_LEVERAGED_SYMBOLS.has(sym)) continue;
@@ -239,8 +240,8 @@ export class DynamicUniverseScanner {
       const raw = await fs.readFile(cacheFile, 'utf8');
       const cached = JSON.parse(raw) as DynamicUniverseState;
       if (Array.isArray(cached.symbols) && cached.symbols.length >= 10) {
-        this.activeSymbols = cached.symbols;
-        this.entries = cached.entries || [];
+        this.activeSymbols = cached.symbols.filter((s) => /^[A-Z0-9_]{2,40}$/.test(s));
+        this.entries = Array.isArray(cached.entries) ? cached.entries.filter((e) => /^[A-Z0-9_]{2,40}$/.test(e.symbol)) : [];
         this.lastUpdatedMs = cached.lastUpdatedMs || now;
         console.log(`[DynamicUniverseScanner] Restored ${this.activeSymbols.length} symbols from disk cache (${cached.lastUpdatedAt}).`);
         return { symbols: this.getUniverse(), refreshed: true, source: 'cache' };

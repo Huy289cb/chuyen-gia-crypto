@@ -317,7 +317,7 @@ export async function computeMomentumUniverse(
   universeSymbols?: readonly string[]
 ): Promise<Array<{ symbol: string; score: number; rawReturn?: number; atr14Pct?: number }>> {
   const t0 = Date.now();
-  const targetSymbols = universeSymbols && universeSymbols.length > 0 ? universeSymbols : SOURCE_MOMENTUM_SYMBOLS;
+  const targetSymbols = (universeSymbols && universeSymbols.length > 0 ? universeSymbols : SOURCE_MOMENTUM_SYMBOLS).filter((s) => /^[A-Z0-9_]{2,40}$/.test(s));
   const results: Array<{ symbol: string; score: number; rawReturn?: number; atr14Pct?: number }> = [];
   const missingSymbols: string[] = [];
 
@@ -964,48 +964,56 @@ export class HybridLiveWorker {
       // 2. Open new symbols in Top 2
       for (const sym of top2) {
         if (!activeSymbols.includes(sym)) {
-          const filter = this.exchangeFilters[sym];
-          if (!filter) continue;
-          const markPrices = await this.broker.getMarkPrices(sym);
-          const mark = parseFloat(markPrices[0]?.markPrice || '0');
-          if (mark <= 0) continue;
-
-          // Max Alpha ROI: Fixed 12% SL with full compounding allocation (30% per trade)
-          const slPct = MOMENTUM_SL_PCT;
-          const allocUsd = this.compoundingManager.computeMomentumAlloc(accountEquity, filter.minNotional);
-
-          const targetQty = allocUsd / mark;
-          const qtyStr = formatToStep(targetQty, filter.stepSize);
-          const numQty = parseFloat(qtyStr);
-          if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
-            console.warn(`[HybridLiveWorker] Rebalance: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
+          if (!/^[A-Z0-9_]{2,40}$/.test(sym)) {
+            console.warn(`[HybridLiveWorker] Rebalance: Skipping ${sym} (Invalid symbol format).`);
             continue;
           }
+          try {
+            const filter = this.exchangeFilters[sym];
+            if (!filter) continue;
+            const markPrices = await this.broker.getMarkPrices(sym);
+            const mark = parseFloat(markPrices[0]?.markPrice || '0');
+            if (mark <= 0) continue;
 
-          console.log(`[HybridLiveWorker] Rebalance: Opening Top 2 position ${sym} Qty=${qtyStr} (~$${(numQty * mark).toFixed(2)}, SL=${(slPct * 100).toFixed(1)}%)`);
-          const order = await this.broker.submitMarketOrder({
-            symbol: sym,
-            side: 'BUY',
-            quantity: qtyStr,
-            clientOrderId: `reb_open_${sym.toLowerCase()}_${Date.now()}`,
-            positionSide: 'BOTH',
-          });
-          const fillPrice = parseFloat(order.avgPrice || mark.toString());
-          const slPrice = fillPrice * (1.0 - slPct);
-          openedPositions.push({ symbol: sym, qty: numQty, entryPrice: fillPrice });
+            // Max Alpha ROI: Fixed 12% SL with full compounding allocation (30% per trade)
+            const slPct = MOMENTUM_SL_PCT;
+            const allocUsd = this.compoundingManager.computeMomentumAlloc(accountEquity, filter.minNotional);
 
-          this.ratchetState.delete(sym);
-          this.nativeStops.delete(sym);
+            const targetQty = allocUsd / mark;
+            const qtyStr = formatToStep(targetQty, filter.stepSize);
+            const numQty = parseFloat(qtyStr);
+            if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
+              console.warn(`[HybridLiveWorker] Rebalance: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
+              continue;
+            }
 
-          this.ratchetState.set(sym, {
-            entryPrice: fillPrice,
-            currentSl: slPrice,
-            initialSlPct: slPct,
-            maxRet: 0,
-            tier: 'initial',
-          });
+            console.log(`[HybridLiveWorker] Rebalance: Opening Top 2 position ${sym} Qty=${qtyStr} (~$${(numQty * mark).toFixed(2)}, SL=${(slPct * 100).toFixed(1)}%)`);
+            const order = await this.broker.submitMarketOrder({
+              symbol: sym,
+              side: 'BUY',
+              quantity: qtyStr,
+              clientOrderId: `reb_open_${sym.toLowerCase()}_${Date.now()}`,
+              positionSide: 'BOTH',
+            });
+            const fillPrice = parseFloat(order.avgPrice || mark.toString());
+            const slPrice = fillPrice * (1.0 - slPct);
+            openedPositions.push({ symbol: sym, qty: numQty, entryPrice: fillPrice });
 
-          await this.syncNativeStopLoss(sym, numQty, slPrice);
+            this.ratchetState.delete(sym);
+            this.nativeStops.delete(sym);
+
+            this.ratchetState.set(sym, {
+              entryPrice: fillPrice,
+              currentSl: slPrice,
+              initialSlPct: slPct,
+              maxRet: 0,
+              tier: 'initial',
+            });
+
+            await this.syncNativeStopLoss(sym, numQty, slPrice);
+          } catch (err: unknown) {
+            console.error(`[HybridLiveWorker] Rebalance: Failed to open candidate ${sym}:`, err);
+          }
         }
       }
 
@@ -1087,50 +1095,59 @@ export class HybridLiveWorker {
           continue;
         }
 
-        const filter = this.exchangeFilters[sym];
-        if (!filter) continue;
-        const markPrices = await this.broker.getMarkPrices(sym);
-        const mark = parseFloat(markPrices[0]?.markPrice || '0');
-        if (mark <= 0) continue;
-
-        // Max Alpha ROI: Fixed 12% SL with full compounding allocation (30% per trade)
-        const slPct = MOMENTUM_SL_PCT;
-        const allocUsd = this.compoundingManager.computeMomentumAlloc(accountEquity, filter.minNotional);
-
-        const targetQty = allocUsd / mark;
-        const qtyStr = formatToStep(targetQty, filter.stepSize);
-        const numQty = parseFloat(qtyStr);
-        if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
-          console.warn(`[HybridLiveWorker] Momentum retry: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
+        if (!/^[A-Z0-9_]{2,40}$/.test(sym)) {
+          console.warn(`[HybridLiveWorker] Momentum retry: Skipping ${sym} (Invalid symbol format).`);
           continue;
         }
 
-        console.log(`[HybridLiveWorker] Momentum retry: Opening ${sym} Qty=${qtyStr} (~$${(numQty * mark).toFixed(2)}, SL=${(slPct * 100).toFixed(1)}%)`);
-        const order = await this.broker.submitMarketOrder({
-          symbol: sym,
-          side: 'BUY',
-          quantity: qtyStr,
-          clientOrderId: `reb_retry_${sym.toLowerCase()}_${Date.now()}`,
-          positionSide: 'BOTH',
-        });
-        const fillPrice = parseFloat(order.avgPrice || mark.toString());
-        const slPrice = fillPrice * (1.0 - slPct);
-        openedPositions.push({ symbol: sym, qty: numQty, entryPrice: fillPrice });
+        try {
+          const filter = this.exchangeFilters[sym];
+          if (!filter) continue;
+          const markPrices = await this.broker.getMarkPrices(sym);
+          const mark = parseFloat(markPrices[0]?.markPrice || '0');
+          if (mark <= 0) continue;
 
-        // Reset any stale ratchet/stop state for fresh trade
-        this.ratchetState.delete(sym);
-        this.nativeStops.delete(sym);
+          // Max Alpha ROI: Fixed 12% SL with full compounding allocation (30% per trade)
+          const slPct = MOMENTUM_SL_PCT;
+          const allocUsd = this.compoundingManager.computeMomentumAlloc(accountEquity, filter.minNotional);
 
-        this.ratchetState.set(sym, {
-          entryPrice: fillPrice,
-          currentSl: slPrice,
-          initialSlPct: slPct,
-          maxRet: 0,
-          tier: 'initial',
-        });
+          const targetQty = allocUsd / mark;
+          const qtyStr = formatToStep(targetQty, filter.stepSize);
+          const numQty = parseFloat(qtyStr);
+          if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
+            console.warn(`[HybridLiveWorker] Momentum retry: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
+            continue;
+          }
 
-        await this.syncNativeStopLoss(sym, numQty, slPrice);
-        openedCount++;
+          console.log(`[HybridLiveWorker] Momentum retry: Opening ${sym} Qty=${qtyStr} (~$${(numQty * mark).toFixed(2)}, SL=${(slPct * 100).toFixed(1)}%)`);
+          const order = await this.broker.submitMarketOrder({
+            symbol: sym,
+            side: 'BUY',
+            quantity: qtyStr,
+            clientOrderId: `reb_retry_${sym.toLowerCase()}_${Date.now()}`,
+            positionSide: 'BOTH',
+          });
+          const fillPrice = parseFloat(order.avgPrice || mark.toString());
+          const slPrice = fillPrice * (1.0 - slPct);
+          openedPositions.push({ symbol: sym, qty: numQty, entryPrice: fillPrice });
+
+          // Reset any stale ratchet/stop state for fresh trade
+          this.ratchetState.delete(sym);
+          this.nativeStops.delete(sym);
+
+          this.ratchetState.set(sym, {
+            entryPrice: fillPrice,
+            currentSl: slPrice,
+            initialSlPct: slPct,
+            maxRet: 0,
+            tier: 'initial',
+          });
+
+          await this.syncNativeStopLoss(sym, numQty, slPrice);
+          openedCount++;
+        } catch (err: unknown) {
+          console.error(`[HybridLiveWorker] Momentum retry: Failed to open candidate ${sym}:`, err);
+        }
       }
 
       if (openedPositions.length > 0) {

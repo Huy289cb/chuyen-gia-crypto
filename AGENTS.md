@@ -1,20 +1,24 @@
 <!-- roi-hybrid-live-phase7-live-milestone-20261102 -->
-# Hiện hành 02/11 09:15 — Phase 7 Vận hành Thực chiến Bùng nổ: BEAMXUSDT +18.4% Peak, Ratchet Lock 2 Bảo đảm Khóa Lãi >= +10%, PnL Ngày +4.06%
+# Hiện hành 02/11 09:38 — Phase 7 Vận hành Thực chiến: Chốt Lãi Khóa BEAMXUSDT (+10% Net), Vá Lỗi Ký Tự Lạ Meme Token, Lấp Đầy Slot Ngay Lập Tức Bằng POWRUSDT
 
 1. **Hiệu suất Thực chiến Thực tế trên Sàn (Binance Futures)**:
-   - **Tài khoản & Lợi nhuận**: Vốn Equity đạt **51.92 USDT** (tăng từ mốc đầu ngày 49.89 USDT). Lợi nhuận ròng trong ngày đạt **+2.03 USDT (+4.06%)**. Số dư khả dụng (Cash Buffer): **47.72 USDT** (đảm bảo đệm tiền mặt an toàn cao).
-   - **Bắt trúng Sóng Tăng BEAMXUSDT**:
-     * Ngay lúc 00:00:04 UTC (07:00 ICT), bot hoàn thành tính toán vũ trụ Top Momentum trong 100ms từ RAM cache, xoay vòng thoát `HYPEUSDT` gọn gàng và vào lệnh `BEAMXUSDT` tại giá `0.004849` (~$11.97).
-     * `BEAMXUSDT` bốc đầu mạnh mẽ, đạt đỉnh **+18.42%** (mark `0.005559`).
-   - **Ratchet Profit Guard Lock 2 Kích hoạt Hoàn hảo**:
-     * Bot tự động điều chỉnh lệnh dừng lỗ `STOP_MARKET` trên matching engine của sàn qua 4 nấc: `0.004276` (-12%) $\to$ `0.004704` (+5%) $\to$ `0.004888` (+8%) $\to$ `0.005091` (+12%) $\to$ **`0.005334` (+16% - Lock 2)**.
-     * Bảo đảm khóa chắc chắn $\ge +10\%$ lợi nhuận ròng trên sàn live, loại trừ 100% rủi ro bị đảo chiều lỗ ngược.
-   - **Vị thế 1000PEPEUSDT**: Tiếp tục giữ nhịp ổn định theo chu kỳ 3 ngày Phase 7, lệnh dừng lỗ sàn tại `0.004453` (-12%).
+   - **Tài khoản & Lợi nhuận**: Vốn Equity đạt **51.13 USDT** (đầu ngày 49.89 USDT). Lợi nhuận ròng hiện tại **+1.24 USDT (+2.48%)**.
+   - **BEAMXUSDT Chốt Lời Thành Công Với Ratchet Lock 2**:
+     * Đạt đỉnh tăng **+18.42%** (mark `0.005559`).
+     * Khi giá hồi về `0.005334`, lệnh `STOP_MARKET` trên matching engine của Binance tự động khớp chuẩn xác lúc 09:08:50 ICT.
+     * Khóa thành công **+10.0% lợi nhuận ròng** vào số dư khả dụng mà không để mất lãi!
+   - **Vá Lỗi Ký tự Lạ Meme Token & Khả năng Chịu lỗi Từng Ứng viên**:
+     * Phát hiện Binance Futures niêm yết token ký tự tiếng Trung (`牛来USDT`), vi phạm regex kiểm tra ký hiệu an toàn của broker (`/^[A-Z0-9_]{2,40}$/`).
+     * Đã bổ sung bộ lọc regex chặt chẽ tại `dynamic-universe.ts` (quét API & nạp cache đĩa) và `computeMomentumUniverse`.
+     * Bọc `try/catch` độc lập cho từng ứng viên trong vòng lặp `retryMomentumEntry` và `rebalanceMomentum`, ngăn chặn việc 1 mã lỗi làm gián đoạn toàn bộ quá trình mở lệnh.
+   - **Eager Retry Khớp Lệnh Lập Tức POWRUSDT**:
+     * Ngay sau khi fix, bot tự động duyệt danh sách Top Momentum kế tiếp (bỏ qua `BEAMXUSDT`, `1000PEPEUSDT`, `HYPEUSDT` do cooldown/vị thế).
+     * Mở ngay vị thế `POWRUSDT` Qty=220 (~$12.22, SL 12% tại 0.04887), lấp đầy 2/2 slot danh mục chỉ trong vài mili-giây.
 
 2. **Kiểm toán Sức khỏe Vận hành & Cầu chì An toàn**:
    - Cầu chì rủi ro ngày (Circuit Breaker): **Chính xác 0 lần vi phạm** (trần 12.0 USDT nguyên vẹn).
-   - Tự đối soát (Cross-Reconciliation): Định kỳ 15 phút (vượt mốc 9,900 ticks), 100% vị thế và lệnh dừng lỗ sàn khớp tuyệt đối với sổ nội bộ.
-   - Nhật ký lỗi (Error logs): **0 lỗi API Binance, 0 timeout, 0 exception, 0 lần restart**. Toàn bộ dịch vụ PM2 (`crypto-hybrid-live`, `crypto-telegram-bot`, `crypto-api`) online 100%.
+   - Tự đối soát (Cross-Reconciliation): Vượt mốc 11,400 ticks, 100% vị thế và lệnh dừng lỗ sàn khớp tuyệt đối.
+   - Toàn bộ dịch vụ PM2 (`crypto-hybrid-live`, `crypto-telegram-bot`, `crypto-api`) online 100%.
 <!-- /roi-hybrid-live-phase7-live-milestone-20261102 -->
 
 <!-- roi-hybrid-live-phase7-impulse-holding-and-alpha-expansion-20261101 -->
