@@ -4,6 +4,7 @@ import { isTelegramEnabled, telegramConfig } from '../config/telegram';
 import { createLiveTelegramSender } from './live-telegram-transport';
 import type { HybridLiveState } from './hybrid-worker';
 import { handleHybridAgyCommand } from '../services/telegram/agy-chat.service';
+import { downloadTelegramPhoto } from '../services/telegram/telegram-client';
 
 const agent = new https.Agent({ family: 4, keepAlive: true });
 
@@ -142,6 +143,46 @@ export function formatHybridTpNotice(input: { symbol: string; qty: number; exitP
   ].join('\n');
 }
 
+export function formatHybridCashFlowNotice(input: {
+  type: 'DEPOSIT' | 'WITHDRAWAL';
+  amount: number;
+  tranId: string;
+  cumulativeDeposits: number;
+  strategyNetPnl: number;
+  strategyRoiPct: number;
+  accountEquity: number;
+}): string {
+  const isDeposit = input.type === 'DEPOSIT';
+  return [
+    `${isDeposit ? '📥 [TỰ ĐỘNG PHÁT HIỆN TIỀN NẠP]' : '📤 [TỰ ĐỘNG PHÁT HIỆN TIỀN RÚT]'} (BINANCE)`,
+    `• Số tiền: ${isDeposit ? '+' : '-'}${usd(input.amount)}`,
+    `• Mã giao dịch sàn: #${input.tranId}`,
+    `• Vốn sàn sau biến động: ${usd(input.accountEquity)}`,
+    `• Tổng tiền nạp tích lũy: ${usd(input.cumulativeDeposits)} (Đã phân lập vào vốn cơ sở)`,
+    `• Lãi ròng do bot tự đánh: ${usd(input.strategyNetPnl, true)} (${input.strategyRoiPct >= 0 ? '+' : ''}${input.strategyRoiPct.toFixed(2)}%)`,
+    '• Hệ thống tự động cân bằng cầu chì ngày và bảo toàn công thức PnL!',
+  ].join('\n');
+}
+
+export function formatHybridPruneNotice(input: {
+  symbol: string;
+  entryPrice: number;
+  exitPrice: number;
+  lossPct: number;
+  pnl: number;
+  daysHeld: number;
+}): string {
+  return [
+    `✂️ CẮT TỈA COIN CHÌM XUỒNG (PHASE 8 PRUNING)`,
+    `• Đồng coin: ${coin(input.symbol)}`,
+    `• Thời gian giữ: ${input.daysHeld} ngày (không vượt nổi +2%)`,
+    `• Giá vào: ${px(input.entryPrice)} ➔ Giá thoát: ${px(input.exitPrice)}`,
+    `• Cắt lỗ sớm: ${input.lossPct.toFixed(2)}% (Tiết kiệm ~7% so với mức SL -12%)`,
+    `• Lãi/lỗ lệnh: ${usd(input.pnl, true)}`,
+    `• Slot tiền mặt đã được giải phóng ngay lập tức để đón coin mới bứt phá!`,
+  ].join('\n');
+}
+
 function formatTimeIct(iso?: string): string {
   if (!iso) return 'vừa xong';
   try {
@@ -220,13 +261,41 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     }
 
     case 'pnl': {
-      return [
-        '💰 PNL TỔNG KẾT TÀI KHOẢN',
-        `• Vốn sàn hiện tại: ${usd(state.accountEquity)}`,
+      const cf = state.cashFlow;
+      const lines = [
+        '💰 PNL TỔNG KẾT TÀI KHOẢN (PHÂN LẬP MINH BẠCH)',
+        `• Vốn sàn thực tế (Equity): ${usd(state.accountEquity)}`,
+      ];
+      if (cf) {
+        lines.push(
+          `• Vốn nạp cơ sở (Gốc + Nạp): ${usd(cf.adjustedBaselineEquity)} (${usd(cf.baselineEquity)} gốc + ${usd(cf.cumulativeDeposits)} nạp)`,
+          `• Lãi ròng do bot tự đánh (từ ${cf.baselineDate}): ${usd(cf.strategyNetPnl, true)} (${cf.strategyRoiPct >= 0 ? '+' : ''}${cf.strategyRoiPct.toFixed(2)}%)`,
+        );
+      }
+      lines.push(
         `• Lãi/lỗ lệnh đang mở: ${usd(totalUnrl, true)}`,
         `• Lãi/lỗ hôm nay: ${usd(state.currentDayPnl, true)}`,
         `• Mức sụt vốn lớn nhất ngày: ${usd(state.worstDayPnl)}`,
         `• Dư an toàn trần 12u: ${usd(Math.max(0, 12 + state.currentDayPnl))}`,
+      );
+      return lines.join('\n');
+    }
+
+    case 'cashflow':
+    case 'dongtien': {
+      const cf = state.cashFlow;
+      if (!cf) {
+        return '💰 DÒNG TIỀN:\n• Đang khởi động module CashFlow.';
+      }
+      return [
+        '💰 QUẢN LÝ DÒNG TIỀN NGOẠI VI (PHÂN LẬP VỐN)',
+        `• Mốc tính chuẩn: ${cf.baselineDate}`,
+        `• Vốn xuất phát mốc chuẩn: ${usd(cf.baselineEquity)}`,
+        `• Tổng tiền nạp thêm: +${usd(cf.cumulativeDeposits)}`,
+        `• Tổng tiền rút ra: -${usd(cf.cumulativeWithdrawals)}`,
+        `• Vốn cơ sở điều chỉnh: ${usd(cf.adjustedBaselineEquity)}`,
+        `• Lãi/lỗ ròng chiến lược: ${usd(cf.strategyNetPnl, true)} (${cf.strategyRoiPct >= 0 ? '+' : ''}${cf.strategyRoiPct.toFixed(2)}%)`,
+        '• Toàn bộ tiền nạp/rút được tự động phân lập, tuyệt đối không tính vào lãi giao dịch!',
       ].join('\n');
     }
 
@@ -307,7 +376,8 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
         '• /agy new · /agy status · /agy cancel — Quản lý phiên agy',
         '• /status — Trạng thái worker, vốn sàn & an toàn',
         '• /report (hoặc /lenh) — Chi tiết các vị thế đang mở & giá Stop Loss',
-        '• /pnl — Lãi/lỗ hôm nay & lãi/lỗ chưa chốt',
+        '• /pnl — Lãi/lỗ hôm nay & lãi/lỗ chưa chốt (Phân lập tiền nạp)',
+        '• /cashflow (hoặc /dongtien) — Quản lý dòng tiền nạp/rút & vốn cơ sở',
         '• /compounding (hoặc /lai) — Quy mô phân bổ vốn lãi kép động',
         '• /grid (hoặc /luoi) — Thông số lưới BTC co giãn theo biến động ATR',
         '• /universe — Xem Top coin thanh khoản trong vũ trụ động',
@@ -353,33 +423,85 @@ export function startHybridTelegramCommandListener(getState: () => HybridLiveSta
 
         const updates = (response.data?.result as Array<{
           update_id: number;
-          message?: { chat?: { id: number | string }; text?: string };
+          message?: {
+            chat?: { id: number | string };
+            text?: string;
+            caption?: string;
+            photo?: Array<{ file_id: string; file_unique_id?: string; width?: number; height?: number; file_size?: number }>;
+          };
         }>) || [];
 
         for (const update of updates) {
           offset = update.update_id + 1;
-          const text = update.message?.text?.trim();
-          const chatId = String(update.message?.chat?.id || '');
-          if (!text || !chatId) continue;
+          const msg = update.message;
+          if (!msg) continue;
+          const chatId = String(msg.chat?.id || '');
+          if (!chatId) continue;
 
-          // Check if chat is authorized
+          // Check if chat is authorized (chỉ nhận trong group được cấp phép)
           if (telegramConfig.chatIds.length && !telegramConfig.chatIds.includes(chatId)) {
             continue;
           }
 
-          console.log(`[HybridTelegramListener] Received command: "${text}" from ${chatId}`);
+          const rawText = msg.text?.trim() || '';
+          const rawCaption = msg.caption?.trim() || '';
+          const photos = msg.photo;
 
-          if (text.startsWith('/agy')) {
-            void handleHybridAgyCommand(chatId, text, send);
+          // Xử lý khi người dùng gửi ảnh biểu đồ (photo)
+          if (photos && photos.length > 0) {
+            const bestPhoto = photos[photos.length - 1];
+            console.log(`[HybridTelegramListener] Received photo (file_id=${bestPhoto.file_id}) with caption: "${rawCaption}" from ${chatId}`);
+
+            try {
+              await send(chatId, '📸 Đã nhận ảnh biểu đồ từ Telegram. Đang tải về và phân tích các nét vẽ...');
+            } catch (err) {
+              console.warn('[HybridTelegramListener] Failed to send photo acknowledgement:', err);
+            }
+
+            const imagePath = await downloadTelegramPhoto(bestPhoto.file_id);
+            if (!imagePath) {
+              await send(chatId, '❌ Không thể tải ảnh từ Telegram về máy chủ. Vui lòng gửi lại ảnh!');
+              continue;
+            }
+
+            const questionText = rawCaption.replace(/^\/agy\s*/i, '').trim() ||
+              'Phân tích kỹ thuật chi tiết biểu đồ này: nhận diện mã coin, khung thời gian, các đường kẻ vẽ, vùng cản/hỗ trợ, xu hướng và đưa ra nhận định khách quan.';
+
+            void handleHybridAgyCommand(chatId, questionText, send, imagePath);
             continue;
           }
 
-          const reply = formatHybridCommandResponse(text, getState());
-          try {
-            await send(chatId, reply);
-            console.log(`[HybridTelegramListener] Replied to ${chatId}`);
-          } catch (sendErr) {
-            console.error('[HybridTelegramListener] Reply send error:', sendErr);
+          if (!rawText) continue;
+
+          console.log(`[HybridTelegramListener] Received message: "${rawText}" from ${chatId}`);
+
+          // Lệnh bắt đầu bằng /agy
+          if (rawText.startsWith('/agy')) {
+            void handleHybridAgyCommand(chatId, rawText, send);
+            continue;
+          }
+
+          const cmd = rawText.replace(/^\//, '').split(/\s+/)[0]?.toLowerCase() || '';
+          const KNOWN_COMMANDS = new Set([
+            'status', 'trangthai',
+            'report', 'baocao', 'lenh', 'positions', 'book',
+            'pnl', 'lai', 'laikep', 'compounding',
+            'grid', 'luoi',
+            'universe', 'vutru',
+            'shield', 'lachang',
+            'help', 'trogiup', 'start'
+          ]);
+
+          // Nếu là lệnh hệ thống đã biết
+          if (KNOWN_COMMANDS.has(cmd)) {
+            const reply = formatHybridCommandResponse(rawText, getState());
+            try {
+              await send(chatId, reply);
+              console.log(`[HybridTelegramListener] Replied to ${chatId}`);
+            } catch (sendErr) {
+              console.error('[HybridTelegramListener] Reply send error:', sendErr);
+            }
+            continue;
           }
         }
       } catch (err) {

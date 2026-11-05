@@ -1,5 +1,7 @@
 import axios, { isAxiosError } from 'axios';
 import https from 'https';
+import fs from 'node:fs';
+import path from 'node:path';
 import { isTelegramEnabled, telegramConfig } from '../../config/telegram';
 
 const API_BASE = 'https://api.telegram.org';
@@ -227,3 +229,51 @@ export async function deleteTelegramWebhook(): Promise<void> {
     console.warn(`[Telegram] deleteWebhook failed pid=${process.pid}: ${formatTelegramApiError(err)}`);
   }
 }
+
+/**
+ * Tải file ảnh từ Telegram về thư mục cục bộ (dùng IPv4 agent an toàn)
+ */
+export async function downloadTelegramPhoto(
+  fileId: string,
+  targetDir: string = path.resolve(__dirname, '../../../data/telegram-images')
+): Promise<string | null> {
+  if (!isTelegramEnabled() || !telegramConfig.botToken || !fileId) return null;
+  try {
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    // 1. Lấy thông tin file_path từ Telegram API
+    const getFileUrl = `${API_BASE}/bot${telegramConfig.botToken}/getFile?file_id=${encodeURIComponent(fileId)}`;
+    const fileRes = await axios.get(getFileUrl, {
+      timeout: 15_000,
+      httpsAgent: telegramHttpsAgent,
+    });
+    const filePath = fileRes.data?.result?.file_path;
+    if (!filePath) {
+      console.warn('[TelegramPhoto] getFile returned no file_path for fileId:', fileId);
+      return null;
+    }
+
+    // 2. Tải nội dung binary của ảnh và lưu tệp cục bộ
+    const ext = path.extname(filePath) || '.jpg';
+    const localFileName = `chart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+    const localFilePath = path.join(targetDir, localFileName);
+
+    const downloadUrl = `${API_BASE}/file/bot${telegramConfig.botToken}/${filePath}`;
+    const streamRes = await axios.get(downloadUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30_000,
+      httpsAgent: telegramHttpsAgent,
+    });
+
+    const buf = Buffer.from(streamRes.data);
+    fs.writeFileSync(localFilePath, buf);
+    console.log(`[TelegramPhoto] Successfully downloaded photo (${(buf.length / 1024).toFixed(1)} KB) to: ${localFilePath}`);
+    return localFilePath;
+  } catch (err) {
+    console.error('[TelegramPhoto] Error downloading photo:', err);
+    return null;
+  }
+}
+

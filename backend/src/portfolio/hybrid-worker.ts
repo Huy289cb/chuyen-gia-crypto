@@ -10,6 +10,8 @@ import {
   formatHybridRatchetNotice,
   formatHybridRebalanceNotice,
   formatHybridTpNotice,
+  formatHybridCashFlowNotice,
+  formatHybridPruneNotice,
   sendHybridTelegram,
   startHybridTelegramCommandListener,
 } from './hybrid-live-notice';
@@ -19,6 +21,7 @@ import { DynamicUniverseScanner } from './dynamic-universe';
 import { LLMEventShield } from './event-shield';
 import { DynamicCompoundingManager, MOMENTUM_ALLOC_PCT, BTC_GRID_TICKET_PCT } from './dynamic-compounding';
 import { VolatilityGridController, type VolatilityGridParams, type CandleData } from './volatility-grid';
+import { CashFlowManager, type CashFlowSummary } from './cashflow-manager';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
@@ -26,6 +29,10 @@ const ICT_OFFSET = 7 * 3_600_000;
 const CHECK_INTERVAL_MS = 3_000;
 const MOMENTUM_SL_PCT = 0.12;
 export const MOMENTUM_REBALANCE_DAYS = 3; // Phase 7: 3-day momentum impulse holding
+export const BTC_CRASH_HEALTH_GATE_PCT = -0.03; // Phase 8: BTC Crash Trend Health Gate (-3.0%)
+export const PRUNING_DAYS_THRESHOLD = 2.0; // Phase 8: 2 days (48 hours)
+export const PRUNING_MAX_RETURN_THRESH = 0.02; // Phase 8: Never pumped > +2.0%
+export const PRUNING_CURRENT_RETURN_THRESH = -0.05; // Phase 8: Cut sinking loser at -5.0%
 const BTC_GRID_MAX_LEVELS = 3;
 const MOMENTUM_RETRY_INTERVAL_MS = 6 * 3_600_000; // 6 hours
 export const FUNDING_RATE_CAP = 0.0005; // +0.05% per 8h (+0.15% daily)
@@ -42,7 +49,7 @@ export interface HybridLiveState {
   currentDayPnl: number;
   worstDayPnl: number;
   breakerLatched: boolean;
-  positions: Record<string, { symbol: string; qty: number; entryPrice: number; markPrice: number; unrlPnl: number; slPrice: number; slPct?: number; maxReturnPct?: number; ratchetTier?: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock' }>;
+  positions: Record<string, { symbol: string; qty: number; entryPrice: number; markPrice: number; unrlPnl: number; slPrice: number; slPct?: number; maxReturnPct?: number; ratchetTier?: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock'; entryTime?: number }>;
   btcGridLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }>;
   lastRebalanceUtcDay?: string;
   daysSinceRebalance?: number;
@@ -77,6 +84,7 @@ export interface HybridLiveState {
     crashGatePct: number;
     regime: string;
   };
+  cashFlow?: CashFlowSummary;
 }
 
 interface SymbolFilterInfo {
@@ -502,6 +510,7 @@ export class HybridLiveWorker {
   public eventShield = new LLMEventShield();
   public compoundingManager = new DynamicCompoundingManager();
   public volatilityGridController = new VolatilityGridController();
+  public cashFlowManager = new CashFlowManager();
   public ratchetState = new Map<
     string,
     {
@@ -510,6 +519,7 @@ export class HybridLiveWorker {
       initialSlPct: number;
       maxRet: number;
       tier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock';
+      entryTime: number;
     }
   >();
   public sameDaySlCooldown = new Map<string, string>(); // symbol -> UTC day e.g. "2026-10-29"
@@ -553,6 +563,9 @@ export class HybridLiveWorker {
     // Warm up candle RAM cache for zero-latency momentum calculations
     console.log(`[HybridLiveWorker] Warming up candle RAM cache for ${activeUniverse.length} dynamic universe symbols...`);
     await this.candleCache.prefetchAll(activeUniverse);
+
+    // Initialize Cash Flow Manager
+    await this.cashFlowManager.load();
 
     // Initial cross-reconciliation with exchange ground truth
     await this.reconcileState();
@@ -679,6 +692,20 @@ export class HybridLiveWorker {
         for (const [sym, date] of Object.entries(raw.sameDaySlCooldown)) {
           if (date === todayUtc) {
             this.sameDaySlCooldown.set(sym, date as string);
+          }
+        }
+      }
+      if (raw.positions && typeof raw.positions === 'object') {
+        for (const [sym, pos] of Object.entries(raw.positions)) {
+          if (pos && typeof pos === 'object' && pos.entryPrice) {
+            this.ratchetState.set(sym, {
+              entryPrice: pos.entryPrice,
+              currentSl: pos.slPrice || pos.entryPrice * 0.88,
+              initialSlPct: pos.slPct || 0.12,
+              maxRet: (pos.maxReturnPct || 0) / 100.0,
+              tier: pos.ratchetTier || 'initial',
+              entryTime: pos.entryTime || Date.now(),
+            });
           }
         }
       }
@@ -898,6 +925,49 @@ export class HybridLiveWorker {
       }
 
       console.log(`[HybridLiveWorker] [CrossReconciliation] Audit completed at tick ${this.tickCounter}: ${livePositions.length} live positions, ${this.nativeStops.size} active stop orders verified. Discrepancies resolved: ${discrepancyFound}`);
+
+      // 4. External Cash Flow Reconciliation (Automatic Deposit/Withdrawal Isolation)
+      try {
+        const { newDeposits, newWithdrawals } = await this.cashFlowManager.syncFromBroker(this.broker);
+        const liveEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0') || this.dayStartEquity;
+        const todayUtc = new Date().toISOString().slice(0, 10);
+
+        for (const dep of newDeposits) {
+          if (dep.dateUtc === todayUtc) {
+            this.dayStartEquity += dep.amount;
+            console.log(`[HybridLiveWorker] [CashFlow] Re-anchored dayStartEquity += ${dep.amount} to ${this.dayStartEquity.toFixed(2)} for today's deposit.`);
+          }
+          const summary = this.cashFlowManager.getSummary(liveEquity);
+          await sendHybridTelegram(formatHybridCashFlowNotice({
+            type: 'DEPOSIT',
+            amount: dep.amount,
+            tranId: dep.tranId,
+            cumulativeDeposits: summary.cumulativeDeposits,
+            strategyNetPnl: summary.strategyNetPnl,
+            strategyRoiPct: summary.strategyRoiPct,
+            accountEquity: liveEquity,
+          }));
+        }
+
+        for (const w of newWithdrawals) {
+          if (w.dateUtc === todayUtc) {
+            this.dayStartEquity = Math.max(0, this.dayStartEquity - w.amount);
+            console.log(`[HybridLiveWorker] [CashFlow] Re-anchored dayStartEquity -= ${w.amount} to ${this.dayStartEquity.toFixed(2)} for today's withdrawal.`);
+          }
+          const summary = this.cashFlowManager.getSummary(liveEquity);
+          await sendHybridTelegram(formatHybridCashFlowNotice({
+            type: 'WITHDRAWAL',
+            amount: w.amount,
+            tranId: w.tranId,
+            cumulativeDeposits: summary.cumulativeDeposits,
+            strategyNetPnl: summary.strategyNetPnl,
+            strategyRoiPct: summary.strategyRoiPct,
+            accountEquity: liveEquity,
+          }));
+        }
+      } catch (cfErr) {
+        console.warn('[HybridLiveWorker] [CashFlow] Failed to sync cash flows during reconciliation:', cfErr);
+      }
     } catch (err) {
       console.error('[HybridLiveWorker] [CrossReconciliation] Error during reconciliation:', err instanceof Error ? err.message : err);
     }
@@ -906,6 +976,16 @@ export class HybridLiveWorker {
   private async rebalanceMomentum(): Promise<void> {
     console.log('[HybridLiveWorker] Starting 2-day Momentum Rebalance (Phase 4 Dynamic)...');
     try {
+      // Phase 8: BTC Crash Trend Health Gate (-3.0%)
+      const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
+      if (btcSignal.oneDayReturn <= BTC_CRASH_HEALTH_GATE_PCT) {
+        console.log(`[HybridLiveWorker] [Phase8 BTC Crash Gate] BTC 1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Postponing new Altcoin entries.`);
+        await sendHybridTelegram(
+          `🛡️ [CỬA CHẶN BTC SẬP - PHASE 8]: BTC giảm ${(btcSignal.oneDayReturn * 100).toFixed(2)}% trong ngày (<= -3.0%). Tạm dừng mở mới Altcoin để tránh bẫy bán tháo!`
+        );
+        return;
+      }
+
       const universe = this.dynamicUniverseScanner.getUniverse();
       const ranked = await computeMomentumUniverse(this.candleCache, universe);
       const todayUtc = new Date().toISOString().slice(0, 10);
@@ -1008,6 +1088,7 @@ export class HybridLiveWorker {
               initialSlPct: slPct,
               maxRet: 0,
               tier: 'initial',
+              entryTime: Date.now(),
             });
 
             await this.syncNativeStopLoss(sym, numQty, slPrice);
@@ -1042,6 +1123,13 @@ export class HybridLiveWorker {
 
       if (remainingSlots <= 0) {
         console.log(`[HybridLiveWorker] Momentum sleeve is already full (${activeNonGrid.length}/2). Skipping retry.`);
+        return;
+      }
+
+      // Phase 8: BTC Crash Trend Health Gate (-3.0%)
+      const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
+      if (btcSignal.oneDayReturn <= BTC_CRASH_HEALTH_GATE_PCT) {
+        console.log(`[HybridLiveWorker] [Phase8 BTC Crash Gate] BTC 1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Skipping momentum retry today.`);
         return;
       }
 
@@ -1141,6 +1229,7 @@ export class HybridLiveWorker {
             initialSlPct: slPct,
             maxRet: 0,
             tier: 'initial',
+            entryTime: Date.now(),
           });
 
           await this.syncNativeStopLoss(sym, numQty, slPrice);
@@ -1441,6 +1530,7 @@ export class HybridLiveWorker {
             initialSlPct,
             maxRet: Math.max(0, currentRet),
             tier: 'initial',
+            entryTime: Date.now(),
           };
           this.ratchetState.set(p.symbol, rState);
         } else {
@@ -1495,6 +1585,52 @@ export class HybridLiveWorker {
 
         slPrice = rState.currentSl;
         ratchetTier = rState.tier;
+
+        // Phase 8: Freqtrade Time-Decay Loser Pruning
+        // If coin held >= 2.0 days (48h), max return never exceeded +2.0%, and current return <= -5.0%:
+        // Prune early at -5% instead of waiting for full -12% stop loss, saving 7% capital and freeing the slot.
+        const daysHeld = (Date.now() - rState.entryTime) / (24 * 3_600_000);
+        if (
+          !this.breakerLatched &&
+          daysHeld >= PRUNING_DAYS_THRESHOLD &&
+          rState.maxRet < PRUNING_MAX_RETURN_THRESH &&
+          currentRet <= PRUNING_CURRENT_RETURN_THRESH
+        ) {
+          console.warn(
+            `[HybridLiveWorker] [Phase8 Pruning] PRUNING TRIGGERED for ${p.symbol}: Held ${daysHeld.toFixed(1)}d >= ${PRUNING_DAYS_THRESHOLD}d, MaxRet: +${maxReturnPct.toFixed(1)}% < 2.0%, CurrentRet: ${(currentRet * 100).toFixed(2)}% <= -5.0%. Pruning early to preserve capital!`
+          );
+          try {
+            await this.broker.submitMarketOrder({
+              symbol: p.symbol,
+              side: 'SELL',
+              quantity: Math.abs(qty).toString(),
+              clientOrderId: `prune_${p.symbol.toLowerCase()}_${Date.now()}`,
+              positionSide: 'BOTH',
+              reduceOnly: true,
+            });
+            await this.cancelSymbolStops(p.symbol);
+            this.ratchetState.delete(p.symbol);
+            this.sameDaySlCooldown.set(p.symbol, today);
+            console.log(
+              `[HybridLiveWorker] [Phase8 Pruning] Successfully pruned ${p.symbol} at ${(currentRet * 100).toFixed(2)}%. Added to Same-Day Cooldown.`
+            );
+            const pruneNotice = formatHybridPruneNotice({
+              symbol: p.symbol,
+              entryPrice: entry,
+              exitPrice: mark,
+              lossPct: currentRet * 100.0,
+              pnl: (mark - entry) * qty,
+              daysHeld: Math.round(daysHeld * 10) / 10,
+            });
+            alerts.push({ key: `prune:${today}:${p.symbol}:${Date.now()}`, text: pruneNotice });
+            void sendHybridTelegram(pruneNotice);
+            this.activeTrackedPositions.delete(p.symbol);
+            void this.retryMomentumEntry();
+            continue;
+          } catch (err) {
+            console.error(`[HybridLiveWorker] [Phase8 Pruning] Failed to prune ${p.symbol}:`, err);
+          }
+        }
       }
 
       posMap[p.symbol] = {
@@ -1507,6 +1643,7 @@ export class HybridLiveWorker {
         slPct: positionSlPct,
         maxReturnPct,
         ratchetTier,
+        entryTime: (p.symbol !== 'BTCUSDT' && this.ratchetState.get(p.symbol)?.entryTime) || undefined,
       };
 
       // Ensure native STOP_MARKET order is on Binance matching engine
@@ -1670,6 +1807,7 @@ export class HybridLiveWorker {
         crashGatePct: volParams.crashGatePct,
         regime: volParams.regime,
       },
+      cashFlow: this.cashFlowManager.getSummary(accountEquity),
     };
 
     this.lastState = state;

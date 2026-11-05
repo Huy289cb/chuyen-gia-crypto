@@ -1,24 +1,27 @@
-# KẾ HOẠCH THEO DÕI HIỆU SUẤT 2 TUẦN (2026-10-29 ĐẾN 2026-11-12)
+# KẾ HOẠCH THEO DÕI HIỆU SUẤT THỰC CHIẾN (CHÍNH THỨC TỪ 2026-10-30 ĐẾN 2026-11-13)
 
-> **Cập nhật lúc**: 2026-10-29 18:45:00 ICT  
-> **Chính sách vận hành**: `PHASE2_HYBRID_MOM50_BTCGRID45_SL12_V1` (Cấu hình Max Alpha - Lựa chọn 3)  
-> **Trạng thái Worker**: Online (PM2 process `crypto-hybrid-live`, PID `6`)
+> **Cập nhật lúc**: 2026-11-05 10:45:00 ICT  
+> **Chính sách vận hành**: `Phase 7 Alpha Expansion Suite (3-Day Momentum Holding + Progressive Ratchet + Volatility BTC Grid)`  
+> **Trạng thái Worker**: Online (PM2 process `crypto-hybrid-live`, PID `6`)  
+> **Ghi chú chuẩn hóa mốc đánh giá**: Giai đoạn trước 30/10 là giai đoạn thử nghiệm cấu hình sơ khai (chưa hoàn thiện plan, chưa có Same-Day Cooldown và Ratchet Guard dẫn tới whipsaw). Toàn bộ đánh giá hiệu suất chuẩn thức được **reset bắt đầu từ ngày 30/10/2026** và **tách riêng 25.0 USDT người dùng nạp thêm**.
 
 ---
 
-## 1. Mốc Vốn Xuất Phát & Thông Số Chiến Lược
+## 1. Mốc Vốn Xuất Phát Chuẩn & Dòng Tiền Ngoại Vi (Cash Flow)
 
-| Thông số | Giá trị khởi điểm |
-| :--- | :--- |
-| **Vốn tài khoản (Equity)** | **26.05 USDT** |
-| **Vốn khả dụng (Available)** | **26.05 USDT** |
-| **Vị thế đang giữ** | 0 lệnh (Sẵn sàng mở mới theo tín hiệu) |
-| **Tỷ trọng phân bổ mỗi lệnh** | **30% vốn** (~7.82 USDT/lệnh ở mức vốn hiện tại) |
-| **Mức dừng lỗ (Stop Loss)** | **Cố định cứng 12.0%** |
-| **Bảng xếp hạng Momentum** | **Raw 14-day Return** (săn top 2 altcoin bùng nổ mạnh nhất) |
-| **Ngưỡng lọc biến động (Hyper-Vol)** | **ATR14 $\le$ 20.0%** (chặn coin rác, đón siêu sóng 14-18%) |
-| **Bảo vệ rủi ro chủ động** | Same-Day SL Cooldown (chặn coin cắn SL tái vào lệnh), Khóa cứng tối đa 2 vị thế |
-| **Trần lỗ an toàn (Circuit Breaker)**| 12.00 USDT/ngày (bảo vệ tuyệt đối tài khoản) |
+| Thông số | Giá trị chuẩn mốc 30/10 | Ghi chú minh bạch |
+| :--- | :--- | :--- |
+| **Vốn xuất phát ban đầu** | **~26.00 USDT** | Số dư khả dụng trước khi người dùng nạp |
+| **Tiền nạp thêm (User Deposit)** | **+25.00 USDT** | Nạp ngày 30/10/2026 (TÁCH RIÊNG KHỎI PnL CHIẾN LƯỢC) |
+| **Tổng vốn cơ sở (Base Capital)** | **~51.00 USDT** | Mốc đối soát chuẩn để đo lường Trading PnL |
+| **Vốn hiện tại trên sàn (Equity)** | **52.85 USDT** | Ghi nhận lúc 10:45 ICT ngày 05/11/2026 |
+| **Lợi nhuận ròng thực tế (Net PnL)** | **+1.85 USDT** | $= 52.85 - 51.00$ (Lãi thực tế do bot đánh từ 30/10) |
+| **Tỷ suất sinh lời thực tế (Real ROI)** | **+3.63%** | Lợi nhuận ròng thuần túy sau 6 ngày vận hành Phase 6/7 |
+| **Vị thế đang giữ** | 2 lệnh (`BEAMXUSDT`, `1000PEPEUSDT`) | BEAMX đã kích hoạt dời SL Breakeven bảo toàn vốn |
+| **Tỷ trọng phân bổ mỗi lệnh** | **24% vốn** (Dynamic Compounding) | Top 2 Momentum = 48%, BTC Grid = 42%, Cash Buffer = 10% |
+| **Mức dừng lỗ (Stop Loss)** | **Cố định cứng 12.0%** | Kết hợp Progressive Ratchet nâng SL theo lợi nhuận |
+| **Bảo vệ rủi ro chủ động** | Same-Day SL Cooldown, Hyper-volatility Gate, LLM Event Shield |
+| **Trần lỗ an toàn (Circuit Breaker)**| `dailyLossLimitUsd = Math.max(12.0, DayStartEquity * 0.12)` |
 
 ---
 
@@ -43,15 +46,15 @@ Dựa trên dữ liệu kiểm thử thực nghiệm 1,500 ngày (2022–2026) v
 
 ## 3. Nhật Ký Theo Dõi & Các Mốc Kiểm Tra (Milestone Checkpoints)
 
-| Ngày theo dõi | Mốc thời gian | Sự kiện / Kiểm tra | Vốn thực tế (USDT) | Lãi/Lỗ lũy kế ($) | Đánh giá / Ghi chú |
+| Ngày theo dõi | Mốc thời gian | Sự kiện / Kiểm tra | Vốn sàn (USDT) | Lãi/Lỗ ròng Bot ($) | Đánh giá / Ghi chú |
 | :---: | :---: | :--- | :---: | :---: | :--- |
-| **Khởi điểm** | 2026-10-29 18:45 | Kích hoạt cấu hình Max Alpha | 26.05 | 0.00 | Điểm xuất phát theo dõi |
-| **Ngày 2** | 2026-10-31 07:00 | Chu kỳ Rebalance đầu tiên | *Đang chờ* | *Đang chờ* | Kiểm tra Top 2 Momentum |
-| **Ngày 4** | 2026-11-02 07:00 | Rebalance chu kỳ 2 | *Đang chờ* | *Đang chờ* | Đánh giá PnL mở |
-| **Ngày 7** | 2026-11-05 18:45 | **Sơ kết Tuần 1** | *Đang chờ* | *Đang chờ* | So sánh với mốc kỳ vọng trung bình |
-| **Ngày 9** | 2026-11-07 07:00 | Rebalance chu kỳ 3 | *Đang chờ* | *Đang chờ* | Tối ưu danh mục |
-| **Ngày 11** | 2026-11-09 07:00 | Rebalance chu kỳ 4 | *Đang chờ* | *Đang chờ* | Kiểm soát trần rủi ro |
-| **Ngày 14** | 2026-11-12 18:45 | **Tổng kết 2 Tuần** | *Đang chờ* | *Đang chờ* | Đánh giá toàn diện ROI & Hiệu suất |
+| **Mốc Chuẩn** | 2026-10-30 00:00 | Khởi động chuẩn Phase 6 + Nạp 25u | 51.00 | 0.00 | Điểm xuất phát chuẩn (tách 25u nạp) |
+| **Ngày 1** | 2026-10-31 07:00 | Nâng cấp Phase 6 Ratchet & Cooldown | 50.15 | -0.85 | Bắt sóng `BLESSUSDT`, chặn cắn lỗ |
+| **Ngày 3** | 2026-11-02 09:38 | Chốt lời BEAMX +10% & Nâng Phase 7 | 51.13 | +0.13 | Khóa lãi Ratchet Lock 2, lấp đầy POWR |
+| **Ngày 6** | 2026-11-05 10:45 | **Sơ kết Tuần 1 (Hiện tại)** | **52.85** | **+1.85** | **ROI +3.63%**, BEAMX nâng SL Breakeven |
+| **Ngày 8** | 2026-11-07 07:00 | Rebalance chu kỳ tiếp theo | *Đang chờ* | *Đang chờ* | Đánh giá Top 2 Momentum |
+| **Ngày 11** | 2026-11-10 07:00 | Kiểm soát rủi ro & bước lưới BTC | *Đang chờ* | *Đang chờ* | Tối ưu danh mục |
+| **Ngày 14** | 2026-11-13 18:45 | **Tổng kết 2 Tuần Chuẩn** | *Đang chờ* | *Đang chờ* | Đánh giá toàn diện ROI thực |
 
 ---
 

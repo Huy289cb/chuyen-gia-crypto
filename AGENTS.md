@@ -1,3 +1,37 @@
+<!-- roi-hybrid-live-phase8-freqtrade-enhancements-research-20261105 -->
+# Nghiên cứu 05/11 14:38 — Thử nghiệm Phase 8: Freqtrade-Inspired Suite (Kiểm toán Độc lập: PASS_PHASE8_INDEPENDENT_AUDIT)
+
+1. **Ý Tưởng & Cơ Chế Đề Xuất Từ Freqtrade**:
+   - **BTC Crash Health Gate (`-3.0%`)**: Ngăn chặn 75 bẫy false breakout của altcoin trong những ngày BTC sập mạnh.
+   - **Time-Decay Loser Pruning (`days >= 2`, `max_ret < 2%`, `curr_ret <= -5.0%`)**: Cắt sớm các coin thực sự chìm xuồng tại mức `-5%` (tiết kiệm 7% so với mức SL `-12%`), giải phóng slot cho coin mới bứt phá.
+2. **Kết Quả Kiểm Toán Định Lượng 1,500 Ngày**:
+   - Vốn cuối kỳ đạt **1,351.27 USDT** (Net **+1,251.27 USDT**, thặng dư **+239.17 USDT** (+23.6%) so với Phase 7).
+   - Tỷ suất ROI quy năm tăng lên **+89.7%/năm** (Cửa sổ 512 ngày tăng vọt lên **+1.6981 USDT/ngày**).
+   - Mức sụt giảm tối đa (Max Drawdown) **giảm mạnh từ 53.6% xuống 46.8%** (-6.8% drawdown).
+   - Vượt qua toàn bộ 4 Cổng kiểm toán bắt buộc (`PASS_PHASE8_INDEPENDENT_AUDIT`).
+3. **Trạng thái**: Lưu trữ tài liệu tại `docs/research/2026-11-05-phase8-freqtrade-enhancements-audit.md` và mã kiểm toán `backend/scripts/verify-phase8-freqtrade-enhancements.py`. Đang chờ phê duyệt của người dùng trước khi triển khai vào Live.
+<!-- /roi-hybrid-live-phase8-freqtrade-enhancements-research-20261105 -->
+
+<!-- roi-hybrid-live-baseline-reset-and-cashflow-isolation-20261105 -->
+# Hiện hành 05/11 10:45 — Thiết lập Mốc Đánh giá Live Chuẩn từ 30/10/2026 & Kế hoạch Phân lập Dòng tiền Nạp (External Cash Flow Isolation)
+
+1. **Chuẩn hóa Mốc Đánh giá Hiệu suất Live (Official Benchmark Baseline: 30/10/2026)**:
+   - **Xác định lại Mốc Thời gian**: Giai đoạn 24/10 – 29/10 là giai đoạn thử nghiệm cấu hình sơ khai, chưa kích hoạt đầy đủ kế hoạch chuẩn (thiếu Same-Day Cooldown, thiếu Ratchet Guard dẫn tới chuỗi dính SL whipsaw ở `QUSDT`, `EVAAUSDT`).
+   - **Mốc Khởi điểm Chuẩn thức**: Toàn bộ hiệu suất, PnL ròng và tỷ suất sinh lời thực tế được **tính bắt đầu từ ngày 30/10/2026** — thời điểm kiến trúc chuẩn Phase 6/7 chính thức đi vào hoạt động (khống chế đòn bẩy $\le 0.9\text{x}$, Same-Day SL Cooldown, 3-Day Momentum Impulse Holding, và Progressive Ratchet Profit Guard).
+   - **Ghi nhận Dòng tiền Nạp của Người dùng**: Người dùng nạp thêm **+25.0 USDT** vào tài khoản. Tuyệt đối **KHÔNG** được tính gộp số tiền này vào lợi nhuận giao dịch (Trading PnL).
+
+2. **Kế hoạch Phân lập Dòng tiền Nạp/Rút (Cash Flow Isolation Architecture)**:
+   - **Sổ cái Dòng tiền Ngoại vi (`cashflows.json`)**:
+     * Lưu trữ cấu trúc bền vững: `[{ timestamp, type: 'DEPOSIT' | 'WITHDRAWAL', amountUsd, note }]`.
+     * Tự động hoặc thủ công ghi nhận khoản nạp +25.0 USDT mốc 30/10/2026.
+   - **Điều chỉnh Công thức PnL & Cầu chì Ngày trong `HybridLiveWorker`**:
+     * `StrategyNetPnl = AccountEquity - (BaselineEquity + CumulativeDeposits - CumulativeWithdrawals)`.
+     * Khi có biến động số dư ngoài giao dịch (Deposit/Withdrawal): Tự động hiệu chỉnh `dayStartEquity += deltaDeposit` để không làm méo mó tính toán PnL ngày và không kích hoạt sai cầu chì rủi ro 12u (`dailyLossLimitUsd`).
+   - **Hiển thị Minh bạch trên Telegram & Trạng thái Worker**:
+     * Bóc tách rõ trên bản tin `/pnl`: Vốn sàn thực tế, Tổng tiền nạp thêm, Lãi/lỗ ròng do bot tự đánh (Strategy Net PnL), và % ROI thực tính từ mốc 30/10.
+
+<!-- /roi-hybrid-live-baseline-reset-and-cashflow-isolation-20261105 -->
+
 <!-- roi-hybrid-live-phase7-live-milestone-20261102 -->
 # Hiện hành 02/11 09:38 — Phase 7 Vận hành Thực chiến: Chốt Lãi Khóa BEAMXUSDT (+10% Net), Vá Lỗi Ký Tự Lạ Meme Token, Lấp Đầy Slot Ngay Lập Tức Bằng POWRUSDT
 

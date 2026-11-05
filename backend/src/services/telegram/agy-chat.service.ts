@@ -327,10 +327,15 @@ function findLatestCliConversationId(): string | undefined {
 export async function runAgyCli(
   question: string,
   chatId: string,
-  options: { conversationId?: string; isNew?: boolean } = {}
+  options: { conversationId?: string; isNew?: boolean; imagePath?: string } = {}
 ): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve) => {
-    const promptWithFormatHint = `${question}\n\n[Lưu ý định dạng: Trả lời qua tin nhắn Telegram mobile. Áp dụng skill telegram-chat-style: trực quan, chia đoạn ngắn, dùng bullet point và emoji sinh động, không dùng bảng markdown rộng hay trích xuất log terminal quá dài].`;
+    let promptWithImage = question;
+    if (options.imagePath) {
+      promptWithImage = `[Người dùng gửi kèm ảnh biểu đồ được lưu tại tệp: ${options.imagePath}. Hãy sử dụng công cụ read_file để đọc nội dung ảnh biểu đồ này và phân tích chi tiết: nhận diện mã coin, khung thời gian, các đường kẻ trendline, vùng hỗ trợ/kháng cự, chỉ báo và mũi tên/ghi chú kẻ vẽ trên ảnh].\n\nYêu cầu phân tích: ${question}`;
+    }
+
+    const promptWithFormatHint = `${promptWithImage}\n\n[Lưu ý định dạng: Trả lời qua tin nhắn Telegram mobile. Áp dụng skill telegram-chat-style: trực quan, chia đoạn ngắn, dùng bullet point và emoji sinh động, không dùng bảng markdown rộng hay trích xuất log terminal quá dài].`;
     const cmdArgs: string[] = ['-p', promptWithFormatHint, '--output-format', 'text'];
 
     if (options.conversationId) {
@@ -484,14 +489,18 @@ async function processResumeCommand(
 export async function handleHybridAgyCommand(
   chatId: string,
   rawText: string,
-  sendFn: (chatId: string, text: string) => Promise<string>
+  sendFn: (chatId: string, text: string) => Promise<string>,
+  imagePath?: string
 ): Promise<void> {
   if (!agyChatConfig.enabled) {
     await sendFn(chatId, '⚠️ Tính năng /agy đang tạm tắt (AGY_CHAT_ENABLED=false).');
     return;
   }
 
-  const args = rawText.replace(/^\/agy\s*/i, '').trim();
+  let args = rawText.replace(/^\/agy\s*/i, '').trim();
+  if (!args && imagePath) {
+    args = 'Phân tích kỹ thuật chi tiết biểu đồ này: nhận diện mã coin, khung thời gian, các đường kẻ vẽ, vùng cản/hỗ trợ, xu hướng và đưa ra nhận định khách quan.';
+  }
   const lower = args.toLowerCase();
 
   if (!args || lower === 'help') {
@@ -574,11 +583,16 @@ export async function handleHybridAgyCommand(
     ? 'tạo hội thoại mới'
     : 'tiếp tục phiên gần nhất';
 
-  await sendFn(chatId, `🪐 Antigravity đang xử lý (${promptNote}, không giới hạn thời gian)...`);
+  const waitMsg = imagePath
+    ? `🪐 Antigravity đã nhận ảnh biểu đồ và đang phân tích (${promptNote}, vui lòng chờ trong giây lát)...`
+    : `🪐 Antigravity đang xử lý (${promptNote}, không giới hạn thời gian)...`;
+
+  await sendFn(chatId, waitMsg);
 
   const result = await runAgyCli(question, chatId, {
     conversationId: activeConvId,
     isNew,
+    imagePath,
   });
 
   const chunks = chunkText(result.output, 3800);
