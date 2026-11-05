@@ -465,10 +465,18 @@ async function fetchBtcGridSignal(volGridController: VolatilityGridController): 
       const volParams = volGridController.getLastParams();
       return { ema10: 0, oneDayReturn: 0, crashGateTripped: false, volParams };
     }
+    const lastBar = data[data.length - 1];
+    const todayOpen = parseFloat(lastBar[1] as string);
+    const todayCurrent = parseFloat(lastBar[4] as string);
+    const todayReturn = todayOpen > 0 ? (todayCurrent - todayOpen) / todayOpen : 0;
+
     const closes = data.slice(-11, -1).map((k) => parseFloat(k[4] as string));
     const yesterdayClose = closes[closes.length - 1];
     const dayBeforeYesterday = closes[closes.length - 2];
-    const oneDayReturn = (yesterdayClose - dayBeforeYesterday) / dayBeforeYesterday;
+    const yesterdayReturn = dayBeforeYesterday > 0 ? (yesterdayClose - dayBeforeYesterday) / dayBeforeYesterday : 0;
+
+    // Use worst of today's intraday return or yesterday's return to detect live market dumps
+    const oneDayReturn = Math.min(todayReturn, yesterdayReturn);
     const ema10 = closes.reduce((sum, v) => sum + v, 0) / closes.length;
 
     const candleData: CandleData[] = data.map((k) => ({
