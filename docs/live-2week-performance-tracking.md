@@ -65,3 +65,22 @@ Dựa trên dữ liệu kiểm thử thực nghiệm 1,500 ngày (2022–2026) v
 3. **Cơ chế Stop Loss**: Luôn có lệnh `STOP_MARKET` thật trên sàn Binance tại mức $-12.0\%$.
 4. **Thông báo Telegram**: Nhận thông báo tức thì khi mở lệnh, chốt lời, dừng lỗ (đã sửa triệt để bug bỏ sót thông báo).
 5. **Cầu chì bảo vệ (Circuit Breaker)**: Không để lỗ quá $12.00 USDT/ngày.
+
+---
+
+## 5. Lộ Trình Đối Soát Về Bờ Mục Tiêu +25 USDT (Checkpoint Roadmap)
+
+> **Mục tiêu**: Bù đắp +25.0 USDT lợi nhuận ròng, đưa tài khoản từ **51.4 USDT lên 76.4 USDT (+48.6%)**.  
+> **Thời điểm xác lập**: 06/11/2026 (Ngày 7 của mốc chuẩn Phase 6/7/8).
+
+### Bảng Đối Soát Các Mốc Thời Gian (Checkpoint Matrix):
+
+| Mốc đối soát | Thời điểm | Kịch bản Bùng nổ (Altseason) | Kịch bản Chuẩn (Base Case) | Kịch bản Chậm (Chop Market) | Trạng thái / Kết quả thực tế |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **Mốc 30 Ngày** | **06/12/2026** | **76.4 USDT** (Về bờ 100%) | **59.0 – 61.5 USDT** (+8u đến +10.5u) | **55.0 – 57.0 USDT** (+4u đến +6u) | *Chờ kiểm tra ngày 06/12* |
+| **Mốc 60 Ngày** | **06/01/2027** | Vượt đỉnh (> 85 USDT) | **67.0 – 70.0 USDT** (+16u đến +19u) | **60.0 – 63.0 USDT** (+9u đến +12u) | *Chờ kiểm tra ngày 06/01* |
+| **Mốc 90 Ngày** | **06/02/2027** | Vượt đỉnh (> 100 USDT) | **76.4 USDT** (VỀ BỜ 100% +25u) | **67.0 – 72.0 USDT** (Đạt 80% về bờ) | *Chờ kiểm tra ngày 06/02* |
+
+> [!IMPORTANT]
+> * **Nguyên tắc quản trị**: Không tăng đòn bẩy đột ngột. Tuân thủ Dynamic Compounding 24%/vị thế ($\le 0.9\text{x}$ tổng đòn bẩy).
+> * **Tự động tăng tốc**: Khi vốn tăng lên 60u, 70u, quy mô lệnh tự động mở rộng theo cấp số nhân.

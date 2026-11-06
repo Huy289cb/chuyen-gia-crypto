@@ -1,3 +1,26 @@
+<!-- roi-hybrid-recovery-milestones-target25u-20261106 -->
+# Hiện hành 06/11 08:15 — Thiết lập Lộ trình Đối soát Về Bờ Mục tiêu +25 USDT (Checkpoint Roadmap: 30 Ngày, 60 Ngày, 90 Ngày)
+
+1. **Cam kết & Mốc Mục tiêu Người Dùng Yêu Cầu (Target: +25.0 USDT)**:
+   - **Vốn hiện tại (mốc 06/11/2026)**: **51.40 USDT** (Khả dụng ~46.5 USDT).
+   - **Mục tiêu về bờ**: Kiếm thêm **+25.0 USDT** lợi nhuận ròng, đưa tổng vốn lên **76.40 USDT (+48.6%)**.
+2. **Ba Mốc Đối Soát Bắt Buộc (Checkpoints)**:
+   - **Mốc 30 Ngày (06/12/2026)**:
+     * Kịch bản Bùng nổ (Altseason): Đạt **76.4 USDT** (Về bờ 100%).
+     * Kịch bản Chuẩn (Base Case): Đạt **59.0 – 61.5 USDT** (Lãi ròng +8u đến +10.5u).
+     * Kịch bản Chậm (Chop Market): Đạt **55.0 – 57.0 USDT** (Lãi ròng +4u đến +6u).
+   - **Mốc 60 Ngày (06/01/2027)**:
+     * Kịch bản Chuẩn: Đạt **67.0 – 70.0 USDT** (Lãi ròng +16u đến +19u, đạt 70% chặng đường).
+     * Kịch bản Chậm: Đạt **60.0 – 63.0 USDT** (Lãi ròng +9u đến +12u).
+   - **Mốc 90 Ngày (06/02/2027)**:
+     * Kịch bản Chuẩn: Đạt **76.4 USDT** (**CHÍNH THỨC VỀ BỜ 100%**, hoàn tất mục tiêu +25 USDT).
+     * Kịch bản Chậm: Đạt **67.0 – 72.0 USDT** (Đạt ~80% về bờ, về bờ hoàn toàn ở tháng thứ 4).
+3. **Nguyên tắc Vận Hành Cốt Lõi**:
+   - Giữ nguyên kỷ luật đòn bẩy $\le 0.9\text{x}$ (phân bổ Dynamic Compounding 24%/vị thế, tối đa 2 vị thế momentum).
+   - Tuyệt đối không nâng đòn bẩy đột ngột. Để hiệu ứng lãi kép tự động mở rộng quy mô lệnh khi vốn tăng.
+   - Tài liệu theo dõi: `docs/live-2week-performance-tracking.md`.
+<!-- /roi-hybrid-recovery-milestones-target25u-20261106 -->
+
 <!-- roi-hybrid-live-phase8-freqtrade-enhancements-research-20261105 -->
 # Nghiên cứu 05/11 14:38 — Thử nghiệm Phase 8: Freqtrade-Inspired Suite (Kiểm toán Độc lập: PASS_PHASE8_INDEPENDENT_AUDIT)
 
