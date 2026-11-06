@@ -55,7 +55,7 @@ export function formatHybridPositionClosedNotice(input: {
       : input.reason === 'RISK_REDUCTION'
       ? '🛡️ Dừng lỗ giảm rủi ro (-3.0%)'
       : input.reason === 'LOCK_PROFIT'
-      ? '🔒 Khóa lãi bảo toàn (+5% / +10%)'
+      ? '🔒 Khóa lãi bảo toàn (+3.5% / +6% / +10%)'
       : input.reason === 'EVENT_SHIELD'
       ? '🚨 Event Shield bảo vệ'
       : '🛑 Dừng lỗ ban đầu (Stop Loss)';
@@ -86,7 +86,7 @@ export function formatHybridStopNotice(input: { symbol: string; mark: number; sl
 
 export function formatHybridRatchetNotice(input: {
   symbol: string;
-  tier: 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock';
+  tier: 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock';
   entryPrice: number;
   newSlPrice: number;
   maxReturnPct: number;
@@ -95,9 +95,11 @@ export function formatHybridRatchetNotice(input: {
   if (input.tier === 'risk_reduction') {
     tierTitle = '🛡️ GIẢM RỦI RO (-3,0%)';
   } else if (input.tier === 'lock1') {
-    tierTitle = '🔒 KHÓA LÃI NẤC 1 (+5,0%)';
-  } else if (input.tier === 'lock2' || input.tier === 'lock') {
-    tierTitle = '🔒 KHÓA LÃI NẤC 2 (+10,0%)';
+    tierTitle = '🔒 KHÓA LÃI NẤC 1 (+3,5%)';
+  } else if (input.tier === 'lock2') {
+    tierTitle = '🔒 KHÓA LÃI NẤC 2 (+6,0%)';
+  } else if (input.tier === 'lock3' || input.tier === 'lock') {
+    tierTitle = '🔒 KHÓA LÃI NẤC 3 (+10,0%)';
   }
   return [
     `🛡️ BẢO VỆ LỢI NHUẬN: ${tierTitle} cho ${coin(input.symbol)}`,
@@ -247,8 +249,9 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
           let tierNote = 'SL sàn:';
           if (p.ratchetTier === 'risk_reduction') tierNote = '🛡️ SL Giảm rủi ro (-3%):';
           else if (p.ratchetTier === 'breakeven') tierNote = '🛡️ SL Hòa vốn (+0.8%):';
-          else if (p.ratchetTier === 'lock1') tierNote = '🔒 SL Khóa lãi 1 (+5%):';
-          else if (p.ratchetTier === 'lock2' || p.ratchetTier === 'lock') tierNote = '🔒 SL Khóa lãi 2 (+10%):';
+          else if (p.ratchetTier === 'lock1') tierNote = '🔒 SL Khóa lãi 1 (+3.5%):';
+          else if (p.ratchetTier === 'lock2') tierNote = '🔒 SL Khóa lãi 2 (+6.0%):';
+          else if (p.ratchetTier === 'lock3' || p.ratchetTier === 'lock') tierNote = '🔒 SL Khóa lãi 3 (+10.0%):';
           lines.push(`• ${p.qty > 0 ? 'MUA' : 'BÁN'} ${qtyText(p.qty)} ${coin(p.symbol)}: ${stateStr} ${usd(p.unrlPnl, true)}`);
           lines.push(`   Giá vào: ${px(p.entryPrice)} | Hiện tại: ${px(p.markPrice)} | ${tierNote} ${px(p.slPrice)}`);
         }

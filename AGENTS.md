@@ -1,3 +1,31 @@
+<!-- roi-hybrid-live-phase8-1-early-lock-ratchet-20261106 -->
+# Hiện hành 06/11 12:45 — Triển khai Phase 8.1: Early-Lock Multi-Tier Ratchet Profit Guard (Kiểm toán Định lượng 1,500 Ngày)
+
+1. **Bối Cảnh Thực Chiến & Cơ Chế Khóa Lãi Sớm**:
+   - **Thực tế thị trường altcoin hiện tại**: Các đợt bứt phá (markup impulse) thường kết thúc nhanh sau khi đạt đỉnh $+7\%$ đến $+8.5\%$ (`CLANKERUSDT` $+8.0\%$, `ELSAUSDT` $+8.1\%$).
+   - **Hạn chế của bộ cũ (Baseline Phase 8)**: Đợi $+12\%$ mới khóa lãi $+5\%$ (ngưỡng $+8\%$ chỉ đưa về hòa vốn $+0.8\%$), dẫn đến việc bị trôi ngược về hòa vốn, bỏ lỡ cơ hội tích lũy vốn.
+   - **Bộ Nấc Early-Lock Mới**:
+     * Lãi $\ge +5.0\%$: Nâng SL lên $+0.8\%$ (Bảo toàn hòa vốn có lãi ngay lập tức, triệt tiêu rủi ro thua lỗ).
+     * Lãi $\ge +7.0\%$: Nâng SL lên $+3.5\%$ (Khóa lãi nấc 1: nắm chắc tiền tươi khi coin chạm $+7\%$).
+     * Lãi $\ge +10.0\%$: Nâng SL lên $+6.0\%$ (Khóa lãi nấc 2).
+     * Lãi $\ge +14.0\%$: Nâng SL lên $+10.0\%$ (Khóa lãi nấc 3).
+
+2. **Kết Quả Kiểm Toán Định Lượng & Đối Soát Trade-off**:
+   - Vốn cuối kỳ 1,500 ngày đạt **$1,342.97** (Net **+$1,242.97**, thặng dư **+$57.53 USDT** so với Baseline).
+   - Cửa sổ 512 ngày gần nhất: Net **+$863.24** (vượt trội **+$72.15 USDT**, trung bình **+$1.6860/ngày**).
+   - Số lần chốt lãi có tiền tăng vọt từ 14 lên **49 lệnh** (gấp 3.5 lần).
+   - Max Drawdown: **46.84%** (nguyên vẹn, không tăng rủi ro), ngày xấu nhất $-11.58\%$ (0 lần sập cầu chì).
+   - **Đánh đổi (Trade-off) trung thực**:
+     * Ở Kỳ 1 (Bear 2022-2024): Early-Lock kiếm 324u (kém 18u so với Baseline 342u) do bị chốt non ở các sóng hồi dài.
+     * Ở Kỳ 2 (Chop/Bull 2024-2026): Early-Lock vượt trội đạt 208u (vượt 25u so với Baseline 183u) nhờ thu tiền sớm ở các sóng cộc.
+     * Cấu hình `hybrid_protect` khi test bị GIẢM -48u, chứng minh không phải mọi thay đổi đều làm tăng kết quả.
+
+3. **Trạng Thái Triển Khai**:
+   - Đã cập nhật vào `src/portfolio/hybrid-worker.ts`, `src/portfolio/hybrid-live-notice.ts`.
+   - Unit tests: 17/17 PASSED (`tests/unit/phase6-ratchet-profit-guard.test.ts`).
+   - Biên dịch TypeScript hoàn tất, PM2 `crypto-hybrid-live` đã restart và vận hành trực tiếp.
+<!-- /roi-hybrid-live-phase8-1-early-lock-ratchet-20261106 -->
+
 <!-- roi-hybrid-recovery-milestones-target25u-20261106 -->
 # Hiện hành 06/11 08:15 — Thiết lập Lộ trình Đối soát Về Bờ Mục tiêu +25 USDT (Checkpoint Roadmap: 30 Ngày, 60 Ngày, 90 Ngày)
 

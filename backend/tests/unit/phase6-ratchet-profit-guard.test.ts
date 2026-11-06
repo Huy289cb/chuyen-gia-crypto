@@ -25,7 +25,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
     });
   });
 
-  describe('Part 2: Progressive 4-Tier Ratchet Logic Simulation', () => {
+  describe('Part 2: Early-Lock Multi-Tier Ratchet Logic Simulation', () => {
     function computeProgressiveRatchet(
       entry: number,
       mark: number,
@@ -34,7 +34,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
       initialSlPct = 0.12
     ): {
       targetSl: number;
-      targetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock';
+      targetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock';
       shouldRatchet: boolean;
       newMaxRet: number;
     } {
@@ -42,20 +42,20 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
       const newMaxRet = Math.max(currentMaxRet, ret);
 
       let targetSl = entry * (1.0 - initialSlPct);
-      let targetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock' = 'initial';
+      let targetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock' = 'initial';
 
-      if (newMaxRet >= 0.16) {
+      if (newMaxRet >= 0.14) {
         targetSl = entry * 1.10;
+        targetTier = 'lock3';
+      } else if (newMaxRet >= 0.10) {
+        targetSl = entry * 1.06;
         targetTier = 'lock2';
-      } else if (newMaxRet >= 0.12) {
-        targetSl = entry * 1.05;
+      } else if (newMaxRet >= 0.07) {
+        targetSl = entry * 1.035;
         targetTier = 'lock1';
-      } else if (newMaxRet >= 0.08) {
+      } else if (newMaxRet >= 0.05) {
         targetSl = entry * 1.008;
         targetTier = 'breakeven';
-      } else if (newMaxRet >= 0.05) {
-        targetSl = entry * 0.97;
-        targetTier = 'risk_reduction';
       }
 
       const shouldRatchet = targetSl > currentSl * 1.001;
@@ -74,60 +74,60 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
       expect(r.newMaxRet).toBeCloseTo(0.03);
     });
 
-    it('ratchets to Risk-Reduction (-3.0%) when gain touches +5.2%', () => {
+    it('ratchets to Breakeven (+0.8%) when gain touches +5.2%', () => {
       const entry = 10.0;
       const initialSl = entry * 0.88; // 8.80 (-12%)
       const mark = 10.52; // +5.2% gain
 
       const r = computeProgressiveRatchet(entry, mark, initialSl, 0.0);
       expect(r.shouldRatchet).toBe(true);
-      expect(r.targetTier).toBe('risk_reduction');
-      expect(r.targetSl).toBeCloseTo(9.70); // Entry - 3.0% (cuts 75% risk!)
+      expect(r.targetTier).toBe('breakeven');
+      expect(r.targetSl).toBeCloseTo(10.08); // Entry + 0.8%
       expect(r.newMaxRet).toBeCloseTo(0.052);
     });
 
-    it('ratchets to Confirmed Break-Even (+0.8%) when gain touches +8.5%', () => {
-      const entry = 10.0;
-      const rrSl = 9.70; // Current SL at -3%
-      const mark = 10.85; // +8.5% gain
-
-      const r = computeProgressiveRatchet(entry, mark, rrSl, 0.052);
-      expect(r.shouldRatchet).toBe(true);
-      expect(r.targetTier).toBe('breakeven');
-      expect(r.targetSl).toBeCloseTo(10.08); // Entry + 0.8%
-      expect(r.newMaxRet).toBeCloseTo(0.085);
-    });
-
-    it('does not ratchet backward when price pulls back from +8.5% to +3%', () => {
+    it('ratchets to Lock-Profit 1 (+3.5%) when gain touches +7.5%', () => {
       const entry = 10.0;
       const beSl = 10.08;
-      const mark = 10.30; // +3% after prior +8.5% peak
+      const mark = 10.75; // +7.5% gain
 
-      const r = computeProgressiveRatchet(entry, mark, beSl, 0.085);
-      expect(r.shouldRatchet).toBe(false);
-      expect(r.targetTier).toBe('breakeven');
-      expect(r.targetSl).toBeCloseTo(10.08); // Preserves BE stop!
-    });
-
-    it('ratchets to Lock-Profit 1 (+5.0%) when gain touches +13.0%', () => {
-      const entry = 10.0;
-      const beSl = 10.08;
-      const mark = 11.30; // +13.0% peak
-
-      const r = computeProgressiveRatchet(entry, mark, beSl, 0.085);
+      const r = computeProgressiveRatchet(entry, mark, beSl, 0.052);
       expect(r.shouldRatchet).toBe(true);
       expect(r.targetTier).toBe('lock1');
-      expect(r.targetSl).toBeCloseTo(10.50); // Entry + 5.0%
+      expect(r.targetSl).toBeCloseTo(10.35); // Entry + 3.5%
+      expect(r.newMaxRet).toBeCloseTo(0.075);
     });
 
-    it('ratchets to Lock-Profit 2 (+10.0%) when gain touches +17.5%', () => {
+    it('does not ratchet backward when price pulls back from +7.5% to +4%', () => {
       const entry = 10.0;
-      const lock1Sl = 10.50;
-      const mark = 11.75; // +17.5% peak
+      const lock1Sl = 10.35;
+      const mark = 10.40; // +4% after prior +7.5% peak
 
-      const r = computeProgressiveRatchet(entry, mark, lock1Sl, 0.13);
+      const r = computeProgressiveRatchet(entry, mark, lock1Sl, 0.075);
+      expect(r.shouldRatchet).toBe(false);
+      expect(r.targetTier).toBe('lock1');
+      expect(r.targetSl).toBeCloseTo(10.35); // Preserves Lock 1 stop!
+    });
+
+    it('ratchets to Lock-Profit 2 (+6.0%) when gain touches +10.5%', () => {
+      const entry = 10.0;
+      const lock1Sl = 10.35;
+      const mark = 11.05; // +10.5% peak
+
+      const r = computeProgressiveRatchet(entry, mark, lock1Sl, 0.075);
       expect(r.shouldRatchet).toBe(true);
       expect(r.targetTier).toBe('lock2');
+      expect(r.targetSl).toBeCloseTo(10.60); // Entry + 6.0%
+    });
+
+    it('ratchets to Lock-Profit 3 (+10.0%) when gain touches +14.5%', () => {
+      const entry = 10.0;
+      const lock2Sl = 10.60;
+      const mark = 11.45; // +14.5% peak
+
+      const r = computeProgressiveRatchet(entry, mark, lock2Sl, 0.105);
+      expect(r.shouldRatchet).toBe(true);
+      expect(r.targetTier).toBe('lock3');
       expect(r.targetSl).toBeCloseTo(11.00); // Entry + 10.0%
     });
   });
@@ -166,12 +166,12 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         symbol: 'BLESSUSDT',
         tier: 'lock1',
         entryPrice: 0.00908,
-        newSlPrice: 0.009534,
-        maxReturnPct: 12.5,
+        newSlPrice: 0.009398,
+        maxReturnPct: 7.5,
       });
 
-      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 1 (+5,0%) cho BLESS');
-      expect(text).toContain('+12.5%');
+      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 1 (+3,5%) cho BLESS');
+      expect(text).toContain('+7.5%');
     });
 
     it('formats lock-profit 2 notice correctly', () => {
@@ -179,12 +179,25 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         symbol: 'BLESSUSDT',
         tier: 'lock2',
         entryPrice: 0.00908,
-        newSlPrice: 0.009988,
-        maxReturnPct: 17.0,
+        newSlPrice: 0.009625,
+        maxReturnPct: 10.5,
       });
 
-      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 2 (+10,0%) cho BLESS');
-      expect(text).toContain('+17.0%');
+      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 2 (+6,0%) cho BLESS');
+      expect(text).toContain('+10.5%');
+    });
+
+    it('formats lock-profit 3 notice correctly', () => {
+      const text = formatHybridRatchetNotice({
+        symbol: 'BLESSUSDT',
+        tier: 'lock3',
+        entryPrice: 0.00908,
+        newSlPrice: 0.009988,
+        maxReturnPct: 15.0,
+      });
+
+      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 3 (+10,0%) cho BLESS');
+      expect(text).toContain('+15.0%');
     });
 
     it('formats closed position with risk reduction reason', () => {
