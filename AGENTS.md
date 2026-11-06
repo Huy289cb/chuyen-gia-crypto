@@ -43,7 +43,13 @@
    - **Mốc 90 Ngày (06/02/2027)**:
      * Kịch bản Chuẩn: Đạt **76.4 USDT** (**CHÍNH THỨC VỀ BỜ 100%**, hoàn tất mục tiêu +25 USDT).
      * Kịch bản Chậm: Đạt **67.0 – 72.0 USDT** (Đạt ~80% về bờ, về bờ hoàn toàn ở tháng thứ 4).
-3. **Nguyên tắc Vận Hành Cốt Lõi**:
+3. **Ghi Nhận Đối Soát Mốc Tuần 1 (06/11/2026)**:
+   - **Kết quả thực tế**: Vốn **50.92 USDT**, Net PnL **-0.08 USDT (-0.16%)** so với mốc xuất phát chuẩn 51.00 USDT ngày 30/10.
+   - **Kết luận Người Dùng Xác Nhận**: **KHÔNG ĐẠT MỤC TIÊU TUẦN 1 (MISSED CHECKPOINT)**.
+   - **Bối cảnh & Nguyên nhân**: Từng đạt đỉnh 52.85u (+1.85u) ngày 05/11, nhưng cú xả Phố Wall/BTC -5.5% và cơ chế Ratchet cũ chưa kịp chốt ở CLANKER (+8%) và ELSA (+8.1%) kéo tài khoản lùi về hòa vốn.
+   - **Khắc phục**: Đã nâng cấp Phase 8.1 Early-Lock Ratchet (+7% khóa +3.5%) để ngăn rơi mất lãi, tiếp tục theo dõi tiến độ hướng tới Mốc 30 Ngày (06/12).
+
+4. **Nguyên tắc Vận Hành Cốt Lõi**:
    - Giữ nguyên kỷ luật đòn bẩy $\le 0.9\text{x}$ (phân bổ Dynamic Compounding 24%/vị thế, tối đa 2 vị thế momentum).
    - Tuyệt đối không nâng đòn bẩy đột ngột. Để hiệu ứng lãi kép tự động mở rộng quy mô lệnh khi vốn tăng.
    - Tài liệu theo dõi: `docs/live-2week-performance-tracking.md`.

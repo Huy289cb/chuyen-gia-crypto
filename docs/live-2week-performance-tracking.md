@@ -51,7 +51,8 @@ Dựa trên dữ liệu kiểm thử thực nghiệm 1,500 ngày (2022–2026) v
 | **Mốc Chuẩn** | 2026-10-30 00:00 | Khởi động chuẩn Phase 6 + Nạp 25u | 51.00 | 0.00 | Điểm xuất phát chuẩn (tách 25u nạp) |
 | **Ngày 1** | 2026-10-31 07:00 | Nâng cấp Phase 6 Ratchet & Cooldown | 50.15 | -0.85 | Bắt sóng `BLESSUSDT`, chặn cắn lỗ |
 | **Ngày 3** | 2026-11-02 09:38 | Chốt lời BEAMX +10% & Nâng Phase 7 | 51.13 | +0.13 | Khóa lãi Ratchet Lock 2, lấp đầy POWR |
-| **Ngày 6** | 2026-11-05 10:45 | **Sơ kết Tuần 1 (Hiện tại)** | **52.85** | **+1.85** | **ROI +3.63%**, BEAMX nâng SL Breakeven |
+| **Ngày 6** | 2026-11-05 10:45 | Sơ kết ngày 6 | 52.85 | +1.85 | Từng đạt đỉnh ROI +3.63%, BEAMX nâng SL Breakeven |
+| **Ngày 7** | 2026-11-06 17:00 | **KẾT THÚC TUẦN 1 (7 NGÀY)** | **50.92** | **-0.08** | **❌ KHÔNG ĐẠT MỤC TIÊU TUẦN 1** (Kỳ vọng +0.83u đến +2.53u). Bị BTC dump -5.5% và rơi lãi CLANKER/ELSA kéo lùi về hòa vốn. Đã kích hoạt Phase 8.1 Early-Lock để sửa sai. |
 | **Ngày 8** | 2026-11-07 07:00 | Rebalance chu kỳ tiếp theo | *Đang chờ* | *Đang chờ* | Đánh giá Top 2 Momentum |
 | **Ngày 11** | 2026-11-10 07:00 | Kiểm soát rủi ro & bước lưới BTC | *Đang chờ* | *Đang chờ* | Tối ưu danh mục |
 | **Ngày 14** | 2026-11-13 18:45 | **Tổng kết 2 Tuần Chuẩn** | *Đang chờ* | *Đang chờ* | Đánh giá toàn diện ROI thực |
