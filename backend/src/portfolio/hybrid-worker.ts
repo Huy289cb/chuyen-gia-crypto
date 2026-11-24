@@ -1564,6 +1564,8 @@ export class HybridLiveWorker {
         }
 
         this.activeTrackedPositions.delete(sym);
+        // Eagerly allow immediate momentum retry check to fill vacant slot
+        this.momentumRetryAt = 0;
       }
     }
 

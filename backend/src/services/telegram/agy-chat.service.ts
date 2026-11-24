@@ -525,7 +525,7 @@ export async function handleHybridAgyCommand(
     return;
   }
 
-  if (lower === 'status') {
+  if (lower === 'status' || lower === '/status') {
     const item = activeProcesses.get(chatId);
     const activeId = getActiveConversation(chatId);
     const lines = ['🪐 TRẠNG THÁI ANTIGRAVITY (AGY):'];
@@ -546,6 +546,7 @@ export async function handleHybridAgyCommand(
     }
 
     lines.push('• Thời gian chờ: Không giới hạn (timeout tắt, dùng /agy cancel để ngắt)');
+    lines.push('\n💡 Mẹo: Để xem trạng thái Bot Trade v1.0.0 (Vốn, Lệnh, PnL), hãy gõ thẳng /status hoặc /lenh (không kèm /agy).');
     await sendFn(chatId, lines.join('\n'));
     return;
   }
