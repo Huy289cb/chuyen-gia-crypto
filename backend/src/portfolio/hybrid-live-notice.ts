@@ -29,7 +29,7 @@ export function formatHybridBookNotice(input: {
   equity: number;
   dayPnl: number;
 }): string {
-  const lines = ['📊 PHA 2 ĐANG GIỮ LỆNH'];
+  const lines = ['📊 DANH MỤC HYBRID LIVE v1.0.0'];
   const positions = [...input.positions].sort((a, b) => a.symbol.localeCompare(b.symbol));
   if (!positions.length) lines.push('Không còn vị thế.');
   for (const position of positions) {
@@ -175,7 +175,7 @@ export function formatHybridPruneNotice(input: {
   daysHeld: number;
 }): string {
   return [
-    `✂️ CẮT TỈA COIN CHÌM XUỒNG (PHASE 8 PRUNING)`,
+    `✂️ CẮT TỈA COIN CHÌM XUỒNG v1.0.0 (TIME-DECAY PRUNING)`,
     `• Đồng coin: ${coin(input.symbol)}`,
     `• Thời gian giữ: ${input.daysHeld} ngày (không vượt nổi +2%)`,
     `• Giá vào: ${px(input.entryPrice)} ➔ Giá thoát: ${px(input.exitPrice)}`,
@@ -218,7 +218,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
         : '✅ Đang giám sát (nhịp 3s)';
 
       return [
-        '🟢 WORKER HYBRID LIVE (PHASE 6)',
+        '🟢 WORKER HYBRID LIVE v1.0.0 (OFFICIAL RELEASE)',
         `• Trạng thái: ${statusText}`,
         `• Vốn sàn (Equity): ${usd(state.accountEquity)}`,
         `• Khả dụng (Available): ${usd(state.availableBalance)}`,
@@ -235,7 +235,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'lenh':
     case 'positions': {
       const lines = [
-        '📊 BÁO CÁO VỊ THẾ HYBRID LIVE (PHASE 6)',
+        '📊 BÁO CÁO VỊ THẾ HYBRID LIVE v1.0.0',
         `Vốn: ${usd(state.accountEquity)} | Lãi/lỗ ngày: ${usd(state.currentDayPnl, true)} | Chưa chốt: ${usd(totalUnrl, true)}`,
         `Cập nhật lúc: ${formatTimeIct(state.lastObservedAt)}`,
         '',
@@ -306,10 +306,10 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'vutru': {
       const du = state.dynamicUniverse;
       if (!du) {
-        return '🌐 VŨ TRỤ GIAO DỊCH (PHASE 4):\n• Đang sử dụng 40 symbols mặc định.';
+        return '🌐 VŨ TRỤ GIAO DỊCH v1.0.0:\n• Đang sử dụng 40 symbols mặc định.';
       }
       return [
-        '🌐 VŨ TRỤ GIAO DỊCH ĐỘNG (PHASE 4)',
+        '🌐 VŨ TRỤ GIAO DỊCH ĐỘNG v1.0.0',
         `• Số lượng lọc: Top ${du.count} Binance Futures (> $50M/ngày)`,
         `• Cập nhật lần cuối: ${formatTimeIct(du.lastScannedAt)}`,
         `• Top 10 thanh khoản: ${du.topSymbols.map(coin).join(', ')}`,
@@ -322,14 +322,14 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
       const es = state.eventShield;
       if (!es || es.blacklistCount === 0) {
         return [
-          '🛡️ EVENT SHIELD (LÁ CHẮN THIÊN NGA ĐEN)',
+          '🛡️ EVENT SHIELD v1.0.0 (LÁ CHẮN THIÊN NGA ĐEN)',
           '• Trạng thái: ✅ Đang trực chiến',
           '• Danh sách Blacklist: 0 coin',
           '• Không phát hiện tin tức Delist hoặc Exploit nguy hiểm.',
         ].join('\n');
       }
       return [
-        '🛡️ EVENT SHIELD (LÁ CHẮN THIÊN NGA ĐEN)',
+        '🛡️ EVENT SHIELD v1.0.0 (LÁ CHẮN THIÊN NGA ĐEN)',
         `• Danh sách Blacklist: ${es.blacklistCount} coin`,
         `• Lệnh đóng khẩn cấp (Critical Close): ${es.criticalCloseCount} coin`,
         `• Các coin bị chặn: ${es.blacklistedSymbols.map(coin).join(', ')}`,
@@ -341,10 +341,10 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'laikep': {
       const dc = state.dynamicCompounding;
       if (!dc) {
-        return '📈 LÃI KÉP ĐỘNG (PHASE 5):\n• Đang sử dụng phân bổ mặc định 24% / 14%.';
+        return '📈 LÃI KÉP ĐỘNG v1.0.0:\n• Đang sử dụng phân bổ chuẩn 35% vốn / vị thế.';
       }
       return [
-        '📈 LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING (PHASE 5)',
+        '📈 LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING v1.0.0',
         `• Vốn tài khoản hiện hành: ${usd(state.accountEquity)}`,
         `• Phân bổ Momentum: ${usd(dc.momentumAllocUsd)} / lệnh (tương đương ${(dc.targetMomentumPct * 100).toFixed(0)}% vốn)`,
         `• Phân bổ BTC Grid: ${usd(dc.btcGridTicketUsd)} / tầng (tương đương ${(dc.targetGridTicketPct * 100).toFixed(0)}% vốn)`,
@@ -357,10 +357,10 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'luoi': {
       const vg = state.volatilityGrid;
       if (!vg) {
-        return '⚡ LƯỚI BTC CO GIÃN THEO ATR (PHASE 5):\n• Đang sử dụng thông số lưới mặc định.';
+        return '⚡ LƯỚI BTC CO GIÃN THEO ATR v1.0.0:\n• Đang sử dụng thông số lưới mặc định.';
       }
       return [
-        '⚡ LƯỚI BIẾN ĐỘNG BTC (PHASE 5 ATR-14 VOLATILITY GRID)',
+        '⚡ LƯỚI BIẾN ĐỘNG BTC v1.0.0 (ATR-14 VOLATILITY GRID)',
         `• ATR 14 ngày hiện tại: $${vg.atr14.toFixed(0)} (${vg.atr14Pct.toFixed(2)}% giá BTC)`,
         `• Hệ số biến động (Vol Multiplier): ${vg.volMultiplier.toFixed(2)}x (${vg.regime === 'high_volatility' ? 'Biến động mạnh' : vg.regime === 'low_volatility' ? 'Thị trường yên ắng' : 'Biến động bình thường'})`,
         `• Bước lưới co giãn: ${(vg.gridStepPct * 100).toFixed(2)}% mỗi tầng`,
@@ -373,7 +373,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'help':
     default: {
       return [
-        '🤖 CÁC LỆNH THEO DÕI BOT HYBRID LIVE (PHASE 6):',
+        '🤖 CÁC LỆNH THEO DÕI BOT HYBRID LIVE v1.0.0:',
         '• /agy <câu hỏi> — Chat với Antigravity AI trực tiếp trên máy chủ',
         '• /agy list · /agy resume <số> — Xem & chọn hội thoại tiếp tục',
         '• /agy new · /agy status · /agy cancel — Quản lý phiên agy',

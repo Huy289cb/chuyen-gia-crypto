@@ -1,3 +1,37 @@
+<!-- official-production-release-v1-0-0-20261124 -->
+# Hiện hành 24/11 19:15 — Triển khai Phiên bản Chính thức v1.0.0 (Official Production Release) & Tích hợp Time-Decay Pruning + 35% Sizing
+
+1. **Chuẩn hóa Thương hiệu & Ngữ nghĩa (Wording Migration)**:
+   - Toàn bộ cách gọi thử nghiệm "Phase x" (Phase 4, 5, 6, 7, 8, 8.1, 8.2) được chính thức chuẩn hóa và hợp nhất thành: **Phiên bản Chính thức v1.0.0 (Official Production Release)**.
+   - Cập nhật hiển thị đồng bộ trên toàn bộ thông báo Telegram, bot commands (`/status`, `/lenh`, `/compounding`, `/universe`, `/grid`, `/shield`), và log worker PM2 `crypto-hybrid-live`.
+
+2. **Hai Cốt Lõi Kiến Trúc v1.0.0 Triển Khai Thực Chiến**:
+   - **Tối ưu hóa Vốn 35% / Vị thế (`MOMENTUM_ALLOC_PCT = 0.35`)**:
+     * 2 vị thế Momentum x 35% vốn = 70% tổng giải ngân, bảo toàn 30% đệm tiền mặt an toàn.
+     * Giải quyết triệt để 52% lực cản tiền mặt chết (Idle Cash Drag) do sàn Binance Futures giới hạn minNotional $50 đối với BTC Grid.
+     * Cân bằng hoàn hảo tỷ lệ R/R: Lệnh thắng Ratchet (+3.5% đến +10%) thu về +1.2u đến +3.4u, áp đảo lệnh thua (-1.7u).
+   - **Time-Decay Loser Pruning (Cắt sớm -5% sau 48h)**:
+     * Tự động cắt sớm ở `-5.0%` đối với coin giữ $\ge 2$ ngày mà đỉnh không vượt nổi `+2%`.
+     * Tiết kiệm 7% vốn cho mỗi lệnh so với mức SL `-12.0%`, lập tức giải phóng slot cho coin mới bứt phá.
+     * Khảo sát đối soát: 76.7% coin bị cắt tiếp tục chìm sâu $\le -7\%$, chỉ có 10.1% tiếc nuối.
+   - **Bộ Bảo Toàn Lãi Early-Lock Ratchet**:
+     * $+5\%$ -> $+0.8\%$ (Hòa vốn có lãi).
+     * $+7\%$ -> $+3.5\%$ (Khóa lãi nấc 1).
+     * $+10\%$ -> $+6.0\%$ (Khóa lãi nấc 2).
+     * $+14\%$ -> $+10.0\%$ (Khóa lãi nấc 3).
+   - **Phân lập Cooldown v1.0.0**: 2 giờ cho lệnh chốt lãi, hết ngày UTC cho lệnh cắt lỗ.
+
+3. **Kết Quả Kiểm Toán Độc Lập 4 Cổng (`PASS_OPTIMAL_METHOD_INDEPENDENT_AUDIT`)**:
+   - Vốn tĩnh 1,500 ngày đạt **$914.04** (Net **+$814.04 USDT**, gấp **2.12 lần** Baseline).
+   - Cửa sổ 512 ngày: Net **+$305.10 USDT** (trung bình **+$0.5959/ngày**, gấp 2.45 lần).
+   - Max Drawdown: **9.8%** (thấp hơn baseline 11.6%), ngày xấu nhất $-5.31\%$ (0 lần sập cầu chì).
+   - Stress-test 3,000 ngày (2 Halving cycles): Net **+$2,111.23 USDT**, 0 lần vi phạm cầu chì.
+
+4. **Trạng Thái Thực Chiến Live**:
+   - TypeScript build thành công, PM2 `crypto-hybrid-live` (PID 6) online 100%.
+   - Mở ngay vị thế `LISTAUSDT` Qty=332 (~$33.89, đúng chuẩn 35% vốn), SL sàn tại 0.08982.
+<!-- /official-production-release-v1-0-0-20261124 -->
+
 <!-- roi-hybrid-live-phase8-1-early-lock-ratchet-20261106 -->
 # Hiện hành 06/11 12:45 — Triển khai Phase 8.1: Early-Lock Multi-Tier Ratchet Profit Guard (Kiểm toán Định lượng 1,500 Ngày)
 

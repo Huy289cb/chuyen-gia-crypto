@@ -21,35 +21,35 @@ describe('Phase 5: Dynamic Compounding & Volatility-Scaled Grid', () => {
     const manager = new DynamicCompoundingManager(5.0);
 
     it('defines core quantitative compounding parameters', () => {
-      expect(MOMENTUM_ALLOC_PCT).toBe(0.24);
-      expect(BTC_GRID_TICKET_PCT).toBe(0.14);
+      expect(MOMENTUM_ALLOC_PCT).toBe(0.35);
+      expect(BTC_GRID_TICKET_PCT).toBe(0.08);
       expect(DAILY_LOSS_LIMIT_PCT).toBe(0.12);
       expect(BASELINE_DAILY_LOSS_LIMIT_USD).toBe(12.0);
     });
 
     it('computes momentum position sizing in proportion to realized equity', () => {
-      // At baseline 100 USDT equity -> 24.00 USDT
-      expect(manager.computeMomentumAlloc(100.0)).toBe(24.0);
+      // At baseline 100 USDT equity -> 35.00 USDT
+      expect(manager.computeMomentumAlloc(100.0)).toBe(35.0);
 
-      // At 200 USDT equity -> 48.00 USDT
-      expect(manager.computeMomentumAlloc(200.0)).toBe(48.0);
+      // At 200 USDT equity -> 70.00 USDT
+      expect(manager.computeMomentumAlloc(200.0)).toBe(70.0);
 
-      // At 500 USDT equity -> 120.00 USDT
-      expect(manager.computeMomentumAlloc(500.0)).toBe(120.0);
+      // At 500 USDT equity -> 175.00 USDT
+      expect(manager.computeMomentumAlloc(500.0)).toBe(175.0);
 
-      // At small equity (30 USDT) -> 7.20 USDT (> 5.0 minNotional)
-      expect(manager.computeMomentumAlloc(30.0)).toBe(7.2);
+      // At small equity (30 USDT) -> 10.50 USDT (> 5.0 minNotional)
+      expect(manager.computeMomentumAlloc(30.0)).toBe(10.5);
 
-      // At very small equity (15 USDT) with 0.24 = 3.60u -> floored to minNotional 5.0u
-      expect(manager.computeMomentumAlloc(15.0)).toBe(5.0);
+      // At very small equity (10 USDT) with 0.35 = 3.50u -> floored to minNotional 5.0u
+      expect(manager.computeMomentumAlloc(10.0)).toBe(5.0);
     });
 
     it('computes BTC grid ticket sizing in proportion to realized equity', () => {
-      // At baseline 100 USDT equity -> 14.00 USDT
-      expect(manager.computeGridTicket(100.0)).toBe(14.0);
+      // At baseline 100 USDT equity -> 8.00 USDT
+      expect(manager.computeGridTicket(100.0)).toBe(8.0);
 
-      // At 250 USDT equity -> 35.00 USDT
-      expect(manager.computeGridTicket(250.0)).toBe(35.0);
+      // At 250 USDT equity -> 20.00 USDT
+      expect(manager.computeGridTicket(250.0)).toBe(20.0);
 
       // Small account floor at 5.0 USDT minNotional
       expect(manager.computeGridTicket(20.0)).toBe(5.0);
@@ -67,23 +67,23 @@ describe('Phase 5: Dynamic Compounding & Volatility-Scaled Grid', () => {
       expect(manager.computeDailyLossLimit(800.0)).toBe(96.0);
     });
 
-    it('generates a complete portfolio allocation snapshot and enforces max leverage <= 0.90', () => {
+    it('generates a complete portfolio allocation snapshot and enforces max leverage <= 0.95', () => {
       const snap100 = manager.getAllocationSnapshot(100.0);
-      expect(snap100.momentumAllocUsd).toBe(24.0);
-      expect(snap100.btcGridTicketUsd).toBe(14.0);
+      expect(snap100.momentumAllocUsd).toBe(35.0);
+      expect(snap100.btcGridTicketUsd).toBe(8.0);
       expect(snap100.dailyLossLimitUsd).toBe(12.0);
-      // 2 * 24u + 3 * 14u = 48u + 42u = 90.00u (90% exposure)
-      expect(snap100.totalMaxExposureUsd).toBe(90.0);
-      expect(snap100.cashBufferUsd).toBe(10.0);
-      expect(snap100.maxLeverage).toBe(0.9);
+      // 2 * 35u + 3 * 8u = 70u + 24u = 94.00u (94% exposure)
+      expect(snap100.totalMaxExposureUsd).toBe(94.0);
+      expect(snap100.cashBufferUsd).toBe(6.0);
+      expect(snap100.maxLeverage).toBe(0.94);
 
       const snap400 = manager.getAllocationSnapshot(400.0);
-      expect(snap400.momentumAllocUsd).toBe(96.0);
-      expect(snap400.btcGridTicketUsd).toBe(56.0);
+      expect(snap400.momentumAllocUsd).toBe(140.0);
+      expect(snap400.btcGridTicketUsd).toBe(32.0);
       expect(snap400.dailyLossLimitUsd).toBe(48.0);
-      expect(snap400.totalMaxExposureUsd).toBe(360.0);
-      expect(snap400.cashBufferUsd).toBe(40.0);
-      expect(snap400.maxLeverage).toBe(0.9);
+      expect(snap400.totalMaxExposureUsd).toBe(376.0);
+      expect(snap400.cashBufferUsd).toBe(24.0);
+      expect(snap400.maxLeverage).toBe(0.94);
     });
 
     it('validates portfolio exposure guardrails against over-leveraging', () => {
@@ -193,7 +193,7 @@ describe('Phase 5: Dynamic Compounding & Volatility-Scaled Grid', () => {
 
     it('formats /compounding command with dynamic allocation breakdown', () => {
       const res = formatHybridCommandResponse('/compounding', mockState);
-      expect(res).toContain('LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING (PHASE 5)');
+      expect(res).toContain('LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING v1.0.0');
       expect(res).toContain('125,50 USDT');
       expect(res).toContain('30,12 USDT');
       expect(res).toContain('24%');
@@ -204,7 +204,7 @@ describe('Phase 5: Dynamic Compounding & Volatility-Scaled Grid', () => {
 
     it('formats /grid command with ATR-14 volatility grid details', () => {
       const res = formatHybridCommandResponse('/grid', mockState);
-      expect(res).toContain('LƯỚI BIẾN ĐỘNG BTC (PHASE 5 ATR-14 VOLATILITY GRID)');
+      expect(res).toContain('LƯỚI BIẾN ĐỘNG BTC v1.0.0 (ATR-14 VOLATILITY GRID)');
       expect(res).toContain('$1250');
       expect(res).toContain('1.92%');
       expect(res).toContain('1.92% mỗi tầng');

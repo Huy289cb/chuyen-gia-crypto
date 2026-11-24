@@ -9,19 +9,17 @@
 
 ## 1. Mốc Vốn Xuất Phát Chuẩn & Dòng Tiền Ngoại Vi (Cash Flow)
 
-| Thông số | Giá trị chuẩn mốc 30/10 | Ghi chú minh bạch |
-| :--- | :--- | :--- |
-| **Vốn xuất phát ban đầu** | **~26.00 USDT** | Số dư khả dụng trước khi người dùng nạp |
-| **Tiền nạp thêm (User Deposit)** | **+25.00 USDT** | Nạp ngày 30/10/2026 (TÁCH RIÊNG KHỎI PnL CHIẾN LƯỢC) |
-| **Tổng vốn cơ sở (Base Capital)** | **~51.00 USDT** | Mốc đối soát chuẩn để đo lường Trading PnL |
-| **Vốn hiện tại trên sàn (Equity)** | **52.85 USDT** | Ghi nhận lúc 10:45 ICT ngày 05/11/2026 |
-| **Lợi nhuận ròng thực tế (Net PnL)** | **+1.85 USDT** | $= 52.85 - 51.00$ (Lãi thực tế do bot đánh từ 30/10) |
-| **Tỷ suất sinh lời thực tế (Real ROI)** | **+3.63%** | Lợi nhuận ròng thuần túy sau 6 ngày vận hành Phase 6/7 |
-| **Vị thế đang giữ** | 2 lệnh (`BEAMXUSDT`, `1000PEPEUSDT`) | BEAMX đã kích hoạt dời SL Breakeven bảo toàn vốn |
-| **Tỷ trọng phân bổ mỗi lệnh** | **24% vốn** (Dynamic Compounding) | Top 2 Momentum = 48%, BTC Grid = 42%, Cash Buffer = 10% |
-| **Mức dừng lỗ (Stop Loss)** | **Cố định cứng 12.0%** | Kết hợp Progressive Ratchet nâng SL theo lợi nhuận |
-| **Bảo vệ rủi ro chủ động** | Same-Day SL Cooldown, Hyper-volatility Gate, LLM Event Shield |
-| **Trần lỗ an toàn (Circuit Breaker)**| `dailyLossLimitUsd = Math.max(12.0, DayStartEquity * 0.12)` |
+| Thông số | Giá trị chuẩn mốc 30/10 | Cập nhật lúc 22:30 ICT 13/11/2026 | Ghi chú minh bạch |
+| :--- | :---: | :---: | :--- |
+| **Vốn xuất phát ban đầu** | **~26.00 USDT** | **~26.00 USDT** | Số dư khả dụng trước khi người dùng nạp |
+| **Tiền nạp thêm (User Deposit)** | **+25.00 USDT** | **+75.00 USDT** | Nạp +25u (30/10) và +50u (13/11) (TÁCH RIÊNG KHỎI PnL) |
+| **Tổng vốn cơ sở (Adjusted Base)** | **~51.00 USDT** | **~101.00 USDT** | Mốc đối soát chuẩn để đo lường Trading PnL |
+| **Vốn hiện tại trên sàn (Equity)** | **52.85 USDT** | **102.18 USDT** | Ghi nhận trực tiếp từ Binance Futures |
+| **Lợi nhuận ròng thực tế (Net PnL)** | **+1.85 USDT** | **+1.18 USDT** | $= 102.18 - 101.00$ (Lãi thực tế do bot tự trade) |
+| **Tỷ suất sinh lời thực tế (Real ROI)** | **+3.63%** | **+1.16%** | Tính trên tổng vốn cơ sở đã điều chỉnh 101u |
+| **Vị thế đang giữ** | 2 lệnh | 2 lệnh (`INJUSDT`, `PAXGUSDT`) | INJ hồi về hòa vốn; PAXG đảo hàng ngày mai |
+| **Quy mô phân bổ mỗi lệnh** | **12.30 USDT** (24%) | **24.52 USDT** (24%) | **TỰ ĐỘNG X2 QUY MÔ LỆNH NHỜ DYNAMIC COMPOUNDING** |
+| **Trần lỗ an toàn (Circuit Breaker)**| 12.00 USDT | 12.16 USDT | Tự động co giãn theo quy mô vốn mới |
 
 ---
 
@@ -55,7 +53,7 @@ Dựa trên dữ liệu kiểm thử thực nghiệm 1,500 ngày (2022–2026) v
 | **Ngày 7** | 2026-11-06 17:00 | **KẾT THÚC TUẦN 1 (7 NGÀY)** | **50.92** | **-0.08** | **❌ KHÔNG ĐẠT MỤC TIÊU TUẦN 1** (Kỳ vọng +0.83u đến +2.53u). Bị BTC dump -5.5% và rơi lãi CLANKER/ELSA kéo lùi về hòa vốn. Đã kích hoạt Phase 8.1 Early-Lock để sửa sai. |
 | **Ngày 8** | 2026-11-07 07:00 | Rebalance chu kỳ tiếp theo | *Đang chờ* | *Đang chờ* | Đánh giá Top 2 Momentum |
 | **Ngày 11** | 2026-11-10 07:00 | Kiểm soát rủi ro & bước lưới BTC | *Đang chờ* | *Đang chờ* | Tối ưu danh mục |
-| **Ngày 14** | 2026-11-13 18:45 | **Tổng kết 2 Tuần Chuẩn** | *Đang chờ* | *Đang chờ* | Đánh giá toàn diện ROI thực |
+| **Ngày 14** | 2026-11-13 14:30 | **KẾT THÚC 2 TUẦN CHUẨN** | **51.57** | **+0.57** | **⚠️ CHƯA ĐẠT MỤC TIÊU KỲ VỌNG (+0.83u đến +2.53u / 55-59u)**. Net PnL đạt +0.57 USDT (+1.12%). Sống sót an toàn qua 2 đợt bão xả BTC (-5.5% và -6.6%), bảo toàn 100% vốn gốc, giữ 91% tiền mặt hướng tới Mốc 30 Ngày (06/12). |
 
 ---
 
@@ -69,19 +67,40 @@ Dựa trên dữ liệu kiểm thử thực nghiệm 1,500 ngày (2022–2026) v
 
 ---
 
-## 5. Lộ Trình Đối Soát Về Bờ Mục Tiêu +25 USDT (Checkpoint Roadmap)
+## 5. Lộ Trình Đối Soát Mục Tiêu +25 USDT Lợi Nhuận Ròng (Cập Nhật Vốn Mới 102.18 USDT)
 
-> **Mục tiêu**: Bù đắp +25.0 USDT lợi nhuận ròng, đưa tài khoản từ **51.4 USDT lên 76.4 USDT (+48.6%)**.  
-> **Thời điểm xác lập**: 06/11/2026 (Ngày 7 của mốc chuẩn Phase 6/7/8).
+> **Mục tiêu**: Kiếm thêm **+25.0 USDT lợi nhuận ròng thuần do Bot tự trade**, đưa tổng tài khoản từ **102.18 USDT lên 126.00 USDT (+23.5%)**.  
+> **Thời điểm tái xác lập**: 13/11/2026 22:30 ICT (Sau khoản nạp bổ sung +50u của người dùng, nâng vốn lên 102u).  
+> **Lợi thế vượt trội**: Thay vì phải tăng +48.6% (mất 4 tháng lúc vốn 50u), với vốn 102u và quy mô lệnh X2 (~24.5u/lệnh), tỷ lệ tăng trưởng cần thiết giảm một nửa xuống chỉ còn **+23.5%**!
 
-### Bảng Đối Soát Các Mốc Thời Gian (Checkpoint Matrix):
+### Bảng Đối Soát Các Mốc Thời Gian Mới (Updated Checkpoint Matrix):
 
-| Mốc đối soát | Thời điểm | Kịch bản Bùng nổ (Altseason) | Kịch bản Chuẩn (Base Case) | Kịch bản Chậm (Chop Market) | Trạng thái / Kết quả thực tế |
+| Mốc đối soát | Thời điểm | Kịch bản Bùng nổ (Altseason) | Kịch bản Chuẩn (Base Case) | Kịch bản Chậm (Chop Market) | Trạng thái / Kết quả |
 | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Mốc 30 Ngày** | **06/12/2026** | **76.4 USDT** (Về bờ 100%) | **59.0 – 61.5 USDT** (+8u đến +10.5u) | **55.0 – 57.0 USDT** (+4u đến +6u) | *Chờ kiểm tra ngày 06/12* |
-| **Mốc 60 Ngày** | **06/01/2027** | Vượt đỉnh (> 85 USDT) | **67.0 – 70.0 USDT** (+16u đến +19u) | **60.0 – 63.0 USDT** (+9u đến +12u) | *Chờ kiểm tra ngày 06/01* |
-| **Mốc 90 Ngày** | **06/02/2027** | Vượt đỉnh (> 100 USDT) | **76.4 USDT** (VỀ BỜ 100% +25u) | **67.0 – 72.0 USDT** (Đạt 80% về bờ) | *Chờ kiểm tra ngày 06/02* |
+| **Mốc 30 Ngày Mới** | **13/12/2026** | **126.00 USDT** (**VỀ BỜ 100% +25U** chỉ sau 30 ngày!) | **111.0 – 115.0 USDT** (+10u đến +14u, đạt 50% chặng) | **105.0 – 108.0 USDT** (+4u đến +7u) | *Chờ kiểm tra 13/12* |
+| **Mốc 60 Ngày Mới** | **13/01/2027** | Vượt đỉnh **> 135 USDT** | **126.00 USDT** (**VỀ BỜ 100% +25U** đúng lộ trình chuẩn) | **115.0 – 118.0 USDT** (Đạt ~60% mục tiêu) | *Chờ kiểm tra 13/01* |
+| **Mốc 90 Ngày Mới** | **13/02/2027** | Bứt phá **> 150 USDT** (Đủ mở Lưới BTC Tầng 1) | **135.0 – 145.0 USDT** (+34u đến +44u siêu lợi nhuận) | **126.00 USDT** (**HOÀN TẤT 100% VỀ BỜ** ngay cả khi chop) | *Chờ kiểm tra 13/02* |
 
 > [!IMPORTANT]
-> * **Nguyên tắc quản trị**: Không tăng đòn bẩy đột ngột. Tuân thủ Dynamic Compounding 24%/vị thế ($\le 0.9\text{x}$ tổng đòn bẩy).
-> * **Tự động tăng tốc**: Khi vốn tăng lên 60u, 70u, quy mô lệnh tự động mở rộng theo cấp số nhân.
+> * **Quy mô lệnh tự động nhân đôi**: Mỗi lệnh Altcoin nay được phân bổ **~24.52 USDT** (thay vì 12.3u).
+> * **Bảo toàn kỷ luật đòn bẩy**: 2 vị thế Momentum = 48% vốn (49u), Tiền mặt đệm = 52% (53u), Đòn bẩy danh mục luôn giữ mức an toàn tuyệt đối $\le 0.48\text{x}$.
+
+---
+
+## 6. Mốc Triển Khai Phiên Bản Chính Thức v1.0.0 (24/11/2026)
+
+* **Thời điểm xác lập**: 24/11/2026 19:15 ICT.
+* **Bối cảnh**: Sau chuỗi kiểm toán độc lập 4 cổng (`PASS_OPTIMAL_METHOD_INDEPENDENT_AUDIT`), toàn bộ các giai đoạn thử nghiệm chính thức được hợp nhất thành **Phiên bản Chính thức v1.0.0**.
+* **Hai nâng cấp kiến trúc đột phá**:
+  1. **Tối ưu hóa Vốn 35% / Vị thế (`MOMENTUM_ALLOC_PCT = 0.35`)**:
+     - 2 vị thế Momentum x 35% = 70% tổng giải ngân, bảo toàn 30% đệm tiền mặt an toàn.
+     - Triệt tiêu 52% lực cản tiền mặt chết do sàn Binance Futures giới hạn minNotional $50 đối với BTC Grid.
+     - Tỷ lệ R/R cân bằng: Lệnh thắng Ratchet (+3.5% đến +10%) thu về +1.2u đến +3.4u, áp đảo lệnh thua Time-Decay (-1.7u).
+  2. **Cắt lỗ suy thoái sớm (Time-Decay Pruning)**:
+     - Tự động cắt sớm tại `-5.0%` đối với coin giữ $\ge 2$ ngày không vượt nổi `+2%`.
+     - Tiết kiệm 7% vốn cho mỗi lệnh so với mức SL `-12.0%`.
+* **Trạng thái thực chiến hiện tại**:
+  - Vốn tài khoản: **~97.00 USDT**.
+  - Vị thế mở thực tế: `LISTAUSDT` Qty=332 (~$33.89, đúng chuẩn 35% vốn), SL sàn tại `0.08982`.
+  - Dịch vụ PM2: `crypto-hybrid-live` (PID 6) online 100%.
+

@@ -28,13 +28,16 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const ICT_OFFSET = 7 * 3_600_000;
 const CHECK_INTERVAL_MS = 3_000;
 const MOMENTUM_SL_PCT = 0.12;
-export const MOMENTUM_REBALANCE_DAYS = 3; // Phase 7: 3-day momentum impulse holding
-export const BTC_CRASH_HEALTH_GATE_PCT = -0.03; // Phase 8: BTC Crash Trend Health Gate (-3.0%)
-export const PRUNING_DAYS_THRESHOLD = 2.0; // Phase 8: 2 days (48 hours)
-export const PRUNING_MAX_RETURN_THRESH = 0.02; // Phase 8: Never pumped > +2.0%
-export const PRUNING_CURRENT_RETURN_THRESH = -0.05; // Phase 8: Cut sinking loser at -5.0%
+export const OFFICIAL_RELEASE_VERSION = 'v1.0.0';
+export const MOMENTUM_REBALANCE_DAYS = 3; // v1.0.0: 3-day momentum impulse holding
+export const BTC_CRASH_HEALTH_GATE_PCT = -0.03; // v1.0.0: BTC Crash Trend Health Gate (-3.0%)
+export const PRUNING_DAYS_THRESHOLD = 2.0; // v1.0.0: 2 days (48 hours)
+export const PRUNING_MAX_RETURN_THRESH = 0.02; // v1.0.0: Never pumped > +2.0%
+export const PRUNING_CURRENT_RETURN_THRESH = -0.05; // v1.0.0: Cut sinking loser early at -5.0% (saving 7% capital)
 const BTC_GRID_MAX_LEVELS = 3;
 const MOMENTUM_RETRY_INTERVAL_MS = 6 * 3_600_000; // 6 hours
+export const PROFIT_LOCK_COOLDOWN_MS = 2 * 3_600_000; // v1.0.0: 2 hours for profitable ratchet exits
+export const WATCHDOG_TIMEOUT_MS = 35_000; // 35s watchdog per tick to prevent false-positive aborts on network jitter
 export const FUNDING_RATE_CAP = 0.0005; // +0.05% per 8h (+0.15% daily)
 const RECONCILIATION_INTERVAL_TICKS = 300; // 300 ticks * 3s = 900s = 15 minutes
 const CANDLE_BACKGROUND_REFRESH_MS = 10 * 60_000; // 10 minutes
@@ -453,14 +456,19 @@ async function fetchBtcGridSignal(volGridController: VolatilityGridController): 
   volParams: VolatilityGridParams;
 }> {
   try {
-    const res = await fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=20', {
-      signal: AbortSignal.timeout(6_000),
-    });
-    if (!res.ok) {
+    const [klinesRes, tickerRes] = await Promise.all([
+      fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=20', {
+        signal: AbortSignal.timeout(6_000),
+      }),
+      fetch('https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT', {
+        signal: AbortSignal.timeout(6_000),
+      }),
+    ]);
+    if (!klinesRes.ok) {
       const volParams = volGridController.getLastParams();
       return { ema10: 0, oneDayReturn: 0, crashGateTripped: false, volParams };
     }
-    const data = (await res.json()) as Array<[number, string, string, string, string, ...unknown[]]>;
+    const data = (await klinesRes.json()) as Array<[number, string, string, string, string, ...unknown[]]>;
     if (data.length < 11) {
       const volParams = volGridController.getLastParams();
       return { ema10: 0, oneDayReturn: 0, crashGateTripped: false, volParams };
@@ -470,13 +478,24 @@ async function fetchBtcGridSignal(volGridController: VolatilityGridController): 
     const todayCurrent = parseFloat(lastBar[4] as string);
     const todayReturn = todayOpen > 0 ? (todayCurrent - todayOpen) / todayOpen : 0;
 
-    const closes = data.slice(-11, -1).map((k) => parseFloat(k[4] as string));
-    const yesterdayClose = closes[closes.length - 1];
-    const dayBeforeYesterday = closes[closes.length - 2];
-    const yesterdayReturn = dayBeforeYesterday > 0 ? (yesterdayClose - dayBeforeYesterday) / dayBeforeYesterday : 0;
+    let rolling24hReturn = todayReturn;
+    if (tickerRes.ok) {
+      try {
+        const tickerData = (await tickerRes.json()) as { priceChangePercent?: string };
+        if (tickerData?.priceChangePercent) {
+          rolling24hReturn = parseFloat(tickerData.priceChangePercent) / 100;
+        }
+      } catch {
+        rolling24hReturn = todayReturn;
+      }
+    }
 
-    // Use worst of today's intraday return or yesterday's return to detect live market dumps
-    const oneDayReturn = Math.min(todayReturn, yesterdayReturn);
+    // Dynamic 24h & Intraday Crash Protection:
+    // Uses the worst of rolling 24-hour return (from Binance 24h ticker, continuous rolling window)
+    // or intraday return (from today's 00:00 UTC open).
+    // Eliminates artificial calendar day freezing while detecting both ongoing dumps and sudden intraday crashes.
+    const oneDayReturn = Math.min(todayReturn, rolling24hReturn);
+    const closes = data.slice(-11, -1).map((k) => parseFloat(k[4] as string));
     const ema10 = closes.reduce((sum, v) => sum + v, 0) / closes.length;
 
     const candleData: CandleData[] = data.map((k) => ({
@@ -510,6 +529,7 @@ export class HybridLiveWorker {
   private daysSinceRebalance = 0;
   private lastRebalanceUtcDay = '';
   private momentumRetryAt = 0;
+  private lastBtcCrashAlertTs = 0;
   private btcGridLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }> = [];
   private tickCounter = 0;
   private lastReconciledAt = '';
@@ -543,15 +563,39 @@ export class HybridLiveWorker {
 
   constructor() {
     this.broker = createDefaultLiveBroker({
-      requestTimeoutMs: 5_000,
+      requestTimeoutMs: 8_000,
       retryReads: true,
       executionOwner: process.env.PORTFOLIO_EXECUTION_OWNER?.trim() || HYBRID_POLICY_ID,
     });
     this.stateDir = path.resolve(__dirname, '../../data/portfolio-live', HYBRID_POLICY_ID);
   }
 
+  /**
+   * v1.0.0: Differentiated Cooldown Check.
+   * - Losing exits (initial SL -12% or v1.0.0 Pruning -5%) stay in full Same-Day UTC cooldown (until 00:00 UTC).
+   * - Profitable ratchet exits (breakeven, lock1, lock2, lock3) stay in 2-hour cooldown (PROFIT_LOCK_COOLDOWN_MS).
+   */
+  public isSymbolInCooldown(sym: string, nowMs = Date.now()): boolean {
+    const cd = this.sameDaySlCooldown.get(sym);
+    if (!cd) return false;
+    if (cd.includes('T')) {
+      const expireMs = new Date(cd).getTime();
+      if (Number.isFinite(expireMs) && nowMs < expireMs) {
+        return true;
+      }
+      this.sameDaySlCooldown.delete(sym);
+      return false;
+    }
+    const todayUtc = this.getUtcDay();
+    if (cd === todayUtc) {
+      return true;
+    }
+    this.sameDaySlCooldown.delete(sym);
+    return false;
+  }
+
   public async start(): Promise<void> {
-    console.log(`[HybridLiveWorker] Starting Phase 4 Dynamic Universe & Event Shield Multi-Sleeve Live Worker (${HYBRID_POLICY_ID})...`);
+    console.log(`[HybridLiveWorker] Starting Production Release v1.0.0 Live Worker (${HYBRID_POLICY_ID})...`);
     await fs.mkdir(this.stateDir, { recursive: true });
 
     this.running = true;
@@ -560,10 +604,10 @@ export class HybridLiveWorker {
     await this.loadExchangeFilters();
     await this.restoreDayAnchor();
 
-    // Initialize Phase 4 Event Shield
+    // Initialize v1.0.0 Event Shield
     await this.eventShield.init();
 
-    // Initialize Phase 4 Dynamic Universe Scanner (Top 30 Binance Futures > $50M/d)
+    // Initialize v1.0.0 Dynamic Universe Scanner (Top 30 Binance Futures > $50M/d)
     await this.dynamicUniverseScanner.refreshUniverse(true);
     const activeUniverse = this.dynamicUniverseScanner.getUniverse();
     console.log(`[HybridLiveWorker] Active dynamic universe loaded: ${activeUniverse.length} symbols.`);
@@ -610,14 +654,14 @@ export class HybridLiveWorker {
     // Initial tick
     await this.tick();
 
-    // Run continuous loop with 25s watchdog per tick to prevent Axios/Node socket hangs
+    // Run continuous loop with 35s watchdog per tick to prevent Axios/Node socket hangs
     const loop = async () => {
       while (this.running) {
         try {
           await Promise.race([
             this.tick(),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Tick watchdog timeout (25s)')), 25_000)
+              setTimeout(() => reject(new Error(`Tick watchdog timeout (${WATCHDOG_TIMEOUT_MS / 1000}s)`)), WATCHDOG_TIMEOUT_MS)
             ),
           ]);
         } catch (error) {
@@ -647,7 +691,7 @@ export class HybridLiveWorker {
   }
 
   private getUtcDay(): string {
-    return new Date(Date.now() + ICT_OFFSET).toISOString().slice(0, 10);
+    return new Date().toISOString().slice(0, 10);
   }
 
   private async loadExchangeFilters(): Promise<void> {
@@ -696,10 +740,12 @@ export class HybridLiveWorker {
         this.daysSinceRebalance = raw.daysSinceRebalance;
       }
       if (raw.sameDaySlCooldown && typeof raw.sameDaySlCooldown === 'object') {
-        const todayUtc = this.getUtcDay();
         for (const [sym, date] of Object.entries(raw.sameDaySlCooldown)) {
-          if (date === todayUtc) {
-            this.sameDaySlCooldown.set(sym, date as string);
+          if (typeof date === 'string') {
+            this.sameDaySlCooldown.set(sym, date);
+            if (!this.isSymbolInCooldown(sym)) {
+              this.sameDaySlCooldown.delete(sym);
+            }
           }
         }
       }
@@ -720,7 +766,7 @@ export class HybridLiveWorker {
       // On boot/restart, allow an immediate momentum retry check if a slot is vacant
       this.momentumRetryAt = 0;
       if (!Number.isFinite(observed) || !Number.isFinite(raw.dayStartEquity) || raw.dayStartEquity <= 0) return;
-      const observedDay = new Date(observed + ICT_OFFSET).toISOString().slice(0, 10);
+      const observedDay = new Date(observed).toISOString().slice(0, 10);
       if (observedDay !== this.getUtcDay()) return;
       this.currentDay = observedDay;
       this.dayStartEquity = raw.dayStartEquity;
@@ -821,9 +867,19 @@ export class HybridLiveWorker {
             console.warn(`[HybridLiveWorker] [CrossReconciliation] Discrepancy detected: ${sym} recorded in state (qty=${statePos.qty}) but NOT active on Binance (closed or liquidated). Purging from state.`);
             delete diskState.positions[sym];
             this.nativeStops.delete(sym);
+            const rState = this.ratchetState.get(sym);
+            const tier = rState?.tier || 'initial';
             this.ratchetState.delete(sym);
             const todayUtc = this.getUtcDay();
-            this.sameDaySlCooldown.set(sym, todayUtc);
+            const isProfitableTier = tier === 'breakeven' || tier === 'lock' || tier === 'lock1' || tier === 'lock2' || tier === 'lock3';
+            if (isProfitableTier) {
+              const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
+              this.sameDaySlCooldown.set(sym, expireIso);
+              console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+            } else {
+              this.sameDaySlCooldown.set(sym, todayUtc);
+              console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
+            }
             discrepancyFound = true;
 
             const noticeText = formatHybridPositionClosedNotice({
@@ -907,9 +963,18 @@ export class HybridLiveWorker {
           console.log(`[HybridLiveWorker] [CrossReconciliation] Cleaning up orphan stop orders for closed symbol: ${sym}`);
           await this.cancelSymbolStops(sym);
           this.nativeStops.delete(sym);
-          const todayUtc = new Date().toISOString().slice(0, 10);
-          this.sameDaySlCooldown.set(sym, todayUtc);
-          console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
+          const rState = this.ratchetState.get(sym);
+          const tier = rState?.tier || 'initial';
+          const isProfitableTier = tier === 'breakeven' || tier === 'lock' || tier === 'lock1' || tier === 'lock2' || tier === 'lock3';
+          if (isProfitableTier) {
+            const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
+            this.sameDaySlCooldown.set(sym, expireIso);
+            console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+          } else {
+            const todayUtc = this.getUtcDay();
+            this.sameDaySlCooldown.set(sym, todayUtc);
+            console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
+          }
           discrepancyFound = true;
         }
       }
@@ -981,25 +1046,30 @@ export class HybridLiveWorker {
     }
   }
 
-  private async rebalanceMomentum(): Promise<void> {
-    console.log('[HybridLiveWorker] Starting 2-day Momentum Rebalance (Phase 4 Dynamic)...');
+  private async rebalanceMomentum(): Promise<boolean> {
+    console.log('[HybridLiveWorker] Starting 3-day Momentum Rebalance (v1.0.0 Dynamic)...');
     try {
-      // Phase 8: BTC Crash Trend Health Gate (-3.0%)
+      // v1.0.0: BTC Crash Trend Health Gate (-3.0%)
       const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
       if (btcSignal.oneDayReturn <= BTC_CRASH_HEALTH_GATE_PCT) {
-        console.log(`[HybridLiveWorker] [Phase8 BTC Crash Gate] BTC 1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Postponing new Altcoin entries.`);
-        await sendHybridTelegram(
-          `🛡️ [CỬA CHẶN BTC SẬP - PHASE 8]: BTC giảm ${(btcSignal.oneDayReturn * 100).toFixed(2)}% trong ngày (<= -3.0%). Tạm dừng mở mới Altcoin để tránh bẫy bán tháo!`
-        );
-        return;
+        console.log(`[HybridLiveWorker] [v1.0.0 BTC Crash Gate] BTC 24h/1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Postponing new Altcoin entries.`);
+        const now = Date.now();
+        if (now - this.lastBtcCrashAlertTs >= 4 * 3_600_000) {
+          this.lastBtcCrashAlertTs = now;
+          await sendHybridTelegram(
+            `🛡️ [CỬA CHẶN BTC SẬP v1.0.0]: BTC giảm ${(btcSignal.oneDayReturn * 100).toFixed(2)}% (<= -3.0%). Tạm hoãn mở mới Altcoin để bảo vệ vốn!\n` +
+            `Hệ thống sẽ tự động quét lại mỗi 30 phút và giải ngân ngay khi đà rơi kết thúc.`
+          );
+        }
+        return false;
       }
+      this.lastBtcCrashAlertTs = 0;
 
       const universe = this.dynamicUniverseScanner.getUniverse();
       const ranked = await computeMomentumUniverse(this.candleCache, universe);
-      const todayUtc = new Date().toISOString().slice(0, 10);
       const cooldownExclude = new Set<string>();
-      for (const [sym, date] of this.sameDaySlCooldown.entries()) {
-        if (date === todayUtc) cooldownExclude.add(sym);
+      for (const sym of this.sameDaySlCooldown.keys()) {
+        if (this.isSymbolInCooldown(sym)) cooldownExclude.add(sym);
       }
       const top2 = await selectTopMomentumSymbols(ranked, 2, 'Rebalance', this.eventShield, cooldownExclude);
       console.log(`[HybridLiveWorker] Rebalance Top 2 Momentum: ${top2.join(', ') || '(none)'}`);
@@ -1013,7 +1083,7 @@ export class HybridLiveWorker {
           `⏳ TÁI CÂN BẰNG: Không tìm thấy coin nào đạt ngưỡng momentum +2% (14 ngày) kèm Funding Guard an toàn (<= 0.05%/8h).\n` +
           `Giữ nguyên vị thế hiện tại, sẽ thử lại sau 6 tiếng (~${retryTime} ICT).`
         );
-        return;
+        return false;
       }
 
       // Clear retry timer on successful rebalance
@@ -1113,8 +1183,10 @@ export class HybridLiveWorker {
         nextRebalanceDate: nextDate,
       });
       await sendHybridTelegram(text);
+      return true;
     } catch (err) {
       console.error('[HybridLiveWorker] Error during momentum rebalance:', err);
+      return false;
     }
   }
 
@@ -1134,20 +1206,20 @@ export class HybridLiveWorker {
         return;
       }
 
-      // Phase 8: BTC Crash Trend Health Gate (-3.0%)
+      // v1.0.0: BTC Crash Trend Health Gate (-3.0%)
       const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
       if (btcSignal.oneDayReturn <= BTC_CRASH_HEALTH_GATE_PCT) {
-        console.log(`[HybridLiveWorker] [Phase8 BTC Crash Gate] BTC 1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Skipping momentum retry today.`);
+        console.log(`[HybridLiveWorker] [v1.0.0 BTC Crash Gate] BTC 1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Skipping momentum retry (15m cooldown).`);
+        this.momentumRetryAt = Date.now() + 15 * 60_000;
         return;
       }
 
       const universe = this.dynamicUniverseScanner.getUniverse();
       const ranked = await computeMomentumUniverse(this.candleCache, universe);
-      const todayUtc = new Date().toISOString().slice(0, 10);
       const retryExclude = new Set<string>();
       for (const p of activePositions) retryExclude.add(p.symbol);
-      for (const [sym, date] of this.sameDaySlCooldown.entries()) {
-        if (date === todayUtc) retryExclude.add(sym);
+      for (const sym of this.sameDaySlCooldown.keys()) {
+        if (this.isSymbolInCooldown(sym)) retryExclude.add(sym);
       }
       const topCandidates = await selectTopMomentumSymbols(
         ranked,
@@ -1185,9 +1257,9 @@ export class HybridLiveWorker {
         if (openedCount >= remainingSlots) break;
         if (activeSymbols.includes(sym)) continue;
 
-        // Same-Day Stop Loss Cooldown check
-        if (this.sameDaySlCooldown.get(sym) === todayUtc) {
-          console.log(`[HybridLiveWorker] Momentum retry: Skipping ${sym} (Active Same-Day SL Cooldown for ${todayUtc}).`);
+        // Differentiated Cooldown check
+        if (this.isSymbolInCooldown(sym)) {
+          console.log(`[HybridLiveWorker] Momentum retry: Skipping ${sym} (Active Cooldown).`);
           continue;
         }
 
@@ -1401,9 +1473,9 @@ export class HybridLiveWorker {
       this.currentDay = today;
       this.breakerLatched = false;
 
-      // Purge expired Same-Day Cooldowns from previous days
-      for (const [sym, date] of this.sameDaySlCooldown.entries()) {
-        if (date !== today) {
+      // Purge expired Cooldowns
+      for (const sym of Array.from(this.sameDaySlCooldown.keys())) {
+        if (!this.isSymbolInCooldown(sym)) {
           this.sameDaySlCooldown.delete(sym);
         }
       }
@@ -1420,9 +1492,13 @@ export class HybridLiveWorker {
       if (!isFirstBoot) {
         this.daysSinceRebalance++;
         if (this.daysSinceRebalance >= MOMENTUM_REBALANCE_DAYS && !this.breakerLatched) {
-          await this.rebalanceMomentum();
-          this.daysSinceRebalance = 0;
-          this.lastRebalanceUtcDay = today;
+          const rebalanced = await this.rebalanceMomentum();
+          if (rebalanced) {
+            this.daysSinceRebalance = 0;
+            this.lastRebalanceUtcDay = today;
+          } else {
+            console.log(`[HybridLiveWorker] Rebalance postponed (BTC Gate or No Candidates). Retaining daysSinceRebalance=${this.daysSinceRebalance} to retry periodically.`);
+          }
         }
       }
     }
@@ -1446,7 +1522,15 @@ export class HybridLiveWorker {
         this.ratchetState.delete(sym);
 
         const todayUtc = this.getUtcDay();
-        this.sameDaySlCooldown.set(sym, todayUtc);
+        const isProfitableTier = tier === 'breakeven' || tier === 'lock' || tier === 'lock1' || tier === 'lock2' || tier === 'lock3';
+        if (isProfitableTier) {
+          const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
+          this.sameDaySlCooldown.set(sym, expireIso);
+          console.log(`[HybridLiveWorker] [PositionCloseGuard] Added ${sym} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+        } else {
+          this.sameDaySlCooldown.set(sym, todayUtc);
+          console.log(`[HybridLiveWorker] [PositionCloseGuard] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
+        }
 
         let exitPrice = prev.slPrice;
         try {
@@ -1580,8 +1664,9 @@ export class HybridLiveWorker {
             await this.cancelSymbolStops(p.symbol);
             await this.syncNativeStopLoss(p.symbol, qty, targetSl);
             if (targetTier !== 'initial') {
+              const entryTs = rState.entryTime || Date.now();
               alerts.push({
-                key: `ratchet:${p.symbol}:${targetTier}`,
+                key: `ratchet:${p.symbol}:${targetTier}:${entryTs}`,
                 text: formatHybridRatchetNotice({
                   symbol: p.symbol,
                   tier: targetTier,
@@ -1597,7 +1682,7 @@ export class HybridLiveWorker {
         slPrice = rState.currentSl;
         ratchetTier = rState.tier;
 
-        // Phase 8: Freqtrade Time-Decay Loser Pruning
+        // v1.0.0: Time-Decay Loser Pruning (Official Production Architecture)
         // If coin held >= 2.0 days (48h), max return never exceeded +2.0%, and current return <= -5.0%:
         // Prune early at -5% instead of waiting for full -12% stop loss, saving 7% capital and freeing the slot.
         const daysHeld = (Date.now() - rState.entryTime) / (24 * 3_600_000);
@@ -1608,7 +1693,7 @@ export class HybridLiveWorker {
           currentRet <= PRUNING_CURRENT_RETURN_THRESH
         ) {
           console.warn(
-            `[HybridLiveWorker] [Phase8 Pruning] PRUNING TRIGGERED for ${p.symbol}: Held ${daysHeld.toFixed(1)}d >= ${PRUNING_DAYS_THRESHOLD}d, MaxRet: +${maxReturnPct.toFixed(1)}% < 2.0%, CurrentRet: ${(currentRet * 100).toFixed(2)}% <= -5.0%. Pruning early to preserve capital!`
+            `[HybridLiveWorker] [v1.0.0 Pruning] PRUNING TRIGGERED for ${p.symbol}: Held ${daysHeld.toFixed(1)}d >= ${PRUNING_DAYS_THRESHOLD}d, MaxRet: +${maxReturnPct.toFixed(1)}% < 2.0%, CurrentRet: ${(currentRet * 100).toFixed(2)}% <= -5.0%. Pruning early to preserve capital!`
           );
           try {
             await this.broker.submitMarketOrder({
@@ -1623,7 +1708,7 @@ export class HybridLiveWorker {
             this.ratchetState.delete(p.symbol);
             this.sameDaySlCooldown.set(p.symbol, today);
             console.log(
-              `[HybridLiveWorker] [Phase8 Pruning] Successfully pruned ${p.symbol} at ${(currentRet * 100).toFixed(2)}%. Added to Same-Day Cooldown.`
+              `[HybridLiveWorker] [v1.0.0 Pruning] Successfully pruned ${p.symbol} at ${(currentRet * 100).toFixed(2)}%. Added to Same-Day Cooldown.`
             );
             const pruneNotice = formatHybridPruneNotice({
               symbol: p.symbol,
@@ -1639,7 +1724,7 @@ export class HybridLiveWorker {
             void this.retryMomentumEntry();
             continue;
           } catch (err) {
-            console.error(`[HybridLiveWorker] [Phase8 Pruning] Failed to prune ${p.symbol}:`, err);
+            console.error(`[HybridLiveWorker] [v1.0.0 Pruning] Failed to prune ${p.symbol}:`, err);
           }
         }
       }
@@ -1676,8 +1761,15 @@ export class HybridLiveWorker {
           });
           await this.cancelSymbolStops(p.symbol);
           this.ratchetState.delete(p.symbol);
-          this.sameDaySlCooldown.set(p.symbol, today);
-          console.log(`[HybridLiveWorker] Added ${p.symbol} to Same-Day Stop Loss Cooldown for ${today}.`);
+          const isProfitableTier = ratchetTier === 'breakeven' || ratchetTier === 'lock' || ratchetTier === 'lock1' || ratchetTier === 'lock2' || ratchetTier === 'lock3';
+          if (isProfitableTier) {
+            const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
+            this.sameDaySlCooldown.set(p.symbol, expireIso);
+            console.log(`[HybridLiveWorker] Added ${p.symbol} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+          } else {
+            this.sameDaySlCooldown.set(p.symbol, today);
+            console.log(`[HybridLiveWorker] Added ${p.symbol} to Same-Day Stop Loss Cooldown for ${today}.`);
+          }
           console.log(`[HybridLiveWorker] STOP LOSS order submitted successfully for ${p.symbol}`);
           const notice = formatHybridStopNotice({ symbol: p.symbol, mark, slPrice, sent: true });
           alerts.push({ key: `sl:${today}:${p.symbol}:${Date.now()}`, text: notice });
@@ -1762,6 +1854,16 @@ export class HybridLiveWorker {
       if (refreshRes.refreshed) {
         console.log(`[HybridLiveWorker] Dynamic universe updated: ${refreshRes.symbols.length} symbols. Prefetching candles...`);
         await this.candleCache.prefetchAll(refreshRes.symbols);
+      }
+    }
+
+    // Periodic retry for overdue rebalance (if postponed by BTC Crash Gate, check early at tick 10 and every ~30m / 600 ticks)
+    if (this.daysSinceRebalance >= MOMENTUM_REBALANCE_DAYS && !this.breakerLatched && (this.tickCounter % 600 === 0 || this.tickCounter === 10)) {
+      console.log(`[HybridLiveWorker] Retrying overdue momentum rebalance (daysSinceRebalance=${this.daysSinceRebalance})...`);
+      const rebalanced = await this.rebalanceMomentum();
+      if (rebalanced) {
+        this.daysSinceRebalance = 0;
+        this.lastRebalanceUtcDay = today;
       }
     }
 

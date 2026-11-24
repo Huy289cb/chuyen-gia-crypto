@@ -4,7 +4,8 @@ import { SOURCE_MOMENTUM_SYMBOLS } from './market-data';
 
 export const MIN_QUOTE_VOLUME_USD = 50_000_000; // $50M/24h liquidity threshold
 export const DEFAULT_TOP_UNIVERSE_SIZE = 30; // Top 30 liquid momentum candidates
-export const WEEKLY_REFRESH_INTERVAL_MS = 7 * 86_400_000; // Weekly refresh cycle
+export const DAILY_REFRESH_INTERVAL_MS = 1 * 86_400_000; // Daily refresh cycle (24h)
+export const WEEKLY_REFRESH_INTERVAL_MS = DAILY_REFRESH_INTERVAL_MS; // Backward-compatible alias
 
 export const PEGGED_OR_STABLE_SYMBOLS = new Set([
   'USDCUSDT',
@@ -40,6 +41,8 @@ export const RESTRICTED_OR_LEVERAGED_SYMBOLS = new Set([
   'TQQQUSDT', // Leveraged ETF contract
   'QUSDT', // Severe whipsaw/loss trap token (28-29/10 incident)
   'EVAAUSDT', // Severe whipsaw/loss trap token (28-29/10 incident)
+  'PAXGUSDT', // Physical Gold pegged token (low beta, dilutes crypto alpha)
+  'XAUTUSDT', // Tether Gold pegged token (low beta, dilutes crypto alpha)
 ]);
 
 export interface DynamicUniverseEntry {

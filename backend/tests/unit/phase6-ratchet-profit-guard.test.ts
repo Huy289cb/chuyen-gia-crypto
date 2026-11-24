@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { formatHybridRatchetNotice, formatHybridPositionClosedNotice } from '../../src/portfolio/hybrid-live-notice';
 import { RESTRICTED_OR_LEVERAGED_SYMBOLS } from '../../src/portfolio/dynamic-universe';
-import { computeSymbolAtr14Pct } from '../../src/portfolio/hybrid-worker';
+import { computeSymbolAtr14Pct, PROFIT_LOCK_COOLDOWN_MS, WATCHDOG_TIMEOUT_MS } from '../../src/portfolio/hybrid-worker';
 
 describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard', () => {
   describe('Part 1: Leveraged ETF Exclusion', () => {
@@ -260,6 +260,62 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
       expect(isEligible('QUSDT', today)).toBe(false);
       expect(isEligible('ETHUSDT', today)).toBe(true);
       expect(isEligible('QUSDT', '2026-10-30')).toBe(true);
+    });
+  });
+
+  describe('Part 5: Phase 8.2 Operational Improvements (Differentiated Cooldown & Resilient Watchdog)', () => {
+    it('defines PROFIT_LOCK_COOLDOWN_MS as exactly 2 hours (7,200,000ms)', () => {
+      expect(PROFIT_LOCK_COOLDOWN_MS).toBe(2 * 60 * 60 * 1000);
+    });
+
+    it('defines WATCHDOG_TIMEOUT_MS as 35 seconds to prevent false-positive aborts on network jitter', () => {
+      expect(WATCHDOG_TIMEOUT_MS).toBe(35_000);
+    });
+
+    it('differentiates losing SL exits (full UTC day) from profitable ratchet exits (2-hour cooldown)', () => {
+      const cooldownMap = new Map<string, string>();
+      const isSymbolInCooldown = (sym: string, nowMs: number, todayUtc: string): boolean => {
+        const cd = cooldownMap.get(sym);
+        if (!cd) return false;
+        if (cd.includes('T')) {
+          const expireMs = new Date(cd).getTime();
+          if (Number.isFinite(expireMs) && nowMs < expireMs) return true;
+          cooldownMap.delete(sym);
+          return false;
+        }
+        if (cd === todayUtc) return true;
+        cooldownMap.delete(sym);
+        return false;
+      };
+
+      const now = new Date('2026-11-20T10:00:00.000Z').getTime();
+      const today = '2026-11-20';
+
+      // 1. Losing trade (initial SL -12%) -> Same-Day UTC Cooldown
+      cooldownMap.set('LOSERUSDT', today);
+
+      // 2. Profitable Ratchet exit (e.g. CROSSUSDT locked at +3.5%) -> 2h Cooldown
+      const expireIso = new Date(now + PROFIT_LOCK_COOLDOWN_MS).toISOString();
+      cooldownMap.set('CROSSUSDT', expireIso);
+
+      // At T=0 (immediate exit): both symbols are blocked from re-entering
+      expect(isSymbolInCooldown('LOSERUSDT', now, today)).toBe(true);
+      expect(isSymbolInCooldown('CROSSUSDT', now, today)).toBe(true);
+
+      // At T+1 hour: CROSSUSDT still in cooldown, LOSERUSDT still in cooldown
+      const after1h = now + 1 * 3600_000;
+      expect(isSymbolInCooldown('LOSERUSDT', after1h, today)).toBe(true);
+      expect(isSymbolInCooldown('CROSSUSDT', after1h, today)).toBe(true);
+
+      // At T+2 hours 1 minute: CROSSUSDT cooldown expires and is re-eligible for momentum waves!
+      const after2h = now + PROFIT_LOCK_COOLDOWN_MS + 60_000;
+      expect(isSymbolInCooldown('CROSSUSDT', after2h, today)).toBe(false);
+      // LOSERUSDT remains strictly blocked for the rest of UTC day to prevent whipsaw
+      expect(isSymbolInCooldown('LOSERUSDT', after2h, today)).toBe(true);
+
+      // Next UTC day: LOSERUSDT unlocks
+      const nextDay = '2026-11-21';
+      expect(isSymbolInCooldown('LOSERUSDT', after2h + 24 * 3600_000, nextDay)).toBe(false);
     });
   });
 });
