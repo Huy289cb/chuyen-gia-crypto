@@ -1231,14 +1231,10 @@ export class HybridLiveWorker {
       console.log(`[HybridLiveWorker] Momentum retry candidates: ${topCandidates.join(', ') || '(none)'} (Available slots: ${remainingSlots})`);
 
       if (topCandidates.length === 0) {
-        // Still nothing — schedule another retry in 6h
-        this.momentumRetryAt = Date.now() + MOMENTUM_RETRY_INTERVAL_MS;
+        // Polling retry in 15m instead of 6h to catch cooldown expirations (e.g. 2h ratchet cooldown) and dynamic market opportunities
+        this.momentumRetryAt = Date.now() + 15 * 60_000;
         const retryTime = new Date(this.momentumRetryAt + ICT_OFFSET).toISOString().slice(11, 16);
-        console.log(`[HybridLiveWorker] Momentum retry: Still no qualifying symbols. Next retry ~${retryTime} ICT.`);
-        await sendHybridTelegram(
-          `⏳ Thử lại momentum: Vẫn chưa có coin nào đạt ngưỡng +2% kèm Funding Guard an toàn (<= 0.05%/8h).\n` +
-          `Sẽ thử lại sau 6 tiếng (~${retryTime} ICT).`
-        );
+        console.log(`[HybridLiveWorker] Momentum retry: 0 qualifying symbols right now (candidates in cooldown or < +2%). Polling cooldown active for 15m (~${retryTime} ICT).`);
         return;
       }
 
