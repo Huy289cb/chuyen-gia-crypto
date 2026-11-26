@@ -113,7 +113,7 @@ describe('Phase 8: Freqtrade-Inspired Suite (BTC Crash Trend Gate & Loser Prunin
         daysHeld: 2.3,
       });
 
-      expect(notice).toContain('✂️ CẮT TỈA COIN CHÌM XUỒNG (PHASE 8 PRUNING)');
+      expect(notice).toContain('✂️ CẮT TỈA COIN CHÌM XUỒNG v1.0.4 (TIME-DECAY PRUNING)');
       expect(notice).toContain('SINK');
       expect(notice).toContain('2.3 ngày');
       expect(notice).toContain('-5.33%');

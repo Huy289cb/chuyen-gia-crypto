@@ -61,6 +61,7 @@ const HELP_TEXT = `<b>Lệnh cơ bản</b>
 <b>Antigravity & Cursor</b> (repo agent, admin)
 /agy &lt;câu hỏi&gt; — chat với Antigravity CLI
 /agy list · /agy resume &lt;số&gt; — chọn hội thoại
+/agy models · /agy model · /agy effort — đổi model/effort
 /agy new · /agy cancel · /agy status
 /cursor &lt;câu hỏi&gt; — hỏi gì cũng được
 /cursor new · /cursor status · /cursor cancel

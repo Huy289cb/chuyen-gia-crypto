@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { atomicWriteFile } from './atomic-fs';
 import { SOURCE_MOMENTUM_SYMBOLS } from './market-data';
 
 export const MIN_QUOTE_VOLUME_USD = 50_000_000; // $50M/24h liquidity threshold
@@ -213,7 +214,6 @@ export class DynamicUniverseScanner {
 
         // Persist to disk cache
         try {
-          await fs.mkdir(this.stateDir, { recursive: true });
           const payload: DynamicUniverseState = {
             lastUpdatedAt: new Date(now).toISOString(),
             lastUpdatedMs: now,
@@ -222,7 +222,7 @@ export class DynamicUniverseScanner {
             symbols: this.activeSymbols,
             entries: this.entries,
           };
-          await fs.writeFile(cacheFile, JSON.stringify(payload, null, 2), 'utf8');
+          await atomicWriteFile(cacheFile, JSON.stringify(payload, null, 2));
         } catch (err) {
           console.warn('[DynamicUniverseScanner] Failed to persist disk cache:', err);
         }

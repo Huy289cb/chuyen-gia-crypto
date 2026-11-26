@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { atomicWriteFile } from './atomic-fs';
 import type { LiveBroker, LiveIncome } from './live-broker';
 
 export interface CashFlowRecord {
@@ -79,8 +80,7 @@ export class CashFlowManager {
 
   async save(): Promise<void> {
     try {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      await fs.writeFile(this.filePath, JSON.stringify(this.ledger, null, 2), 'utf-8');
+      await atomicWriteFile(this.filePath, JSON.stringify(this.ledger, null, 2));
     } catch (err) {
       console.error('[CashFlowManager] Error saving ledger file:', err);
     }

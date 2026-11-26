@@ -5,8 +5,10 @@ import os from 'node:os';
 import {
   formatHybridBookNotice,
   formatHybridBreakerNotice,
+  formatHybridRebalanceNotice,
   formatHybridStopNotice,
   formatHybridCommandResponse,
+  HYBRID_KNOWN_COMMANDS,
 } from '../../src/portfolio/hybrid-live-notice';
 import { formatToTick } from '../../src/portfolio/hybrid-worker';
 import type { HybridLiveState } from '../../src/portfolio/hybrid-worker';
@@ -71,17 +73,18 @@ describe('hybrid live telegram notices', () => {
 
     // Test /status
     const statusResp = formatHybridCommandResponse('/status', mockState);
-    expect(statusResp).toContain('🟢 WORKER HYBRID LIVE (PHASE 6)');
+    expect(statusResp).toContain('🟢 WORKER HYBRID LIVE v1.0.4 (OFFICIAL RELEASE)');
     expect(statusResp).toContain('31,45 USDT');
     expect(statusResp).toContain('+0,05 USDT');
     expect(statusResp).toContain('An toàn');
 
     // Test /report or /lenh
     const reportResp = formatHybridCommandResponse('/report', mockState);
-    expect(reportResp).toContain('📊 BÁO CÁO VỊ THẾ HYBRID LIVE (PHASE 6)');
+    expect(reportResp).toContain('📊 BÁO CÁO VỊ THẾ HYBRID LIVE v1.0.4');
     expect(reportResp).toContain('1000PEPE');
     expect(reportResp).toContain('TIA');
     expect(reportResp).toContain('SL Giảm rủi ro (-3%): 0,471768');
+    expect(reportResp).toContain('Momentum -3.0% (1d)');
 
     // Test /pnl
     const pnlResp = formatHybridCommandResponse('/pnl', mockState);
@@ -90,9 +93,52 @@ describe('hybrid live telegram notices', () => {
 
     // Test /help
     const helpResp = formatHybridCommandResponse('/help', mockState);
-    expect(helpResp).toContain('🤖 CÁC LỆNH THEO DÕI BOT HYBRID LIVE (PHASE 6):');
+    expect(helpResp).toContain('🤖 CÁC LỆNH THEO DÕI BOT HYBRID LIVE v1.0.4:');
     expect(helpResp).toContain('/status');
     expect(helpResp).toContain('/report');
+    expect(helpResp).toContain('/cashflow');
+  });
+
+  it('registers /cashflow, /dongtien, and /tt in HYBRID_KNOWN_COMMANDS and renders momentumRegime', () => {
+    expect(HYBRID_KNOWN_COMMANDS.has('cashflow')).toBe(true);
+    expect(HYBRID_KNOWN_COMMANDS.has('dongtien')).toBe(true);
+    expect(HYBRID_KNOWN_COMMANDS.has('tt')).toBe(true);
+
+    const stateWithRegime: HybridLiveState = {
+      policyId: 'PHASE2_HYBRID_MOM50_BTCGRID45_SL12_V1',
+      status: 'active',
+      lastObservedAt: new Date().toISOString(),
+      accountEquity: 94.79,
+      availableBalance: 94.79,
+      dayStartEquity: 100.0,
+      currentDayPnl: -5.21,
+      worstDayPnl: -9.75,
+      breakerLatched: false,
+      positions: {},
+      btcGridLevels: [],
+      momentumRegime: {
+        mode: 'macro_defensive',
+        btc1dReturnPct: -2.5,
+        btc14dReturnPct: -20.7,
+        maxSlots: 1,
+        targetAllocPct: 0.25,
+      },
+      cashFlow: {
+        baselineDate: '2026-10-30',
+        baselineEquity: 26,
+        cumulativeDeposits: 75,
+        cumulativeWithdrawals: 0,
+        netInjectedCapital: 75,
+        adjustedBaselineEquity: 101,
+        strategyNetPnl: -6.21,
+        strategyRoiPct: -6.15,
+      },
+    };
+
+    expect(formatHybridCommandResponse('/tt', stateWithRegime)).toContain('Phòng thủ Macro');
+    expect(formatHybridCommandResponse('/cashflow', stateWithRegime)).toContain('101,00 USDT');
+    expect(formatHybridRebalanceNotice({ closed: [], opened: [], nextRebalanceDate: '2026-11-28' })).toContain('3 NGÀY (v1.0.4)');
+    expect(formatHybridBookNotice({ equity: 200, dayPnl: 1.5, positions: [], dailyLossLimitUsd: 24 })).toContain('Trần lỗ 24 USDT/ngày');
   });
 
   it('loads hybrid live state correctly from disk for standalone Telegram bot', () => {

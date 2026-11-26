@@ -48,6 +48,9 @@ const telegramEnv = {
   CURSOR_CHAT_RATE_LIMIT_PER_USER_HOUR: process.env.CURSOR_CHAT_RATE_LIMIT_PER_USER_HOUR,
   CURSOR_CHAT_SESSION_TTL_MS: process.env.CURSOR_CHAT_SESSION_TTL_MS,
   CURSOR_CHAT_JOB_TIMEOUT_MS: process.env.CURSOR_CHAT_JOB_TIMEOUT_MS,
+  AGY_CHAT_ENABLED: process.env.AGY_CHAT_ENABLED,
+  AGY_SKIP_PERMISSIONS: process.env.AGY_SKIP_PERMISSIONS,
+  AGY_MODEL: process.env.AGY_MODEL,
 };
 
 /**
@@ -55,6 +58,11 @@ const telegramEnv = {
  * process snapshots. `env_file` alone is not reapplied reliably to existing apps.
  */
 const runtimeEnv = { ...fileEnv, ...telegramEnv };
+
+const hybridEnv = {
+  ...runtimeEnv,
+  PORTFOLIO_LIVE_POLICY: process.env.PORTFOLIO_LIVE_POLICY || fileEnv.PORTFOLIO_LIVE_POLICY || 'PHASE2_HYBRID_MOM50_BTCGRID45_SL12_V1',
+};
 
 module.exports = {
   apps: [
@@ -66,11 +74,45 @@ module.exports = {
       exec_mode: 'fork',
       autorestart: true,
       watch: false,
-      max_memory_restart: '300M',
+      max_memory_restart: '220M',
       env_file: envPath,
       env: runtimeEnv,
       error_file: path.join(logsDir, 'api-error.log'),
       out_file: path.join(logsDir, 'api-out.log'),
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      time: true,
+    },
+    {
+      name: 'crypto-hybrid-live',
+      cwd: backendRoot,
+      script: path.join(distDir, 'portfolio', 'hybrid-worker.js'),
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '220M',
+      env_file: envPath,
+      env: hybridEnv,
+      error_file: path.join(logsDir, 'hybrid-live-error.log'),
+      out_file: path.join(logsDir, 'hybrid-live-out.log'),
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      time: true,
+    },
+    {
+      name: 'crypto-telegram-bot',
+      cwd: backendRoot,
+      script: path.join(distDir, 'portfolio', 'hybrid-telegram-worker.js'),
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '180M',
+      env_file: envPath,
+      env: hybridEnv,
+      error_file: path.join(logsDir, 'telegram-bot-error.log'),
+      out_file: path.join(logsDir, 'telegram-bot-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       time: true,

@@ -12,7 +12,41 @@ export interface AgyChatConfig {
   cwd: string;
   dangerouslySkipPermissions: boolean;
   mode: string;
+  model: string;
   settingsPath?: string;
+}
+
+export type AgyEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export const AGY_EFFORT_LEVELS: readonly AgyEffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+export const DEFAULT_AGY_MODEL = 'gemini-4-hydrogen-high';
+
+export interface AgyChatPreferences {
+  model?: string;
+  effort?: AgyEffortLevel;
+}
+
+export interface AgyModelInfo {
+  index: number;
+  slug: string;
+  label: string;
+}
+
+export interface AgyEffortInfo {
+  ok: boolean;
+  adjustable: boolean;
+  current?: AgyEffortLevel;
+  available: AgyEffortLevel[];
+  error?: string;
+}
+
+export interface ResolvedAgyModelConfig {
+  model: string;
+  effort?: AgyEffortLevel;
+  cliArgs: string[];
+  isDefault: boolean;
+  displayModel: string;
 }
 
 const defaultAgySettingsPath = path.resolve(__dirname, '../../../agy-settings.json');
@@ -23,6 +57,7 @@ export const agyChatConfig: AgyChatConfig = {
   cwd: process.env.AGY_CWD || path.resolve(__dirname, '../../..'),
   dangerouslySkipPermissions: process.env.AGY_SKIP_PERMISSIONS !== 'false', // Mặc định bật tự động duyệt tool trong headless mode
   mode: process.env.AGY_MODE || 'accept-edits', // Mặc định accept-edits để cho phép chỉnh sửa code/file
+  model: process.env.AGY_MODEL?.trim() || DEFAULT_AGY_MODEL,
   settingsPath: process.env.AGY_SETTINGS_PATH || (fs.existsSync(defaultAgySettingsPath) ? defaultAgySettingsPath : undefined),
 };
 
@@ -32,7 +67,10 @@ export const AGY_HELP = `🪐 <b>LỆNH ANTIGRAVITY (AGY CLI)</b>
 • <code>/agy list</code> — Danh sách các hội thoại cũ để chọn
 • <code>/agy resume &lt;số hoặc ID&gt; [câu hỏi]</code> — Chọn hội thoại để tiếp tục
 • <code>/agy new &lt;câu hỏi&gt;</code> — Bắt đầu một hội thoại mới
-• <code>/agy status</code> — Xem trạng thái &amp; hội thoại đang chọn
+• <code>/agy models</code> — Xem danh sách model khả dụng
+• <code>/agy model &lt;số hoặc slug|default&gt;</code> — Đổi model cho chat hiện tại
+• <code>/agy effort &lt;low|medium|high|xhigh|max|default&gt;</code> — Đổi mức suy luận
+• <code>/agy status</code> — Xem trạng thái, model &amp; hội thoại đang chọn
 • <code>/agy cancel</code> — Hủy lệnh agy đang thực thi
 
 <i>⚙️ Không giới hạn thời gian chạy (timeout tắt). Dùng /agy cancel để dừng thủ công khi cần.</i>`;
@@ -42,7 +80,10 @@ export const AGY_HELP_PLAIN = `🪐 LỆNH ANTIGRAVITY (AGY CLI):
 • /agy list — Danh sách các hội thoại cũ để chọn
 • /agy resume <số hoặc ID> [câu hỏi] — Chọn hội thoại để tiếp tục
 • /agy new <câu hỏi> — Bắt đầu một hội thoại mới
-• /agy status — Xem trạng thái & hội thoại đang chọn
+• /agy models — Xem danh sách model khả dụng
+• /agy model <số hoặc slug|default> — Đổi model cho chat hiện tại
+• /agy effort <low|medium|high|xhigh|max|default> — Đổi mức suy luận
+• /agy status — Xem trạng thái, model & hội thoại đang chọn
 • /agy cancel — Hủy lệnh agy đang thực thi
 
 Không giới hạn thời gian chạy (timeout tắt). Dùng /agy cancel để dừng thủ công khi cần.`;
@@ -108,6 +149,303 @@ export function setActiveConversation(chatId: string, convId: string | undefined
     activeConversationMap.delete(chatId);
   }
   persistActiveConversations();
+}
+
+// Cache danh sách model vừa liệt kê gần nhất theo chatId (để map số thứ tự [1], [2], ...)
+const lastListedModels = new Map<string, AgyModelInfo[]>();
+let cachedAvailableModels: AgyModelInfo[] | null = null;
+
+function getSettingsStorePath(): string {
+  return process.env.AGY_SETTINGS_STORE_PATH?.trim() || path.resolve(__dirname, '../../../data/agy-telegram-settings.json');
+}
+
+const chatPreferencesMap = new Map<string, AgyChatPreferences>();
+
+export function parseEffortLevel(raw: string | undefined): AgyEffortLevel | undefined {
+  const normalized = raw?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return AGY_EFFORT_LEVELS.includes(normalized as AgyEffortLevel) ? (normalized as AgyEffortLevel) : undefined;
+}
+
+export function splitModelSlugAndEffort(slug: string): { baseModel: string; suffixEffort?: AgyEffortLevel } {
+  const match = slug.trim().match(/^(.+)-(low|medium|high|xhigh|max)$/i);
+  if (!match) {
+    return { baseModel: slug.trim() };
+  }
+  return {
+    baseModel: match[1],
+    suffixEffort: match[2].toLowerCase() as AgyEffortLevel,
+  };
+}
+
+try {
+  const storePath = getSettingsStorePath();
+  if (fs.existsSync(storePath)) {
+    const raw = fs.readFileSync(storePath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, AgyChatPreferences>;
+    for (const [cId, prefs] of Object.entries(parsed)) {
+      if (!prefs || typeof prefs !== 'object') continue;
+      const model = typeof prefs.model === 'string' && prefs.model.trim() ? prefs.model.trim() : undefined;
+      const effort = typeof prefs.effort === 'string' ? parseEffortLevel(prefs.effort) : undefined;
+      if (model || effort) {
+        chatPreferencesMap.set(cId, { ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+      }
+    }
+  }
+} catch {
+  /* ignore settings read error */
+}
+
+function persistChatPreferences(): void {
+  try {
+    const storePath = getSettingsStorePath();
+    const dir = path.dirname(storePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const obj: Record<string, AgyChatPreferences> = {};
+    for (const [k, v] of chatPreferencesMap.entries()) {
+      if (v.model || v.effort) {
+        obj[k] = v;
+      }
+    }
+    fs.writeFileSync(storePath, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[AgyChat] failed to persist settings store:', err);
+  }
+}
+
+export function getChatAgyPreferences(chatId: string): AgyChatPreferences {
+  const prefs = chatPreferencesMap.get(chatId);
+  return prefs ? { ...prefs } : {};
+}
+
+export function setChatAgyPreferences(chatId: string, prefs: AgyChatPreferences | undefined): void {
+  const model = prefs?.model?.trim() || undefined;
+  const effort = prefs?.effort;
+  if (!model && !effort) {
+    chatPreferencesMap.delete(chatId);
+  } else {
+    chatPreferencesMap.set(chatId, { ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+  }
+  persistChatPreferences();
+}
+
+export function getDefaultAgyModel(): string {
+  return process.env.AGY_MODEL?.trim() || agyChatConfig.model || DEFAULT_AGY_MODEL;
+}
+
+export function resolveAgyCliModelArgs(chatId?: string): ResolvedAgyModelConfig {
+  const defaultModel = getDefaultAgyModel();
+  const prefs = chatId ? chatPreferencesMap.get(chatId) : undefined;
+  const rawModel = prefs?.model?.trim() || defaultModel;
+  const { baseModel, suffixEffort } = splitModelSlugAndEffort(rawModel);
+
+  if (prefs?.effort) {
+    return {
+      model: baseModel,
+      effort: prefs.effort,
+      cliArgs: ['--model', baseModel, '--effort', prefs.effort],
+      isDefault: false,
+      displayModel: `${baseModel} (effort: ${prefs.effort})`,
+    };
+  }
+
+  return {
+    model: rawModel,
+    effort: suffixEffort,
+    cliArgs: ['--model', rawModel],
+    isDefault: !prefs?.model && !prefs?.effort,
+    displayModel: rawModel,
+  };
+}
+
+export function getAgyModel(chatId?: string): string {
+  return resolveAgyCliModelArgs(chatId).displayModel;
+}
+
+function buildAgySpawnEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PATH: `/home/ubuntu/.local/bin:${process.env.PATH || ''}`,
+  };
+}
+
+function execAgyCommand(
+  cmdArgs: string[],
+  timeoutMs = 20_000
+): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
+  return new Promise((resolve) => {
+    let stdoutData = '';
+    let stderrData = '';
+    let settled = false;
+
+    const cp = spawn(agyChatConfig.binaryPath, cmdArgs, {
+      cwd: agyChatConfig.cwd,
+      env: buildAgySpawnEnv(),
+    });
+
+    const finish = (res: { ok: boolean; stdout: string; stderr: string; code: number | null }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(res);
+    };
+
+    const timer = setTimeout(() => {
+      try {
+        cp.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+      finish({ ok: false, stdout: stdoutData, stderr: stderrData || 'Timeout', code: null });
+    }, timeoutMs);
+
+    cp.stdout?.on('data', (chunk: Buffer) => {
+      stdoutData += chunk.toString();
+    });
+    cp.stderr?.on('data', (chunk: Buffer) => {
+      stderrData += chunk.toString();
+    });
+    cp.on('close', (code) => {
+      finish({ ok: code === 0, stdout: stdoutData, stderr: stderrData, code });
+    });
+    cp.on('error', (err) => {
+      finish({ ok: false, stdout: stdoutData, stderr: err.message, code: null });
+    });
+  });
+}
+
+export function parseAgyModelsOutput(raw: string): AgyModelInfo[] {
+  const clean = stripAnsi(raw);
+  const models: AgyModelInfo[] = [];
+  for (const line of clean.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || /^fetching available models/i.test(trimmed)) continue;
+    const match = trimmed.match(/^([a-z0-9][a-z0-9._-]*)(?:\t+|\s{2,})(.+)$/i);
+    if (!match) continue;
+    models.push({
+      index: models.length + 1,
+      slug: match[1].trim(),
+      label: match[2].trim(),
+    });
+  }
+  return models;
+}
+
+export async function fetchAgyModels(): Promise<AgyModelInfo[]> {
+  const res = await execAgyCommand(['models'], 25_000);
+  const parsed = parseAgyModelsOutput(`${res.stdout}\n${res.stderr}`);
+  if (parsed.length > 0) {
+    cachedAvailableModels = parsed;
+  }
+  return parsed;
+}
+
+async function getOrFetchAgyModels(): Promise<AgyModelInfo[]> {
+  if (cachedAvailableModels && cachedAvailableModels.length > 0) {
+    return cachedAvailableModels;
+  }
+  return fetchAgyModels();
+}
+
+export async function inspectAgyEffort(
+  modelSlug: string,
+  effortOverride?: AgyEffortLevel
+): Promise<AgyEffortInfo> {
+  const args = ['-p', '/effort', '--output-format', 'json', '--model', modelSlug];
+  if (effortOverride) {
+    args.push('--effort', effortOverride);
+  }
+  const res = await execAgyCommand(args, 25_000);
+  const cleanOut = stripAnsi(res.stdout).trim();
+  const jsonLine = cleanOut
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .reverse()
+    .find((l) => l.startsWith('{') && l.endsWith('}'));
+
+  if (!jsonLine) {
+    return {
+      ok: false,
+      adjustable: false,
+      available: [],
+      error: stripAnsi(res.stderr).trim() || cleanOut || 'Không nhận được phản hồi JSON từ agy.',
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonLine) as {
+      status?: string;
+      error?: string;
+      command?: {
+        data?: {
+          adjustable?: boolean;
+          current?: string;
+          available?: string[];
+        };
+      };
+    };
+    if (parsed.status !== 'SUCCESS') {
+      return {
+        ok: false,
+        adjustable: false,
+        available: [],
+        error: parsed.error || stripAnsi(res.stderr).trim() || 'agy trả về trạng thái lỗi.',
+      };
+    }
+    const data = parsed.command?.data;
+    const available = (data?.available || [])
+      .map((item) => parseEffortLevel(item))
+      .filter((item): item is AgyEffortLevel => Boolean(item));
+    return {
+      ok: true,
+      adjustable: Boolean(data?.adjustable),
+      current: parseEffortLevel(data?.current),
+      available,
+    };
+  } catch {
+    return {
+      ok: false,
+      adjustable: false,
+      available: [],
+      error: 'Không parse được JSON phản hồi từ agy /effort.',
+    };
+  }
+}
+
+function findModelInList(
+  models: AgyModelInfo[],
+  rawTarget: string,
+  preferredEffort?: AgyEffortLevel
+): AgyModelInfo | undefined {
+  const target = rawTarget.trim();
+  if (!target) return undefined;
+
+  if (/^\d+$/.test(target)) {
+    const idx = parseInt(target, 10);
+    return models.find((m) => m.index === idx);
+  }
+
+  const lower = target.toLowerCase();
+  const exactSlug = models.find((m) => m.slug.toLowerCase() === lower);
+  if (exactSlug) return exactSlug;
+
+  const exactLabel = models.find((m) => m.label.toLowerCase() === lower);
+  if (exactLabel) return exactLabel;
+
+  if (preferredEffort) {
+    const withRequestedEffort = models.find((m) => m.slug.toLowerCase() === `${lower}-${preferredEffort}`);
+    if (withRequestedEffort) return withRequestedEffort;
+  }
+
+  const withDefaultHigh = models.find((m) => m.slug.toLowerCase() === `${lower}-high`);
+  if (withDefaultHigh) return withDefaultHigh;
+
+  const prefixMatches = models.filter((m) => m.slug.toLowerCase().startsWith(`${lower}-`) || m.slug.toLowerCase().startsWith(lower));
+  if (prefixMatches.length > 0) {
+    return prefixMatches[0];
+  }
+
+  return models.find((m) => m.label.toLowerCase().includes(lower));
 }
 
 /**
@@ -348,25 +686,19 @@ export async function runAgyCli(
       cmdArgs.push('--dangerously-skip-permissions');
     }
 
-    if (process.env.AGY_MODEL) {
-      cmdArgs.push('--model', process.env.AGY_MODEL);
-    }
+    const resolvedModel = resolveAgyCliModelArgs(chatId);
+    cmdArgs.push(...resolvedModel.cliArgs);
 
     console.log(
-      `[AgyChat] Running agy for chat=${chatId} convId=${options.conversationId || 'none'} isNew=${!!options.isNew} prompt=${question.slice(0, 80)}`
+      `[AgyChat] Running agy for chat=${chatId} convId=${options.conversationId || 'none'} isNew=${!!options.isNew} model=${resolvedModel.model} effort=${resolvedModel.effort || 'default'} prompt=${question.slice(0, 80)}`
     );
-
-    const spawnEnv = {
-      ...process.env,
-      PATH: `/home/ubuntu/.local/bin:${process.env.PATH || ''}`,
-    };
 
     let stdoutData = '';
     let stderrData = '';
 
     const cp = spawn(agyChatConfig.binaryPath, cmdArgs, {
       cwd: agyChatConfig.cwd,
-      env: spawnEnv,
+      env: buildAgySpawnEnv(),
     });
 
     const startedAt = Date.now();
@@ -484,6 +816,260 @@ async function processResumeCommand(
 }
 
 /**
+ * Quản lý lệnh /agy models, /agy model, /agy effort (dùng chung cho hybrid và legacy)
+ */
+async function processModelsCommand(
+  chatId: string,
+  sendFn: (chatId: string, text: string) => Promise<unknown>
+): Promise<void> {
+  const models = await fetchAgyModels();
+  if (models.length === 0) {
+    await sendFn(chatId, '❌ Không lấy được danh sách model từ agy CLI. Vui lòng thử lại sau.');
+    return;
+  }
+
+  lastListedModels.set(chatId, models);
+  const resolved = resolveAgyCliModelArgs(chatId);
+  const activeSlug =
+    resolved.cliArgs.includes('--effort') && resolved.effort
+      ? `${resolved.model}-${resolved.effort}`.toLowerCase()
+      : resolved.model.toLowerCase();
+
+  const lines = ['🤖 DANH SÁCH MODEL ANTIGRAVITY (AGY):\n'];
+  for (const m of models) {
+    const isActive = m.slug.toLowerCase() === activeSlug;
+    const badge = isActive ? ' ⭐ [Đang chọn]' : '';
+    lines.push(`[${m.index}] ${m.slug}${badge}\n    ${m.label}`);
+  }
+  lines.push('');
+  lines.push(`📌 Mặc định hệ thống: ${getDefaultAgyModel()}`);
+  lines.push('👉 Đổi model: /agy model <số hoặc slug>');
+  lines.push('👉 Đổi effort: /agy effort <low|medium|high|xhigh|max>');
+  lines.push('👉 Về mặc định: /agy model default');
+  await sendFn(chatId, lines.join('\n'));
+}
+
+async function processModelCommand(
+  chatId: string,
+  args: string,
+  sendFn: (chatId: string, text: string) => Promise<unknown>
+): Promise<void> {
+  const trimmed = args.trim();
+  const resolved = resolveAgyCliModelArgs(chatId);
+
+  if (!trimmed) {
+    const lines = [
+      '🤖 CẤU HÌNH MODEL HIỆN TẠI:',
+      `• Model: ${resolved.displayModel}${resolved.isDefault ? ' (mặc định)' : ' (tùy chỉnh)'}`,
+      `• Effort: ${resolved.effort || 'theo model'}`,
+      '',
+      '👉 Gõ /agy models để xem danh sách.',
+      '👉 Đổi model: /agy model <số hoặc slug>',
+      '👉 Đổi effort: /agy effort <low|medium|high|xhigh|max>',
+      '👉 Về mặc định: /agy model default',
+    ];
+    await sendFn(chatId, lines.join('\n'));
+    return;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower === 'default' || lower === 'reset') {
+    setChatAgyPreferences(chatId, undefined);
+    const nextResolved = resolveAgyCliModelArgs(chatId);
+    await sendFn(
+      chatId,
+      `✅ Đã đặt lại model về mặc định:\n• Model: ${nextResolved.displayModel}\n• Effort: ${nextResolved.effort || 'theo model'}`
+    );
+    return;
+  }
+
+  const tokens = trimmed.split(/\s+/);
+  const trailingEffort = tokens.length >= 2 ? parseEffortLevel(tokens[tokens.length - 1]) : undefined;
+  const rawTarget = trailingEffort ? tokens.slice(0, -1).join(' ') : trimmed;
+  const isNumeric = /^\d+$/.test(rawTarget);
+
+  let models = isNumeric ? lastListedModels.get(chatId) || (await getOrFetchAgyModels()) : await getOrFetchAgyModels();
+  let matched = findModelInList(models, rawTarget, trailingEffort);
+  if (!matched && !isNumeric) {
+    models = await fetchAgyModels();
+    matched = findModelInList(models, rawTarget, trailingEffort);
+  }
+
+  if (!matched) {
+    await sendFn(
+      chatId,
+      `❌ Không tìm thấy model khớp với "${rawTarget}".\nGõ /agy models để xem danh sách model khả dụng.`
+    );
+    return;
+  }
+
+  if (trailingEffort) {
+    const { baseModel } = splitModelSlugAndEffort(matched.slug);
+    const effortSlug = models.find((m) => m.slug.toLowerCase() === `${baseModel}-${trailingEffort}`.toLowerCase());
+    if (effortSlug) {
+      setChatAgyPreferences(chatId, { model: effortSlug.slug });
+    } else {
+      const check = await inspectAgyEffort(baseModel, trailingEffort);
+      if (!check.ok) {
+        await sendFn(
+          chatId,
+          `❌ Không thể dùng effort "${trailingEffort}" cho ${matched.slug}: ${check.error || 'Không được hỗ trợ'}`
+        );
+        return;
+      }
+      setChatAgyPreferences(chatId, { model: baseModel, effort: trailingEffort });
+    }
+  } else {
+    setChatAgyPreferences(chatId, { model: matched.slug });
+  }
+
+  const updated = resolveAgyCliModelArgs(chatId);
+  const busyNote = activeProcesses.has(chatId)
+    ? '\n⏳ Lệnh đang chạy hiện tại vẫn hoàn tất bằng cấu hình cũ; cấu hình mới áp dụng từ tin nhắn tiếp theo.'
+    : '';
+  await sendFn(
+    chatId,
+    `✅ Đã cập nhật model cho chat này:\n• Model: ${updated.displayModel}\n• Effort: ${updated.effort || 'theo model'}${busyNote}`
+  );
+}
+
+async function processEffortCommand(
+  chatId: string,
+  args: string,
+  sendFn: (chatId: string, text: string) => Promise<unknown>
+): Promise<void> {
+  const trimmed = args.trim();
+  const resolved = resolveAgyCliModelArgs(chatId);
+  const currentPrefs = getChatAgyPreferences(chatId);
+
+  if (!trimmed) {
+    const info = await inspectAgyEffort(resolved.model, currentPrefs.effort);
+    const lines = [
+      '🧠 CẤU HÌNH EFFORT HIỆN TẠI:',
+      `• Model: ${resolved.displayModel}`,
+      `• Effort hiện tại: ${info.current || resolved.effort || 'cố định theo model'}`,
+    ];
+    if (info.ok && !info.adjustable) {
+      lines.push('• Khả năng điều chỉnh: Không (model dùng mức suy luận cố định)');
+    } else if (info.available.length > 0) {
+      lines.push(`• Các mức hỗ trợ: ${info.available.join(', ')}`);
+    } else if (!info.ok && info.error) {
+      lines.push(`• Ghi chú kiểm tra: ${info.error}`);
+    }
+    lines.push('\n👉 Đổi effort: /agy effort <low|medium|high|xhigh|max|default>');
+    await sendFn(chatId, lines.join('\n'));
+    return;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower === 'default' || lower === 'reset') {
+    const defaultModel = getDefaultAgyModel();
+    const { baseModel: defaultBase } = splitModelSlugAndEffort(defaultModel);
+    const { baseModel: currentBase } = splitModelSlugAndEffort(resolved.model);
+    if (!currentPrefs.model || currentBase.toLowerCase() === defaultBase.toLowerCase()) {
+      setChatAgyPreferences(chatId, undefined);
+    } else {
+      const models = await getOrFetchAgyModels();
+      const highVariant = models.find((m) => m.slug.toLowerCase() === `${currentBase.toLowerCase()}-high`);
+      if (highVariant) {
+        setChatAgyPreferences(chatId, { model: highVariant.slug });
+      } else {
+        setChatAgyPreferences(chatId, { model: currentPrefs.model });
+      }
+    }
+    const nextResolved = resolveAgyCliModelArgs(chatId);
+    await sendFn(
+      chatId,
+      `✅ Đã đặt lại effort về mặc định:\n• Model: ${nextResolved.displayModel}\n• Effort: ${nextResolved.effort || 'theo model'}`
+    );
+    return;
+  }
+
+  const level = parseEffortLevel(trimmed);
+  if (!level) {
+    await sendFn(
+      chatId,
+      `❌ Mức effort không hợp lệ: "${trimmed}".\nCác mức hỗ trợ: ${AGY_EFFORT_LEVELS.join(', ')} (hoặc default).`
+    );
+    return;
+  }
+
+  const info = await inspectAgyEffort(resolved.model, currentPrefs.effort);
+  if (!info.ok) {
+    await sendFn(
+      chatId,
+      `❌ Không thể kiểm tra effort cho ${resolved.displayModel}: ${info.error || 'Lỗi agy CLI'}`
+    );
+    return;
+  }
+  if (!info.adjustable) {
+    await sendFn(
+      chatId,
+      `⚠️ Model hiện tại (${resolved.displayModel}) có effort cố định, không hỗ trợ chỉnh riêng /agy effort.`
+    );
+    return;
+  }
+  if (info.available.length > 0 && !info.available.includes(level)) {
+    await sendFn(
+      chatId,
+      `❌ Model ${resolved.model} không hỗ trợ mức effort "${level}".\nCác mức khả dụng: ${info.available.join(', ')}`
+    );
+    return;
+  }
+
+  const { baseModel } = splitModelSlugAndEffort(resolved.model);
+  const models = await getOrFetchAgyModels();
+  const candidateSlug = `${baseModel}-${level}`;
+  const slugMatch = models.find((m) => m.slug.toLowerCase() === candidateSlug.toLowerCase());
+
+  if (slugMatch) {
+    setChatAgyPreferences(chatId, { model: slugMatch.slug });
+  } else {
+    const verify = await inspectAgyEffort(baseModel, level);
+    if (!verify.ok) {
+      await sendFn(
+        chatId,
+        `❌ Không thể áp dụng effort "${level}" cho ${baseModel}: ${verify.error || 'Không hợp lệ'}`
+      );
+      return;
+    }
+    setChatAgyPreferences(chatId, { model: baseModel, effort: level });
+  }
+
+  const updated = resolveAgyCliModelArgs(chatId);
+  const busyNote = activeProcesses.has(chatId)
+    ? '\n⏳ Lệnh đang chạy hiện tại vẫn hoàn tất bằng cấu hình cũ; cấu hình mới áp dụng từ tin nhắn tiếp theo.'
+    : '';
+  await sendFn(
+    chatId,
+    `✅ Đã cập nhật effort cho chat này: ${level}\n• Model áp dụng: ${updated.displayModel}${busyNote}`
+  );
+}
+
+async function handleModelEffortControlCommand(
+  chatId: string,
+  args: string,
+  sendFn: (chatId: string, text: string) => Promise<unknown>
+): Promise<boolean> {
+  const lower = args.toLowerCase();
+  if (lower === 'models') {
+    await processModelsCommand(chatId, sendFn);
+    return true;
+  }
+  if (lower === 'model' || lower.startsWith('model ')) {
+    const modelArgs = args.replace(/^model\s*/i, '').trim();
+    await processModelCommand(chatId, modelArgs, sendFn);
+    return true;
+  }
+  if (lower === 'effort' || lower.startsWith('effort ')) {
+    const effortArgs = args.replace(/^effort\s*/i, '').trim();
+    await processEffortCommand(chatId, effortArgs, sendFn);
+    return true;
+  }
+  return false;
+}
+
+/**
  * Handler cho hybrid-live worker (sử dụng sendFn trực tiếp)
  */
 export async function handleHybridAgyCommand(
@@ -528,6 +1114,7 @@ export async function handleHybridAgyCommand(
   if (lower === 'status' || lower === '/status') {
     const item = activeProcesses.get(chatId);
     const activeId = getActiveConversation(chatId);
+    const resolvedModel = resolveAgyCliModelArgs(chatId);
     const lines = ['🪐 TRẠNG THÁI ANTIGRAVITY (AGY):'];
 
     if (item) {
@@ -545,9 +1132,15 @@ export async function handleHybridAgyCommand(
       lines.push('• Hội thoại: Tiếp tục phiên gần nhất (chưa cố định ID). Gõ /agy list để chọn.');
     }
 
+    lines.push(`• Model: ${resolvedModel.displayModel}${resolvedModel.isDefault ? ' (mặc định)' : ''}`);
+    lines.push(`• Effort: ${resolvedModel.effort || 'theo model'}`);
     lines.push('• Thời gian chờ: Không giới hạn (timeout tắt, dùng /agy cancel để ngắt)');
-    lines.push('\n💡 Mẹo: Để xem trạng thái Bot Trade v1.0.0 (Vốn, Lệnh, PnL), hãy gõ thẳng /status hoặc /lenh (không kèm /agy).');
+    lines.push('\n💡 Mẹo: Để xem trạng thái Bot Trade v1.0.4 (Vốn, Lệnh, PnL), hãy gõ thẳng /status hoặc /lenh (không kèm /agy).');
     await sendFn(chatId, lines.join('\n'));
+    return;
+  }
+
+  if (await handleModelEffortControlCommand(chatId, args, sendFn)) {
     return;
   }
 
@@ -653,6 +1246,7 @@ export async function handleAgyCommand(
   if (lower === 'status') {
     const item = activeProcesses.get(chatId);
     const activeId = getActiveConversation(chatId);
+    const resolvedModel = resolveAgyCliModelArgs(chatId);
     const lines = ['<b>🪐 TRẠNG THÁI ANTIGRAVITY (AGY):</b>'];
 
     if (item) {
@@ -670,8 +1264,18 @@ export async function handleAgyCommand(
       lines.push('• Hội thoại: Tiếp tục phiên gần nhất. Gõ /agy list để chọn.');
     }
 
+    lines.push(`• Model: <code>${escapeHtml(resolvedModel.displayModel)}</code>${resolvedModel.isDefault ? ' (mặc định)' : ''}`);
+    lines.push(`• Effort: <code>${escapeHtml(resolvedModel.effort || 'theo model')}</code>`);
     lines.push('• Thời gian chờ: Không giới hạn (timeout tắt, dùng /agy cancel để ngắt)');
     enqueueTelegramMessage(lines.join('\n'), chatId);
+    return;
+  }
+
+  if (
+    await handleModelEffortControlCommand(chatId, trimmed, async (cId, text) => {
+      enqueueTelegramMessage(text, cId, { plainText: true });
+    })
+  ) {
     return;
   }
 

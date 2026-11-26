@@ -18,29 +18,41 @@ import {
 import { SOURCE_MOMENTUM_SYMBOLS } from './market-data';
 import { HYBRID_POLICY_ID } from './source-hybrid';
 import { DynamicUniverseScanner } from './dynamic-universe';
-import { LLMEventShield } from './event-shield';
-import { DynamicCompoundingManager, MOMENTUM_ALLOC_PCT, BTC_GRID_TICKET_PCT } from './dynamic-compounding';
+import { LLMEventShield, type ExchangeContractStatus } from './event-shield';
+import {
+  DynamicCompoundingManager,
+  MOMENTUM_ALLOC_PCT,
+  DEFENSIVE_MOMENTUM_ALLOC_PCT,
+  BTC_GRID_TICKET_PCT,
+} from './dynamic-compounding';
 import { VolatilityGridController, type VolatilityGridParams, type CandleData } from './volatility-grid';
 import { CashFlowManager, type CashFlowSummary } from './cashflow-manager';
+import { atomicWriteFile } from './atomic-fs';
+
+import { getEffectiveMaxExposureUsd, getMainnetMaxLeverage } from '../config/mainnet-safety';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const ICT_OFFSET = 7 * 3_600_000;
 const CHECK_INTERVAL_MS = 3_000;
 const MOMENTUM_SL_PCT = 0.12;
-export const OFFICIAL_RELEASE_VERSION = 'v1.0.0';
-export const MOMENTUM_REBALANCE_DAYS = 3; // v1.0.0: 3-day momentum impulse holding
-export const BTC_CRASH_HEALTH_GATE_PCT = -0.03; // v1.0.0: BTC Crash Trend Health Gate (-3.0%)
-export const PRUNING_DAYS_THRESHOLD = 2.0; // v1.0.0: 2 days (48 hours)
-export const PRUNING_MAX_RETURN_THRESH = 0.02; // v1.0.0: Never pumped > +2.0%
-export const PRUNING_CURRENT_RETURN_THRESH = -0.05; // v1.0.0: Cut sinking loser early at -5.0% (saving 7% capital)
+export const OFFICIAL_RELEASE_VERSION = 'v1.0.4';
+export const MOMENTUM_REBALANCE_DAYS = 3; // v1.0.4: 3-day momentum impulse holding
+export const BTC_CRASH_HEALTH_GATE_PCT = -0.03; // v1.0.4: BTC Crash Trend Health Gate (-3.0% 1d/24h)
+export const BTC_MACRO_BEAR_GATE_PCT = -0.10; // v1.0.4: Macro Bear Defensive Gate (-10.0% 14d BTC -> 1 slot x 25%)
+export const FALLING_KNIFE_24H_FLOOR_PCT = -0.15; // v1.0.4: Falling-Knife Guard: reject altcoins dumping <= -15.0% in 24h/intraday
+export const PRUNING_DAYS_THRESHOLD = 2.0; // v1.0.4: 2 days (48 hours)
+export const PRUNING_MAX_RETURN_THRESH = 0.02; // v1.0.4: Never pumped > +2.0%
+export const PRUNING_CURRENT_RETURN_THRESH = -0.05; // v1.0.4: Cut sinking loser early at -5.0% (saving 7% capital)
 const BTC_GRID_MAX_LEVELS = 3;
+const SAFE_FUTURES_LEVERAGE = 5;
 const MOMENTUM_RETRY_INTERVAL_MS = 6 * 3_600_000; // 6 hours
-export const PROFIT_LOCK_COOLDOWN_MS = 2 * 3_600_000; // v1.0.0: 2 hours for profitable ratchet exits
+export const PROFIT_LOCK_COOLDOWN_MS = 2 * 3_600_000; // 2 hours for profitable ratchet exits (preserves trend continuation waves)
 export const WATCHDOG_TIMEOUT_MS = 35_000; // 35s watchdog per tick to prevent false-positive aborts on network jitter
 export const FUNDING_RATE_CAP = 0.0005; // +0.05% per 8h (+0.15% daily)
 const RECONCILIATION_INTERVAL_TICKS = 300; // 300 ticks * 3s = 900s = 15 minutes
 const CANDLE_BACKGROUND_REFRESH_MS = 10 * 60_000; // 10 minutes
+const MAX_PERSISTED_NOTICES = 500;
 
 export interface HybridLiveState {
   policyId: string;
@@ -70,6 +82,7 @@ export interface HybridLiveState {
     blacklistCount: number;
     criticalCloseCount: number;
     blacklistedSymbols: string[];
+    lastScannedAt?: string;
   };
   dynamicCompounding?: {
     momentumAllocUsd: number;
@@ -86,6 +99,13 @@ export interface HybridLiveState {
     gridTpPct: number;
     crashGatePct: number;
     regime: string;
+  };
+  momentumRegime?: {
+    mode: 'normal' | 'macro_defensive' | 'crash_freeze';
+    btc1dReturnPct: number;
+    btc14dReturnPct: number | null;
+    maxSlots: number;
+    targetAllocPct: number;
   };
   cashFlow?: CashFlowSummary;
 }
@@ -104,10 +124,25 @@ function stepDecimals(step: number): number {
   return dot < 0 ? 0 : text.length - dot - 1;
 }
 
+function isProfitableLockedTier(tier?: string): boolean {
+  return tier === 'lock1' || tier === 'lock2' || tier === 'lock3' || tier === 'lock';
+}
+
+function isProfitableRatchetTier(tier?: string): boolean {
+  return tier === 'breakeven' || isProfitableLockedTier(tier);
+}
+
+export function floorPriceToTick(price: number, tickSize: number): number {
+  if (!Number.isFinite(price) || price <= 0) return price;
+  if (!Number.isFinite(tickSize) || tickSize <= 0) return price;
+  const decimals = stepDecimals(tickSize);
+  const floored = Math.floor(price / tickSize + 1e-9) * tickSize;
+  return Number(floored.toFixed(decimals));
+}
+
 export function formatToTick(price: number, tickSize: number): string {
   const decimals = stepDecimals(tickSize);
-  const floored = tickSize > 0 ? Math.floor(price / tickSize + 1e-9) * tickSize : price;
-  return floored.toFixed(decimals);
+  return floorPriceToTick(price, tickSize).toFixed(decimals);
 }
 
 function formatToStep(qty: number, stepSize: number): string {
@@ -289,43 +324,163 @@ export class CandleRamCache {
   }
 }
 
-/** REST fallback when RAM cache is missing or cold. */
-export async function fetch14dReturn(symbol: string): Promise<number | null> {
+/** Fetches 16 daily Binance Futures kline bars for a symbol. */
+export async function fetchCandles1d(
+  symbol: string
+): Promise<Array<[number, string, string, string, string, ...unknown[]]> | null> {
   try {
     const res = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=16`, {
       signal: AbortSignal.timeout(6_000),
     });
     if (!res.ok) {
-      console.warn(`[HybridLiveWorker] fetch14dReturn ${symbol} failed: HTTP ${res.status}`);
+      console.warn(`[HybridLiveWorker] fetchCandles1d ${symbol} failed: HTTP ${res.status}`);
       return null;
     }
     const data = (await res.json()) as Array<[number, string, string, string, string, ...unknown[]]>;
     if (!Array.isArray(data) || data.length < 15) {
-      console.warn(`[HybridLiveWorker] fetch14dReturn ${symbol} insufficient candles: ${Array.isArray(data) ? data.length : 'not an array'}`);
+      console.warn(`[HybridLiveWorker] fetchCandles1d ${symbol} insufficient candles: ${Array.isArray(data) ? data.length : 'not an array'}`);
       return null;
     }
-    const ret = compute14dReturnFromCandles(data);
-    if (ret === null) {
-      console.warn(`[HybridLiveWorker] fetch14dReturn ${symbol} could not compute valid 14d return from candles.`);
-      return null;
-    }
-    return ret;
+    return data;
   } catch (err) {
-    console.warn(`[HybridLiveWorker] fetch14dReturn ${symbol} error:`, err instanceof Error ? err.message : err);
+    console.warn(`[HybridLiveWorker] fetchCandles1d ${symbol} error:`, err instanceof Error ? err.message : err);
     return null;
   }
 }
 
+/** REST fallback when RAM cache is missing or cold. */
+export async function fetch14dReturn(symbol: string): Promise<number | null> {
+  const data = await fetchCandles1d(symbol);
+  if (!data) return null;
+  const ret = compute14dReturnFromCandles(data);
+  if (ret === null) {
+    console.warn(`[HybridLiveWorker] fetch14dReturn ${symbol} could not compute valid 14d return from candles.`);
+    return null;
+  }
+  return ret;
+}
+
 export const MAX_MOMENTUM_ATR_PCT = 0.20; // Hyper-volatility ceiling (20% daily ATR: blocks extreme disasters like QUSDT 70% while capturing 14%-18% momentum runners)
+
+export interface MomentumRegimeDecision {
+  mode: 'normal' | 'macro_defensive' | 'crash_freeze';
+  crashBlocked: boolean;
+  maxSlots: number;
+  allocPct: number;
+}
+
+/**
+ * Resolves momentum portfolio sizing and slot ceiling from BTC 1d and 14d returns.
+ * - BTC signal unavailable: Fail-safe freeze (0 new entries until signal recovers).
+ * - BTC 1d/24h <= -3%: Crash Freeze (0 new entries).
+ * - BTC 14d <= -10%: Macro Bear Defensive Mode (1 slot max at 25% equity, keeping 75% cash).
+ * - Otherwise: Normal Mode (2 slots at 35% equity).
+ */
+export function resolveMomentumRegime(
+  btc1dReturn: number,
+  btc14dReturn: number | null,
+  signalAvailable = true
+): MomentumRegimeDecision {
+  if (!signalAvailable || btc1dReturn <= BTC_CRASH_HEALTH_GATE_PCT) {
+    return { mode: 'crash_freeze', crashBlocked: true, maxSlots: 0, allocPct: 0 };
+  }
+  if (btc14dReturn !== null && btc14dReturn <= BTC_MACRO_BEAR_GATE_PCT) {
+    return {
+      mode: 'macro_defensive',
+      crashBlocked: false,
+      maxSlots: 1,
+      allocPct: DEFENSIVE_MOMENTUM_ALLOC_PCT,
+    };
+  }
+  return {
+    mode: 'normal',
+    crashBlocked: false,
+    maxSlots: 2,
+    allocPct: MOMENTUM_ALLOC_PCT,
+  };
+}
+
+/**
+ * Fetches live 24h rolling percentage change (as decimal, e.g. -0.08 = -8%) for all Binance Futures symbols.
+ */
+export async function fetchAll24hChanges(): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  try {
+    const res = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr', {
+      signal: AbortSignal.timeout(6_000),
+    });
+    if (!res.ok) return map;
+    const data = (await res.json()) as Array<{ symbol: string; priceChangePercent?: string }>;
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        const pct = parseFloat(item.priceChangePercent || '');
+        if (item.symbol && Number.isFinite(pct)) {
+          map.set(item.symbol, pct / 100);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[HybridLiveWorker] fetchAll24hChanges error:', err instanceof Error ? err.message : err);
+  }
+  return map;
+}
+
+/** Shared momentum + defensive safety evaluator used by both RAM cache hits and REST fallback. */
+function evaluateMomentumCandidate(
+  sym: string,
+  candles: Array<[number, string, string, string, string, ...unknown[]]>,
+  rolling24hRet?: number
+): { symbol: string; score: number; rawReturn: number; atr14Pct: number } | null {
+  const rawRet = compute14dReturnFromCandles(candles);
+  if (rawRet === null || rawRet < 0.02) return null;
+
+  // 1. Falling-Knife 24h / Intraday Guard: block active crashes (e.g. -25% 24h dump on stale 14d gain)
+  if (rolling24hRet !== undefined && rolling24hRet <= FALLING_KNIFE_24H_FLOOR_PCT) {
+    console.log(`[HybridLiveWorker] computeMomentumUniverse: Skipping ${sym} due to 24h dump (${(rolling24hRet * 100).toFixed(1)}% <= ${(FALLING_KNIFE_24H_FLOOR_PCT * 100).toFixed(1)}%).`);
+    return null;
+  }
+
+  if (candles.length >= 16) {
+    const lastBar = candles[candles.length - 1];
+    const todayOpen = parseFloat(lastBar[1]);
+    const todayClose = parseFloat(lastBar[4]);
+    if (todayOpen > 0 && todayClose > 0 && todayOpen !== todayClose) {
+      const intradayRet = (todayClose - todayOpen) / todayOpen;
+      if (intradayRet <= FALLING_KNIFE_24H_FLOOR_PCT) {
+        console.log(`[HybridLiveWorker] computeMomentumUniverse: Skipping ${sym} due to intraday dump (${(intradayRet * 100).toFixed(1)}% <= ${(FALLING_KNIFE_24H_FLOOR_PCT * 100).toFixed(1)}%).`);
+        return null;
+      }
+      const expected14dTime = lastBar[0] - 14 * 86_400_000;
+      const base14dBar =
+        candles.find((c) => Math.abs(c[0] - expected14dTime) < 3_600_000) ?? candles[candles.length - 15];
+      const baseClose = base14dBar ? parseFloat(base14dBar[4]) : 0;
+      if (baseClose > 0 && (todayClose - baseClose) / baseClose <= 0) {
+        console.log(`[HybridLiveWorker] computeMomentumUniverse: Skipping ${sym} (live 14d momentum flipped negative).`);
+        return null;
+      }
+    }
+  }
+
+  // 2. Hyper-volatility filter: Cap ATR <= 20% to exclude pump-and-dump altcoins while capturing high-alpha runners
+  const atr14Pct = computeSymbolAtr14Pct(candles);
+  if (atr14Pct > MAX_MOMENTUM_ATR_PCT) {
+    console.log(`[HybridLiveWorker] computeMomentumUniverse: Skipping ${sym} due to hyper-volatility ATR14 (${(atr14Pct * 100).toFixed(1)}% > ${(MAX_MOMENTUM_ATR_PCT * 100).toFixed(1)}%).`);
+    return null;
+  }
+
+  return { symbol: sym, score: rawRet, rawReturn: rawRet, atr14Pct };
+}
 
 /**
  * Computes momentum score for universe symbols.
- * Reads instantly from RAM cache (< 50ms). Falls back to REST for missing symbols.
- * Filters out hyper-volatile (>20% ATR14) tokens and ranks by Raw 14d Return for Max Alpha ROI.
+ * Reads instantly from RAM cache (< 50ms). Falls back to REST for missing symbols using identical filters.
+ * Filters out hyper-volatile (>20% ATR14) and falling-knife dumping (<= -15% 24h/intraday) tokens,
+ * and ranks by Raw 14d Return for Max Alpha ROI.
  */
 export async function computeMomentumUniverse(
   candleCache?: CandleRamCache,
-  universeSymbols?: readonly string[]
+  universeSymbols?: readonly string[],
+  changes24h?: Map<string, number>
 ): Promise<Array<{ symbol: string; score: number; rawReturn?: number; atr14Pct?: number }>> {
   const t0 = Date.now();
   const targetSymbols = (universeSymbols && universeSymbols.length > 0 ? universeSymbols : SOURCE_MOMENTUM_SYMBOLS).filter((s) => /^[A-Z0-9_]{2,40}$/.test(s));
@@ -333,35 +488,24 @@ export async function computeMomentumUniverse(
   const missingSymbols: string[] = [];
 
   for (const sym of targetSymbols) {
-    let rawRet: number | null = null;
-    let atr14Pct = 0.05;
     const cachedCandles = candleCache?.getCandles(sym);
     if (cachedCandles && cachedCandles.length >= 15) {
-      rawRet = compute14dReturnFromCandles(cachedCandles);
-      atr14Pct = computeSymbolAtr14Pct(cachedCandles);
-    }
-
-    if (rawRet === null) {
+      const evaluated = evaluateMomentumCandidate(sym, cachedCandles, changes24h?.get(sym));
+      if (evaluated) results.push(evaluated);
+    } else {
       missingSymbols.push(sym);
-    } else if (rawRet >= 0.02) {
-      // 1. Hyper-volatility filter: Cap ATR <= 20% to exclude pump-and-dump altcoins while capturing high-alpha runners
-      if (atr14Pct > MAX_MOMENTUM_ATR_PCT) {
-        console.log(`[HybridLiveWorker] computeMomentumUniverse: Skipping ${sym} due to hyper-volatility ATR14 (${(atr14Pct * 100).toFixed(1)}% > ${(MAX_MOMENTUM_ATR_PCT * 100).toFixed(1)}%).`);
-        continue;
-      }
-      // 2. Raw Momentum Ranking for Max Alpha ROI
-      const score = rawRet;
-      results.push({ symbol: sym, score, rawReturn: rawRet, atr14Pct });
     }
   }
 
-  // Fallback to REST for missing symbols if cache was incomplete
+  // Fallback to REST for missing symbols if cache was incomplete (applies identical ATR/knife/14d filters)
   if (missingSymbols.length > 0) {
     console.warn(`[HybridLiveWorker] computeMomentumUniverse: ${missingSymbols.length} symbols missing in RAM cache, falling back to REST: ${missingSymbols.join(', ')}`);
     for (const sym of missingSymbols) {
-      const ret = await fetch14dReturn(sym);
-      if (ret !== null) {
-        if (ret >= 0.02) results.push({ symbol: sym, score: ret, rawReturn: ret, atr14Pct: 0.05 });
+      const candles = await fetchCandles1d(sym);
+      if (candles) {
+        candleCache?.setCandles(sym, candles);
+        const evaluated = evaluateMomentumCandidate(sym, candles, changes24h?.get(sym));
+        if (evaluated) results.push(evaluated);
       } else {
         console.warn(`[HybridLiveWorker] computeMomentumUniverse: REST fallback also failed for ${sym}.`);
       }
@@ -452,7 +596,9 @@ export async function selectTopMomentumSymbols(
 async function fetchBtcGridSignal(volGridController: VolatilityGridController): Promise<{
   ema10: number;
   oneDayReturn: number;
+  btc14dReturn: number | null;
   crashGateTripped: boolean;
+  signalAvailable: boolean;
   volParams: VolatilityGridParams;
 }> {
   try {
@@ -466,17 +612,27 @@ async function fetchBtcGridSignal(volGridController: VolatilityGridController): 
     ]);
     if (!klinesRes.ok) {
       const volParams = volGridController.getLastParams();
-      return { ema10: 0, oneDayReturn: 0, crashGateTripped: false, volParams };
+      return { ema10: 0, oneDayReturn: 0, btc14dReturn: null, crashGateTripped: false, signalAvailable: false, volParams };
     }
     const data = (await klinesRes.json()) as Array<[number, string, string, string, string, ...unknown[]]>;
     if (data.length < 11) {
       const volParams = volGridController.getLastParams();
-      return { ema10: 0, oneDayReturn: 0, crashGateTripped: false, volParams };
+      return { ema10: 0, oneDayReturn: 0, btc14dReturn: null, crashGateTripped: false, signalAvailable: false, volParams };
     }
     const lastBar = data[data.length - 1];
     const todayOpen = parseFloat(lastBar[1] as string);
     const todayCurrent = parseFloat(lastBar[4] as string);
     const todayReturn = todayOpen > 0 ? (todayCurrent - todayOpen) / todayOpen : 0;
+
+    let btc14dReturn: number | null = null;
+    const expected14dTime = lastBar[0] - 14 * 86_400_000;
+    const base14dBar = data.find((c) => Math.abs(c[0] - expected14dTime) < 3_600_000) ?? (data.length >= 15 ? data[data.length - 15] : undefined);
+    if (base14dBar) {
+      const baseClose = parseFloat(base14dBar[4] as string);
+      if (Number.isFinite(baseClose) && baseClose > 0 && todayCurrent > 0) {
+        btc14dReturn = (todayCurrent - baseClose) / baseClose;
+      }
+    }
 
     let rolling24hReturn = todayReturn;
     if (tickerRes.ok) {
@@ -505,10 +661,10 @@ async function fetchBtcGridSignal(volGridController: VolatilityGridController): 
     }));
     const volParams = volGridController.computeGridParams(candleData);
     const crashGateTripped = oneDayReturn < -volParams.crashGatePct;
-    return { ema10, oneDayReturn, crashGateTripped, volParams };
+    return { ema10, oneDayReturn, btc14dReturn, crashGateTripped, signalAvailable: true, volParams };
   } catch {
     const volParams = volGridController.getLastParams();
-    return { ema10: 0, oneDayReturn: 0, crashGateTripped: false, volParams };
+    return { ema10: 0, oneDayReturn: 0, btc14dReturn: null, crashGateTripped: false, signalAvailable: false, volParams };
   }
 }
 
@@ -517,13 +673,22 @@ export class HybridLiveWorker {
   private running = false;
   private stateDir: string;
   private dayStartEquity = 100.0;
+  private worstDayPnl = 0;
   private currentDay = '';
+  private restoredObservedDay = '';
   private breakerLatched = false;
+  private lastMomentumRegime: HybridLiveState['momentumRegime'];
   private sentNotices = new Set<string>();
   private noticesLoaded = false;
   private lastState: HybridLiveState | null = null;
   private stopTelegramListener: (() => void) | null = null;
   private exchangeFilters: Record<string, SymbolFilterInfo> = {};
+  private rawExchangeSymbols: ExchangeContractStatus[] = [];
+  private configuredLeverageSymbols = new Set<string>();
+  private eventShieldScanning = false;
+  private tickInProgress = false;
+  private retryingMomentum = false;
+  private lastBtcMarkPrice = 0;
   private nativeStops = new Set<string>();
   private stopRetryAt = new Map<string, number>();
   private daysSinceRebalance = 0;
@@ -571,8 +736,8 @@ export class HybridLiveWorker {
   }
 
   /**
-   * v1.0.0: Differentiated Cooldown Check.
-   * - Losing exits (initial SL -12% or v1.0.0 Pruning -5%) stay in full Same-Day UTC cooldown (until 00:00 UTC).
+   * v1.0.1: Differentiated Cooldown Check.
+   * - Losing exits (initial SL -12% or v1.0.1 Pruning -5%) stay in full Same-Day UTC cooldown (until 00:00 UTC).
    * - Profitable ratchet exits (breakeven, lock1, lock2, lock3) stay in 2-hour cooldown (PROFIT_LOCK_COOLDOWN_MS).
    */
   public isSymbolInCooldown(sym: string, nowMs = Date.now()): boolean {
@@ -595,7 +760,7 @@ export class HybridLiveWorker {
   }
 
   public async start(): Promise<void> {
-    console.log(`[HybridLiveWorker] Starting Production Release v1.0.0 Live Worker (${HYBRID_POLICY_ID})...`);
+    console.log(`[HybridLiveWorker] Starting Production Release ${OFFICIAL_RELEASE_VERSION} Live Worker (${HYBRID_POLICY_ID})...`);
     await fs.mkdir(this.stateDir, { recursive: true });
 
     this.running = true;
@@ -604,10 +769,10 @@ export class HybridLiveWorker {
     await this.loadExchangeFilters();
     await this.restoreDayAnchor();
 
-    // Initialize v1.0.0 Event Shield
+    // Initialize Event Shield
     await this.eventShield.init();
 
-    // Initialize v1.0.0 Dynamic Universe Scanner (Top 30 Binance Futures > $50M/d)
+    // Initialize Dynamic Universe Scanner (Top 30 Binance Futures > $50M/d)
     await this.dynamicUniverseScanner.refreshUniverse(true);
     const activeUniverse = this.dynamicUniverseScanner.getUniverse();
     console.log(`[HybridLiveWorker] Active dynamic universe loaded: ${activeUniverse.length} symbols.`);
@@ -622,7 +787,7 @@ export class HybridLiveWorker {
     // Initial cross-reconciliation with exchange ground truth
     await this.reconcileState();
 
-    // Seed activeTrackedPositions with currently open positions
+    // Seed activeTrackedPositions with currently open positions (preserving restored ratchet SL/tier)
     try {
       const initialPositions = await this.broker.getPositions();
       for (const p of initialPositions) {
@@ -630,18 +795,23 @@ export class HybridLiveWorker {
         const q = parseFloat(p.positionAmt);
         if (Math.abs(q) > 0) {
           const ent = parseFloat(p.entryPrice);
-          const sl = q > 0 ? ent * (1.0 - MOMENTUM_SL_PCT) : ent * (1.0 + MOMENTUM_SL_PCT);
+          const rState = this.ratchetState.get(p.symbol);
+          const tickSize = this.exchangeFilters[p.symbol]?.tickSize ?? 0;
+          const fallbackSl = q > 0 ? floorPriceToTick(ent * (1.0 - MOMENTUM_SL_PCT), tickSize) : ent * (1.0 + MOMENTUM_SL_PCT);
           this.activeTrackedPositions.set(p.symbol, {
             qty: Math.abs(q),
             entryPrice: ent,
-            slPrice: sl,
-            ratchetTier: 'initial',
+            slPrice: rState?.currentSl ?? fallbackSl,
+            ratchetTier: rState?.tier || 'initial',
           });
         }
       }
     } catch (err) {
       console.warn('[HybridLiveWorker] Could not pre-seed activeTrackedPositions:', err);
     }
+
+    // Run initial automated Event Shield scan (Binance contract status + public security RSS feeds)
+    await this.runEventShieldScan();
 
     // Start interactive Telegram listener only if explicitly enabled (embedded mode)
     if (process.env.HYBRID_EMBEDDED_TELEGRAM_LISTENER === 'true') {
@@ -654,18 +824,38 @@ export class HybridLiveWorker {
     // Initial tick
     await this.tick();
 
-    // Run continuous loop with 35s watchdog per tick to prevent Axios/Node socket hangs
+    // Run continuous loop with non-overlapping 35s watchdog per tick to prevent socket hangs & concurrency races
     const loop = async () => {
       while (this.running) {
+        if (this.tickInProgress) {
+          await new Promise((resolve) => setTimeout(resolve, CHECK_INTERVAL_MS));
+          continue;
+        }
+        this.tickInProgress = true;
+        let tickPromise: Promise<void> | null = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
         try {
+          tickPromise = this.tick();
           await Promise.race([
-            this.tick(),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`Tick watchdog timeout (${WATCHDOG_TIMEOUT_MS / 1000}s)`)), WATCHDOG_TIMEOUT_MS)
-            ),
+            tickPromise,
+            new Promise((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error(`Tick watchdog timeout (${WATCHDOG_TIMEOUT_MS / 1000}s)`)),
+                WATCHDOG_TIMEOUT_MS
+              );
+            }),
           ]);
         } catch (error) {
           console.error('[HybridLiveWorker] Tick error:', error instanceof Error ? error.message : error);
+        } finally {
+          if (timer) clearTimeout(timer);
+          if (tickPromise) {
+            void tickPromise.finally(() => {
+              this.tickInProgress = false;
+            });
+          } else {
+            this.tickInProgress = false;
+          }
         }
         await new Promise((resolve) => setTimeout(resolve, CHECK_INTERVAL_MS));
       }
@@ -698,7 +888,15 @@ export class HybridLiveWorker {
     try {
       const info: LiveExchangeInfo = await this.broker.getExchangeInfo();
       const tradableCrypto = new Set<string>();
+      const rawContracts: ExchangeContractStatus[] = [];
       for (const s of (info.symbols as any[])) {
+        rawContracts.push({
+          symbol: s.symbol,
+          status: s.status,
+          contractType: s.contractType,
+          quoteAsset: s.quoteAsset,
+          deliveryDate: typeof s.deliveryDate === 'number' ? s.deliveryDate : undefined,
+        });
         // Strict crypto perpetual contract guard: Exclude commodities (oil, gold), equities, pre-market, quarterly delivery
         if (s.status !== 'TRADING') continue;
         if (s.contractType !== 'PERPETUAL') continue;
@@ -718,6 +916,7 @@ export class HybridLiveWorker {
           };
         }
       }
+      this.rawExchangeSymbols = rawContracts;
       this.dynamicUniverseScanner.setAllowedSymbols(tradableCrypto);
       console.log(`[HybridLiveWorker] Loaded exchange filters for ${Object.keys(this.exchangeFilters).length} tradable crypto perpetual symbols.`);
     } catch (err) {
@@ -725,10 +924,39 @@ export class HybridLiveWorker {
     }
   }
 
+  public async runEventShieldScan(): Promise<void> {
+    if (this.eventShieldScanning) return;
+    this.eventShieldScanning = true;
+    try {
+      const watched = new Set<string>([
+        ...this.dynamicUniverseScanner.getUniverse(),
+        ...this.activeTrackedPositions.keys(),
+      ]);
+      const tradableSet = new Set(Object.keys(this.exchangeFilters));
+      const contractAlerts = await this.eventShield.scanExchangeStatuses(this.rawExchangeSymbols, watched);
+      const rssAlerts = await this.eventShield.scanRssFeeds(tradableSet.size > 0 ? tradableSet : undefined);
+      for (const alert of [...contractAlerts, ...rssAlerts]) {
+        if (watched.has(alert.symbol) || alert.severity === 'CRITICAL_CLOSE') {
+          await sendHybridTelegram(
+            `🛡️ [EVENT SHIELD TỰ ĐỘNG] ĐÃ ĐƯA ${alert.symbol} VÀO BLACKLIST!\n` +
+            `• Mức độ: ${alert.severity}\n` +
+            `• Phân loại: ${alert.category}\n` +
+            `• Lý do: ${alert.reason}`
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[HybridLiveWorker] [EventShield] Auto scan error:', err instanceof Error ? err.message : err);
+    } finally {
+      this.eventShieldScanning = false;
+    }
+  }
+
   /** Keep the 12 USDT day anchor, rebalance state, and grid state across restarts. */
   private async restoreDayAnchor(): Promise<void> {
     try {
       const raw = JSON.parse(await fs.readFile(path.join(this.stateDir, 'worker-status.json'), 'utf8')) as HybridLiveState;
+      this.lastState = raw;
       const observed = Date.parse(raw.lastObservedAt);
       if (Array.isArray(raw.btcGridLevels)) {
         this.btcGridLevels = raw.btcGridLevels;
@@ -738,6 +966,9 @@ export class HybridLiveWorker {
       }
       if (typeof raw.daysSinceRebalance === 'number') {
         this.daysSinceRebalance = raw.daysSinceRebalance;
+      }
+      if (raw.momentumRegime) {
+        this.lastMomentumRegime = raw.momentumRegime;
       }
       if (raw.sameDaySlCooldown && typeof raw.sameDaySlCooldown === 'object') {
         for (const [sym, date] of Object.entries(raw.sameDaySlCooldown)) {
@@ -767,14 +998,37 @@ export class HybridLiveWorker {
       this.momentumRetryAt = 0;
       if (!Number.isFinite(observed) || !Number.isFinite(raw.dayStartEquity) || raw.dayStartEquity <= 0) return;
       const observedDay = new Date(observed).toISOString().slice(0, 10);
+      this.restoredObservedDay = observedDay;
       if (observedDay !== this.getUtcDay()) return;
       this.currentDay = observedDay;
       this.dayStartEquity = raw.dayStartEquity;
+      this.worstDayPnl = Math.min(0, Number.isFinite(raw.worstDayPnl) ? raw.worstDayPnl : 0);
       this.breakerLatched = raw.breakerLatched === true;
       console.log(`[HybridLiveWorker] Restored day anchor ${raw.dayStartEquity} for ${observedDay}, daysSinceRebalance: ${this.daysSinceRebalance}`);
     } catch {
       // First boot has no status file.
     }
+  }
+
+  private async submitVenueStopOrder(symbol: string, qty: number, slPrice: number): Promise<string | null> {
+    const filter = this.exchangeFilters[symbol];
+    if (!filter) return null;
+    const stopPriceStr = formatToTick(slPrice, filter.tickSize);
+    const qtyStr = formatToStep(Math.abs(qty), filter.stepSize);
+    const clientOrderId = `sl_${symbol.toLowerCase()}_${Date.now()}`.slice(0, 36);
+    await this.broker.submitStopMarketOrder({
+      symbol,
+      side: qty > 0 ? 'SELL' : 'BUY',
+      stopPrice: stopPriceStr,
+      quantity: qtyStr,
+      clientOrderId,
+      positionSide: 'BOTH',
+      reduceOnly: true,
+    });
+    this.nativeStops.add(symbol);
+    this.stopRetryAt.delete(symbol);
+    console.log(`[HybridLiveWorker] Native venue STOP_MARKET placed for ${symbol}: SL=${stopPriceStr}, Qty=${qtyStr}`);
+    return clientOrderId;
   }
 
   private async syncNativeStopLoss(symbol: string, qty: number, slPrice: number): Promise<boolean> {
@@ -794,20 +1048,7 @@ export class HybridLiveWorker {
         this.nativeStops.add(symbol);
         return true;
       }
-      const stopPriceStr = formatToTick(slPrice, filter.tickSize);
-      const qtyStr = formatToStep(Math.abs(qty), filter.stepSize);
-      await this.broker.submitStopMarketOrder({
-        symbol,
-        side: qty > 0 ? 'SELL' : 'BUY',
-        stopPrice: stopPriceStr,
-        quantity: qtyStr,
-        clientOrderId: `sl_${symbol.toLowerCase()}_${Date.now()}`.slice(0, 36),
-        positionSide: 'BOTH',
-        reduceOnly: true,
-      });
-      this.nativeStops.add(symbol);
-      console.log(`[HybridLiveWorker] Native venue STOP_MARKET placed for ${symbol}: SL=${stopPriceStr}, Qty=${qtyStr}`);
-      return true;
+      return Boolean(await this.submitVenueStopOrder(symbol, qty, slPrice));
     } catch (err) {
       this.stopRetryAt.set(symbol, Date.now() + 60_000);
       console.warn(`[HybridLiveWorker] Could not place native STOP_MARKET for ${symbol}:`, err instanceof Error ? err.message : err);
@@ -815,13 +1056,33 @@ export class HybridLiveWorker {
     }
   }
 
-  private async cancelSymbolStops(symbol: string): Promise<void> {
-    this.nativeStops.delete(symbol);
+  /** Places the replacement STOP_MARKET before cancelling older stop orders so no naked window occurs on failure. */
+  private async replaceNativeStopLoss(symbol: string, qty: number, newSlPrice: number): Promise<boolean> {
+    try {
+      const newClientOrderId = await this.submitVenueStopOrder(symbol, qty, newSlPrice);
+      if (!newClientOrderId) return false;
+      await this.cancelSymbolStops(symbol, newClientOrderId);
+      this.nativeStops.add(symbol);
+      return true;
+    } catch (err) {
+      console.warn(
+        `[HybridLiveWorker] Could not replace native STOP_MARKET for ${symbol} (preserving previous venue stop):`,
+        err instanceof Error ? err.message : err
+      );
+      return false;
+    }
+  }
+
+  private async cancelSymbolStops(symbol: string, keepClientAlgoId?: string): Promise<void> {
+    if (!keepClientAlgoId) {
+      this.nativeStops.delete(symbol);
+    }
     try {
       const algoOrders = await this.broker.getOpenAlgoOrders(symbol);
       for (const order of algoOrders) {
         const clientAlgoId = String(order.clientAlgoId ?? order.clientOrderId ?? order.algoId ?? '');
-        if ((order.orderType === 'STOP_MARKET' || order.type === 'STOP_MARKET') && clientAlgoId) {
+        if (!clientAlgoId || clientAlgoId === keepClientAlgoId) continue;
+        if (order.orderType === 'STOP_MARKET' || order.type === 'STOP_MARKET') {
           await this.broker.cancelAlgoOrder(symbol, clientAlgoId);
           console.log(`[HybridLiveWorker] Cancelled open stop order for ${symbol}: ${clientAlgoId}`);
         }
@@ -875,7 +1136,7 @@ export class HybridLiveWorker {
             if (isProfitableTier) {
               const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
               this.sameDaySlCooldown.set(sym, expireIso);
-              console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+              console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Profitable Ratchet Cooldown (${PROFIT_LOCK_COOLDOWN_MS / 3_600_000}h until ${expireIso}).`);
             } else {
               this.sameDaySlCooldown.set(sym, todayUtc);
               console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
@@ -925,9 +1186,19 @@ export class HybridLiveWorker {
         }
       }
 
+      // Reconcile stale BTC grid levels when no live BTCUSDT position exists on exchange
+      if (this.btcGridLevels.length > 0 && !liveMap.has('BTCUSDT')) {
+        console.warn('[HybridLiveWorker] [CrossReconciliation] Clearing stale btcGridLevels (no live BTCUSDT position on Binance).');
+        this.btcGridLevels = [];
+        if (diskState) {
+          diskState.btcGridLevels = [];
+        }
+        discrepancyFound = true;
+      }
+
       // 2. Open Algo Orders cross-reconciliation
       for (const p of livePositions) {
-        if (p.symbol === 'BTCUSDT') continue;
+        if (p.symbol === 'BTCUSDT' && this.btcGridLevels.length === 0) continue;
         const qty = parseFloat(p.positionAmt);
         if (qty <= 0) continue;
 
@@ -945,7 +1216,8 @@ export class HybridLiveWorker {
             console.warn(`[HybridLiveWorker] [CrossReconciliation] Active position ${p.symbol} is MISSING exchange STOP_MARKET order! Re-placing immediately...`);
             this.nativeStops.delete(p.symbol);
             this.stopRetryAt.delete(p.symbol);
-            const slPrice = parseFloat(p.entryPrice) * (1.0 - MOMENTUM_SL_PCT);
+            const tickSize = this.exchangeFilters[p.symbol]?.tickSize ?? 0;
+            const slPrice = this.ratchetState.get(p.symbol)?.currentSl ?? floorPriceToTick(parseFloat(p.entryPrice) * (1.0 - MOMENTUM_SL_PCT), tickSize);
             const placed = await this.syncNativeStopLoss(p.symbol, qty, slPrice);
             if (placed) {
               console.log(`[HybridLiveWorker] [CrossReconciliation] Successfully placed replacement STOP_MARKET for ${p.symbol}.`);
@@ -963,17 +1235,19 @@ export class HybridLiveWorker {
           console.log(`[HybridLiveWorker] [CrossReconciliation] Cleaning up orphan stop orders for closed symbol: ${sym}`);
           await this.cancelSymbolStops(sym);
           this.nativeStops.delete(sym);
-          const rState = this.ratchetState.get(sym);
-          const tier = rState?.tier || 'initial';
-          const isProfitableTier = tier === 'breakeven' || tier === 'lock' || tier === 'lock1' || tier === 'lock2' || tier === 'lock3';
-          if (isProfitableTier) {
-            const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
-            this.sameDaySlCooldown.set(sym, expireIso);
-            console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
-          } else {
-            const todayUtc = this.getUtcDay();
-            this.sameDaySlCooldown.set(sym, todayUtc);
-            console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
+          if (sym !== 'BTCUSDT') {
+            const rState = this.ratchetState.get(sym);
+            const tier = rState?.tier || 'initial';
+            const isProfitableTier = tier === 'breakeven' || tier === 'lock' || tier === 'lock1' || tier === 'lock2' || tier === 'lock3';
+            if (isProfitableTier) {
+              const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
+              this.sameDaySlCooldown.set(sym, expireIso);
+              console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+            } else {
+              const todayUtc = this.getUtcDay();
+              this.sameDaySlCooldown.set(sym, todayUtc);
+              console.log(`[HybridLiveWorker] [CrossReconciliation] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
+            }
           }
           discrepancyFound = true;
         }
@@ -992,7 +1266,7 @@ export class HybridLiveWorker {
         diskState.accountEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0');
         diskState.availableBalance = parseFloat(account.availableBalance || '0');
         diskState.lastReconciledAt = this.lastReconciledAt;
-        await fs.writeFile(path.join(this.stateDir, 'worker-status.json'), JSON.stringify(diskState, null, 2));
+        await atomicWriteFile(path.join(this.stateDir, 'worker-status.json'), JSON.stringify(diskState, null, 2));
         this.lastState = diskState;
         console.log('[HybridLiveWorker] [CrossReconciliation] State file updated with reconciled data.');
       }
@@ -1046,33 +1320,174 @@ export class HybridLiveWorker {
     }
   }
 
-  private async rebalanceMomentum(): Promise<boolean> {
-    console.log('[HybridLiveWorker] Starting 3-day Momentum Rebalance (v1.0.0 Dynamic)...');
+  private async ensureSafeLeverage(symbol: string): Promise<void> {
+    if (this.configuredLeverageSymbols.has(symbol)) return;
+    if (typeof this.broker.setLeverage !== 'function') {
+      this.configuredLeverageSymbols.add(symbol);
+      return;
+    }
     try {
-      // v1.0.0: BTC Crash Trend Health Gate (-3.0%)
-      const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
-      if (btcSignal.oneDayReturn <= BTC_CRASH_HEALTH_GATE_PCT) {
-        console.log(`[HybridLiveWorker] [v1.0.0 BTC Crash Gate] BTC 24h/1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Postponing new Altcoin entries.`);
-        const now = Date.now();
-        if (now - this.lastBtcCrashAlertTs >= 4 * 3_600_000) {
-          this.lastBtcCrashAlertTs = now;
-          await sendHybridTelegram(
-            `🛡️ [CỬA CHẶN BTC SẬP v1.0.0]: BTC giảm ${(btcSignal.oneDayReturn * 100).toFixed(2)}% (<= -3.0%). Tạm hoãn mở mới Altcoin để bảo vệ vốn!\n` +
-            `Hệ thống sẽ tự động quét lại mỗi 30 phút và giải ngân ngay khi đà rơi kết thúc.`
+      const targetLeverage = Math.max(1, Math.min(SAFE_FUTURES_LEVERAGE, getMainnetMaxLeverage()));
+      await this.broker.setLeverage(symbol, targetLeverage);
+      this.configuredLeverageSymbols.add(symbol);
+    } catch (err) {
+      console.warn(`[HybridLiveWorker] Could not enforce leverage for ${symbol}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  private computeActiveNotional(positions: LivePosition[]): number {
+    return positions.reduce((sum, p) => {
+      const qty = Math.abs(parseFloat(p.positionAmt));
+      const px = parseFloat(p.markPrice || p.entryPrice || '0');
+      return qty > 0 && px > 0 ? sum + qty * px : sum;
+    }, 0);
+  }
+
+  private async openMomentumPosition(
+    sym: string,
+    accountEquity: number,
+    allocPct: number,
+    clientPrefix: 'reb_open' | 'reb_retry',
+    logPrefix: 'Rebalance' | 'Momentum retry',
+    exposureCtx?: { availableBalance: number; activeNotionalUsd: number }
+  ): Promise<{ symbol: string; qty: number; entryPrice: number } | null> {
+    if (!/^[A-Z0-9_]{2,40}$/.test(sym)) {
+      console.warn(`[HybridLiveWorker] ${logPrefix}: Skipping ${sym} (Invalid symbol format).`);
+      return null;
+    }
+    try {
+      const filter = this.exchangeFilters[sym];
+      if (!filter) return null;
+      const markPrices = await this.broker.getMarkPrices(sym);
+      const mark = parseFloat(markPrices[0]?.markPrice || '0');
+      if (mark <= 0) return null;
+
+      const slPct = MOMENTUM_SL_PCT;
+      const rawAllocUsd = this.compoundingManager.computeMomentumAlloc(accountEquity, filter.minNotional, allocPct);
+      let allocUsd = rawAllocUsd;
+      const targetLeverage = Math.max(1, Math.min(SAFE_FUTURES_LEVERAGE, getMainnetMaxLeverage()));
+
+      if (exposureCtx) {
+        const maxExposureUsd = getEffectiveMaxExposureUsd(accountEquity);
+        const remainingExposureUsd = Math.max(0, maxExposureUsd - exposureCtx.activeNotionalUsd);
+        if (remainingExposureUsd < filter.minNotional) {
+          console.warn(
+            `[HybridLiveWorker] ${logPrefix}: [SafetyGuard] Skipping ${sym}, remaining exposure headroom ($${remainingExposureUsd.toFixed(2)}) < minNotional ($${filter.minNotional}).`
           );
+          return null;
+        }
+        allocUsd = Math.min(rawAllocUsd, remainingExposureUsd);
+        const exposureCheck = this.compoundingManager.validateExposure(
+          accountEquity,
+          exposureCtx.activeNotionalUsd + allocUsd,
+          1.0
+        );
+        if (!exposureCheck.isSafe) {
+          console.warn(`[HybridLiveWorker] ${logPrefix}: [SafetyGuard] Skipping ${sym}: ${exposureCheck.reason}`);
+          return null;
+        }
+        const requiredMargin = (allocUsd / targetLeverage) * 1.15;
+        if (exposureCtx.availableBalance < requiredMargin) {
+          console.warn(
+            `[HybridLiveWorker] ${logPrefix}: [SafetyGuard] Skipping ${sym}, availableBalance ($${exposureCtx.availableBalance.toFixed(2)}) < required margin ($${requiredMargin.toFixed(2)}).`
+          );
+          return null;
+        }
+      }
+
+      const targetQty = allocUsd / mark;
+      const qtyStr = formatToStep(targetQty, filter.stepSize);
+      const numQty = parseFloat(qtyStr);
+      if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
+        console.warn(`[HybridLiveWorker] ${logPrefix}: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
+        return null;
+      }
+
+      await this.ensureSafeLeverage(sym);
+      console.log(`[HybridLiveWorker] ${logPrefix}: Opening ${sym} Qty=${qtyStr} (~$${(numQty * mark).toFixed(2)}, SL=${(slPct * 100).toFixed(1)}%)`);
+      const order = await this.broker.submitMarketOrder({
+        symbol: sym,
+        side: 'BUY',
+        quantity: qtyStr,
+        clientOrderId: `${clientPrefix}_${sym.toLowerCase()}_${Date.now()}`,
+        positionSide: 'BOTH',
+      });
+      const fillPrice = parseFloat(order.avgPrice || mark.toString());
+      const slPrice = floorPriceToTick(fillPrice * (1.0 - slPct), filter.tickSize);
+
+      this.ratchetState.delete(sym);
+      this.nativeStops.delete(sym);
+      this.ratchetState.set(sym, {
+        entryPrice: fillPrice,
+        currentSl: slPrice,
+        initialSlPct: slPct,
+        maxRet: 0,
+        tier: 'initial',
+        entryTime: Date.now(),
+      });
+
+      await this.syncNativeStopLoss(sym, numQty, slPrice);
+      return { symbol: sym, qty: numQty, entryPrice: fillPrice };
+    } catch (err: unknown) {
+      console.error(`[HybridLiveWorker] ${logPrefix}: Failed to open candidate ${sym}:`, err);
+      return null;
+    }
+  }
+
+  private updateCachedRegime(
+    btcSignal: { oneDayReturn: number; btc14dReturn: number | null; signalAvailable: boolean },
+    regime: MomentumRegimeDecision
+  ): void {
+    if (!btcSignal.signalAvailable) return;
+    this.lastMomentumRegime = {
+      mode: regime.mode,
+      btc1dReturnPct: Number((btcSignal.oneDayReturn * 100).toFixed(2)),
+      btc14dReturnPct: btcSignal.btc14dReturn !== null ? Number((btcSignal.btc14dReturn * 100).toFixed(2)) : null,
+      maxSlots: regime.maxSlots,
+      targetAllocPct: regime.allocPct,
+    };
+  }
+
+  private async rebalanceMomentum(): Promise<boolean> {
+    console.log(`[HybridLiveWorker] Starting 3-day Momentum Rebalance (${OFFICIAL_RELEASE_VERSION} Dynamic)...`);
+    try {
+      // BTC Crash Trend Health Gate (-3.0% 1d) & Macro Bear Defensive Regime (-10.0% 14d)
+      const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
+      const regime = resolveMomentumRegime(btcSignal.oneDayReturn, btcSignal.btc14dReturn, btcSignal.signalAvailable);
+      this.updateCachedRegime(btcSignal, regime);
+      if (regime.crashBlocked) {
+        console.log(
+          btcSignal.signalAvailable
+            ? `[HybridLiveWorker] [${OFFICIAL_RELEASE_VERSION} BTC Crash Gate] BTC 24h/1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Postponing new Altcoin entries.`
+            : `[HybridLiveWorker] [${OFFICIAL_RELEASE_VERSION} BTC Crash Gate] BTC signal unavailable (fail-safe). Postponing new Altcoin entries.`
+        );
+        if (btcSignal.signalAvailable) {
+          const now = Date.now();
+          if (now - this.lastBtcCrashAlertTs >= 4 * 3_600_000) {
+            this.lastBtcCrashAlertTs = now;
+            await sendHybridTelegram(
+              `🛡️ [CỬA CHẶN BTC SẬP ${OFFICIAL_RELEASE_VERSION}]: BTC giảm ${(btcSignal.oneDayReturn * 100).toFixed(2)}% (<= -3.0%). Tạm hoãn mở mới Altcoin để bảo vệ vốn!\n` +
+              `Hệ thống sẽ tự động quét lại mỗi 30 phút và giải ngân ngay khi đà rơi kết thúc.`
+            );
+          }
         }
         return false;
       }
       this.lastBtcCrashAlertTs = 0;
 
+      if (regime.mode === 'macro_defensive') {
+        console.log(`[HybridLiveWorker] [MacroBearGuard] BTC 14d return ${(btcSignal.btc14dReturn! * 100).toFixed(2)}% <= -10.0%. Defensive mode: max ${regime.maxSlots} slot @ ${(regime.allocPct * 100).toFixed(0)}%.`);
+      }
+
       const universe = this.dynamicUniverseScanner.getUniverse();
-      const ranked = await computeMomentumUniverse(this.candleCache, universe);
+      const changes24h = await fetchAll24hChanges();
+      const ranked = await computeMomentumUniverse(this.candleCache, universe, changes24h);
       const cooldownExclude = new Set<string>();
       for (const sym of this.sameDaySlCooldown.keys()) {
         if (this.isSymbolInCooldown(sym)) cooldownExclude.add(sym);
       }
-      const top2 = await selectTopMomentumSymbols(ranked, 2, 'Rebalance', this.eventShield, cooldownExclude);
-      console.log(`[HybridLiveWorker] Rebalance Top 2 Momentum: ${top2.join(', ') || '(none)'}`);
+      const top2 = await selectTopMomentumSymbols(ranked, regime.maxSlots, 'Rebalance', this.eventShield, cooldownExclude);
+      console.log(`[HybridLiveWorker] Rebalance Top ${regime.maxSlots} Momentum (${regime.mode}): ${top2.join(', ') || '(none)'}`);
 
       // If no qualifying symbols found, schedule a retry in 6h instead of sitting idle
       if (top2.length === 0) {
@@ -1089,89 +1504,65 @@ export class HybridLiveWorker {
       // Clear retry timer on successful rebalance
       this.momentumRetryAt = 0;
 
-      const positions = await this.broker.getPositions();
+      const [positions, account] = await Promise.all([
+        this.broker.getPositions(),
+        this.broker.getAccount(),
+      ]);
       const activePositions = positions.filter((p) => Math.abs(parseFloat(p.positionAmt)) > 0);
-      const activeSymbols = activePositions.map((p) => p.symbol);
+      const activeMomentum = activePositions.filter((p) => p.symbol !== 'BTCUSDT');
+      const accountEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0');
+      let availableBalance = parseFloat(account.availableBalance || '0');
+      let activeNotionalUsd = this.computeActiveNotional(activePositions);
 
       const closedSymbols: string[] = [];
       const openedPositions: Array<{ symbol: string; qty: number; entryPrice: number }> = [];
+      const survivingSymbols = new Set<string>();
 
-      // 1. Close symbols that fell out of Top 2 (excluding BTC which is managed by Grid sleeve)
-      for (const p of activePositions) {
-        if (p.symbol === 'BTCUSDT') continue;
-        if (!top2.includes(p.symbol)) {
-          const qty = parseFloat(p.positionAmt);
-          console.log(`[HybridLiveWorker] Rebalance: Rotating out of ${p.symbol} (no longer in Top 2)`);
-          await this.broker.submitMarketOrder({
-            symbol: p.symbol,
-            side: qty > 0 ? 'SELL' : 'BUY',
-            quantity: Math.abs(qty).toString(),
-            clientOrderId: `reb_close_${p.symbol.toLowerCase()}_${Date.now()}`,
-            positionSide: 'BOTH',
-            reduceOnly: true,
-          });
-          await this.cancelSymbolStops(p.symbol);
-          this.ratchetState.delete(p.symbol);
-          closedSymbols.push(p.symbol);
+      // 1. Close non-locked symbols that fell out of target selection (preserve profitable lock1/lock2/lock3 winners)
+      for (const p of activeMomentum) {
+        if (top2.includes(p.symbol)) {
+          survivingSymbols.add(p.symbol);
+          continue;
         }
+        const currentTier = this.ratchetState.get(p.symbol)?.tier ?? this.activeTrackedPositions.get(p.symbol)?.ratchetTier;
+        if (isProfitableLockedTier(currentTier)) {
+          console.log(`[HybridLiveWorker] Rebalance: Preserving ${p.symbol} (${currentTier} locked winner) instead of force-closing at market.`);
+          survivingSymbols.add(p.symbol);
+          continue;
+        }
+        const qty = parseFloat(p.positionAmt);
+        const px = parseFloat(p.markPrice || p.entryPrice || '0');
+        console.log(`[HybridLiveWorker] Rebalance: Rotating out of ${p.symbol} (no longer in Top ${regime.maxSlots})`);
+        await this.broker.submitMarketOrder({
+          symbol: p.symbol,
+          side: qty > 0 ? 'SELL' : 'BUY',
+          quantity: Math.abs(qty).toString(),
+          clientOrderId: `reb_close_${p.symbol.toLowerCase()}_${Date.now()}`,
+          positionSide: 'BOTH',
+          reduceOnly: true,
+        });
+        await this.cancelSymbolStops(p.symbol);
+        this.ratchetState.delete(p.symbol);
+        this.activeTrackedPositions.delete(p.symbol);
+        closedSymbols.push(p.symbol);
+        activeNotionalUsd = Math.max(0, activeNotionalUsd - Math.abs(qty) * px);
       }
 
-      const account = await this.broker.getAccount();
-      const accountEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0');
-
-      // 2. Open new symbols in Top 2
+      // 2. Open new symbols in Top selection within remaining slot ceiling
+      const targetLeverage = Math.max(1, Math.min(SAFE_FUTURES_LEVERAGE, getMainnetMaxLeverage()));
       for (const sym of top2) {
-        if (!activeSymbols.includes(sym)) {
-          if (!/^[A-Z0-9_]{2,40}$/.test(sym)) {
-            console.warn(`[HybridLiveWorker] Rebalance: Skipping ${sym} (Invalid symbol format).`);
-            continue;
-          }
-          try {
-            const filter = this.exchangeFilters[sym];
-            if (!filter) continue;
-            const markPrices = await this.broker.getMarkPrices(sym);
-            const mark = parseFloat(markPrices[0]?.markPrice || '0');
-            if (mark <= 0) continue;
-
-            // Max Alpha ROI: Fixed 12% SL with full compounding allocation (30% per trade)
-            const slPct = MOMENTUM_SL_PCT;
-            const allocUsd = this.compoundingManager.computeMomentumAlloc(accountEquity, filter.minNotional);
-
-            const targetQty = allocUsd / mark;
-            const qtyStr = formatToStep(targetQty, filter.stepSize);
-            const numQty = parseFloat(qtyStr);
-            if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
-              console.warn(`[HybridLiveWorker] Rebalance: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
-              continue;
-            }
-
-            console.log(`[HybridLiveWorker] Rebalance: Opening Top 2 position ${sym} Qty=${qtyStr} (~$${(numQty * mark).toFixed(2)}, SL=${(slPct * 100).toFixed(1)}%)`);
-            const order = await this.broker.submitMarketOrder({
-              symbol: sym,
-              side: 'BUY',
-              quantity: qtyStr,
-              clientOrderId: `reb_open_${sym.toLowerCase()}_${Date.now()}`,
-              positionSide: 'BOTH',
-            });
-            const fillPrice = parseFloat(order.avgPrice || mark.toString());
-            const slPrice = fillPrice * (1.0 - slPct);
-            openedPositions.push({ symbol: sym, qty: numQty, entryPrice: fillPrice });
-
-            this.ratchetState.delete(sym);
-            this.nativeStops.delete(sym);
-
-            this.ratchetState.set(sym, {
-              entryPrice: fillPrice,
-              currentSl: slPrice,
-              initialSlPct: slPct,
-              maxRet: 0,
-              tier: 'initial',
-              entryTime: Date.now(),
-            });
-
-            await this.syncNativeStopLoss(sym, numQty, slPrice);
-          } catch (err: unknown) {
-            console.error(`[HybridLiveWorker] Rebalance: Failed to open candidate ${sym}:`, err);
+        if (survivingSymbols.size >= regime.maxSlots) break;
+        if (!survivingSymbols.has(sym)) {
+          const opened = await this.openMomentumPosition(sym, accountEquity, regime.allocPct, 'reb_open', 'Rebalance', {
+            availableBalance,
+            activeNotionalUsd,
+          });
+          if (opened) {
+            openedPositions.push(opened);
+            survivingSymbols.add(sym);
+            const notional = opened.qty * opened.entryPrice;
+            activeNotionalUsd += notional;
+            availableBalance = Math.max(0, availableBalance - notional / targetLeverage);
           }
         }
       }
@@ -1194,28 +1585,42 @@ export class HybridLiveWorker {
    * Retry finding momentum symbols after a rebalance that found none.
    * Only opens new positions; does not close existing ones.
    */
-  private async retryMomentumEntry(): Promise<void> {
+  private async retryMomentumEntry(): Promise<boolean> {
+    if (this.retryingMomentum) return false;
+    this.retryingMomentum = true;
     try {
       const positions = await this.broker.getPositions();
       const activePositions = positions.filter((p) => Math.abs(parseFloat(p.positionAmt)) > 0);
       const activeNonGrid = activePositions.filter((p) => p.symbol !== 'BTCUSDT');
-      const remainingSlots = Math.max(0, 2 - activeNonGrid.length);
 
-      if (remainingSlots <= 0) {
-        console.log(`[HybridLiveWorker] Momentum sleeve is already full (${activeNonGrid.length}/2). Skipping retry.`);
-        return;
+      // BTC Crash Trend Health Gate (-3.0% 1d) & Macro Bear Defensive Regime (-10.0% 14d)
+      const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
+      const regime = resolveMomentumRegime(btcSignal.oneDayReturn, btcSignal.btc14dReturn, btcSignal.signalAvailable);
+      this.updateCachedRegime(btcSignal, regime);
+      if (regime.crashBlocked) {
+        console.log(
+          btcSignal.signalAvailable
+            ? `[HybridLiveWorker] [${OFFICIAL_RELEASE_VERSION} BTC Crash Gate] BTC 1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Skipping momentum retry (15m cooldown).`
+            : `[HybridLiveWorker] [${OFFICIAL_RELEASE_VERSION} BTC Crash Gate] BTC signal unavailable (fail-safe). Skipping momentum retry (15m cooldown).`
+        );
+        this.momentumRetryAt = Date.now() + 15 * 60_000;
+        return false;
       }
 
-      // v1.0.0: BTC Crash Trend Health Gate (-3.0%)
-      const btcSignal = await fetchBtcGridSignal(this.volatilityGridController);
-      if (btcSignal.oneDayReturn <= BTC_CRASH_HEALTH_GATE_PCT) {
-        console.log(`[HybridLiveWorker] [v1.0.0 BTC Crash Gate] BTC 1d return is ${(btcSignal.oneDayReturn * 100).toFixed(2)}% <= -3.0%. Skipping momentum retry (15m cooldown).`);
+      const remainingSlots = Math.max(0, regime.maxSlots - activeNonGrid.length);
+      if (remainingSlots <= 0) {
+        console.log(`[HybridLiveWorker] Momentum sleeve is already full (${activeNonGrid.length}/${regime.maxSlots}, regime=${regime.mode}). Skipping retry.`);
         this.momentumRetryAt = Date.now() + 15 * 60_000;
-        return;
+        return false;
+      }
+
+      if (regime.mode === 'macro_defensive') {
+        console.log(`[HybridLiveWorker] [MacroBearGuard] BTC 14d return ${(btcSignal.btc14dReturn! * 100).toFixed(2)}% <= -10.0%. Defensive mode: max ${regime.maxSlots} slot @ ${(regime.allocPct * 100).toFixed(0)}%.`);
       }
 
       const universe = this.dynamicUniverseScanner.getUniverse();
-      const ranked = await computeMomentumUniverse(this.candleCache, universe);
+      const changes24h = await fetchAll24hChanges();
+      const ranked = await computeMomentumUniverse(this.candleCache, universe, changes24h);
       const retryExclude = new Set<string>();
       for (const p of activePositions) retryExclude.add(p.symbol);
       for (const sym of this.sameDaySlCooldown.keys()) {
@@ -1235,7 +1640,7 @@ export class HybridLiveWorker {
         this.momentumRetryAt = Date.now() + 15 * 60_000;
         const retryTime = new Date(this.momentumRetryAt + ICT_OFFSET).toISOString().slice(11, 16);
         console.log(`[HybridLiveWorker] Momentum retry: 0 qualifying symbols right now (candidates in cooldown or < +2%). Polling cooldown active for 15m (~${retryTime} ICT).`);
-        return;
+        return false;
       }
 
       // Found symbols! Open positions up to remainingSlots
@@ -1247,6 +1652,9 @@ export class HybridLiveWorker {
 
       const account = await this.broker.getAccount();
       const accountEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0');
+      let availableBalance = parseFloat(account.availableBalance || '0');
+      let activeNotionalUsd = this.computeActiveNotional(activePositions);
+      const targetLeverage = Math.max(1, Math.min(SAFE_FUTURES_LEVERAGE, getMainnetMaxLeverage()));
 
       let openedCount = 0;
       for (const sym of topCandidates) {
@@ -1259,59 +1667,16 @@ export class HybridLiveWorker {
           continue;
         }
 
-        if (!/^[A-Z0-9_]{2,40}$/.test(sym)) {
-          console.warn(`[HybridLiveWorker] Momentum retry: Skipping ${sym} (Invalid symbol format).`);
-          continue;
-        }
-
-        try {
-          const filter = this.exchangeFilters[sym];
-          if (!filter) continue;
-          const markPrices = await this.broker.getMarkPrices(sym);
-          const mark = parseFloat(markPrices[0]?.markPrice || '0');
-          if (mark <= 0) continue;
-
-          // Max Alpha ROI: Fixed 12% SL with full compounding allocation (30% per trade)
-          const slPct = MOMENTUM_SL_PCT;
-          const allocUsd = this.compoundingManager.computeMomentumAlloc(accountEquity, filter.minNotional);
-
-          const targetQty = allocUsd / mark;
-          const qtyStr = formatToStep(targetQty, filter.stepSize);
-          const numQty = parseFloat(qtyStr);
-          if (numQty * mark < filter.minNotional || numQty < filter.minQty) {
-            console.warn(`[HybridLiveWorker] Momentum retry: ${sym} notional ${numQty * mark} < minNotional ${filter.minNotional}`);
-            continue;
-          }
-
-          console.log(`[HybridLiveWorker] Momentum retry: Opening ${sym} Qty=${qtyStr} (~$${(numQty * mark).toFixed(2)}, SL=${(slPct * 100).toFixed(1)}%)`);
-          const order = await this.broker.submitMarketOrder({
-            symbol: sym,
-            side: 'BUY',
-            quantity: qtyStr,
-            clientOrderId: `reb_retry_${sym.toLowerCase()}_${Date.now()}`,
-            positionSide: 'BOTH',
-          });
-          const fillPrice = parseFloat(order.avgPrice || mark.toString());
-          const slPrice = fillPrice * (1.0 - slPct);
-          openedPositions.push({ symbol: sym, qty: numQty, entryPrice: fillPrice });
-
-          // Reset any stale ratchet/stop state for fresh trade
-          this.ratchetState.delete(sym);
-          this.nativeStops.delete(sym);
-
-          this.ratchetState.set(sym, {
-            entryPrice: fillPrice,
-            currentSl: slPrice,
-            initialSlPct: slPct,
-            maxRet: 0,
-            tier: 'initial',
-            entryTime: Date.now(),
-          });
-
-          await this.syncNativeStopLoss(sym, numQty, slPrice);
+        const opened = await this.openMomentumPosition(sym, accountEquity, regime.allocPct, 'reb_retry', 'Momentum retry', {
+          availableBalance,
+          activeNotionalUsd,
+        });
+        if (opened) {
+          openedPositions.push(opened);
           openedCount++;
-        } catch (err: unknown) {
-          console.error(`[HybridLiveWorker] Momentum retry: Failed to open candidate ${sym}:`, err);
+          const notional = opened.qty * opened.entryPrice;
+          activeNotionalUsd += notional;
+          availableBalance = Math.max(0, availableBalance - notional / targetLeverage);
         }
       }
 
@@ -1324,22 +1689,27 @@ export class HybridLiveWorker {
         });
         await sendHybridTelegram(`🔄 RETRY THÀNH CÔNG!\n${text}`);
 
-        // If we still have an open slot (e.g., opened 1 of 2), apply 15m polling cooldown to avoid hot loops
-        if (activeNonGrid.length + openedPositions.length < 2) {
+        // If we still have an open slot within current regime maxSlots, apply 15m polling cooldown to avoid hot loops
+        if (activeNonGrid.length + openedPositions.length < regime.maxSlots) {
           this.momentumRetryAt = Date.now() + 15 * 60_000;
         } else {
           this.momentumRetryAt = 0;
         }
+        return true;
       } else {
         // No positions could be opened (all candidates were in cooldown, below minNotional, or filtered).
         // Set a 15-minute cooldown to prevent tight-loop polling every 3-second tick.
         this.momentumRetryAt = Date.now() + 15 * 60_000;
         console.log(`[HybridLiveWorker] Momentum retry: 0 positions opened (candidates skipped/cooldown). Polling cooldown active for 15m.`);
+        return false;
       }
     } catch (err) {
       console.error('[HybridLiveWorker] Error during momentum retry:', err);
       // Reschedule retry on error
       this.momentumRetryAt = Date.now() + MOMENTUM_RETRY_INTERVAL_MS;
+      return false;
+    } finally {
+      this.retryingMomentum = false;
     }
   }
 
@@ -1361,6 +1731,8 @@ export class HybridLiveWorker {
       });
       await this.cancelSymbolStops(symbol);
       this.ratchetState.delete(symbol);
+      this.activeTrackedPositions.delete(symbol);
+      this.sameDaySlCooldown.set(symbol, this.getUtcDay());
       await sendHybridTelegram(
         `🚨 [EVENT SHIELD] ĐÃ KHẨN CẤP ĐÓNG VỊ THẾ ${symbol}!\n` +
         `• Lý do: ${reason}\n` +
@@ -1372,9 +1744,74 @@ export class HybridLiveWorker {
     }
   }
 
+  /** Resolves actual post-fee realized PnL and closing price from venue fills when available. */
+  private async resolveClosedTradeSummary(
+    symbol: string,
+    qty: number,
+    entryPrice: number,
+    fallbackSlPrice: number,
+    entryTime?: number
+  ): Promise<{ exitPrice: number; pnl: number }> {
+    const nowMs = Date.now();
+    if (typeof this.broker.getUserTrades === 'function') {
+      try {
+        const minWindowStart = nowMs - 6 * 86_400_000;
+        const startTime = entryTime && entryTime > 0
+          ? Math.min(nowMs - 60_000, Math.max(minWindowStart, entryTime - 60_000))
+          : nowMs - 24 * 3_600_000;
+        const trades = await this.broker.getUserTrades({ symbol, startTime, limit: 20 });
+        const closingFills = trades.filter((t) => {
+          const rPnl = parseFloat(t.realizedPnl);
+          return Number.isFinite(rPnl) && rPnl !== 0 && t.time >= startTime;
+        });
+        if (closingFills.length > 0) {
+          let totalNetPnl = 0;
+          let totalNotional = 0;
+          let totalQty = 0;
+          for (const t of closingFills) {
+            const rPnl = parseFloat(t.realizedPnl);
+            const fee = t.commissionAsset === 'USDT' ? parseFloat(t.commission) : 0;
+            const px = parseFloat(t.price);
+            const q = parseFloat(t.qty);
+            if (Number.isFinite(rPnl)) totalNetPnl += rPnl - (Number.isFinite(fee) ? fee : 0);
+            if (Number.isFinite(px) && Number.isFinite(q) && px > 0 && q > 0) {
+              totalNotional += px * q;
+              totalQty += q;
+            }
+          }
+          const exitPrice = totalQty > 0 ? totalNotional / totalQty : fallbackSlPrice;
+          return { exitPrice, pnl: totalNetPnl };
+        }
+      } catch (err) {
+        console.warn(`[HybridLiveWorker] Could not fetch closing userTrades for ${symbol}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    let exitPrice = fallbackSlPrice;
+    try {
+      const m = await this.broker.getMarkPrices(symbol);
+      if (m[0]?.markPrice) exitPrice = parseFloat(m[0].markPrice);
+    } catch {}
+    return { exitPrice, pnl: (exitPrice - entryPrice) * qty };
+  }
+
   private async tickBtcGrid(): Promise<void> {
     const filter = this.exchangeFilters['BTCUSDT'];
     if (!filter) return;
+
+    // Skip frequent REST polling if no active grid levels and raw 8% ticket cannot afford BTC min order.
+    // Still refresh BTC volatility & macro regime once every 200 ticks (~10m).
+    if (this.btcGridLevels.length === 0 && this.lastState && this.lastState.accountEquity > 0) {
+      const estAffordability = this.compoundingManager.evaluateGridAffordability(
+        this.lastState.accountEquity,
+        this.lastBtcMarkPrice || 60_000,
+        filter.minQty,
+        filter.minNotional
+      );
+      if (!estAffordability.affordable && this.tickCounter % 200 !== 0) {
+        return;
+      }
+    }
 
     try {
       const [markPrices, btcSignal, account] = await Promise.all([
@@ -1383,37 +1820,68 @@ export class HybridLiveWorker {
         this.broker.getAccount(),
       ]);
       const btcMark = parseFloat(markPrices[0]?.markPrice || '0');
-      if (btcMark <= 0 || btcSignal.ema10 <= 0) return;
+      if (btcMark > 0) this.lastBtcMarkPrice = btcMark;
+      if (!btcSignal.signalAvailable || btcMark <= 0 || btcSignal.ema10 <= 0) return;
+
+      const regime = resolveMomentumRegime(btcSignal.oneDayReturn, btcSignal.btc14dReturn, btcSignal.signalAvailable);
+      this.updateCachedRegime(btcSignal, regime);
 
       const accountEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0');
+      const availableBalance = parseFloat(account.availableBalance || '0');
 
-      // 1. Check Take Profit on existing active grid levels
-      const survivingLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }> = [];
-      for (const lvl of this.btcGridLevels) {
-        if (btcMark >= lvl.tpPrice) {
-          console.log(`[HybridLiveWorker] BTC Grid Take Profit Triggered! Mark=${btcMark} >= TP=${lvl.tpPrice}`);
-          const qtyStr = formatToStep(lvl.qty, filter.stepSize);
-          await this.broker.submitMarketOrder({
-            symbol: 'BTCUSDT',
-            side: 'SELL',
-            quantity: qtyStr,
-            clientOrderId: `btc_grid_tp_${Date.now()}`,
-            positionSide: 'BOTH',
-            reduceOnly: true,
-          });
-          const pnl = (btcMark - lvl.entryPrice) * lvl.qty;
-          const text = formatHybridTpNotice({
-            symbol: 'BTCUSDT',
-            qty: lvl.qty,
-            exitPrice: btcMark,
-            pnl,
-          });
-          await sendHybridTelegram(text);
+      // 1. Check Take Profit on existing active grid levels (synced against real live BTCUSDT position)
+      if (this.btcGridLevels.length > 0) {
+        const btcPositions = (await this.broker.getPositions('BTCUSDT')).filter((p) => p.symbol === 'BTCUSDT');
+        let remainingBtcQty = btcPositions.reduce((sum, p) => {
+          const q = parseFloat(p.positionAmt);
+          return q > 0 ? sum + q : sum;
+        }, 0);
+
+        if (remainingBtcQty <= 0) {
+          console.warn('[HybridLiveWorker] BTC Grid state had levels but live BTCUSDT position is 0. Clearing stale btcGridLevels.');
+          this.btcGridLevels = [];
+          await this.cancelSymbolStops('BTCUSDT');
         } else {
-          survivingLevels.push(lvl);
+          const survivingLevels: Array<{ entryPrice: number; qty: number; tpPrice: number }> = [];
+          for (const lvl of this.btcGridLevels) {
+            if (btcMark >= lvl.tpPrice && remainingBtcQty > 0) {
+              const sellQty = Math.min(lvl.qty, remainingBtcQty);
+              const qtyStr = formatToStep(sellQty, filter.stepSize);
+              const numSell = parseFloat(qtyStr);
+              if (numSell >= filter.minQty) {
+                console.log(`[HybridLiveWorker] BTC Grid Take Profit Triggered! Mark=${btcMark} >= TP=${lvl.tpPrice}`);
+                await this.broker.submitMarketOrder({
+                  symbol: 'BTCUSDT',
+                  side: 'SELL',
+                  quantity: qtyStr,
+                  clientOrderId: `btc_grid_tp_${Date.now()}`,
+                  positionSide: 'BOTH',
+                  reduceOnly: true,
+                });
+                remainingBtcQty = Math.max(0, remainingBtcQty - numSell);
+                const pnl = (btcMark - lvl.entryPrice) * numSell;
+                await sendHybridTelegram(formatHybridTpNotice({
+                  symbol: 'BTCUSDT',
+                  qty: numSell,
+                  exitPrice: btcMark,
+                  pnl,
+                }));
+              }
+            } else {
+              survivingLevels.push(lvl);
+            }
+          }
+          this.btcGridLevels = survivingLevels;
+          if (this.btcGridLevels.length === 0) {
+            await this.cancelSymbolStops('BTCUSDT');
+          } else {
+            const totalQty = this.btcGridLevels.reduce((s, l) => s + l.qty, 0);
+            const avgEntry = this.btcGridLevels.reduce((s, l) => s + l.entryPrice * l.qty, 0) / Math.max(totalQty, 1e-9);
+            const catSl = floorPriceToTick(avgEntry * (1.0 - MOMENTUM_SL_PCT), filter.tickSize);
+            await this.replaceNativeStopLoss('BTCUSDT', totalQty, catSl);
+          }
         }
       }
-      this.btcGridLevels = survivingLevels;
 
       // 2. Check Crash Gate: If 1d return < dynamic crash gate, freeze new entries
       if (btcSignal.crashGateTripped) {
@@ -1421,19 +1889,42 @@ export class HybridLiveWorker {
         return;
       }
 
-      // 3. Check Dip Buy Levels with ATR dynamic spacing
+      // 3. Check Dip Buy Levels with ATR dynamic spacing & strict affordability/exposure guard
       if (this.btcGridLevels.length < BTC_GRID_MAX_LEVELS) {
+        const affordability = this.compoundingManager.evaluateGridAffordability(
+          accountEquity,
+          btcMark,
+          filter.minQty,
+          filter.minNotional
+        );
+        if (!affordability.affordable) {
+          return;
+        }
+
         const nextLevelIndex = this.btcGridLevels.length + 1;
         const stepPct = btcSignal.volParams.gridStepPct * nextLevelIndex;
         const dipThreshold = btcSignal.ema10 * (1.0 - stepPct);
 
         if (btcMark <= dipThreshold) {
-          const targetTicketUsd = this.compoundingManager.computeGridTicket(accountEquity, filter.minNotional);
+          const allPositions = await this.broker.getPositions();
+          const activeNotional = this.computeActiveNotional(allPositions);
+          const targetTicketUsd = affordability.rawTicketUsd;
+          const maxExposureUsd = getEffectiveMaxExposureUsd(accountEquity);
+          if (activeNotional + targetTicketUsd > maxExposureUsd) {
+            console.warn(`[HybridLiveWorker] BTC Grid [SafetyGuard] Skipping level ${nextLevelIndex}: active notional ($${activeNotional.toFixed(2)}) + $${targetTicketUsd} > maxExposure $${maxExposureUsd.toFixed(2)}.`);
+            return;
+          }
+          const targetLeverage = Math.max(1, Math.min(SAFE_FUTURES_LEVERAGE, getMainnetMaxLeverage()));
+          if (availableBalance < (targetTicketUsd / targetLeverage) * 1.15) {
+            return;
+          }
+
           const targetQty = targetTicketUsd / btcMark;
           const qtyStr = formatToStep(targetQty, filter.stepSize);
           const numQty = parseFloat(qtyStr);
 
-          if (numQty * btcMark >= filter.minNotional) {
+          if (numQty >= filter.minQty && numQty * btcMark >= filter.minNotional) {
+            await this.ensureSafeLeverage('BTCUSDT');
             console.log(`[HybridLiveWorker] BTC Grid Entry Level ${nextLevelIndex} Triggered: Mark=${btcMark} <= Dip=${dipThreshold.toFixed(2)} (-${(stepPct * 100).toFixed(1)}%)! Buying $${targetTicketUsd}...`);
             const order = await this.broker.submitMarketOrder({
               symbol: 'BTCUSDT',
@@ -1445,10 +1936,17 @@ export class HybridLiveWorker {
             const entryPrice = parseFloat(order.avgPrice || btcMark.toString());
             const tpPrice = entryPrice * (1.0 + btcSignal.volParams.gridTpPct);
             this.btcGridLevels.push({ entryPrice, qty: numQty, tpPrice });
+
+            const totalQty = this.btcGridLevels.reduce((s, l) => s + l.qty, 0);
+            const avgEntry = this.btcGridLevels.reduce((s, l) => s + l.entryPrice * l.qty, 0) / Math.max(totalQty, 1e-9);
+            const catSl = floorPriceToTick(avgEntry * (1.0 - MOMENTUM_SL_PCT), filter.tickSize);
+            await this.replaceNativeStopLoss('BTCUSDT', totalQty, catSl);
+
             await sendHybridTelegram(
               `⚡ KHỚP LƯỚI BTC TẦNG ${nextLevelIndex} (SLEEVE 2 ATR VOLATILITY GRID)\n` +
               `• MUA ${qtyStr} BTC @ ${entryPrice} (~${targetTicketUsd} USDT)\n` +
               `• Chốt lời kỳ vọng: ${tpPrice.toFixed(2)} (+${(btcSignal.volParams.gridTpPct * 100).toFixed(1)}%)\n` +
+              `• Dừng lỗ thảm họa: ${catSl} (-${(MOMENTUM_SL_PCT * 100).toFixed(0)}%)\n` +
               `• Bước lưới biến động ATR: ${(btcSignal.volParams.gridStepPct * 100).toFixed(2)}%\n` +
               `• 10-EMA hiện tại: ${btcSignal.ema10.toFixed(2)}`
             );
@@ -1468,6 +1966,7 @@ export class HybridLiveWorker {
       const isFirstBoot = !this.currentDay;
       this.currentDay = today;
       this.breakerLatched = false;
+      this.worstDayPnl = 0;
 
       // Purge expired Cooldowns
       for (const sym of Array.from(this.sameDaySlCooldown.keys())) {
@@ -1476,16 +1975,27 @@ export class HybridLiveWorker {
         }
       }
 
-      // Re-anchor start equity
+      // Re-anchor start equity with safe fallback to last observed equity rather than hardcoded 100.0
       try {
         const acc = await this.broker.getAccount();
-        this.dayStartEquity = parseFloat(acc.totalMarginBalance || acc.totalWalletBalance || '100');
+        const parsedEq = parseFloat(acc.totalMarginBalance || acc.totalWalletBalance || '');
+        if (Number.isFinite(parsedEq) && parsedEq > 0) {
+          this.dayStartEquity = parsedEq;
+        } else if (this.lastState?.accountEquity && this.lastState.accountEquity > 0) {
+          this.dayStartEquity = this.lastState.accountEquity;
+        }
       } catch {
-        this.dayStartEquity = 100.0;
+        if (this.lastState?.accountEquity && this.lastState.accountEquity > 0) {
+          this.dayStartEquity = this.lastState.accountEquity;
+        }
       }
 
-      // Check 3-day momentum rebalance boundary (Phase 7)
-      if (!isFirstBoot) {
+      // Check 3-day momentum rebalance boundary (including restarts that spanned 00:00 UTC)
+      const crossedMidnightOnRestart = isFirstBoot && this.restoredObservedDay !== '' && this.restoredObservedDay < today;
+      if (!isFirstBoot || crossedMidnightOnRestart) {
+        if (crossedMidnightOnRestart) {
+          this.restoredObservedDay = today;
+        }
         this.daysSinceRebalance++;
         if (this.daysSinceRebalance >= MOMENTUM_REBALANCE_DAYS && !this.breakerLatched) {
           const rebalanced = await this.rebalanceMomentum();
@@ -1505,7 +2015,6 @@ export class HybridLiveWorker {
     ]);
 
     const activePositions = positions.filter((p) => Math.abs(parseFloat(p.positionAmt)) > 0);
-    const activeNonGrid = activePositions.filter((p) => p.symbol !== 'BTCUSDT');
     const activeSymbols = new Set(activePositions.map((p) => p.symbol));
 
     // Detect closed positions on Binance exchange venue (e.g. native STOP_MARKET triggered)
@@ -1518,29 +2027,28 @@ export class HybridLiveWorker {
         this.ratchetState.delete(sym);
 
         const todayUtc = this.getUtcDay();
-        const isProfitableTier = tier === 'breakeven' || tier === 'lock' || tier === 'lock1' || tier === 'lock2' || tier === 'lock3';
-        if (isProfitableTier) {
+        if (isProfitableRatchetTier(tier)) {
           const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
           this.sameDaySlCooldown.set(sym, expireIso);
-          console.log(`[HybridLiveWorker] [PositionCloseGuard] Added ${sym} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+          console.log(`[HybridLiveWorker] [PositionCloseGuard] Added ${sym} to Profitable Ratchet Cooldown (${PROFIT_LOCK_COOLDOWN_MS / 3_600_000}h until ${expireIso}).`);
         } else {
           this.sameDaySlCooldown.set(sym, todayUtc);
           console.log(`[HybridLiveWorker] [PositionCloseGuard] Added ${sym} to Same-Day SL Cooldown for ${todayUtc}.`);
         }
 
-        let exitPrice = prev.slPrice;
-        try {
-          const m = await this.broker.getMarkPrices(sym);
-          if (m[0]?.markPrice) exitPrice = parseFloat(m[0].markPrice);
-        } catch {}
-
-        const approxPnl = (exitPrice - prev.entryPrice) * prev.qty;
+        const { exitPrice, pnl: approxPnl } = await this.resolveClosedTradeSummary(
+          sym,
+          prev.qty,
+          prev.entryPrice,
+          prev.slPrice,
+          rState?.entryTime
+        );
         const reason =
           tier === 'breakeven'
             ? 'BREAKEVEN'
             : tier === 'risk_reduction'
             ? 'RISK_REDUCTION'
-            : (tier === 'lock' || tier === 'lock1' || tier === 'lock2' || tier === 'lock3')
+            : isProfitableLockedTier(tier)
             ? 'LOCK_PROFIT'
             : 'STOP_LOSS';
         const notice = formatHybridPositionClosedNotice({
@@ -1565,6 +2073,8 @@ export class HybridLiveWorker {
       }
     }
 
+    const closedThisTick = new Set<string>();
+
     // Phase 4: LLM Event Shield Emergency Close Check
     if (!this.breakerLatched) {
       const emergencySymbols = this.eventShield.getEmergencyCloseSymbols();
@@ -1573,38 +2083,47 @@ export class HybridLiveWorker {
         if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
           const entry = this.eventShield.getEntry(sym);
           await this.emergencyClosePosition(sym, pos, entry?.reason || 'Event Shield Critical Alert');
+          closedThisTick.add(sym);
         }
       }
     }
 
-    // If momentum sleeve has fewer than 2 positions and retry is due or uninitialized, try to enter
-    if (activeNonGrid.length < 2 && !this.breakerLatched && (this.momentumRetryAt === 0 || Date.now() >= this.momentumRetryAt)) {
-      console.log(`[HybridLiveWorker] Momentum sleeve has ${activeNonGrid.length}/2 positions, checking for qualifying symbols...`);
-      await this.retryMomentumEntry();
+    let latestAccount = account;
+    let latestActivePositions = activePositions.filter((p) => !closedThisTick.has(p.symbol));
+    const latestActiveNonGrid = latestActivePositions.filter((p) => p.symbol !== 'BTCUSDT');
+
+    // If momentum sleeve has fewer than regime target slots and retry is due or uninitialized, try to enter
+    const targetMomentumSlots = this.lastMomentumRegime?.maxSlots ?? 2;
+    if (latestActiveNonGrid.length < targetMomentumSlots && !this.breakerLatched && (this.momentumRetryAt === 0 || Date.now() >= this.momentumRetryAt)) {
+      console.log(`[HybridLiveWorker] Momentum sleeve has ${latestActiveNonGrid.length}/${targetMomentumSlots} positions, checking for qualifying symbols...`);
+      const openedAny = await this.retryMomentumEntry();
+      if (openedAny) {
+        const [refreshedAccount, refreshedPositions] = await Promise.all([
+          this.broker.getAccount(),
+          this.broker.getPositions(),
+        ]);
+        latestAccount = refreshedAccount;
+        latestActivePositions = refreshedPositions.filter(
+          (p) => Math.abs(parseFloat(p.positionAmt)) > 0 && !closedThisTick.has(p.symbol)
+        );
+      }
     }
-    const accountEquity = parseFloat(account.totalMarginBalance || account.totalWalletBalance || '0');
-    const availableBalance = parseFloat(account.availableBalance || '0');
+    const accountEquity = parseFloat(latestAccount.totalMarginBalance || latestAccount.totalWalletBalance || '0');
+    const availableBalance = parseFloat(latestAccount.availableBalance || '0');
 
     let totalUnrealizedPnl = 0.0;
     const posMap: HybridLiveState['positions'] = {};
     const alerts: Array<{ key: string; text: string }> = [];
 
-    for (const p of activePositions) {
+    for (const p of latestActivePositions) {
       const qty = parseFloat(p.positionAmt);
       const entry = parseFloat(p.entryPrice);
       const mark = parseFloat(p.markPrice || p.entryPrice);
       const unrl = (mark - entry) * qty;
       totalUnrealizedPnl += unrl;
 
-      // Progressive Risk-Reduction & Multi-Tier Ratchet Guard:
-      // Tier 4: Lock profit 2 at +10% if max return reached >= +16%
-      // Tier 3: Lock profit 1 at +5% if max return reached >= +12%
-      // Early-Lock Ratchet Profit Guard (Audited 1,500 days: +$57.53 Net Alpha, 49 Lock SL exits vs 14)
-      // Tier 4: Lock +10% if max return >= +14% (lock3)
-      // Tier 3: Lock +6% if max return >= +10% (lock2)
-      // Tier 2: Lock +3.5% if max return >= +7% (lock1) (locks in gains early during sudden +8% pump & dumps)
-      // Tier 1: Break-even at +0.8% if max return >= +5% (breakeven) (eliminates downside once slightly green)
-      let slPrice = qty > 0 ? entry * (1.0 - MOMENTUM_SL_PCT) : entry * (1.0 + MOMENTUM_SL_PCT);
+      const tickSize = this.exchangeFilters[p.symbol]?.tickSize ?? 0;
+      let slPrice = qty > 0 ? floorPriceToTick(entry * (1.0 - MOMENTUM_SL_PCT), tickSize) : entry * (1.0 + MOMENTUM_SL_PCT);
       let ratchetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock' = 'initial';
       let maxReturnPct = 0.0;
       let positionSlPct: number | undefined;
@@ -1619,7 +2138,7 @@ export class HybridLiveWorker {
           const initialSlPct = Math.max(0.08, Math.min(0.12, 1.8 * symAtr));
           rState = {
             entryPrice: entry,
-            currentSl: entry * (1.0 - initialSlPct),
+            currentSl: floorPriceToTick(entry * (1.0 - initialSlPct), tickSize),
             initialSlPct,
             maxRet: Math.max(0, currentRet),
             tier: 'initial',
@@ -1634,33 +2153,36 @@ export class HybridLiveWorker {
         const initialSlPct = rState.initialSlPct || MOMENTUM_SL_PCT;
         positionSlPct = initialSlPct;
 
-        let targetSl = entry * (1.0 - initialSlPct);
+        let rawTargetSl = entry * (1.0 - initialSlPct);
         let targetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock' = 'initial';
 
         if (rState.maxRet >= 0.14) {
-          targetSl = entry * 1.10;
+          rawTargetSl = entry * 1.10;
           targetTier = 'lock3';
         } else if (rState.maxRet >= 0.10) {
-          targetSl = entry * 1.06;
+          rawTargetSl = entry * 1.06;
           targetTier = 'lock2';
         } else if (rState.maxRet >= 0.07) {
-          targetSl = entry * 1.035;
+          rawTargetSl = entry * 1.035;
           targetTier = 'lock1';
         } else if (rState.maxRet >= 0.05) {
-          targetSl = entry * 1.008;
+          rawTargetSl = entry * 1.008;
           targetTier = 'breakeven';
         }
+        const targetSl = floorPriceToTick(rawTargetSl, tickSize);
 
         // Ratchet up if target is higher than current SL (ratchet moves only upward)
-        if (targetSl > rState.currentSl * 1.001) {
+        if (targetSl > rState.currentSl * 1.0005) {
           const oldSl = rState.currentSl;
           rState.currentSl = targetSl;
           rState.tier = targetTier;
           console.log(`[HybridLiveWorker] [RatchetGuard] Ratcheting SL for ${p.symbol}: ${oldSl.toFixed(6)} -> ${targetSl.toFixed(6)} (${targetTier.toUpperCase()} tier, MaxRet: +${maxReturnPct.toFixed(1)}%)`);
 
           if (!this.breakerLatched) {
-            await this.cancelSymbolStops(p.symbol);
-            await this.syncNativeStopLoss(p.symbol, qty, targetSl);
+            const replaced = await this.replaceNativeStopLoss(p.symbol, qty, targetSl);
+            if (!replaced) {
+              this.nativeStops.delete(p.symbol);
+            }
             if (targetTier !== 'initial') {
               const entryTs = rState.entryTime || Date.now();
               alerts.push({
@@ -1680,9 +2202,7 @@ export class HybridLiveWorker {
         slPrice = rState.currentSl;
         ratchetTier = rState.tier;
 
-        // v1.0.0: Time-Decay Loser Pruning (Official Production Architecture)
-        // If coin held >= 2.0 days (48h), max return never exceeded +2.0%, and current return <= -5.0%:
-        // Prune early at -5% instead of waiting for full -12% stop loss, saving 7% capital and freeing the slot.
+        // Time-Decay Loser Pruning (Official Production Architecture)
         const daysHeld = (Date.now() - rState.entryTime) / (24 * 3_600_000);
         if (
           !this.breakerLatched &&
@@ -1691,7 +2211,7 @@ export class HybridLiveWorker {
           currentRet <= PRUNING_CURRENT_RETURN_THRESH
         ) {
           console.warn(
-            `[HybridLiveWorker] [v1.0.0 Pruning] PRUNING TRIGGERED for ${p.symbol}: Held ${daysHeld.toFixed(1)}d >= ${PRUNING_DAYS_THRESHOLD}d, MaxRet: +${maxReturnPct.toFixed(1)}% < 2.0%, CurrentRet: ${(currentRet * 100).toFixed(2)}% <= -5.0%. Pruning early to preserve capital!`
+            `[HybridLiveWorker] [${OFFICIAL_RELEASE_VERSION} Pruning] PRUNING TRIGGERED for ${p.symbol}: Held ${daysHeld.toFixed(1)}d >= ${PRUNING_DAYS_THRESHOLD}d, MaxRet: +${maxReturnPct.toFixed(1)}% < 2.0%, CurrentRet: ${(currentRet * 100).toFixed(2)}% <= -5.0%. Pruning early to preserve capital!`
           );
           try {
             await this.broker.submitMarketOrder({
@@ -1706,7 +2226,7 @@ export class HybridLiveWorker {
             this.ratchetState.delete(p.symbol);
             this.sameDaySlCooldown.set(p.symbol, today);
             console.log(
-              `[HybridLiveWorker] [v1.0.0 Pruning] Successfully pruned ${p.symbol} at ${(currentRet * 100).toFixed(2)}%. Added to Same-Day Cooldown.`
+              `[HybridLiveWorker] [${OFFICIAL_RELEASE_VERSION} Pruning] Successfully pruned ${p.symbol} at ${(currentRet * 100).toFixed(2)}%. Added to Same-Day Cooldown.`
             );
             const pruneNotice = formatHybridPruneNotice({
               symbol: p.symbol,
@@ -1719,10 +2239,11 @@ export class HybridLiveWorker {
             alerts.push({ key: `prune:${today}:${p.symbol}:${Date.now()}`, text: pruneNotice });
             void sendHybridTelegram(pruneNotice);
             this.activeTrackedPositions.delete(p.symbol);
-            void this.retryMomentumEntry();
+            closedThisTick.add(p.symbol);
+            this.momentumRetryAt = 0;
             continue;
           } catch (err) {
-            console.error(`[HybridLiveWorker] [v1.0.0 Pruning] Failed to prune ${p.symbol}:`, err);
+            console.error(`[HybridLiveWorker] [${OFFICIAL_RELEASE_VERSION} Pruning] Failed to prune ${p.symbol}:`, err);
           }
         }
       }
@@ -1745,9 +2266,13 @@ export class HybridLiveWorker {
         void this.syncNativeStopLoss(p.symbol, qty, slPrice);
       }
 
-      // In-memory fallback check
-      if (!this.breakerLatched && qty > 0 && mark <= slPrice) {
-        console.warn(`[HybridLiveWorker] STOP LOSS TRIGGERED for ${p.symbol}: Mark=${mark} <= SL=${slPrice} (${ratchetTier.toUpperCase()})! Closing position...`);
+      // In-memory fallback check: when native venue stop is verified, allow 1 tick / 0.2% grace so venue STOP_MARKET fills cleanly without -2022 races
+      const hasVerifiedVenueStop = this.nativeStops.has(p.symbol);
+      const fallbackTriggerSl = hasVerifiedVenueStop
+        ? Math.min(slPrice - tickSize, slPrice * 0.998)
+        : slPrice;
+      if (!this.breakerLatched && qty > 0 && p.symbol !== 'BTCUSDT' && mark <= fallbackTriggerSl) {
+        console.warn(`[HybridLiveWorker] STOP LOSS TRIGGERED for ${p.symbol}: Mark=${mark} <= FallbackSL=${fallbackTriggerSl} (${ratchetTier.toUpperCase()})! Closing position...`);
         try {
           await this.broker.submitMarketOrder({
             symbol: p.symbol,
@@ -1759,11 +2284,10 @@ export class HybridLiveWorker {
           });
           await this.cancelSymbolStops(p.symbol);
           this.ratchetState.delete(p.symbol);
-          const isProfitableTier = ratchetTier === 'breakeven' || ratchetTier === 'lock' || ratchetTier === 'lock1' || ratchetTier === 'lock2' || ratchetTier === 'lock3';
-          if (isProfitableTier) {
+          if (isProfitableRatchetTier(ratchetTier)) {
             const expireIso = new Date(Date.now() + PROFIT_LOCK_COOLDOWN_MS).toISOString();
             this.sameDaySlCooldown.set(p.symbol, expireIso);
-            console.log(`[HybridLiveWorker] Added ${p.symbol} to Profitable Ratchet Cooldown (2h until ${expireIso}).`);
+            console.log(`[HybridLiveWorker] Added ${p.symbol} to Profitable Ratchet Cooldown (${PROFIT_LOCK_COOLDOWN_MS / 3_600_000}h until ${expireIso}).`);
           } else {
             this.sameDaySlCooldown.set(p.symbol, today);
             console.log(`[HybridLiveWorker] Added ${p.symbol} to Same-Day Stop Loss Cooldown for ${today}.`);
@@ -1773,6 +2297,8 @@ export class HybridLiveWorker {
           alerts.push({ key: `sl:${today}:${p.symbol}:${Date.now()}`, text: notice });
           void sendHybridTelegram(notice);
           this.activeTrackedPositions.delete(p.symbol);
+          closedThisTick.add(p.symbol);
+          this.momentumRetryAt = 0;
         } catch (err) {
           console.error(`[HybridLiveWorker] Failed to execute stop loss for ${p.symbol}:`, err);
           const failNotice = formatHybridStopNotice({ symbol: p.symbol, mark, slPrice, sent: false });
@@ -1782,15 +2308,16 @@ export class HybridLiveWorker {
       }
     }
 
-    // Update tracked positions for currently active positions for next tick
+    // Update tracked positions for currently active positions for next tick (excluding positions closed this tick)
     this.activeTrackedPositions.clear();
-    for (const p of activePositions) {
-      if (p.symbol === 'BTCUSDT') continue;
+    for (const p of latestActivePositions) {
+      if (p.symbol === 'BTCUSDT' || closedThisTick.has(p.symbol)) continue;
       const q = parseFloat(p.positionAmt);
       if (Math.abs(q) > 0) {
         const ent = parseFloat(p.entryPrice);
         const rState = this.ratchetState.get(p.symbol);
-        const sl = rState?.currentSl ?? (q > 0 ? ent * (1.0 - MOMENTUM_SL_PCT) : ent * (1.0 + MOMENTUM_SL_PCT));
+        const tickSize = this.exchangeFilters[p.symbol]?.tickSize ?? 0;
+        const sl = rState?.currentSl ?? (q > 0 ? floorPriceToTick(ent * (1.0 - MOMENTUM_SL_PCT), tickSize) : ent * (1.0 + MOMENTUM_SL_PCT));
         this.activeTrackedPositions.set(p.symbol, {
           qty: Math.abs(q),
           entryPrice: ent,
@@ -1801,6 +2328,7 @@ export class HybridLiveWorker {
     }
 
     const currentDayPnl = accountEquity - this.dayStartEquity;
+    this.worstDayPnl = Math.min(this.worstDayPnl, currentDayPnl);
     const dailyLossLimitUsd = this.compoundingManager.computeDailyLossLimit(this.dayStartEquity);
 
     // Check Daily Circuit Breaker (12% of dayStartEquity, floor 12.0 USDT)
@@ -1809,7 +2337,8 @@ export class HybridLiveWorker {
       this.breakerLatched = true;
       let breakerOk = true;
 
-      for (const p of activePositions) {
+      for (const p of latestActivePositions) {
+        if (closedThisTick.has(p.symbol)) continue;
         const qty = parseFloat(p.positionAmt);
         if (Math.abs(qty) > 0) {
           try {
@@ -1822,6 +2351,10 @@ export class HybridLiveWorker {
               reduceOnly: true,
             });
             await this.cancelSymbolStops(p.symbol);
+            if (p.symbol !== 'BTCUSDT') {
+              this.sameDaySlCooldown.set(p.symbol, today);
+            }
+            delete posMap[p.symbol];
             console.log(`[HybridLiveWorker] Breaker flatten submitted for ${p.symbol}`);
           } catch (err) {
             breakerOk = false;
@@ -1829,6 +2362,10 @@ export class HybridLiveWorker {
           }
         }
       }
+      this.activeTrackedPositions.clear();
+      this.ratchetState.clear();
+      this.nativeStops.clear();
+      this.btcGridLevels = [];
       alerts.push({ key: `breaker:${today}`, text: formatHybridBreakerNotice(currentDayPnl, breakerOk, dailyLossLimitUsd) });
     }
 
@@ -1846,13 +2383,19 @@ export class HybridLiveWorker {
       await this.candleCache.checkBackgroundPrefetch(activeUniverse);
     }
 
-    // Periodic dynamic universe refresh check (every 1200 ticks = ~1 hour)
+    // Periodic dynamic universe & contract status refresh check (every 1200 ticks = ~1 hour)
     if (this.tickCounter % 1200 === 0) {
+      await this.loadExchangeFilters();
       const refreshRes = await this.dynamicUniverseScanner.refreshUniverse(false);
       if (refreshRes.refreshed) {
         console.log(`[HybridLiveWorker] Dynamic universe updated: ${refreshRes.symbols.length} symbols. Prefetching candles...`);
         await this.candleCache.prefetchAll(refreshRes.symbols);
       }
+    }
+
+    // Periodic Event Shield scan every ~30 minutes (600 ticks)
+    if (this.tickCounter % 600 === 0) {
+      void this.runEventShieldScan();
     }
 
     // Periodic retry for overdue rebalance (if postponed by BTC Crash Gate, check early at tick 10 and every ~30m / 600 ticks)
@@ -1879,7 +2422,7 @@ export class HybridLiveWorker {
       availableBalance,
       dayStartEquity: this.dayStartEquity,
       currentDayPnl,
-      worstDayPnl: Math.min(currentDayPnl, 0),
+      worstDayPnl: this.worstDayPnl,
       breakerLatched: this.breakerLatched,
       positions: posMap,
       btcGridLevels: this.btcGridLevels,
@@ -1901,12 +2444,17 @@ export class HybridLiveWorker {
         blacklistCount: this.eventShield.getBlacklistedSymbols().length,
         criticalCloseCount: this.eventShield.getEmergencyCloseSymbols().length,
         blacklistedSymbols: this.eventShield.getBlacklistedSymbols(),
+        lastScannedAt: this.eventShield.getLastScannedAt() || undefined,
       },
       dynamicCompounding: {
-        momentumAllocUsd: compoundingSnapshot.momentumAllocUsd,
+        momentumAllocUsd: this.compoundingManager.computeMomentumAlloc(
+          accountEquity,
+          undefined,
+          this.lastMomentumRegime?.targetAllocPct ?? MOMENTUM_ALLOC_PCT
+        ),
         btcGridTicketUsd: compoundingSnapshot.btcGridTicketUsd,
         dailyLossLimitUsd: compoundingSnapshot.dailyLossLimitUsd,
-        targetMomentumPct: MOMENTUM_ALLOC_PCT,
+        targetMomentumPct: this.lastMomentumRegime?.targetAllocPct ?? MOMENTUM_ALLOC_PCT,
         targetGridTicketPct: BTC_GRID_TICKET_PCT,
       },
       volatilityGrid: {
@@ -1918,11 +2466,12 @@ export class HybridLiveWorker {
         crashGatePct: volParams.crashGatePct,
         regime: volParams.regime,
       },
+      momentumRegime: this.lastMomentumRegime,
       cashFlow: this.cashFlowManager.getSummary(accountEquity),
     };
 
     this.lastState = state;
-    await fs.writeFile(path.join(this.stateDir, 'worker-status.json'), JSON.stringify(state, null, 2));
+    await atomicWriteFile(path.join(this.stateDir, 'worker-status.json'), JSON.stringify(state, null, 2));
     await this.publish(state, alerts);
   }
 
@@ -1935,7 +2484,7 @@ export class HybridLiveWorker {
     this.noticesLoaded = true;
     try {
       const raw = JSON.parse(await fs.readFile(this.noticeFile(), 'utf8')) as { keys?: string[] };
-      for (const key of raw.keys ?? []) this.sentNotices.add(key);
+      for (const key of (raw.keys ?? []).slice(-MAX_PERSISTED_NOTICES)) this.sentNotices.add(key);
     } catch {
       // First notice for this policy.
     }
@@ -1950,6 +2499,7 @@ export class HybridLiveWorker {
         positions: Object.values(state.positions),
         equity: state.accountEquity,
         dayPnl: state.currentDayPnl,
+        dailyLossLimitUsd: state.dynamicCompounding?.dailyLossLimitUsd,
       }),
     }, ...alerts];
     for (const job of jobs) {
@@ -1958,7 +2508,12 @@ export class HybridLiveWorker {
         const ids = await sendHybridTelegram(job.text);
         if (!ids.length) return;
         this.sentNotices.add(job.key);
-        await fs.writeFile(this.noticeFile(), JSON.stringify({ keys: [...this.sentNotices] }));
+        while (this.sentNotices.size > MAX_PERSISTED_NOTICES) {
+          const oldest = this.sentNotices.values().next().value;
+          if (!oldest) break;
+          this.sentNotices.delete(oldest);
+        }
+        await atomicWriteFile(this.noticeFile(), JSON.stringify({ keys: [...this.sentNotices] }));
         console.log(`[HybridLiveWorker] telegram_sent ${job.key} ${ids.join(',')}`);
       } catch (error) {
         console.error('[HybridLiveWorker] telegram_error', error instanceof Error ? error.message : error);

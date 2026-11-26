@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { atomicWriteFile } from './atomic-fs';
 
 export type EventShieldCategory =
   | 'DELISTING'
@@ -7,6 +8,20 @@ export type EventShieldCategory =
   | 'REGULATORY_ENFORCEMENT'
   | 'MONITORING_TAG'
   | 'MANUAL_BLACKSWAN';
+
+export const DEFAULT_SECURITY_RSS_FEEDS = [
+  'https://cointelegraph.com/rss',
+  'https://decrypt.co/feed',
+  'https://www.coindesk.com/arc/outboundfeeds/rss',
+] as const;
+
+export interface ExchangeContractStatus {
+  symbol: string;
+  status?: string;
+  contractType?: string;
+  quoteAsset?: string;
+  deliveryDate?: number;
+}
 
 export type EventShieldSeverity = 'CRITICAL_CLOSE' | 'PREVENT_ENTRY';
 
@@ -41,11 +56,33 @@ export interface LLMEventShieldOptions {
  * - PREVENT_ENTRY: Blocks new momentum positions from being opened.
  * - CRITICAL_CLOSE: Triggers immediate emergency market exit for currently held positions.
  */
+function extractRssHeadlines(xml: string): string[] {
+  const headlines: string[] = [];
+  const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const titleMatch = match[1].match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+    if (!titleMatch?.[1]) continue;
+    const clean = titleMatch[1]
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (clean) headlines.push(clean);
+  }
+  return headlines;
+}
+
 export class LLMEventShield {
   private stateDir: string;
   private persistPath: string;
   private entries = new Map<string, BlacklistEntry>();
   private lastScannedAt = '';
+  private seenHeadlines = new Set<string>();
 
   constructor(options: LLMEventShieldOptions = {}) {
     this.stateDir = options.stateDir || path.resolve(__dirname, '../../data/hybrid-live');
@@ -54,6 +91,115 @@ export class LLMEventShield {
 
   public async init(): Promise<void> {
     await this.loadFromDisk();
+  }
+
+  public getLastScannedAt(): string {
+    return this.lastScannedAt;
+  }
+
+  /**
+   * Scans Binance Futures exchange contract metadata for non-TRADING status transitions
+   * (SETTLING / PRE_DELIVERING) or upcoming delivery/settlement within 7 days on watched symbols.
+   */
+  public async scanExchangeStatuses(
+    contracts: readonly ExchangeContractStatus[],
+    watchedSymbols?: Set<string>
+  ): Promise<BlacklistEntry[]> {
+    const now = Date.now();
+    const soonCutoff = now + 7 * 86_400_000;
+    const newlyAdded: BlacklistEntry[] = [];
+
+    for (const c of contracts) {
+      const sym = c.symbol?.toUpperCase().trim();
+      if (!sym) continue;
+      if (c.contractType && c.contractType !== 'PERPETUAL') continue;
+      if (c.quoteAsset && c.quoteAsset !== 'USDT') continue;
+
+      const isWatched = watchedSymbols ? watchedSymbols.has(sym) : true;
+      const status = c.status || 'TRADING';
+      const isInactiveWatched = isWatched && status !== 'TRADING';
+      const isUpcomingSettlement =
+        status === 'TRADING' &&
+        typeof c.deliveryDate === 'number' &&
+        c.deliveryDate > now &&
+        c.deliveryDate <= soonCutoff;
+
+      if (!isInactiveWatched && !isUpcomingSettlement) continue;
+      if (this.isBlacklisted(sym)) continue;
+
+      const reason = isInactiveWatched
+        ? `Binance Futures contract status transitioned to ${status}`
+        : `Binance Futures upcoming settlement scheduled (${new Date(c.deliveryDate!).toISOString().slice(0, 10)})`;
+
+      const entry: BlacklistEntry = {
+        symbol: sym,
+        reason,
+        category: 'DELISTING',
+        severity: 'CRITICAL_CLOSE',
+        addedAt: new Date(now).toISOString(),
+        source: 'binance_exchange_info',
+      };
+      await this.addEntry(entry);
+      newlyAdded.push(entry);
+    }
+
+    this.lastScannedAt = new Date(now).toISOString();
+    return newlyAdded;
+  }
+
+  /**
+   * Polls public security & exchange RSS feeds and filters matches against tradable futures contracts.
+   * Uses headline-only classification and suppresses non-delisting generic BTC/ETH mentions to avoid false positives.
+   */
+  public async scanRssFeeds(
+    knownSymbols?: Set<string>,
+    feeds: readonly string[] = DEFAULT_SECURITY_RSS_FEEDS
+  ): Promise<BlacklistEntry[]> {
+    const newlyAdded: BlacklistEntry[] = [];
+    const results = await Promise.allSettled(
+      feeds.map(async (url) => {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'CryptoHybridWorker/1.0' },
+          signal: AbortSignal.timeout(6_000),
+        });
+        if (!res.ok) return { url, headlines: [] as string[] };
+        const xml = await res.text();
+        return { url, headlines: extractRssHeadlines(xml) };
+      })
+    );
+
+    let fetchedAny = false;
+    for (const r of results) {
+      if (r.status !== 'fulfilled') continue;
+      fetchedAny = true;
+      let host = 'rss_feed';
+      try {
+        host = new URL(r.value.url).hostname;
+      } catch {}
+
+      for (const headline of r.value.headlines) {
+        if (this.seenHeadlines.has(headline)) continue;
+        this.seenHeadlines.add(headline);
+        if (this.seenHeadlines.size > 500) {
+          const oldest = this.seenHeadlines.values().next().value;
+          if (oldest) this.seenHeadlines.delete(oldest);
+        }
+
+        const entry = this.classifyNews(headline, '', host);
+        if (!entry) continue;
+        if (knownSymbols && !knownSymbols.has(entry.symbol)) continue;
+        if (entry.category !== 'DELISTING' && (entry.symbol === 'BTCUSDT' || entry.symbol === 'ETHUSDT')) continue;
+        if (this.isBlacklisted(entry.symbol)) continue;
+
+        await this.addEntry(entry);
+        newlyAdded.push(entry);
+      }
+    }
+
+    if (fetchedAny) {
+      this.lastScannedAt = new Date().toISOString();
+    }
+    return newlyAdded;
   }
 
   public isBlacklisted(symbol: string): boolean {
@@ -228,9 +374,8 @@ export class LLMEventShield {
    */
   public async saveToDisk(): Promise<void> {
     try {
-      await fs.mkdir(this.stateDir, { recursive: true });
       const entriesArr = Array.from(this.entries.values());
-      await fs.writeFile(this.persistPath, JSON.stringify(entriesArr, null, 2), 'utf8');
+      await atomicWriteFile(this.persistPath, JSON.stringify(entriesArr, null, 2));
     } catch (err) {
       console.warn('[LLMEventShield] Failed to persist blacklist to disk:', err);
     }

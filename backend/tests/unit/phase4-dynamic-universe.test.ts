@@ -180,6 +180,55 @@ describe('Phase 4: Dynamic Universe & LLM Event Shield', () => {
       expect(shield.isBlacklisted('LUNAUSDT')).toBe(false);
       expect(shield.getEmergencyCloseSymbols()).not.toContain('LUNAUSDT');
     });
+
+    it('scanExchangeStatuses detects non-TRADING watched perpetuals and upcoming settlement dates', async () => {
+      const futureSoon = Date.now() + 2 * 86_400_000;
+      const farFuture = 4133404800000;
+      const added = await shield.scanExchangeStatuses(
+        [
+          { symbol: 'BADCOINUSDT', status: 'SETTLING', contractType: 'PERPETUAL', quoteAsset: 'USDT', deliveryDate: farFuture },
+          { symbol: 'UNWATCHEDUSDT', status: 'SETTLING', contractType: 'PERPETUAL', quoteAsset: 'USDT', deliveryDate: farFuture },
+          { symbol: 'SOONDELISTUSDT', status: 'TRADING', contractType: 'PERPETUAL', quoteAsset: 'USDT', deliveryDate: futureSoon },
+          { symbol: 'ETHUSDT', status: 'TRADING', contractType: 'PERPETUAL', quoteAsset: 'USDT', deliveryDate: farFuture },
+        ],
+        new Set(['BADCOINUSDT', 'ETHUSDT'])
+      );
+
+      expect(added.map((e) => e.symbol)).toEqual(['BADCOINUSDT', 'SOONDELISTUSDT']);
+      expect(shield.getEmergencyCloseSymbols()).toContain('BADCOINUSDT');
+      expect(shield.getEmergencyCloseSymbols()).toContain('SOONDELISTUSDT');
+      expect(shield.isBlacklisted('UNWATCHEDUSDT')).toBe(false);
+      expect(shield.isBlacklisted('ETHUSDT')).toBe(false);
+      expect(shield.getLastScannedAt()).not.toBe('');
+    });
+
+    it('scanRssFeeds blacklists valid tradable exploit/delist headlines while ignoring acronyms & generic ETH/BTC mentions', async () => {
+      const rssXml = `<?xml version="1.0" encoding="UTF-8"?>
+        <rss><channel>
+          <item><title>Security Alert: Protocol Exploit on INJUSDT Drained $20M</title></item>
+          <item><title>Crypto exchange hacked for $10M in ETH after bridge leak</title></item>
+          <item><title>Enforcement charges filed against regulator agency (FBI) over compliance</title></item>
+          <item><title><![CDATA[Binance Will Delist NEAR (NEAR) Perpetual Contracts]]></title></item>
+        </channel></rss>`;
+
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(rssXml),
+      } as unknown as Response);
+
+      try {
+        const tradable = new Set(['INJUSDT', 'NEARUSDT', 'ETHUSDT', 'BTCUSDT']);
+        const added = await shield.scanRssFeeds(tradable, ['https://cointelegraph.com/rss']);
+        expect(added.map((e) => e.symbol)).toEqual(['INJUSDT', 'NEARUSDT']);
+        expect(shield.isBlacklisted('INJUSDT')).toBe(true);
+        expect(shield.isBlacklisted('NEARUSDT')).toBe(true);
+        expect(shield.isBlacklisted('ETHUSDT')).toBe(false);
+        expect(shield.isBlacklisted('FBIUSDT')).toBe(false);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
   });
 
   describe('Part 3: Worker Integration with Event Shield & Dynamic Universe', () => {
@@ -238,12 +287,19 @@ describe('Phase 4: Dynamic Universe & LLM Event Shield', () => {
 
       const worker = new HybridLiveWorker();
       (worker as unknown as { broker: LiveBroker }).broker = mockBroker as LiveBroker;
+      worker.activeTrackedPositions.set('LUNAUSDT', {
+        qty: 100,
+        entryPrice: 10.0,
+        slPrice: 8.8,
+        ratchetTier: 'initial',
+      });
 
       const pos: LivePosition = {
         symbol: 'LUNAUSDT',
         positionAmt: '100',
         entryPrice: '10.0',
         markPrice: '9.0',
+        positionSide: 'BOTH',
       };
 
       await worker.emergencyClosePosition('LUNAUSDT', pos, 'Binance Emergency Delist Notice');
@@ -257,6 +313,8 @@ describe('Phase 4: Dynamic Universe & LLM Event Shield', () => {
         })
       );
       expect(mockBroker.cancelAlgoOrder).toHaveBeenCalled();
+      expect(worker.activeTrackedPositions.has('LUNAUSDT')).toBe(false);
+      expect(worker.isSymbolInCooldown('LUNAUSDT')).toBe(true);
     });
 
     it('computeMomentumUniverse accepts dynamic universe of symbols', async () => {
