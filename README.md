@@ -1,6 +1,36 @@
+> **Phiên bản Chính thức Hiện hành — `v2.0.0` (`27/11/2026`):** Hệ thống giao dịch live Binance Futures đã nâng cấp toàn diện sang kiến trúc **Turtle20 Dual L/S (`O2+O3_R3.0% @4h`)**. Xem đầy đủ chi tiết phát hành tại [Official Production Release v2.0.0](./docs/official-production-release-v2.0.0.md), quy tắc vận hành [AGENTS.md](./AGENTS.md) và nhật ký live [Live Performance Tracking](./docs/live-2week-performance-tracking.md).
+
+# Crypto Trend Analyzer & Turtle20 Dual L/S (`v2.0.0`)
+
+## Chiến lược Live Production v2.0.0 (`O2+O3_R3.0% @4h`)
+
+Vận hành tự động trên **Binance Futures Mainnet** qua 3 tiến trình PM2 (`crypto-hybrid-live`, `crypto-telegram-bot`, `crypto-api` cấu hình tại [`backend/ecosystem.config.cjs`](./backend/ecosystem.config.cjs)):
+
+* **Pha thị trường BTC (`resolveTurtleDualRegime`)**:
+  * **Bull Trend (`BTC > EMA50`)**: Tối đa **3 Long**, `0` Short (chặn mở Long mới nếu BTC intraday/24h `<= -4.0%`).
+  * **Bear Trend (`BTC < EMA50 && BTC EMA20 < EMA50`)**: Tối đa **2 Short**, `0` Long (chặn mở Short mới nếu BTC intraday/24h bật tăng `>= +4.0%`).
+  * **Neutral Cash / API Fail-Safe**: `0` Long / `0` Short, đứng ngoài tiền mặt bảo toàn vốn.
+* **Bộ lọc Breakout `O2+O3` khung `@4h UTC` (`00/04/08/12/16/20 UTC`)**:
+  * Quét **Top 30 Binance Futures** thanh khoản `>= $50M/24h`, đồng bộ cache nến 100 ngày trước quét kết hợp `lastPrice` live.
+  * **Long**: `price > hi20`, `price > ema20 > ema50` (`O3`), `volRatio >= 1.25x` (`O2`), `ATR14 <= 16%`, funding `<= +0.05%/8h`.
+  * **Short**: `price < lo20`, `price < ema20 < ema50` (`O3`), `volRatio >= 1.25x` (`O2`), `ATR14 <= 16%`, funding `>= -0.05%/8h`.
+* **Risk Parity Sizing & Trần An Toàn**:
+  * Rủi ro tĩnh **3.0% Equity / Long** và **2.5% Equity / Short**, `SL = clamp(2.0 × ATR14, 6%–14%)`, trần slot `40%`, tổng giải ngân tối đa `1.05x Equity` (bị chặn dưới trần an toàn `.env` `MAINNET_MAX_TOTAL_EXPOSURE_USD=2000` / `MAX_TOTAL_EXPOSURE_USD=2000`).
+* **Bảo vệ vị thế & Chống sập**:
+  * **Chandelier Trailing `2.5 × ATR14`** đối xứng kích hoạt từ `+5%` (`SELL STOP_MARKET` dùng `floor`, `BUY STOP_MARKET` dùng `ceil`, cập nhật `ATR14` hoàn chỉnh hàng ngày).
+  * Tự động đóng lệch pha khi BTC đảo chiều `EMA50` (`REGIME_ALIGN`), **Cooldown 24h**, và **Cầu chì ngày `-12%`** (sàn `$12`) miễn trừ giữ lại các lệnh đã khóa lãi `>= +1%`.
+* **Module lõi & Telegram Bot**:
+  * Core: [`turtle-dual-strategy.ts`](./backend/src/portfolio/turtle-dual-strategy.ts), [`hybrid-worker.ts`](./backend/src/portfolio/hybrid-worker.ts), [`hybrid-live-notice.ts`](./backend/src/portfolio/hybrid-live-notice.ts)
+  * Tests (`v2.0.0`): [`v2-turtle-dual-ls.test.ts`](./backend/tests/unit/v2-turtle-dual-ls.test.ts) (`npm run build` sạch `0` lỗi; `16/16` unit suites liên quan / `146/146` tests passed).
+  * Bot Telegram: `/status`, `/lenh` (`/report`), `/pnl`, `/cashflow`, `/compounding`, `/universe`, `/shield`, `/grid`, `/agy`.
+
+---
+
+### Lịch sử Ghi chú & Tài liệu Legacy (Trước `v1.0.0` / `v2.0.0`)
+
 > **Phạm vi phát triển hiện hành — 12/10/2026:** Cải thiện toàn hệ thống Futures, bỏ ICT/SMC và rule giao dịch cũ. Chỉ giữ vốn100USDT, lỗ tối đa10USDT/ngày cố định, không cap số lệnh, chấp nhận ngày âm và kỳ vọng mean khoảng1USDT/ngày lịch. Người dùng chấp nhận mạo hiểm; [followup mới](docs/research/2026-10-12-futures-aggressive-followup.md) ưu tiên EMA-anchor averaging và wick recovery, đã kiểm public wallet/filters/arithmetic. [Policy](docs/runtime-risk-policy.md), [lộ trình/tiến độ](docs/plan/2026-10-12-futures-system-research-roadmap.md). Feasibility còn PARTIAL, chưa strategy backtest100/đổi runtime/đặt lệnh hoặc xác nhận trọn mục tiêu. Các cap/cooldown/SL/target/guard dưới đây là lịch sử/runtime chưa migration.
 
-# Crypto Trend Analyzer (v2.9.0)
+## Crypto Trend Analyzer (v2.9.0 - Legacy Web App)
 
 > **Kế hoạch nâng cấp ngày 02/10/2026:** người dùng cho phép nghiên cứu SL rộng hơn, trần rủi ro mỗi lệnh trên 3% và bỏ circuit drawdown 15%. Xem [kế hoạch chi tiết](docs/plan/2026-10-02-roi-upgrade-plan.md) và [chính sách cập nhật](docs/runtime-risk-policy.md). Phương án 5%/drawdown tắt đang là đề xuất nghiên cứu, chưa đổi cấu hình live; các giá trị bên dưới tiếp tục mô tả baseline đã ghi nhận.
 
@@ -378,6 +408,10 @@ Hệ thống sử dụng **Inner Circle Trader (ICT)** Smart Money Concepts:
 
 ## Tài liệu
 
+- [Official Production Release v2.0.0](./docs/official-production-release-v2.0.0.md)
+- [Official Production Release v1.0.0](./docs/official-production-release-v1.0.0.md)
+- [Live Performance Tracking](./docs/live-2week-performance-tracking.md)
+- [Active Runtime Rules (AGENTS.md)](./AGENTS.md)
 - [Architecture](./docs/architecture.md)
 - [API Spec](./docs/api-spec.md)
 - [Windsurf Skills](./.windsurf/skills)
