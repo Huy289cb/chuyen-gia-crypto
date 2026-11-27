@@ -104,3 +104,15 @@ Dựa trên dữ liệu kiểm thử thực nghiệm 1,500 ngày (2022–2026) v
   - Vị thế mở thực tế: `LISTAUSDT` Qty=332 (~$33.89, đúng chuẩn 35% vốn), SL sàn tại `0.08982`.
   - Dịch vụ PM2: `crypto-hybrid-live` (PID 6) online 100%.
 
+---
+
+## 7. Mốc Chuyển Đổi Chiến Lược Chính Thức v2.0.0 — Turtle20 Dual L/S (`27/11/2026`)
+
+* **Thời điểm triển khai**: 27/11/2026 (`crypto-hybrid-live` ID `6`, `crypto-telegram-bot` ID `9`, `crypto-api` ID `0` online 100%).
+* **Lý do chuyển đổi**: Nâng cấp từ `v1.0.x` (14d Long-only) sang kiến trúc 2 chiều **`O2+O3_R3.0% @4h` (`Turtle20 Dual L/S`)** nhằm xử lý triệt để giai đoạn downtrend (đóng Long trái pha, kích hoạt Short theo BTC `< EMA50 && EMA20 < EMA50`) và dùng Risk Parity + Chandelier `2.5 × ATR14`.
+* **Điều chỉnh thực chiến khi Go-Live (`13:55–16:35 ICT`)**:
+  - Vốn sàn ghi nhận lúc nâng cấp: **~92.37 USDT** (mốc cơ sở điều chỉnh từ 30/10 giữ nguyên ở `101.00 USDT`, `Strategy Net PnL: -8.63 USDT / -8.55%`, `Day PnL: +0.77 USDT`).
+  - Xác định pha `bear_trend` (`BTC $61,721.2 < EMA20 $65,071.5 < EMA50 $71,301.3`): tự động đóng 2 vị thế Long ngược pha (`MOVEUSDT`, `VVVUSDT`) & hủy `STOP_MARKET` cũ.
+  - Nâng trần an toàn `.env` (`MAINNET_MAX_TOTAL_EXPOSURE_USD` & `MAX_TOTAL_EXPOSURE_USD`) từ `100` ➔ **`2000 USDT`** và reload qua `ecosystem.config.cjs`, giữ sizing động `1.05 × Equity` chạy thông suốt không bị nghẽn khi tài khoản lãi kép.
+* **Chi tiết kỹ thuật & kiểm toán**: Xem [`docs/official-production-release-v2.0.0.md`](./official-production-release-v2.0.0.md).
+

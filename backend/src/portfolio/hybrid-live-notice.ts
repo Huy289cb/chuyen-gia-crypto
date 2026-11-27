@@ -6,6 +6,8 @@ import type { HybridLiveState } from './hybrid-worker';
 import { handleHybridAgyCommand } from '../services/telegram/agy-chat.service';
 import { downloadTelegramPhoto } from '../services/telegram/telegram-client';
 
+export const OFFICIAL_RELEASE_VERSION = 'v2.0.0';
+
 const agent = new https.Agent({ family: 4, keepAlive: true });
 
 export interface HybridNoticePosition {
@@ -22,6 +24,7 @@ const usd = (value: number, signed = false): string => {
   return `${sign}${Math.abs(value).toFixed(2).replace('.', ',')} USDT`;
 };
 const qtyText = (value: number): string => String(Math.abs(value)).replace('.', ',');
+const sideLabel = (qty: number): string => (qty >= 0 ? 'MUA (LONG)' : 'BÁN (SHORT)');
 
 /** One snapshot of the book the hybrid worker is already watching. */
 export function formatHybridBookNotice(input: {
@@ -32,15 +35,15 @@ export function formatHybridBookNotice(input: {
 }): string {
   const limitUsd = input.dailyLossLimitUsd && input.dailyLossLimitUsd > 0 ? input.dailyLossLimitUsd : 12;
   const limitStr = Number.isInteger(limitUsd) ? String(limitUsd) : limitUsd.toFixed(2).replace('.', ',');
-  const lines = ['📊 DANH MỤC HYBRID LIVE v1.0.4'];
+  const lines = [`📊 DANH MỤC TURTLE DUAL L/S ${OFFICIAL_RELEASE_VERSION}`];
   const positions = [...input.positions].sort((a, b) => a.symbol.localeCompare(b.symbol));
   if (!positions.length) lines.push('Không còn vị thế.');
   for (const position of positions) {
     const state = position.unrlPnl > 0 ? 'đang lãi' : position.unrlPnl < 0 ? 'đang lỗ' : 'đang hòa vốn';
-    lines.push(`${position.qty > 0 ? 'MUA' : 'BÁN'} ${qtyText(position.qty)} ${coin(position.symbol)}: ${state} ${usd(position.unrlPnl, true)}. Dừng lỗ ${px(position.slPrice)}.`);
+    lines.push(`${position.qty >= 0 ? 'MUA' : 'BÁN'} ${qtyText(position.qty)} ${coin(position.symbol)}: ${state} ${usd(position.unrlPnl, true)}. Dừng lỗ ${px(position.slPrice)}.`);
   }
   lines.push(`Vốn ${usd(input.equity)}. Lãi/lỗ ngày ${usd(input.dayPnl, true)}. Trần lỗ ${limitStr} USDT/ngày.`);
-  lines.push('Lãi/lỗ lệnh mở theo giá, chưa tính phí.');
+  lines.push('Lãi/lỗ lệnh mở theo giá mark, chưa tính phí.');
   return lines.join('\n');
 }
 
@@ -50,38 +53,42 @@ export function formatHybridPositionClosedNotice(input: {
   entryPrice: number;
   exitPrice?: number;
   pnl?: number;
-  reason: 'STOP_LOSS' | 'RISK_REDUCTION' | 'BREAKEVEN' | 'LOCK_PROFIT' | 'MANUAL_OR_VENUE_STOP' | 'EVENT_SHIELD';
+  reason: 'STOP_LOSS' | 'CHANDELIER' | 'REGIME_ALIGN' | 'RISK_REDUCTION' | 'BREAKEVEN' | 'LOCK_PROFIT' | 'MANUAL_OR_VENUE_STOP' | 'EVENT_SHIELD';
 }): string {
   const reasonText =
-    input.reason === 'BREAKEVEN'
-      ? '🛡️ Dừng lỗ hòa vốn (+0.8%)'
+    input.reason === 'LOCK_PROFIT'
+      ? '🔒 Chandelier khóa lãi (>= +1%)'
+      : input.reason === 'BREAKEVEN'
+      ? '🛡️ Chandelier bảo vệ hòa vốn'
+      : input.reason === 'CHANDELIER'
+      ? '📐 Chandelier Trail 2,5x ATR'
+      : input.reason === 'REGIME_ALIGN'
+      ? '🧭 Đóng theo đảo pha BTC EMA50'
       : input.reason === 'RISK_REDUCTION'
-      ? '🛡️ Dừng lỗ giảm rủi ro (-3.0%)'
-      : input.reason === 'LOCK_PROFIT'
-      ? '🔒 Khóa lãi bảo toàn (+3.5% / +6% / +10%)'
+      ? '🛡️ Dừng lỗ giảm rủi ro (-4.0%)'
       : input.reason === 'EVENT_SHIELD'
       ? '🚨 Event Shield bảo vệ'
-      : '🛑 Dừng lỗ ban đầu (Stop Loss)';
+      : '🛑 Dừng lỗ ban đầu (2.0x ATR)';
 
   const lines = [
-    `🔔 [ĐÓNG VỊ THẾ] ${coin(input.symbol)}`,
-    `• Trạng thái đóng: ${reasonText}`,
-    `• Khối lượng: ${qtyText(input.qty)} ${coin(input.symbol)}`,
+    `🔔 [ĐÓNG VỊ THẾ ${input.qty >= 0 ? 'LONG' : 'SHORT'}] ${coin(input.symbol)}`,
+    `• Lý do đóng: ${reasonText}`,
+    `• Chiều & KL: ${sideLabel(input.qty)} ${qtyText(input.qty)} ${coin(input.symbol)}`,
     `• Giá vào lệnh: ${px(input.entryPrice)}`,
   ];
   if (input.exitPrice !== undefined && input.exitPrice > 0) {
     lines.push(`• Giá đóng ước tính: ${px(input.exitPrice)}`);
   }
   if (input.pnl !== undefined) {
-    lines.push(`• Lãi/lỗ lệnh: ${usd(input.pnl, true)}`);
+    lines.push(`• Lãi/lỗ ròng: ${usd(input.pnl, true)}`);
   }
-  lines.push(`• Đã kích hoạt Same-Day Cooldown và hủy các lệnh chờ liên quan.`);
+  lines.push(`• Đã kích hoạt Cooldown 24h và dọn sạch lệnh SL chờ.`);
   return lines.join('\n');
 }
 
-export function formatHybridStopNotice(input: { symbol: string; mark: number; slPrice: number; sent: boolean }): string {
+export function formatHybridStopNotice(input: { symbol: string; mark: number; slPrice: number; sent: boolean; qty?: number }): string {
   return [
-    `⚠ DỪNG LỖ ${coin(input.symbol)}`,
+    `⚠ DỪNG LỖ ${coin(input.symbol)}${input.qty !== undefined ? ` (${input.qty >= 0 ? 'LONG' : 'SHORT'})` : ''}`,
     `Giá ${px(input.mark)} đã chạm dừng lỗ (${px(input.slPrice)}).`,
     input.sent ? 'Đã gửi lệnh đóng.' : 'Gửi lệnh đóng thất bại. Worker sẽ thử lại.',
   ].join('\n');
@@ -89,61 +96,85 @@ export function formatHybridStopNotice(input: { symbol: string; mark: number; sl
 
 export function formatHybridRatchetNotice(input: {
   symbol: string;
-  tier: 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock';
+  side?: 'LONG' | 'SHORT';
+  tier: 'risk_reduction' | 'breakeven' | 'chandelier' | 'lock1' | 'lock2' | 'lock3' | 'lock';
   entryPrice: number;
   newSlPrice: number;
   maxReturnPct: number;
 }): string {
-  let tierTitle = '🛡️ HÒA VỐN (+0,8%)';
+  let tierTitle = '📐 CHANDELIER TRAIL (2,5x ATR)';
   if (input.tier === 'risk_reduction') {
-    tierTitle = '🛡️ GIẢM RỦI RO (-3,0%)';
+    tierTitle = '🛡️ GIẢM RỦI RO (-4,0%)';
+  } else if (input.tier === 'breakeven') {
+    tierTitle = '🛡️ HÒA VỐN AN TOÀN';
   } else if (input.tier === 'lock1') {
     tierTitle = '🔒 KHÓA LÃI NẤC 1 (+3,5%)';
   } else if (input.tier === 'lock2') {
     tierTitle = '🔒 KHÓA LÃI NẤC 2 (+6,0%)';
   } else if (input.tier === 'lock3' || input.tier === 'lock') {
-    tierTitle = '🔒 KHÓA LÃI NẤC 3 (+10,0%)';
+    tierTitle = '🔒 CHANDELIER KHÓA LÃI (>= +1,0%)';
   }
+  const sideTag = input.side ? ` (${input.side})` : '';
   return [
-    `🛡️ BẢO VỆ LỢI NHUẬN: ${tierTitle} cho ${coin(input.symbol)}`,
+    `🛡️ BẢO VỆ XU HƯỚNG: ${tierTitle} cho ${coin(input.symbol)}${sideTag}`,
     `• Giá vào: ${px(input.entryPrice)}`,
     `• Đỉnh lãi quan sát: +${input.maxReturnPct.toFixed(1)}%`,
-    `• Mức dừng lỗ mới: ${px(input.newSlPrice)} (Đã cập nhật lệnh STOP_MARKET sàn Binance)`,
+    `• Dừng lỗ mới: ${px(input.newSlPrice)} (Đã cập nhật STOP_MARKET sàn Binance)`,
   ].join('\n');
 }
 
-export function formatHybridBreakerNotice(dayPnl: number, sent: boolean, limitUsd = 12.0): string {
-  return [
-    '🚨 CẦU CHÌ NGÀY',
+export function formatHybridBreakerNotice(
+  dayPnl: number,
+  sent: boolean,
+  limitUsd = 12.0,
+  preservedLockedSymbols: string[] = []
+): string {
+  const lines = [
+    '🚨 CẦU CHÌ NGÀY (-12%)',
     `Lãi/lỗ ngày ${usd(dayPnl, true)}, chạm trần ${usd(limitUsd)}.`,
-    sent ? 'Đã gửi lệnh đóng toàn bộ.' : 'Gửi lệnh đóng thất bại. Worker sẽ thử lại.',
-  ].join('\n');
+    sent ? 'Đã gửi lệnh đóng các vị thế chưa khóa lãi.' : 'Gửi lệnh đóng thất bại. Worker sẽ thử lại.',
+  ];
+  if (preservedLockedSymbols.length > 0) {
+    lines.push(`🔒 Miễn trừ giữ lại lệnh đang khóa lãi >= +1%: ${preservedLockedSymbols.map(coin).join(', ')}`);
+  }
+  return lines.join('\n');
 }
 
 export function formatHybridRebalanceNotice(input: {
   closed: string[];
-  opened: Array<{ symbol: string; qty: number; entryPrice: number }>;
-  nextRebalanceDate: string;
+  opened: Array<{ symbol: string; side?: 'LONG' | 'SHORT'; qty: number; entryPrice: number; slPrice?: number }>;
+  nextRebalanceDate?: string;
+  scanBucket?: string;
+  regimeLabel?: string;
 }): string {
-  const lines = ['🔄 TÁI CÂN BẰNG ĐỊNH KỲ 3 NGÀY (v1.0.4)'];
+  const lines = [`🔄 QUÉT BREAKOUT @4H — TURTLE20 DUAL L/S (${OFFICIAL_RELEASE_VERSION})`];
+  if (input.regimeLabel) {
+    lines.push(`• Chế độ BTC: ${input.regimeLabel}`);
+  }
   if (input.closed.length) {
-    lines.push(`• Đã đóng các coin rời Top: ${input.closed.map(coin).join(', ')}`);
+    lines.push(`• Đóng ngược pha chế độ: ${input.closed.map(coin).join(', ')}`);
   }
   if (input.opened.length) {
     for (const p of input.opened) {
-      lines.push(`• Mở mới: MUA ${qtyText(p.qty)} ${coin(p.symbol)} @ ${px(p.entryPrice)}`);
+      const action = p.side === 'SHORT' || p.qty < 0 ? 'BÁN SHORT' : 'MUA LONG';
+      const slInfo = p.slPrice && p.slPrice > 0 ? ` | SL: ${px(p.slPrice)}` : '';
+      lines.push(`• Mở mới: ${action} ${qtyText(p.qty)} ${coin(p.symbol)} @ ${px(p.entryPrice)}${slInfo}`);
     }
-  } else {
+  } else if (!input.closed.length) {
     lines.push('• Giữ nguyên vị thế hiện tại.');
   }
-  lines.push(`• Đợt tái cân bằng tiếp theo: ${input.nextRebalanceDate}`);
+  if (input.scanBucket) {
+    lines.push(`• Khung quét: ${input.scanBucket} UTC (Chu kỳ 4h kế tiếp)`);
+  } else if (input.nextRebalanceDate) {
+    lines.push(`• Mốc kế tiếp: ${input.nextRebalanceDate}`);
+  }
   return lines.join('\n');
 }
 
 export function formatHybridTpNotice(input: { symbol: string; qty: number; exitPrice: number; pnl: number }): string {
   return [
-    `🎯 CHỐT LỜI ${coin(input.symbol)} (SLEEVE 2 GRID)`,
-    `Đã bán ${qtyText(input.qty)} ${coin(input.symbol)} @ ${px(input.exitPrice)}.`,
+    `🎯 CHỐT LỜI ${coin(input.symbol)}`,
+    `Đã đóng ${qtyText(input.qty)} ${coin(input.symbol)} @ ${px(input.exitPrice)}.`,
     `Lợi nhuận chốt: +${usd(input.pnl)}.`,
   ].join('\n');
 }
@@ -178,11 +209,11 @@ export function formatHybridPruneNotice(input: {
   daysHeld: number;
 }): string {
   return [
-    `✂️ CẮT TỈA COIN CHÌM XUỒNG v1.0.4 (TIME-DECAY PRUNING)`,
+    `✂️ CẮT TỈA COIN CHÌM XUỒNG ${OFFICIAL_RELEASE_VERSION} (TIME-DECAY PRUNING)`,
     `• Đồng coin: ${coin(input.symbol)}`,
-    `• Thời gian giữ: ${input.daysHeld} ngày (không vượt nổi +2%)`,
+    `• Thời gian giữ: ${input.daysHeld} ngày (không vượt nổi +3%)`,
     `• Giá vào: ${px(input.entryPrice)} ➔ Giá thoát: ${px(input.exitPrice)}`,
-    `• Cắt lỗ sớm: ${input.lossPct.toFixed(2)}% (Tiết kiệm ~7% so với mức SL -12%)`,
+    `• Cắt lỗ sớm: ${input.lossPct.toFixed(2)}% (Tiết kiệm ~8% so với mức SL -12%)`,
     `• Lãi/lỗ lệnh: ${usd(input.pnl, true)}`,
     `• Slot tiền mặt đã được giải phóng ngay lập tức để đón coin mới bứt phá!`,
   ].join('\n');
@@ -200,10 +231,21 @@ function formatTimeIct(iso?: string): string {
 
 function formatRegimeSummary(regime?: HybridLiveState['momentumRegime']): string | null {
   if (!regime) return null;
-  const btc14 = regime.btc14dReturnPct !== null ? `${regime.btc14dReturnPct.toFixed(2)}%` : 'N/A';
-  if (regime.mode === 'crash_freeze') {
-    return `🔴 Đóng băng BTC Crash (BTC 1d ${regime.btc1dReturnPct.toFixed(2)}%, 0 slot)`;
+  if (regime.turtleMode === 'bull_trend') {
+    const btcInfo = regime.btcPrice && regime.btcEma50 ? `BTC ${px(regime.btcPrice)} > EMA50 ${px(regime.btcEma50)}` : `BTC 1d ${regime.btc1dReturnPct.toFixed(2)}%`;
+    return `🟢 Bull Trend (Tối đa ${regime.longSlots ?? regime.maxSlots} Long | ${btcInfo}${regime.longBlocked ? ' — ⛔ Long Freeze -4%' : ''})`;
   }
+  if (regime.turtleMode === 'bear_trend') {
+    const btcInfo = regime.btcPrice && regime.btcEma50 ? `BTC ${px(regime.btcPrice)} < EMA50 ${px(regime.btcEma50)}` : `BTC 1d ${regime.btc1dReturnPct.toFixed(2)}%`;
+    return `🔴 Bear Trend (Tối đa ${regime.shortSlots ?? regime.maxSlots} Short | ${btcInfo}${regime.shortBlocked ? ' — ⛔ Short Freeze +4%' : ''})`;
+  }
+  if (regime.turtleMode === 'neutral_cash') {
+    return `🟡 Trung tính — Giữ Tiền Mặt (0 Long / 0 Short | BTC hồi chưa vượt EMA50)`;
+  }
+  if (regime.turtleMode === 'signal_unavailable' || regime.mode === 'crash_freeze') {
+    return `🔴 Đóng băng an toàn (BTC 1d ${regime.btc1dReturnPct.toFixed(2)}%, 0 slot)`;
+  }
+  const btc14 = regime.btc14dReturnPct !== null ? `${regime.btc14dReturnPct.toFixed(2)}%` : 'N/A';
   if (regime.mode === 'macro_defensive') {
     return `🟡 Phòng thủ Macro (${regime.maxSlots} slot × ${(regime.targetAllocPct * 100).toFixed(0)}%, BTC 14d ${btc14})`;
   }
@@ -233,19 +275,22 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
         ? '🚨 CẦU CHÌ ĐÃ KÍCH HOẠT'
         : isStale
         ? `⚠️ Worker phản hồi chậm (${ageSec}s trước)`
-        : '✅ Đang giám sát (nhịp 3s)';
+        : '✅ Đang giám sát (nhịp 3s, quét @4h)';
 
       const lines = [
-        '🟢 WORKER HYBRID LIVE v1.0.4 (OFFICIAL RELEASE)',
+        `🟢 WORKER TURTLE DUAL L/S ${OFFICIAL_RELEASE_VERSION} (O2+O3_R3.0%)`,
         `• Trạng thái: ${statusText}`,
         `• Vốn sàn (Equity): ${usd(state.accountEquity)}`,
         `• Khả dụng (Available): ${usd(state.availableBalance)}`,
         `• Lãi/lỗ hôm nay: ${usd(state.currentDayPnl, true)}`,
         `• Lãi/lỗ vị thế mở: ${usd(totalUnrl, true)}`,
         `• Cập nhật: ${formatTimeIct(state.lastObservedAt)}${isStale ? ` (${ageSec}s trước)` : ''}`,
-        `• Cầu chì ngày: ${usd(dailyLimit)} ${state.breakerLatched ? '(ĐÃ CHẠM)' : '(An toàn)'}`,
-        `• Vị thế đang giữ: ${positions.length} lệnh (${positions.map(p => coin(p.symbol)).join(', ') || 'trống'})`,
+        `• Cầu chì ngày: ${usd(dailyLimit)} ${state.breakerLatched ? '(ĐÃ CHẠM)' : '(An toàn · miễn trừ lệnh khóa >= +1%)'}`,
+        `• Vị thế đang giữ: ${positions.length} lệnh (${positions.map((p) => `${p.qty < 0 ? 'SHORT ' : 'LONG '}${coin(p.symbol)}`).join(', ') || 'trống'})`,
       ];
+      if (state.lastScanBucket4h) {
+        lines.push(`• Phiên quét @4h gần nhất: ${state.lastScanBucket4h} UTC`);
+      }
       if (regimeLine) {
         lines.push(`• Chế độ thị trường: ${regimeLine}`);
       }
@@ -258,7 +303,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'positions':
     case 'book': {
       const lines = [
-        '📊 BÁO CÁO VỊ THẾ HYBRID LIVE v1.0.4',
+        `📊 BÁO CÁO VỊ THẾ TURTLE DUAL L/S ${OFFICIAL_RELEASE_VERSION}`,
         `Vốn: ${usd(state.accountEquity)} | Lãi/lỗ ngày: ${usd(state.currentDayPnl, true)} | Chưa chốt: ${usd(totalUnrl, true)}`,
         `Cập nhật lúc: ${formatTimeIct(state.lastObservedAt)}`,
         ...(regimeLine ? [`Chế độ: ${regimeLine}`] : []),
@@ -270,21 +315,21 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
       } else {
         for (const p of positions) {
           const stateStr = p.unrlPnl > 0 ? 'đang lãi' : p.unrlPnl < 0 ? 'đang lỗ' : 'hòa vốn';
-          let tierNote = 'SL sàn:';
-          if (p.ratchetTier === 'risk_reduction') tierNote = '🛡️ SL Giảm rủi ro (-3%):';
-          else if (p.ratchetTier === 'breakeven') tierNote = '🛡️ SL Hòa vốn (+0.8%):';
-          else if (p.ratchetTier === 'lock1') tierNote = '🔒 SL Khóa lãi 1 (+3.5%):';
-          else if (p.ratchetTier === 'lock2') tierNote = '🔒 SL Khóa lãi 2 (+6.0%):';
-          else if (p.ratchetTier === 'lock3' || p.ratchetTier === 'lock') tierNote = '🔒 SL Khóa lãi 3 (+10.0%):';
-          lines.push(`• ${p.qty > 0 ? 'MUA' : 'BÁN'} ${qtyText(p.qty)} ${coin(p.symbol)}: ${stateStr} ${usd(p.unrlPnl, true)}`);
+          let tierNote = '🛑 SL khởi tạo (2.0x ATR):';
+          if (p.ratchetTier === 'chandelier') tierNote = '📐 SL Chandelier (2.5x ATR):';
+          else if (p.ratchetTier === 'risk_reduction') tierNote = '🛡️ SL Giảm rủi ro (-4%):';
+          else if (p.ratchetTier === 'breakeven') tierNote = '🛡️ SL Hòa vốn Chandelier:';
+          else if (p.ratchetTier === 'lock' || p.ratchetTier === 'lock1' || p.ratchetTier === 'lock2' || p.ratchetTier === 'lock3') {
+            tierNote = '🔒 SL Khóa lãi (>= +1%):';
+          }
+          lines.push(`• ${sideLabel(p.qty)} ${qtyText(p.qty)} ${coin(p.symbol)}: ${stateStr} ${usd(p.unrlPnl, true)}`);
           lines.push(`   Giá vào: ${px(p.entryPrice)} | Hiện tại: ${px(p.markPrice)} | ${tierNote} ${px(p.slPrice)}`);
         }
       }
-      const gridCrashPct = state.volatilityGrid ? (state.volatilityGrid.crashGatePct * 100).toFixed(1) : '6.0';
       lines.push('');
-      lines.push(`• Sleeve 2 (BTC Grid): ${state.btcGridLevels?.length ? `${state.btcGridLevels.length} tầng khớp` : 'Đang chờ BTC giảm sâu dưới 10-EMA'}`);
-      lines.push(`• Crash Gate: Momentum -3.0% (1d) · Grid -${gridCrashPct}% (ATR)`);
-      lines.push(`• Trần rủi ro: ${usd(dailyLimit)}/ngày`);
+      lines.push(`• Bộ lọc: Donchian 20d + EMA20/EMA50 đồng pha + Vol >= 1.25x @4h`);
+      lines.push(`• Cửa chặn BTC: Long freeze <= -4.0% · Short freeze >= +4.0% (24h)`);
+      lines.push(`• Trần rủi ro: ${usd(dailyLimit)}/ngày (giữ nguyên lệnh đã khóa lãi >= +1%)`);
       return lines.join('\n');
     }
 
@@ -331,14 +376,14 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'vutru': {
       const du = state.dynamicUniverse;
       if (!du) {
-        return '🌐 VŨ TRỤ GIAO DỊCH v1.0.4:\n• Đang sử dụng 40 symbols mặc định.';
+        return `🌐 VŨ TRỤ GIAO DỊCH ${OFFICIAL_RELEASE_VERSION}:\n• Đang sử dụng 40 symbols mặc định.`;
       }
       return [
-        '🌐 VŨ TRỤ GIAO DỊCH ĐỘNG v1.0.4',
+        `🌐 VŨ TRỤ GIAO DỊCH ĐỘNG ${OFFICIAL_RELEASE_VERSION}`,
         `• Số lượng lọc: Top ${du.count} Binance Futures (> $50M/ngày)`,
         `• Cập nhật lần cuối: ${formatTimeIct(du.lastScannedAt)}`,
         `• Top 10 thanh khoản: ${du.topSymbols.map(coin).join(', ')}`,
-        '• Tự động loại bỏ coin rác, giảm trượt giá taker về tối thiểu.',
+        '• Kết hợp lọc Vol >= 1.25x TB20 & ATR <= 16% để loại phá đỉnh giả.',
       ].join('\n');
     }
 
@@ -348,7 +393,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
       const scanLine = es?.lastScannedAt ? `• Quét tự động gần nhất: ${formatTimeIct(es.lastScannedAt)}` : null;
       if (!es || es.blacklistCount === 0) {
         return [
-          '🛡️ EVENT SHIELD v1.0.4 (LÁ CHẮN THIÊN NGA ĐEN)',
+          `🛡️ EVENT SHIELD ${OFFICIAL_RELEASE_VERSION} (LÁ CHẮN THIÊN NGA ĐEN)`,
           '• Trạng thái: ✅ Đang trực chiến (Auto Exchange + RSS)',
           ...(scanLine ? [scanLine] : []),
           '• Danh sách Blacklist: 0 coin',
@@ -356,7 +401,7 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
         ].join('\n');
       }
       return [
-        '🛡️ EVENT SHIELD v1.0.4 (LÁ CHẮN THIÊN NGA ĐEN)',
+        `🛡️ EVENT SHIELD ${OFFICIAL_RELEASE_VERSION} (LÁ CHẮN THIÊN NGA ĐEN)`,
         ...(scanLine ? [scanLine] : []),
         `• Danh sách Blacklist: ${es.blacklistCount} coin`,
         `• Lệnh đóng khẩn cấp (Critical Close): ${es.criticalCloseCount} coin`,
@@ -369,16 +414,17 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'laikep': {
       const dc = state.dynamicCompounding;
       if (!dc) {
-        return '📈 LÃI KÉP ĐỘNG v1.0.4:\n• Đang sử dụng phân bổ chuẩn 35% vốn / vị thế.';
+        return `📈 LÃI KÉP ĐỘNG — RISK PARITY ${OFFICIAL_RELEASE_VERSION}:\n• Risk 3.0% Long (3 slot) / 2.5% Short (2 slot), trần tổng 1.05x.`;
       }
       return [
-        '📈 LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING v1.0.4',
+        `📈 LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING ${OFFICIAL_RELEASE_VERSION}`,
         `• Vốn tài khoản hiện hành: ${usd(state.accountEquity)}`,
-        `• Phân bổ Momentum: ${usd(dc.momentumAllocUsd)} / lệnh (tương đương ${(dc.targetMomentumPct * 100).toFixed(0)}% vốn)`,
-        `• Phân bổ BTC Grid: ${usd(dc.btcGridTicketUsd)} / tầng (tương đương ${(dc.targetGridTicketPct * 100).toFixed(0)}% vốn)`,
+        `• Phân bổ Momentum / Slot cap: ${usd(dc.momentumAllocUsd)} (${(dc.targetMomentumPct * 100).toFixed(0)}% vốn max/lệnh)`,
+        `• Risk Parity: 3.0% Equity/Long (tối đa 3 lệnh) · 2.5% Equity/Short (tối đa 2 lệnh)`,
+        `• Phân bổ BTC Grid (dự phòng): ${usd(dc.btcGridTicketUsd)} (${(dc.targetGridTicketPct * 100).toFixed(0)}% vốn · tắt dưới minNotional)`,
         `• Trần rủi ro ngày: ${usd(dc.dailyLossLimitUsd)} (12% day-start equity, sàn 12.0u)`,
         ...(regimeLine ? [`• Chế độ hiện hành: ${regimeLine}`] : []),
-        '• Tự động tái đầu tư lợi nhuận, giữ đòn bẩy danh mục an toàn (0.25x phòng thủ – 0.94x tối đa).',
+        '• Trần đòn bẩy tổng 1.05x, tự động cắt giảm size theo biến động ATR.',
       ].join('\n');
     }
 
@@ -386,16 +432,16 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'luoi': {
       const vg = state.volatilityGrid;
       if (!vg) {
-        return '⚡ LƯỚI BTC CO GIÃN THEO ATR v1.0.4:\n• Đang sử dụng thông số lưới mặc định.';
+        return `⚡ BIẾN ĐỘNG BTC & CHANDELIER ${OFFICIAL_RELEASE_VERSION}:\n• Sleeve BTC Grid đang tắt ở vốn nhỏ (minNotional $50).`;
       }
       return [
-        '⚡ LƯỚI BIẾN ĐỘNG BTC v1.0.4 (ATR-14 VOLATILITY GRID)',
+        `⚡ LƯỚI BIẾN ĐỘNG BTC ${OFFICIAL_RELEASE_VERSION} (THEO DÕI ATR-14 BTC)`,
         `• ATR 14 ngày hiện tại: $${vg.atr14.toFixed(0)} (${vg.atr14Pct.toFixed(2)}% giá BTC)`,
         `• Hệ số biến động (Vol Multiplier): ${vg.volMultiplier.toFixed(2)}x (${vg.regime === 'high_volatility' ? 'Biến động mạnh' : vg.regime === 'low_volatility' ? 'Thị trường yên ắng' : 'Biến động bình thường'})`,
         `• Bước lưới co giãn: ${(vg.gridStepPct * 100).toFixed(2)}% mỗi tầng`,
         `• Chốt lời kỳ vọng: +${(vg.gridTpPct * 100).toFixed(2)}%`,
         `• Cửa chặn sập (Crash Gate): -${(vg.crashGatePct * 100).toFixed(2)}%`,
-        `• Các tầng đang giữ: ${state.btcGridLevels?.length || 0}/3 tầng`,
+        `• Các tầng đang giữ: ${state.btcGridLevels?.length || 0}/3 tầng (BTC Grid tắt mặc định trên v2.0.0 để tập trung 100% vốn cho Turtle Dual L/S)`,
       ].join('\n');
     }
 
@@ -404,17 +450,17 @@ export function formatHybridCommandResponse(rawCmd: string, state: HybridLiveSta
     case 'start':
     default: {
       return [
-        '🤖 CÁC LỆNH THEO DÕI BOT HYBRID LIVE v1.0.4:',
+        `🤖 CÁC LỆNH THEO DÕI BOT TURTLE DUAL L/S ${OFFICIAL_RELEASE_VERSION}:`,
         '• /agy <câu hỏi> — Chat với Antigravity AI trực tiếp trên máy chủ',
         '• /agy list · /agy resume <số> — Xem & chọn hội thoại tiếp tục',
         '• /agy models · /agy model <tên|số> · /agy effort <mức> — Đổi model/effort',
         '• /agy new · /agy status · /agy cancel — Quản lý phiên agy',
-        '• /status — Trạng thái worker, vốn sàn & an toàn',
-        '• /report (hoặc /lenh) — Chi tiết các vị thế đang mở & giá Stop Loss',
+        '• /status — Trạng thái worker, pha BTC EMA50 & vị thế Long/Short',
+        '• /report (hoặc /lenh) — Chi tiết các vị thế đang mở & giá Chandelier SL',
         '• /pnl — Lãi/lỗ hôm nay & lãi/lỗ chưa chốt (Phân lập tiền nạp)',
         '• /cashflow (hoặc /dongtien) — Quản lý dòng tiền nạp/rút & vốn cơ sở',
-        '• /compounding (hoặc /lai) — Quy mô phân bổ vốn lãi kép động',
-        '• /grid (hoặc /luoi) — Thông số lưới BTC co giãn theo biến động ATR',
+        '• /compounding (hoặc /lai) — Quy mô phân bổ vốn Risk Parity lãi kép',
+        '• /grid (hoặc /luoi) — Thông số biến động ATR-14 của BTC',
         '• /universe — Xem Top coin thanh khoản trong vũ trụ động',
         '• /shield — Trạng thái lá chắn Delist & Exploit',
         '• /help — Danh sách lệnh hỗ trợ',
@@ -484,7 +530,6 @@ export function startHybridTelegramCommandListener(getState: () => HybridLiveSta
           const chatId = String(msg.chat?.id || '');
           if (!chatId) continue;
 
-          // Check if chat is authorized (chỉ nhận trong group được cấp phép)
           if (telegramConfig.chatIds.length && !telegramConfig.chatIds.includes(chatId)) {
             continue;
           }
@@ -493,7 +538,6 @@ export function startHybridTelegramCommandListener(getState: () => HybridLiveSta
           const rawCaption = msg.caption?.trim() || '';
           const photos = msg.photo;
 
-          // Xử lý khi người dùng gửi ảnh biểu đồ (photo)
           if (photos && photos.length > 0) {
             const bestPhoto = photos[photos.length - 1];
             console.log(`[HybridTelegramListener] Received photo (file_id=${bestPhoto.file_id}) with caption: "${rawCaption}" from ${chatId}`);
@@ -521,7 +565,6 @@ export function startHybridTelegramCommandListener(getState: () => HybridLiveSta
 
           console.log(`[HybridTelegramListener] Received message: "${rawText}" from ${chatId}`);
 
-          // Lệnh bắt đầu bằng /agy
           if (rawText.startsWith('/agy')) {
             void handleHybridAgyCommand(chatId, rawText, send);
             continue;
@@ -529,7 +572,6 @@ export function startHybridTelegramCommandListener(getState: () => HybridLiveSta
 
           const cmd = rawText.replace(/^\//, '').split(/\s+/)[0]?.toLowerCase() || '';
 
-          // Nếu là lệnh hệ thống đã biết
           if (HYBRID_KNOWN_COMMANDS.has(cmd)) {
             const reply = formatHybridCommandResponse(rawText, getState());
             try {
@@ -541,8 +583,7 @@ export function startHybridTelegramCommandListener(getState: () => HybridLiveSta
             continue;
           }
         }
-      } catch (err) {
-        // Sleep 3 seconds on transient network error before retry
+      } catch {
         await new Promise((r) => setTimeout(r, 3_000));
       }
     }

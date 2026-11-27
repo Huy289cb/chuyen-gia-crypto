@@ -1135,7 +1135,7 @@ export async function handleHybridAgyCommand(
     lines.push(`• Model: ${resolvedModel.displayModel}${resolvedModel.isDefault ? ' (mặc định)' : ''}`);
     lines.push(`• Effort: ${resolvedModel.effort || 'theo model'}`);
     lines.push('• Thời gian chờ: Không giới hạn (timeout tắt, dùng /agy cancel để ngắt)');
-    lines.push('\n💡 Mẹo: Để xem trạng thái Bot Trade v1.0.4 (Vốn, Lệnh, PnL), hãy gõ thẳng /status hoặc /lenh (không kèm /agy).');
+    lines.push('\n💡 Mẹo: Để xem trạng thái Bot Trade v2.0.0 (Vốn, Lệnh, PnL), hãy gõ thẳng /status hoặc /lenh (không kèm /agy).');
     await sendFn(chatId, lines.join('\n'));
     return;
   }

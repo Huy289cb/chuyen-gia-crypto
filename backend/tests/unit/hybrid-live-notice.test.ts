@@ -73,18 +73,18 @@ describe('hybrid live telegram notices', () => {
 
     // Test /status
     const statusResp = formatHybridCommandResponse('/status', mockState);
-    expect(statusResp).toContain('🟢 WORKER HYBRID LIVE v1.0.4 (OFFICIAL RELEASE)');
+    expect(statusResp).toContain('🟢 WORKER TURTLE DUAL L/S v2.0.0 (O2+O3_R3.0%)');
     expect(statusResp).toContain('31,45 USDT');
     expect(statusResp).toContain('+0,05 USDT');
     expect(statusResp).toContain('An toàn');
 
     // Test /report or /lenh
     const reportResp = formatHybridCommandResponse('/report', mockState);
-    expect(reportResp).toContain('📊 BÁO CÁO VỊ THẾ HYBRID LIVE v1.0.4');
+    expect(reportResp).toContain('📊 BÁO CÁO VỊ THẾ TURTLE DUAL L/S v2.0.0');
     expect(reportResp).toContain('1000PEPE');
     expect(reportResp).toContain('TIA');
-    expect(reportResp).toContain('SL Giảm rủi ro (-3%): 0,471768');
-    expect(reportResp).toContain('Momentum -3.0% (1d)');
+    expect(reportResp).toContain('SL Giảm rủi ro (-4%): 0,471768');
+    expect(reportResp).toContain('Long freeze <= -4.0%');
 
     // Test /pnl
     const pnlResp = formatHybridCommandResponse('/pnl', mockState);
@@ -93,7 +93,7 @@ describe('hybrid live telegram notices', () => {
 
     // Test /help
     const helpResp = formatHybridCommandResponse('/help', mockState);
-    expect(helpResp).toContain('🤖 CÁC LỆNH THEO DÕI BOT HYBRID LIVE v1.0.4:');
+    expect(helpResp).toContain('🤖 CÁC LỆNH THEO DÕI BOT TURTLE DUAL L/S v2.0.0:');
     expect(helpResp).toContain('/status');
     expect(helpResp).toContain('/report');
     expect(helpResp).toContain('/cashflow');
@@ -137,7 +137,7 @@ describe('hybrid live telegram notices', () => {
 
     expect(formatHybridCommandResponse('/tt', stateWithRegime)).toContain('Phòng thủ Macro');
     expect(formatHybridCommandResponse('/cashflow', stateWithRegime)).toContain('101,00 USDT');
-    expect(formatHybridRebalanceNotice({ closed: [], opened: [], nextRebalanceDate: '2026-11-28' })).toContain('3 NGÀY (v1.0.4)');
+    expect(formatHybridRebalanceNotice({ closed: [], opened: [], nextRebalanceDate: '2026-11-28' })).toContain('TURTLE20 DUAL L/S (v2.0.0)');
     expect(formatHybridBookNotice({ equity: 200, dayPnl: 1.5, positions: [], dailyLossLimitUsd: 24 })).toContain('Trần lỗ 24 USDT/ngày');
   });
 

@@ -193,7 +193,7 @@ describe('Phase 5: Dynamic Compounding & Volatility-Scaled Grid', () => {
 
     it('formats /compounding command with dynamic allocation breakdown', () => {
       const res = formatHybridCommandResponse('/compounding', mockState);
-      expect(res).toContain('LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING v1.0.4');
+      expect(res).toContain('LÃI KÉP ĐỘNG — DYNAMIC COMPOUNDING v2.0.0');
       expect(res).toContain('125,50 USDT');
       expect(res).toContain('30,12 USDT');
       expect(res).toContain('24%');
@@ -204,7 +204,7 @@ describe('Phase 5: Dynamic Compounding & Volatility-Scaled Grid', () => {
 
     it('formats /grid command with ATR-14 volatility grid details', () => {
       const res = formatHybridCommandResponse('/grid', mockState);
-      expect(res).toContain('LƯỚI BIẾN ĐỘNG BTC v1.0.4 (ATR-14 VOLATILITY GRID)');
+      expect(res).toContain('LƯỚI BIẾN ĐỘNG BTC v2.0.0');
       expect(res).toContain('$1250');
       expect(res).toContain('1.92%');
       expect(res).toContain('1.92% mỗi tầng');

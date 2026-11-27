@@ -4,25 +4,26 @@ import {
   PRUNING_DAYS_THRESHOLD,
   PRUNING_MAX_RETURN_THRESH,
   PRUNING_CURRENT_RETURN_THRESH,
+  shouldPruneStagnantLoser,
 } from '../../src/portfolio/hybrid-worker';
 import { formatHybridPruneNotice } from '../../src/portfolio/hybrid-live-notice';
 
-describe('Phase 8: Freqtrade-Inspired Suite (BTC Crash Trend Gate & Loser Pruning)', () => {
+describe('Phase 8 & v1.0.5: Freqtrade-Inspired Suite (BTC Crash Trend Gate & Loser Pruning)', () => {
   describe('Part 1: Calibrated Constants Integrity', () => {
-    it('has BTC Crash Trend Health Gate calibrated to -3.0%', () => {
-      expect(BTC_CRASH_HEALTH_GATE_PCT).toBe(-0.03);
+    it('has BTC Crash Long Block Gate calibrated to -4.0%', () => {
+      expect(BTC_CRASH_HEALTH_GATE_PCT).toBe(-0.04);
     });
 
     it('has Pruning Days Threshold calibrated to 2.0 days (48 hours)', () => {
       expect(PRUNING_DAYS_THRESHOLD).toBe(2.0);
     });
 
-    it('has Pruning Max Return Threshold calibrated to +2.0%', () => {
-      expect(PRUNING_MAX_RETURN_THRESH).toBe(0.02);
+    it('has Pruning Max Return Threshold calibrated to +3.0% (v1.0.5)', () => {
+      expect(PRUNING_MAX_RETURN_THRESH).toBe(0.03);
     });
 
-    it('has Pruning Current Return Threshold calibrated to -5.0%', () => {
-      expect(PRUNING_CURRENT_RETURN_THRESH).toBe(-0.05);
+    it('has Pruning Current Return Threshold calibrated to -4.0% (v1.0.5)', () => {
+      expect(PRUNING_CURRENT_RETURN_THRESH).toBe(-0.04);
     });
   });
 
@@ -31,14 +32,14 @@ describe('Phase 8: Freqtrade-Inspired Suite (BTC Crash Trend Gate & Loser Prunin
       return btc1dReturn <= BTC_CRASH_HEALTH_GATE_PCT;
     }
 
-    it('blocks new altcoin entries on severe BTC crash day (-3.0% or worse)', () => {
-      expect(shouldBlockNewAltcoins(-0.0300)).toBe(true);
-      expect(shouldBlockNewAltcoins(-0.0350)).toBe(true);
+    it('blocks new altcoin entries on severe BTC crash day (-4.0% or worse)', () => {
+      expect(shouldBlockNewAltcoins(-0.0400)).toBe(true);
+      expect(shouldBlockNewAltcoins(-0.0450)).toBe(true);
       expect(shouldBlockNewAltcoins(-0.0650)).toBe(true);
     });
 
-    it('allows new altcoin entries on normal or mildly negative BTC days (> -3.0%)', () => {
-      expect(shouldBlockNewAltcoins(-0.0299)).toBe(false);
+    it('allows new altcoin entries on normal or mildly negative BTC days (> -4.0%)', () => {
+      expect(shouldBlockNewAltcoins(-0.0399)).toBe(false);
       expect(shouldBlockNewAltcoins(-0.0150)).toBe(false);
       expect(shouldBlockNewAltcoins(0.0000)).toBe(false);
       expect(shouldBlockNewAltcoins(0.0450)).toBe(false);
@@ -57,23 +58,20 @@ describe('Phase 8: Freqtrade-Inspired Suite (BTC Crash Trend Gate & Loser Prunin
       lossPctSaved: number;
     } {
       const daysHeld = (now - entryTime) / (24 * 3_600_000);
-      const shouldPrune =
-        daysHeld >= PRUNING_DAYS_THRESHOLD &&
-        maxRet < PRUNING_MAX_RETURN_THRESH &&
-        currentRet <= PRUNING_CURRENT_RETURN_THRESH;
+      const shouldPrune = shouldPruneStagnantLoser(entryTime, now, maxRet, currentRet);
       const lossPctSaved = shouldPrune ? Math.max(0, 0.12 - Math.abs(currentRet)) : 0;
       return { shouldPrune, daysHeld, lossPctSaved };
     }
 
-    it('prunes sinking loser held for >= 2 days with maxRet < 2% and currentRet <= -5%', () => {
+    it('prunes stagnant loser held for >= 2 days with maxRet < 3% and currentRet <= -4%', () => {
       const entryTime = 1000;
       const now = entryTime + 2.5 * 24 * 3_600_000; // 2.5 days
-      const result = evaluatePruning(entryTime, now, 0.012, -0.055); // maxRet 1.2%, currRet -5.5%
+      const result = evaluatePruning(entryTime, now, 0.022, -0.042); // maxRet 2.2%, currRet -4.2%
 
       expect(result.shouldPrune).toBe(true);
       expect(result.daysHeld).toBe(2.5);
-      // Saved ~6.5% vs 12% hard SL
-      expect(result.lossPctSaved).toBeCloseTo(0.065, 4);
+      // Saved ~7.8% vs 12% hard SL
+      expect(result.lossPctSaved).toBeCloseTo(0.078, 4);
     });
 
     it('does NOT prune young position held < 2 days (gives 48h breathing room for momentum development)', () => {
@@ -93,12 +91,12 @@ describe('Phase 8: Freqtrade-Inspired Suite (BTC Crash Trend Gate & Loser Prunin
       expect(result.shouldPrune).toBe(false);
     });
 
-    it('does NOT prune position that demonstrated strength earlier (maxRet >= 2.0%)', () => {
+    it('does NOT prune position that demonstrated strength earlier (maxRet >= 3.0%)', () => {
       const entryTime = 1000;
       const now = entryTime + 2.2 * 24 * 3_600_000;
-      const result = evaluatePruning(entryTime, now, 0.045, -0.055); // pumped +4.5% earlier
+      const result = evaluatePruning(entryTime, now, 0.032, -0.045); // pumped +3.2% earlier -> covered by Pre-Ratchet -4%
 
-      expect(result.shouldPrune).toBe(false); // Handled by Ratchet Guard or regular SL
+      expect(result.shouldPrune).toBe(false);
     });
   });
 
@@ -107,17 +105,17 @@ describe('Phase 8: Freqtrade-Inspired Suite (BTC Crash Trend Gate & Loser Prunin
       const notice = formatHybridPruneNotice({
         symbol: 'SINKUSDT',
         entryPrice: 1.50,
-        exitPrice: 1.42,
-        lossPct: -5.33,
-        pnl: -0.65,
+        exitPrice: 1.44,
+        lossPct: -4.00,
+        pnl: -0.92,
         daysHeld: 2.3,
       });
 
-      expect(notice).toContain('✂️ CẮT TỈA COIN CHÌM XUỒNG v1.0.4 (TIME-DECAY PRUNING)');
+      expect(notice).toContain('✂️ CẮT TỈA COIN CHÌM XUỒNG v2.0.0 (TIME-DECAY PRUNING)');
       expect(notice).toContain('SINK');
       expect(notice).toContain('2.3 ngày');
-      expect(notice).toContain('-5.33%');
-      expect(notice).toContain('Tiết kiệm ~7%');
+      expect(notice).toContain('-4.00%');
+      expect(notice).toContain('Tiết kiệm ~8%');
     });
   });
 });

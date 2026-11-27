@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { formatHybridRatchetNotice, formatHybridPositionClosedNotice } from '../../src/portfolio/hybrid-live-notice';
 import { RESTRICTED_OR_LEVERAGED_SYMBOLS } from '../../src/portfolio/dynamic-universe';
-import { computeSymbolAtr14Pct, PROFIT_LOCK_COOLDOWN_MS, WATCHDOG_TIMEOUT_MS } from '../../src/portfolio/hybrid-worker';
+import {
+  computeSymbolAtr14Pct,
+  computeRatchetTarget,
+  PROFIT_LOCK_COOLDOWN_MS,
+  WATCHDOG_TIMEOUT_MS,
+} from '../../src/portfolio/hybrid-worker';
 
 describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard', () => {
   describe('Part 1: Leveraged ETF Exclusion', () => {
@@ -25,53 +30,43 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
     });
   });
 
-  describe('Part 2: Early-Lock Multi-Tier Ratchet Logic Simulation', () => {
+  describe('Part 2: v1.0.5 5-Tier Pre-Ratchet & Early-Lock Profit Guard', () => {
     function computeProgressiveRatchet(
       entry: number,
       mark: number,
       currentSl: number,
       currentMaxRet: number,
       initialSlPct = 0.12
-    ): {
-      targetSl: number;
-      targetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock';
-      shouldRatchet: boolean;
-      newMaxRet: number;
-    } {
+    ) {
       const ret = (mark - entry) / entry;
       const newMaxRet = Math.max(currentMaxRet, ret);
-
-      let targetSl = entry * (1.0 - initialSlPct);
-      let targetTier: 'initial' | 'risk_reduction' | 'breakeven' | 'lock1' | 'lock2' | 'lock3' | 'lock' = 'initial';
-
-      if (newMaxRet >= 0.14) {
-        targetSl = entry * 1.10;
-        targetTier = 'lock3';
-      } else if (newMaxRet >= 0.10) {
-        targetSl = entry * 1.06;
-        targetTier = 'lock2';
-      } else if (newMaxRet >= 0.07) {
-        targetSl = entry * 1.035;
-        targetTier = 'lock1';
-      } else if (newMaxRet >= 0.05) {
-        targetSl = entry * 1.008;
-        targetTier = 'breakeven';
-      }
-
-      const shouldRatchet = targetSl > currentSl * 1.001;
+      const { targetSl, targetTier } = computeRatchetTarget(entry, newMaxRet, initialSlPct);
+      const shouldRatchet = targetSl > currentSl * 1.0005;
       return { targetSl, targetTier, shouldRatchet, newMaxRet };
     }
 
-    it('keeps initial -12% stop when gain is under +5%', () => {
+    it('keeps initial -12% stop when gain is under +3%', () => {
       const entry = 10.0;
       const initialSl = entry * 0.88; // 8.80
-      const mark = 10.3; // +3% gain
+      const mark = 10.25; // +2.5% gain
 
       const r = computeProgressiveRatchet(entry, mark, initialSl, 0.0);
       expect(r.shouldRatchet).toBe(false);
       expect(r.targetTier).toBe('initial');
       expect(r.targetSl).toBeCloseTo(8.80);
-      expect(r.newMaxRet).toBeCloseTo(0.03);
+      expect(r.newMaxRet).toBeCloseTo(0.025);
+    });
+
+    it('ratchets to Pre-Ratchet Risk-Reduction (-4.0%) when gain touches +3.0%', () => {
+      const entry = 10.0;
+      const initialSl = entry * 0.88; // 8.80 (-12%)
+      const mark = 10.31; // +3.1% gain
+
+      const r = computeProgressiveRatchet(entry, mark, initialSl, 0.0);
+      expect(r.shouldRatchet).toBe(true);
+      expect(r.targetTier).toBe('risk_reduction');
+      expect(r.targetSl).toBeCloseTo(9.60); // Entry - 4.0%
+      expect(r.newMaxRet).toBeCloseTo(0.031);
     });
 
     it('ratchets to Breakeven (+0.8%) when gain touches +5.2%', () => {
@@ -142,7 +137,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         maxReturnPct: 5.5,
       });
 
-      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🛡️ GIẢM RỦI RO (-3,0%) cho 1000PEPE');
+      expect(text).toContain('🛡️ BẢO VỆ XU HƯỚNG: 🛡️ GIẢM RỦI RO (-4,0%) cho 1000PEPE');
       expect(text).toContain('+5.5%');
       expect(text).toContain('STOP_MARKET sàn Binance');
     });
@@ -156,7 +151,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         maxReturnPct: 8.5,
       });
 
-      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🛡️ HÒA VỐN (+0,8%) cho INJ');
+      expect(text).toContain('🛡️ BẢO VỆ XU HƯỚNG: 🛡️ HÒA VỐN AN TOÀN cho INJ');
       expect(text).toContain('+8.5%');
       expect(text).toContain('STOP_MARKET sàn Binance');
     });
@@ -170,7 +165,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         maxReturnPct: 7.5,
       });
 
-      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 1 (+3,5%) cho BLESS');
+      expect(text).toContain('🛡️ BẢO VỆ XU HƯỚNG: 🔒 KHÓA LÃI NẤC 1 (+3,5%) cho BLESS');
       expect(text).toContain('+7.5%');
     });
 
@@ -183,7 +178,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         maxReturnPct: 10.5,
       });
 
-      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 2 (+6,0%) cho BLESS');
+      expect(text).toContain('🛡️ BẢO VỆ XU HƯỚNG: 🔒 KHÓA LÃI NẤC 2 (+6,0%) cho BLESS');
       expect(text).toContain('+10.5%');
     });
 
@@ -196,7 +191,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         maxReturnPct: 15.0,
       });
 
-      expect(text).toContain('BẢO VỆ LỢI NHUẬN: 🔒 KHÓA LÃI NẤC 3 (+10,0%) cho BLESS');
+      expect(text).toContain('🛡️ BẢO VỆ XU HƯỚNG: 🔒 CHANDELIER KHÓA LÃI (>= +1,0%) cho BLESS');
       expect(text).toContain('+15.0%');
     });
 
@@ -210,7 +205,7 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
         reason: 'RISK_REDUCTION',
       });
 
-      expect(text).toContain('🛡️ Dừng lỗ giảm rủi ro (-3.0%)');
+      expect(text).toContain('🛡️ Dừng lỗ giảm rủi ro (-4.0%)');
     });
   });
 
@@ -263,9 +258,9 @@ describe('Phase 6: Progressive Risk-Reduction & Multi-Tier Ratchet Profit Guard'
     });
   });
 
-  describe('Part 5: Phase 8.2 Operational Improvements (Differentiated Cooldown & Resilient Watchdog)', () => {
-    it('defines PROFIT_LOCK_COOLDOWN_MS as exactly 2 hours (7,200,000ms)', () => {
-      expect(PROFIT_LOCK_COOLDOWN_MS).toBe(2 * 60 * 60 * 1000);
+  describe('Part 5: Phase 8.2 / v2.0.0 Operational Improvements (24h Cooldown & Resilient Watchdog)', () => {
+    it('defines PROFIT_LOCK_COOLDOWN_MS as 24 hours (86,400,000ms) matching audited Turtle cooldown', () => {
+      expect(PROFIT_LOCK_COOLDOWN_MS).toBe(24 * 60 * 60 * 1000);
     });
 
     it('defines WATCHDOG_TIMEOUT_MS as 35 seconds to prevent false-positive aborts on network jitter', () => {

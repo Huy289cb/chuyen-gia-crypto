@@ -1,3 +1,32 @@
+<!-- official-production-release-v2-0-0-20261127 -->
+# Hiện hành 27/11 16:35 — Triển khai Phiên bản Chính thức v2.0.0: Turtle20 Dual L/S (`O2+O3_R3.0% @4h`)
+
+1. **Nâng Cấp Kiến Trúc Toàn Diện Lên `v2.0.0` (`src/portfolio/turtle-dual-strategy.ts` & `hybrid-worker.ts`)**:
+   - **Pha Thị Trường BTC Dual-Trend (`resolveTurtleDualRegime`)**:
+     * `Bull Trend` (`BTC > EMA50`): Tối đa **3 Long**, `0` Short (chặn Long mới khi BTC 1D/24h `<= -4.0%`).
+     * `Bear Trend` (`BTC < EMA50 && BTC EMA20 < EMA50`): Tối đa **2 Short**, `0` Long (chặn Short mới khi BTC 1D/24h squeeze `>= +4.0%` tính theo `Math.max`).
+     * `Neutral Cash` (BTC `< EMA50` nhưng `EMA20 >= EMA50`) hoặc mất tín hiệu API: `0` Long / `0` Short, đứng ngoài tiền mặt bảo toàn vốn.
+   - **Bộ Lọc Breakout `O2+O3` Khung `@4h UTC` (`00/04/08/12/16/20 UTC`)**:
+     * Quét Top 30 Binance Futures `>= $50M/24h`, đồng bộ cache nến 100 ngày trước quét (`> 20s`) + truyền `livePrice` từ `/fapi/v1/ticker/24hr`.
+     * Long: `price > hi20`, `price > ema20 > ema50` (`O3`), `volRatio >= 1.25x` (`O2`), `ATR14 <= 16%`, funding `<= +0.05%/8h`.
+     * Short: `price < lo20`, `price < ema20 < ema50` (`O3`), `volRatio >= 1.25x` (`O2`), `ATR14 <= 16%`, funding `>= -0.05%/8h`.
+   - **Risk Parity Sizing & Trần Exposure `.env`**:
+     * Rủi ro **3.0% Long / 2.5% Short**, `SL = clamp(2.0 * ATR14, 6%, 14%)`, trần slot `40%`, tổng giải ngân tối đa `1.05x` Equity.
+     * Đã nâng cầu dao `.env` `MAINNET_MAX_TOTAL_EXPOSURE_USD` & `MAX_TOTAL_EXPOSURE_USD` lên **`2000`** và reload qua `ecosystem.config.cjs` để lãi kép vận hành thông suốt.
+   - **Bảo Toàn Lợi Nhuận & Chống Sập**:
+     * Chandelier Trailing `2.5 × ATR14` đối xứng kích hoạt từ `+5%` (`floor` cho `SELL STOP_MARKET`, `ceil` cho `BUY STOP_MARKET`, cập nhật `ATR14` hoàn chỉnh hàng ngày).
+     * Đóng khẩn cấp vị thế lệch xu hướng khi BTC cắt `EMA50` (`REGIME_ALIGN`), Cooldown đối xứng `24h`, Cầu chì `-12%` (sàn `12u`) **miễn trừ giữ nguyên lệnh đã khóa lãi `>= +1%`**, chỉ chốt `lastScanBucket4h` sau khi quét hoàn tất.
+
+2. **Kiểm Chứng Định Lượng & Build/Test**:
+   - Backtest `O2+O3_R3.0%`: IS `+508.2u`, OOS 2024–2026 `+72.3u` (`PF 1.32`), 1,500d Static `+232.8u` (`NoTop3 +43.0u`), Comp từ `$91.82` đạt `$352.3` (1,500d) và `$3,705.6` (2,430d); khung 1H `@4h` Top30 73d đạt `+22.1u` (`PF 5.82`, `MDD 13.0%`, 2×+1%SL `+20.2u`, Live28d `+5.4u`, CORE40 `+14.2u`).
+   - Build & Tests: `npm run build` sạch `0` lỗi; `16/16` file unit test (`146/146` tests) PASSED.
+
+3. **Trạng Thái Live Binance Futures Mainnet (`27/11 16:35 ICT`)**:
+   - PM2 `crypto-hybrid-live` (ID `6`), `crypto-telegram-bot` (ID `9`), `crypto-api` (ID `0`) đều `online`, giao diện Telegram đồng bộ `v2.0.0`.
+   - BTC đang ở `bear_trend` (`L=0, S=2`); đã đóng sạch 2 lệnh Long ngược pha (`MOVEUSDT`, `VVVUSDT`), giữ `100%` USDT (`Equity $92.37`, `Day PnL +$0.77`) chờ breakout Short `@4h`.
+   - Tài liệu phát hành: `docs/official-production-release-v2.0.0.md`.
+<!-- /official-production-release-v2-0-0-20261127 -->
+
 <!-- official-production-release-v1-0-0-20261124 -->
 # Hiện hành 24/11 19:15 — Triển khai Phiên bản Chính thức v1.0.0 (Official Production Release) & Tích hợp Time-Decay Pruning + 35% Sizing
 

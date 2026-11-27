@@ -18,6 +18,10 @@ import {
   PROFIT_LOCK_COOLDOWN_MS,
   FALLING_KNIFE_24H_FLOOR_PCT,
   BTC_MACRO_BEAR_GATE_PCT,
+  RATCHET_RISK_REDUCTION_TRIGGER,
+  RATCHET_RISK_REDUCTION_SL_PCT,
+  PRUNING_MAX_RETURN_THRESH,
+  PRUNING_CURRENT_RETURN_THRESH,
 } from '../../src/portfolio/hybrid-worker';
 import {
   DynamicCompoundingManager,
@@ -44,13 +48,17 @@ function makeDailyCandles(
   });
 }
 
-describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime & Safety Guards', () => {
-  it('defines calibrated v1.0.4 defensive thresholds', () => {
-    expect(OFFICIAL_RELEASE_VERSION).toBe('v1.0.4');
-    expect(PROFIT_LOCK_COOLDOWN_MS).toBe(2 * 3_600_000);
+describe('v2.0.0 Safety Guards, Venue Stop Ordering & Worker Reconciliation', () => {
+  it('defines calibrated v2.0.0 constants and safety thresholds', () => {
+    expect(OFFICIAL_RELEASE_VERSION).toBe('v2.0.0');
+    expect(PROFIT_LOCK_COOLDOWN_MS).toBe(24 * 3_600_000);
     expect(FALLING_KNIFE_24H_FLOOR_PCT).toBe(-0.15);
     expect(BTC_MACRO_BEAR_GATE_PCT).toBe(-0.10);
     expect(DEFENSIVE_MOMENTUM_ALLOC_PCT).toBe(0.25);
+    expect(RATCHET_RISK_REDUCTION_TRIGGER).toBe(0.03);
+    expect(RATCHET_RISK_REDUCTION_SL_PCT).toBe(-0.04);
+    expect(PRUNING_MAX_RETURN_THRESH).toBe(0.03);
+    expect(PRUNING_CURRENT_RETURN_THRESH).toBe(-0.04);
   });
 
   it('resolveMomentumRegime switches cleanly between normal, macro_defensive, and fail-safe crash_freeze', () => {
@@ -75,7 +83,7 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
       allocPct: DEFENSIVE_MOMENTUM_ALLOC_PCT,
     });
 
-    expect(resolveMomentumRegime(-0.03, 0.05)).toEqual({
+    expect(resolveMomentumRegime(-0.04, 0.05)).toEqual({
       mode: 'crash_freeze',
       crashBlocked: true,
       maxSlots: 0,
@@ -128,23 +136,15 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
     expect(ranked).toEqual([]);
   });
 
-  it('rebalanceMomentum removes rotated-out symbols from activeTrackedPositions so PositionCloseGuard does not misclassify them', async () => {
+  it('runTurtleCycle closes unaligned positions on BTC EMA50 regime flip cleanly without PositionCloseGuard misclassification', async () => {
     const worker = new HybridLiveWorker();
     worker.activeTrackedPositions.set('VVVUSDT', {
+      side: 'LONG',
       qty: 10,
       entryPrice: 2.0,
       slPrice: 1.76,
       ratchetTier: 'initial',
     });
-
-    const closes = Array.from({ length: 16 }, (_, idx) => (idx >= 14 ? 115 : 100));
-    worker.candleCache.setCandles('SAFEUSDT', makeDailyCandles(closes, { open: 115, close: 116 }));
-    (worker as unknown as { exchangeFilters: Record<string, unknown> }).exchangeFilters['SAFEUSDT'] = {
-      stepSize: 1,
-      tickSize: 0.001,
-      minQty: 1,
-      minNotional: 5,
-    };
 
     const mockBroker: Partial<LiveBroker> = {
       getPositions: vi.fn().mockResolvedValue([
@@ -152,11 +152,11 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
       ]),
       submitMarketOrder: vi.fn().mockResolvedValue({
         orderId: 1,
-        clientOrderId: 'x',
+        clientOrderId: 'reg_exit',
         symbol: 'VVVUSDT',
         status: 'FILLED',
         executedQty: '10',
-        avgPrice: '116',
+        avgPrice: '2.05',
       }),
       getOpenAlgoOrders: vi.fn().mockResolvedValue([]),
       getAccount: vi.fn().mockResolvedValue({
@@ -166,48 +166,35 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
         totalUnrealizedProfit: '0',
         assets: [],
       }),
-      getMarkPrices: vi.fn().mockResolvedValue([{ symbol: 'SAFEUSDT', markPrice: '116', time: Date.now() }]),
-      submitStopMarketOrder: vi.fn().mockResolvedValue({
-        orderId: 2,
-        clientOrderId: 'sl',
-        symbol: 'SAFEUSDT',
-        status: 'NEW',
-        executedQty: '0',
-      }),
     };
     (worker as unknown as { broker: LiveBroker }).broker = mockBroker as LiveBroker;
-    (worker as unknown as { dynamicUniverseScanner: { getUniverse: () => string[] } }).dynamicUniverseScanner = {
-      getUniverse: () => ['SAFEUSDT'],
-    };
 
     const originalFetch = global.fetch;
     global.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('klines') && url.includes('BTCUSDT')) {
         const now = Date.now();
-        const bars = Array.from({ length: 20 }, (_, i) => [now - (19 - i) * 86_400_000, '60000', '60500', '59500', '60000']);
+        // BTC dropped below EMA50 (70k -> 60k): neutral_cash / bear_trend -> closes LONG VVVUSDT
+        const bars = Array.from({ length: 100 }, (_, i) => [
+          now - (99 - i) * 86_400_000,
+          i >= 80 ? '60000' : '72000',
+          i >= 80 ? '60500' : '72500',
+          i >= 80 ? '59500' : '71500',
+          i >= 80 ? '60000' : '72000',
+        ]);
         return Promise.resolve({ ok: true, json: () => Promise.resolve(bars) } as Response);
       }
       if (url.includes('ticker/24hr') && url.includes('BTCUSDT')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ priceChangePercent: '0.5' }) } as Response);
-      }
-      if (url.includes('ticker/24hr')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ symbol: 'SAFEUSDT', priceChangePercent: '1.0' }]),
-        } as Response);
-      }
-      if (url.includes('premiumIndex')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ symbol: 'SAFEUSDT', lastFundingRate: '0.0001' }]),
-        } as Response);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ priceChangePercent: '-1.0' }) } as Response);
       }
       return originalFetch(url);
     });
 
     try {
-      const ok = await (worker as unknown as { rebalanceMomentum: () => Promise<boolean> }).rebalanceMomentum();
+      const ok = await worker.runTurtleCycle(false);
       expect(ok).toBe(true);
+      expect(mockBroker.submitMarketOrder).toHaveBeenCalledWith(
+        expect.objectContaining({ symbol: 'VVVUSDT', side: 'SELL', reduceOnly: true })
+      );
       expect(worker.activeTrackedPositions.has('VVVUSDT')).toBe(false);
     } finally {
       global.fetch = originalFetch;
@@ -260,11 +247,14 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
   it('reconcileState preserves Ratchet SL instead of downgrading to -12% and REST fallback enforces ATR filter', async () => {
     const worker = new HybridLiveWorker();
     worker.ratchetState.set('ELSAUSDT', {
+      side: 'LONG',
       entryPrice: 0.10,
       currentSl: 0.11, // Lock +10%
       initialSlPct: 0.12,
+      extremePrice: 0.115,
       maxRet: 0.15,
-      tier: 'lock3',
+      atr14Pct: 0.05,
+      tier: 'lock',
       entryTime: Date.now(),
     });
     (worker as unknown as { exchangeFilters: Record<string, unknown> }).exchangeFilters['ELSAUSDT'] = {
@@ -372,17 +362,19 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
 
     const opened = await (
       worker as unknown as {
-        openMomentumPosition: (
-          sym: string,
+        openTurtlePosition: (
+          cand: { symbol: string; side: 'LONG' | 'SHORT'; score: number; atr14Pct: number; slPct: number; mom20Return: number; volRatio: number; price: number },
           equity: number,
-          allocPct: number,
-          prefix: 'reb_open' | 'reb_retry',
-          logPrefix: 'Rebalance' | 'Momentum retry'
-        ) => Promise<{ symbol: string; qty: number; entryPrice: number } | null>;
+          ctx: { availableBalance: number; activeNotionalUsd: number }
+        ) => Promise<{ symbol: string; side: 'LONG' | 'SHORT'; qty: number; entryPrice: number; slPrice: number } | null>;
       }
-    ).openMomentumPosition('NEARUSDT', 100, 0.25, 'reb_retry', 'Momentum retry');
+    ).openTurtlePosition(
+      { symbol: 'NEARUSDT', side: 'LONG', score: 2.0, atr14Pct: 0.05, slPct: 0.10, mom20Return: 0.15, volRatio: 1.5, price: 5.0 },
+      100,
+      { availableBalance: 90, activeNotionalUsd: 0 }
+    );
 
-    expect(opened).toEqual({ symbol: 'NEARUSDT', qty: 5, entryPrice: 5.0 });
+    expect(opened).toMatchObject({ symbol: 'NEARUSDT', side: 'LONG', qty: 6, entryPrice: 5.0 });
     expect(mockBroker.setLeverage).toHaveBeenCalledWith('NEARUSDT', 5);
 
     const summary = await (
@@ -416,7 +408,7 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
     expect(eq800.rawTicketUsd).toBe(64);
   });
 
-  it('openMomentumPosition enforces exposure and availableBalance safety guards', async () => {
+  it('openTurtlePosition enforces exposure and availableBalance safety guards', async () => {
     const worker = new HybridLiveWorker();
     (worker as unknown as { exchangeFilters: Record<string, unknown> }).exchangeFilters['SOLUSDT'] = {
       stepSize: 0.1,
@@ -430,140 +422,34 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
     };
     (worker as unknown as { broker: LiveBroker }).broker = mockBroker as LiveBroker;
 
+    const cand = { symbol: 'SOLUSDT', side: 'LONG' as const, score: 2.0, atr14Pct: 0.05, slPct: 0.10, mom20Return: 0.15, volRatio: 1.5, price: 100 };
+
     // Insufficient availableBalance -> blocked before order submission
     const lowMargin = await (
       worker as unknown as {
-        openMomentumPosition: (
-          s: string,
-          e: number,
-          a: number,
-          p: 'reb_open' | 'reb_retry',
-          l: 'Rebalance' | 'Momentum retry',
-          ctx: { availableBalance: number; activeNotionalUsd: number }
-        ) => Promise<unknown>;
+        openTurtlePosition: (c: typeof cand, e: number, ctx: { availableBalance: number; activeNotionalUsd: number }) => Promise<unknown>;
       }
-    ).openMomentumPosition('SOLUSDT', 100, 0.35, 'reb_retry', 'Momentum retry', {
-      availableBalance: 2.0,
-      activeNotionalUsd: 0,
-    });
+    ).openTurtlePosition(cand, 100, { availableBalance: 2.0, activeNotionalUsd: 0 });
     expect(lowMargin).toBeNull();
     expect(mockBroker.submitMarketOrder).not.toHaveBeenCalled();
 
-    // Exposure saturated -> blocked
+    // Exposure saturated -> blocked (< minNotional headroom)
     const overExposed = await (
       worker as unknown as {
-        openMomentumPosition: (
-          s: string,
-          e: number,
-          a: number,
-          p: 'reb_open' | 'reb_retry',
-          l: 'Rebalance' | 'Momentum retry',
-          ctx: { availableBalance: number; activeNotionalUsd: number }
-        ) => Promise<unknown>;
+        openTurtlePosition: (c: typeof cand, e: number, ctx: { availableBalance: number; activeNotionalUsd: number }) => Promise<unknown>;
       }
-    ).openMomentumPosition('SOLUSDT', 100, 0.35, 'reb_retry', 'Momentum retry', {
-      availableBalance: 90.0,
-      activeNotionalUsd: 97.0,
-    });
+    ).openTurtlePosition(cand, 100, { availableBalance: 90.0, activeNotionalUsd: 97.0 });
     expect(overExposed).toBeNull();
     expect(mockBroker.submitMarketOrder).not.toHaveBeenCalled();
   });
 
-  it('rebalanceMomentum preserves profitable lock1/lock2/lock3 winners instead of force-closing at market', async () => {
-    const worker = new HybridLiveWorker();
-    worker.ratchetState.set('VVVUSDT', {
-      entryPrice: 20.0,
-      currentSl: 21.2,
-      initialSlPct: 0.12,
-      maxRet: 0.12,
-      tier: 'lock2',
-      entryTime: Date.now() - 86_400_000,
-    });
-    worker.activeTrackedPositions.set('VVVUSDT', {
-      qty: 1.5,
-      entryPrice: 20.0,
-      slPrice: 21.2,
-      ratchetTier: 'lock2',
-    });
-
-    const closes = Array.from({ length: 16 }, (_, idx) => (idx >= 14 ? 115 : 100));
-    worker.candleCache.setCandles('NEWUSDT', makeDailyCandles(closes, { open: 115, close: 116 }));
-    (worker as unknown as { exchangeFilters: Record<string, unknown> }).exchangeFilters['NEWUSDT'] = {
-      stepSize: 1,
-      tickSize: 0.001,
-      minQty: 1,
-      minNotional: 5,
-    };
-
-    const mockBroker: Partial<LiveBroker> = {
-      getPositions: vi.fn().mockResolvedValue([
-        { symbol: 'VVVUSDT', positionAmt: '1.5', entryPrice: '20.0', markPrice: '22.4', positionSide: 'BOTH' },
-      ]),
-      getAccount: vi.fn().mockResolvedValue({
-        totalMarginBalance: '100',
-        totalWalletBalance: '100',
-        availableBalance: '90',
-        totalUnrealizedProfit: '3.6',
-        assets: [],
-      }),
-      submitMarketOrder: vi.fn(),
-    };
-    (worker as unknown as { broker: LiveBroker }).broker = mockBroker as LiveBroker;
-    (worker as unknown as { dynamicUniverseScanner: { getUniverse: () => string[] } }).dynamicUniverseScanner = {
-      getUniverse: () => ['NEWUSDT'],
-    };
-
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('klines') && url.includes('BTCUSDT')) {
-        const now = Date.now();
-        // BTC 14d <= -10% -> macro_defensive (1 slot max)
-        const bars = Array.from({ length: 20 }, (_, i) => [
-          now - (19 - i) * 86_400_000,
-          i >= 18 ? '51000' : '60000',
-          i >= 18 ? '51500' : '60500',
-          i >= 18 ? '50500' : '59500',
-          i >= 18 ? '51000' : '60000',
-        ]);
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(bars) } as Response);
-      }
-      if (url.includes('ticker/24hr') && url.includes('BTCUSDT')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ priceChangePercent: '0.5' }) } as Response);
-      }
-      if (url.includes('ticker/24hr')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ symbol: 'NEWUSDT', priceChangePercent: '1.0' }]),
-        } as Response);
-      }
-      if (url.includes('premiumIndex')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ symbol: 'NEWUSDT', lastFundingRate: '0.0001' }]),
-        } as Response);
-      }
-      return originalFetch(url);
-    });
-
-    try {
-      const ok = await (worker as unknown as { rebalanceMomentum: () => Promise<boolean> }).rebalanceMomentum();
-      expect(ok).toBe(true);
-      // Locked winner VVVUSDT is preserved and slot limit (1) prevents opening NEWUSDT on top
-      expect(mockBroker.submitMarketOrder).not.toHaveBeenCalled();
-      expect(worker.ratchetState.has('VVVUSDT')).toBe(true);
-    } finally {
-      global.fetch = originalFetch;
-    }
-  });
-
-  it('tick refreshes positions after retryMomentumEntry opens a trade and cleans all state on Circuit Breaker', async () => {
+  it('runTurtleCycle enters qualified Donchian20 + EMA20>EMA50 + Vol>=1.25x Long breakout and Circuit Breaker flattens non-locked positions', async () => {
     const os = await import('node:os');
     const fs = await import('node:fs');
     const path = await import('node:path');
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hybrid-v104-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hybrid-v200-'));
 
-    const worker = new HybridLiveWorker();
-    (worker as unknown as { stateDir: string }).stateDir = tmpDir;
+    const worker = new HybridLiveWorker({ stateDir: tmpDir });
     (worker as unknown as { currentDay: string }).currentDay = new Date().toISOString().slice(0, 10);
     (worker as unknown as { dayStartEquity: number }).dayStartEquity = 100.0;
     (worker as unknown as { exchangeFilters: Record<string, unknown> }).exchangeFilters = {
@@ -571,8 +457,14 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
       NEARUSDT: { stepSize: 1, tickSize: 0.001, minQty: 1, minNotional: 5 },
     };
 
-    const closes = Array.from({ length: 16 }, (_, idx) => (idx >= 14 ? 115 : 100));
-    worker.candleCache.setCandles('NEARUSDT', makeDailyCandles(closes, { open: 115, close: 116 }));
+    const DAY = 86_400_000;
+    const todayMidnight = Math.floor(Date.now() / DAY) * DAY;
+    // 100 daily bars rising smoothly with volume 10M/d and today breaking out > hi20
+    const nearBars = Array.from({ length: 100 }, (_, i) => {
+      const px = i < 99 ? 4.0 + i * 0.008 : 5.0; // prev 20d hi ~4.79, today breaks out to 5.0
+      return [todayMidnight - (99 - i) * DAY, String(px), String(px * 1.01), String(px * 0.99), String(px), '1000', 0, '10000000'];
+    });
+    worker.candleCache.setCandles('NEARUSDT', nearBars as unknown as Array<[number, string, string, string, string]>);
     (worker as unknown as { dynamicUniverseScanner: { getUniverse: () => string[]; getState: () => { lastUpdatedAt: string } } }).dynamicUniverseScanner = {
       getUniverse: () => ['NEARUSDT'],
       getState: () => ({ lastUpdatedAt: new Date().toISOString() }),
@@ -589,12 +481,13 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
       }),
       getPositions: vi.fn().mockImplementation(async () => {
         if (!positionOpened) return [];
-        return [{ symbol: 'NEARUSDT', positionAmt: '7', entryPrice: '5.0', markPrice: '5.0', positionSide: 'BOTH' }];
+        return [{ symbol: 'NEARUSDT', positionAmt: '6', entryPrice: '5.0', markPrice: '5.0', positionSide: 'BOTH' }];
       }),
       getMarkPrices: vi.fn().mockResolvedValue([{ symbol: 'NEARUSDT', markPrice: '5.0', time: Date.now() }]),
       setLeverage: vi.fn().mockResolvedValue({ leverage: 5 }),
       submitMarketOrder: vi.fn().mockImplementation(async (order) => {
         if (order.side === 'BUY') positionOpened = true;
+        else positionOpened = false;
         return {
           orderId: 10,
           clientOrderId: order.clientOrderId,
@@ -619,17 +512,21 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
     const originalFetch = global.fetch;
     global.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('klines') && url.includes('BTCUSDT')) {
-        const now = Date.now();
-        const bars = Array.from({ length: 20 }, (_, i) => [now - (19 - i) * 86_400_000, '60000', '60500', '59500', '60000']);
+        // BTC in clear Bull Trend (> EMA50)
+        const bars = Array.from({ length: 100 }, (_, i) => [
+          todayMidnight - (99 - i) * DAY,
+          String(60000 + i * 100), String(60500 + i * 100), String(59500 + i * 100), String(60000 + i * 100),
+          '1000', 0, '5000000000',
+        ]);
         return Promise.resolve({ ok: true, json: () => Promise.resolve(bars) } as Response);
       }
       if (url.includes('ticker/24hr') && url.includes('BTCUSDT')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ priceChangePercent: '0.2' }) } as Response);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ priceChangePercent: '1.2' }) } as Response);
       }
       if (url.includes('ticker/24hr')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve([{ symbol: 'NEARUSDT', priceChangePercent: '1.0' }]),
+          json: () => Promise.resolve([{ symbol: 'NEARUSDT', priceChangePercent: '6.0', quoteVolume: '20000000' }]), // 2.0x avg vol >= 1.25x
         } as Response);
       }
       if (url.includes('premiumIndex')) {
@@ -644,11 +541,10 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
     try {
       await (worker as unknown as { tick: () => Promise<void> }).tick();
       const written = JSON.parse(fs.readFileSync(path.join(tmpDir, 'worker-status.json'), 'utf8'));
-      // Immediately reflects opened NEARUSDT instead of sending empty book!
       expect(Object.keys(written.positions)).toEqual(['NEARUSDT']);
       expect(worker.activeTrackedPositions.has('NEARUSDT')).toBe(true);
 
-      // Now simulate Circuit Breaker trip (-13 USDT <= -12 USDT)
+      // Simulate Circuit Breaker (-13u <= -12u) -> flattens unlocked initial NEARUSDT
       (mockBroker.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         totalMarginBalance: '87',
         totalWalletBalance: '87',
@@ -664,6 +560,88 @@ describe('v1.0.4 Defensive Improvements: Execution Hardening, BTC Macro Regime &
       expect(worker.ratchetState.size).toBe(0);
     } finally {
       global.fetch = originalFetch;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('triggers Chandelier 2.5x ATR trailing stop on +6% gain and respects 24h cooldown on close', async () => {
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hybrid-v200-trail-'));
+
+    const worker = new HybridLiveWorker({ stateDir: tmpDir });
+    const today = new Date().toISOString().slice(0, 10);
+    (worker as unknown as { currentDay: string }).currentDay = today;
+    (worker as unknown as { dayStartEquity: number }).dayStartEquity = 100.0;
+    // Mark current @4h bucket as already scanned so tick only runs 3s stop protection
+    const { getCurrent4hBucketUtc } = await import('../../src/portfolio/turtle-dual-strategy');
+    (worker as unknown as { lastScanBucket4h: string }).lastScanBucket4h = getCurrent4hBucketUtc();
+    (worker as unknown as { exchangeFilters: Record<string, unknown> }).exchangeFilters = {
+      NEARUSDT: { stepSize: 1, tickSize: 0.001, minQty: 1, minNotional: 5 },
+    };
+    worker.ratchetState.set('NEARUSDT', {
+      side: 'LONG',
+      entryPrice: 5.0,
+      currentSl: 4.5, // -10% initial
+      initialSlPct: 0.10,
+      extremePrice: 5.0,
+      maxRet: 0,
+      atr14Pct: 0.02, // 2.5 * 2% = 5% Chandelier trail
+      tier: 'initial',
+      entryTime: Date.now() - 3600_000,
+    });
+    worker.activeTrackedPositions.set('NEARUSDT', {
+      side: 'LONG',
+      qty: 6,
+      entryPrice: 5.0,
+      slPrice: 4.5,
+      ratchetTier: 'initial',
+    });
+
+    const cancelSpy = vi.fn().mockResolvedValue({ code: 200 });
+    const submitStopSpy = vi.fn().mockResolvedValue({
+      orderId: 22,
+      clientOrderId: 'sl_near_ch',
+      symbol: 'NEARUSDT',
+      status: 'NEW',
+      executedQty: '0',
+    });
+    const getPosMock = vi.fn().mockResolvedValue([
+      { symbol: 'NEARUSDT', positionAmt: '6', entryPrice: '5.0', markPrice: '5.40', positionSide: 'BOTH' },
+    ]);
+
+    const mockBroker: Partial<LiveBroker> = {
+      getAccount: vi.fn().mockResolvedValue({
+        totalMarginBalance: '102.4',
+        totalWalletBalance: '100',
+        availableBalance: '93',
+        totalUnrealizedProfit: '2.4',
+        assets: [],
+      }),
+      getPositions: getPosMock,
+      getOpenAlgoOrders: vi.fn().mockResolvedValue([{ orderId: 21, clientAlgoId: 'sl_old', orderType: 'STOP_MARKET', algoStatus: 'NEW' }]),
+      submitStopMarketOrder: submitStopSpy,
+      cancelAlgoOrder: cancelSpy,
+      getUserTrades: vi.fn().mockResolvedValue([
+        { id: 1, orderId: 90, symbol: 'NEARUSDT', price: '5.13', qty: '6', commission: '0.01', commissionAsset: 'USDT', realizedPnl: '0.78', time: Date.now() },
+      ]),
+    };
+    (worker as unknown as { broker: LiveBroker }).broker = mockBroker as LiveBroker;
+
+    try {
+      // Tick 1: mark = 5.40 (+8% >= +5%) -> extreme=5.40, SL = 5.40 * (1 - 2.5*0.02) = 5.130 (>= +1% lock!)
+      await (worker as unknown as { tick: () => Promise<void> }).tick();
+      expect(submitStopSpy).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'NEARUSDT', stopPrice: '5.130' }));
+      expect(worker.ratchetState.get('NEARUSDT')?.tier).toBe('lock');
+      expect(worker.ratchetState.get('NEARUSDT')?.currentSl).toBeCloseTo(5.13, 3);
+
+      // Tick 2: venue STOP_MARKET filled -> sets 24h ISO cooldown
+      getPosMock.mockResolvedValueOnce([]);
+      await (worker as unknown as { tick: () => Promise<void> }).tick();
+      expect(worker.isSymbolInCooldown('NEARUSDT', Date.now() + 2 * 3_600_000)).toBe(true);
+      expect(worker.isSymbolInCooldown('NEARUSDT', Date.now() + 25 * 3_600_000)).toBe(false);
+    } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
